@@ -1,5 +1,3 @@
-# 2025_GP_3
-
 # 🌱 Nameer: A Gamified Sustainability Mobile App  
 *(2025_GP_GroupNumber)*
 
