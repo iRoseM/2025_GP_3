@@ -10,7 +10,7 @@
 - **Rose Mady**  
   📧 444200107@student.ksu.edu.sa  
 
-- **Aljawharah Alwabel **  
+- **Aljawharah Alwabel**  
   📧 444200750@student.ksu.edu.sa    
 
 - **Layan Aldbays**  
