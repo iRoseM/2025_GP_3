@@ -1,4 +1,4 @@
-# 🌱 Nameer: A Gamified Sustainability Mobile App  
+# 🌱 Nameer: A Sustainability Mobile App  
 *(2025_GP_GroupNumber)*
 
 ![Logo](docs/img/Logo.png)
@@ -32,12 +32,4 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 
 ---
 
-## 📂 Project Structure
-2025_GP_GroupNumber/
-│
-├── src/ # Flutter source code
-├── docs/ # Documentation & diagrams
-├── data/ # Dataset samples ( recycling bins, etc.)
-│
-├── AUTHORS # Team contributors
-└── README.md # Project overview
+<pre> ## 📂 Project Structure ``` 2025_GP_GroupNumber/ │ ├── src/ # Flutter source code ├── docs/ # Documentation & diagrams ├── data/ # Dataset samples (recycling bins, etc.) │ ├── AUTHORS # Team contributors └── README.md # Project overview ``` </pre>
