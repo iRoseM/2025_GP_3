@@ -2,7 +2,7 @@
 *(2025_GP_GroupNumber)*
 
 <p align="center">
-  <img src="docs/images/logo.png" alt="Nameer Logo" width="200"/>
+  <img src="docs/img/logo.png" alt="Nameer Logo" width="200"/>
 </p>
 
 ---
