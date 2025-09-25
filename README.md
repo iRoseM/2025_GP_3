@@ -1,9 +1,8 @@
 # 🌱 Nameer: A Gamified Sustainability Mobile App  
 *(2025_GP_GroupNumber)*
 
-<p align="center">
-  <img src="../docs/img/Logo.png" alt="Nameer Logo" width="200"/>
-</p>
+![Logo](docs/img/Logo.png)
+
 
 ---
 
