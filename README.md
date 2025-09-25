@@ -32,10 +32,11 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 
 ---
 2025_GP_3/
+```
 │
 ├── src/           # Flutter source code
 ├── docs/          # Documentation & diagrams
 ├── data/          # Dataset samples (recycling bins, etc.)
 │
 ├── AUTHORS        # Team contributors
-└── README.md      # Project overview
+└── README.md      # Project overview ```
