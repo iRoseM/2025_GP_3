@@ -35,7 +35,7 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 ## ⚡ Launching Instructions
 1. Clone the repository:
    ```bash
-   git clone https://github.com/YourUsername/2025_GP_3.git
+   git clone https://github.com/iRoseM/2025_GP_3.git
 
 2. Navigate to the project folder:
    ```bash
