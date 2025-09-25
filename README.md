@@ -31,6 +31,23 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 - **Tools**: GitHub, Google Colab  
 
 ---
+
+## ⚡ Launching Instructions
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/YourUsername/2025_GP_3.git
+
+2. Navigate to the project folder:
+   ```bash
+    cd 2025_GP_3/src
+
+3. Install dependencies:
+   ```bash
+   flutter pub get
+4. Run
+   ```bash
+   flutter run
+
 2025_GP_3/
 ```
 │
