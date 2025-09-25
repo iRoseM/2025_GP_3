@@ -12,8 +12,6 @@
 This mobile application motivates individuals to adopt **eco-friendly habits** such as:
 - ♻️ Recycling  
 - 🚶 Using public transport  
-- 🌳 Planting trees  
-- 💡 Reducing electricity & water consumption  
 
 Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative (SGI)**, turning sustainability into a fun, engaging lifestyle.  
 
@@ -22,17 +20,25 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 ## 🚀 Features
 ✨ Gamified tasks with rewards  
 ✨ Eco-impact tracking dashboard  
-✨ Recycling bin locator (Riyadh / KSU campus)  
+✨ Recycling bin locator (Riyadh)  
 ✨ AI-powered validation (image recognition & auto-read tracking)  
 
 ---
 
 ## 🛠️ Technology Stack
 - **Frontend**: Flutter (Dart)  
-- **Backend / Database**: Firebase (Hybrid SQL + NoSQL)  
-- **Machine Learning**: Python (TensorFlow / PyTorch for CV tasks)  
-- **Tools**: GitHub, UML diagrams, Google Colab  
+- **Backend / Database**:  
+- **Machine Learning**: Python 
+- **Tools**: GitHub, Google Colab  
 
 ---
 
 ## 📂 Project Structure
+2025_GP_GroupNumber/
+│
+├── src/ # Flutter source code
+├── docs/ # Documentation & diagrams
+├── data/ # Dataset samples ( recycling bins, etc.)
+│
+├── AUTHORS # Team contributors
+└── README.md # Project overview
