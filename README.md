@@ -50,12 +50,18 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 
 2025_GP_3/
 ```
-│
-├── lib/              # Flutter main source code (screens, widgets, logic)
-├── assets/           # Images, icons, and other media files
-├── docs/             # Project documentation, diagrams, and reports
-├── data/             # Sample datasets (e.g., recycling bins, sensors, etc.)
-│
-├── AUTHORS           # List of team members and their roles
-├── README.md         # Project overview, setup instructions, and usage
-└── pubspec.yaml      # Flutter dependencies and configurations ```
+│  
+├── lib/                # Main Flutter source code 
+├── assets/             # Images, icons, and other static media  
+├── docs/               # Documentation, diagrams, and reports  
+├── data/               # Sample datasets 
+│  
+├── android/            # Native Android project files  
+├── ios/                # Native iOS project files  
+│  
+├── .gitignore          # Git ignore rules  
+├── AUTHORS.md          # List of contributors and their roles  
+├── README.md           # Project overview
+├── analysis_options.yaml # Dart/Flutter static analysis rules  
+├── pubspec.yaml        # Flutter dependencies and configuration  
+└── pubspec.lock        # Locked dependency versions   ```
