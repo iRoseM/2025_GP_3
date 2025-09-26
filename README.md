@@ -1,3 +1,21 @@
+<<<<<<< HEAD
+# my_app
+
+A new Flutter project.
+
+## Getting Started
+
+This project is a starting point for a Flutter application.
+
+A few resources to get you started if this is your first Flutter project:
+
+- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
+=======
 # 🌱 Nameer: A Sustainability Mobile App  
 *32025_GP_3*
 
@@ -57,3 +75,4 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 │
 ├── AUTHORS        # Team contributors
 └── README.md      # Project overview ```
+>>>>>>> 6e05550d996eae9753f09260eea43d6e211c9aa1
