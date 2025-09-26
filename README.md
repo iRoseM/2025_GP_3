@@ -51,10 +51,11 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 2025_GP_3/
 ```
 │
-├── src/           # Flutter source code
-├── docs/          # Documentation & diagrams
-├── data/          # Dataset samples (recycling bins, etc.)
+├── lib/              # Flutter main source code (screens, widgets, logic)
+├── assets/           # Images, icons, and other media files
+├── docs/             # Project documentation, diagrams, and reports
+├── data/             # Sample datasets (e.g., recycling bins, sensors, etc.)
 │
-├── AUTHORS        # Team contributors
-└── README.md      # Project overview ```
->>>>>>> 6e05550d996eae9753f09260eea43d6e211c9aa1
+├── AUTHORS           # List of team members and their roles
+├── README.md         # Project overview, setup instructions, and usage
+└── pubspec.yaml      # Flutter dependencies and configurations ```
