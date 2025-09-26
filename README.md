@@ -1,5 +1,5 @@
 # 🌱 Nameer: A Sustainability Mobile App  
-*32025_GP_3*
+*2025_GP_3*
 
 ![Logo](docs/img/Logo.png)
 
