@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'home_page.dart'; // مسار الملف الذي أنشأناه
+
 void main() => runApp(const MyApp());
 
 class AppColors {
@@ -137,16 +139,21 @@ class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMix
     );
   }
 
-  void _submit(BuildContext context) {
-    final ok = _formKey.currentState?.validate() ?? false;
-    if (!ok) {
-      _shakeCtrl
-        ..reset()
-        ..forward();
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإرسال ✔️')));
+void _submit(BuildContext context) {
+  final ok = _formKey.currentState?.validate() ?? false;
+  if (!ok) {
+    _shakeCtrl
+      ..reset()
+      ..forward();
+    return;
   }
+
+  // التنقّل إلى الهوم بيج بعد نجاح التحقق
+  Navigator.of(context).pushReplacement(
+    MaterialPageRoute(builder: (_) => const HomePage()),
+  );
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -582,16 +589,15 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     );
   }
 
-  void _submit() {
-    final ok = _formKey.currentState?.validate() ?? false;
-    if (!ok) return;
+void _submit() {
+  final ok = _formKey.currentState?.validate() ?? false;
+  if (!ok) return;
 
-    // هنا تقدر ترسل البيانات للسيرفر/الفايربيز...
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم إنشاء الحساب بنجاح ✔️')),
-    );
-    Navigator.of(context).pop(); // رجوع لصفحة تسجيل الدخول
-  }
+  Navigator.of(context).pushReplacement(
+    MaterialPageRoute(builder: (_) => const HomePage()),
+  );
+}
+
 
   @override
   Widget build(BuildContext context) {
