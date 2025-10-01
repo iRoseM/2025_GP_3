@@ -1,6 +1,8 @@
 // home_page.dart (نسخة محدّثة)
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'map.dart';
+
 
 // إن كان لديك AppColors في ملف مشترك، استورده واحذف هذا التعريف.
 class AppColors {
@@ -163,8 +165,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           currentIndex: _currentIndex,
           onTap: (i) => setState(() => _currentIndex = i),
           onCenterTap: () {
-            // TODO: افتح صفحة الخريطة
-          },
+          Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const MapPage()),
+  );
+},
         ),
       ),
     );
