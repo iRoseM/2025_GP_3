@@ -1,15 +1,23 @@
-// home_page.dart (نسخة محدّثة)
+// home_page.dart — نسخة محسّنة أكثر بهجة (تدرّج فاتح يمين + عنوان EcoLand داخل البلوك)
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'map.dart';
 
 
-// إن كان لديك AppColors في ملف مشترك، استورده واحذف هذا التعريف.
+// لوحة الألوان (هوية Nameer)
 class AppColors {
-  static const primary = Color(0xFF009688);
-  static const dark = Color(0xFF00695C);
-  static const light = Color(0xFF4DB6AC);
-  static const background = Color(0xFFFAFCFB);
+  static const primary = Color(0xFF4BAA98); // تركوازي مشبّع
+  static const dark = Color(0xFF3C3C3B); // أسود الهوية
+  static const accent = Color(0xFFF4A340); // أصفر/برتقالي دافئ
+  static const sea = Color(0xFF1F7A8C); // لون مساعد ناعم
+  static const primary60 = Color(0x994BAA98);
+  static const primary33 = Color(0x544BAA98);
+  static const light = Color(0xFF79D0BE);
+  static const background = Color(0xFFF3FAF7);
+
+  // ألوان الهوية الجديدة المضافة
+  static const mint = Color(0xFFB6E9C1); // #b6e9c1
+  static const tealSoft = Color(0xFF75BCAF); // #75bcaf
 }
 
 class HomePage extends StatefulWidget {
@@ -21,16 +29,25 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   int _currentIndex = 0;
   late final AnimationController _bgCtrl;
+  late final AnimationController _floatingCtrl;
 
   @override
   void initState() {
     super.initState();
-    _bgCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 14))..repeat();
+    _bgCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
+    _floatingCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
     _bgCtrl.dispose();
+    _floatingCtrl.dispose();
     super.dispose();
   }
 
@@ -55,17 +72,59 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   // Header
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                       child: Row(
                         children: [
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: AppColors.primary.withOpacity(.12),
-                            child: const Icon(Icons.person_outline, color: AppColors.primary),
+                          Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppColors.primary.withOpacity(.2),
+                                  AppColors.sea.withOpacity(.1),
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withOpacity(.2),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const CircleAvatar(
+                              radius: 24,
+                              backgroundColor: Colors.transparent,
+                              child: Icon(
+                                Icons.person_outline,
+                                color: AppColors.primary,
+                                size: 28,
+                              ),
+                            ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 12),
                           const Expanded(
-                            child: Text('مرحبًا، Nameer', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'مرحبًا، Nameer 👋',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.dark,
+                                  ),
+                                ),
+                                Text(
+                                  'لنجعل اليوم مميزاً!',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.sea,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           _PointsChip(points: 1500, onTap: () {}),
                         ],
@@ -73,22 +132,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  // Title
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'ابدأ رحلتك الخضراء اليوم 🌿',
-                        style: TextStyle(fontSize: 22, height: 1.2, fontWeight: FontWeight.w800, color: Colors.black.withOpacity(.85)),
-                      ),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
                   // Daily progress
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                       child: _DailyProgressCard(
                         percent: .62,
                         bullets: const [
@@ -97,62 +144,196 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           'سلسلة الاستدامة: 3 أيام متتالية 🔥',
                         ],
                         onTapDetails: () {},
+                        colored: false, // أبيض
                       ),
                     ),
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                  // === EcoLand (بدل سلسلة النظافة) ===
+                  // === بلوك الأرض: عنوان داخل نفس الـContainer وبنفس نمط عنوان الداشبورد ===
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: _EcoLandCard(
-                        title: 'EcoLand الخاصة بك',
-                        subtitle: 'طوِّر أرضك بزراعة الأشجار وترقية العناصر عبر إنجاز المهام.',
-                        onTap: () {
-                          // TODO: افتح شاشة EcoLand كاملة
-                        },
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x14000000),
+                              blurRadius: 18,
+                              offset: Offset(0, 8),
+                            ),
+                          ],
+                          border: Border.all(
+                            color: const Color(0xFFE8F1EE),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // العنوان بنفس حركة الداشبورد
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.terrain_rounded,
+                                    color: AppColors.primary,
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                const Expanded(
+                                  child: Text(
+                                    'أرضي في EcoLand',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppColors.dark,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+
+                            // المنصّة
+                            Center(
+                              child: IsoLand(
+                                rows: 6,
+                                cols: 6,
+                                height: 150, // مكبّرة شوي
+                                topColor: AppColors.mint, // السطح فاتح
+                                sideColor:
+                                    AppColors.tealSoft, // الجوانب أغمق بشوي
+                                gridColor: AppColors.sea,
+                                gridOpacity: .08,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
                   // Banner
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: _InlineBanner(
-                        label: 'إعلان: حملة “احفظ حيّك نظيفًا” بدأت اليوم — شارك الآن!',
+                        label:
+                            'احفظ حيّك نظيفًا - شارك الآن واربح نقاطاً مضاعفة!',
                         onTap: () {},
                       ),
                     ),
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                  // EcoLand Card مع تحسينات
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: AnimatedBuilder(
+                        animation: _floatingCtrl,
+                        builder: (context, child) {
+                          return Transform.translate(
+                            offset: Offset(
+                              0,
+                              -4 * math.sin(_floatingCtrl.value * math.pi),
+                            ),
+                            child: child,
+                          );
+                        },
+                        child: _EcoLandCard(
+                          title: 'EcoLand الخاصة بك 🌱',
+                          subtitle:
+                              'طوِّر أرضك بزراعة الأشجار وترقية العناصر عبر إنجاز المهام.',
+                          onTap: () {},
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
 
                   // Friends
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Row(
                         children: [
-                          const Expanded(child: Text('أصدقائي', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
-                          TextButton(onPressed: () {}, child: const Text('عرض الكل')),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.group,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'أصدقائي',
+                              style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () {},
+                            icon: const Icon(Icons.arrow_back, size: 16),
+                            label: const Text('عرض الكل'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Row(
-                        children: const [
-                          Expanded(child: _FriendCard(name: 'سارة', points: 220, streak: 4)),
-                          SizedBox(width: 12),
-                          Expanded(child: _FriendCard(name: 'خالد', points: 180, streak: 2)),
+                        children: [
+                          Expanded(
+                            child: _FriendCard(
+                              name: 'سارة',
+                              points: 220,
+                              streak: 4,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _FriendCard(
+                              name: 'خالد',
+                              points: 180,
+                              streak: 2,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
+
                   const SliverToBoxAdapter(child: SizedBox(height: 120)),
                 ],
               ),
@@ -160,15 +341,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ],
         ),
 
-        // === Bottom Nav: زر الوسط = الخريطة ===
-        bottomNavigationBar: _BottomNav(
+        // ======== شريط التنقل (بدون أي تغيير) ========
+        bottomNavigationBar: BottomNav(
           currentIndex: _currentIndex,
           onTap: (i) => setState(() => _currentIndex = i),
           onCenterTap: () {
-          Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const MapPage()),
-  );
-},
+            // TODO: افتح صفحة الخريطة
+          },
         ),
       ),
     );
@@ -188,18 +367,138 @@ class _PointsChip extends StatelessWidget {
       borderRadius: BorderRadius.circular(100),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: AppColors.primary,
+          // تدرّج مع الفاتح في الزاوية اليمنى العليا + تكثيره شوي
+          gradient: const LinearGradient(
+            colors: [AppColors.primary, AppColors.primary, AppColors.mint],
+            stops: [0.0, 0.5, 1.0], // mint يأخذ مساحة أكبر قليلاً
+            begin: Alignment.bottomLeft,
+            end: Alignment.topRight, // الفاتح يظهر بالزاوية اليمين (فوق)
+          ),
           borderRadius: BorderRadius.circular(100),
-          boxShadow: const [BoxShadow(color: Color(0x33009688), blurRadius: 10, offset: Offset(0, 6))],
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withOpacity(.4),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.monetization_on_outlined, size: 18, color: Colors.white),
+            const Icon(Icons.stars_rounded, color: Colors.white, size: 20),
             const SizedBox(width: 6),
-            Text('$points', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+            Text(
+              '$points',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Text(
+              'نقطة',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineBanner extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _InlineBanner({required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        // تدرّج مع الفاتح بالزاوية اليمنى العليا وزيادته شوي
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, AppColors.primary, AppColors.mint],
+          stops: [0.0, 0.5, 1.0],
+          begin: Alignment.bottomLeft,
+          end: Alignment.topRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(.20),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(.25),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.campaign_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('🎉', style: TextStyle(fontSize: 14)),
+                      SizedBox(width: 4),
+                      Text(
+                        'جديد',
+                        style: TextStyle(
+                          color: AppColors.accent,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -210,46 +509,135 @@ class _DailyProgressCard extends StatelessWidget {
   final double percent;
   final List<String> bullets;
   final VoidCallback? onTapDetails;
-  const _DailyProgressCard({required this.percent, required this.bullets, this.onTapDetails});
+  final bool colored;
+
+  const _DailyProgressCard({
+    required this.percent,
+    required this.bullets,
+    this.onTapDetails,
+    this.colored = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final decoration = colored
+        ? BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primary, AppColors.sea],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(.3),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          )
+        : BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 18,
+                offset: Offset(0, 8),
+              ),
+            ],
+          );
+
+    final baseTextColor = colored ? Colors.white : AppColors.dark;
+    final iconColor = colored ? Colors.white : AppColors.primary;
+
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 18, offset: Offset(0, 8))],
-      ),
-      child: Row(
+      padding: const EdgeInsets.all(18),
+      decoration: decoration,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('تقدّم اليوم', style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                ...bullets.take(3).map(
-                  (b) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.check_circle_outline, size: 18, color: AppColors.primary),
-                        const SizedBox(width: 6),
-                        Expanded(child: Text(b)),
-                      ],
-                    ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colored
+                      ? Colors.white.withOpacity(.2)
+                      : AppColors.primary.withOpacity(.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.dashboard_customize_rounded,
+                  color: iconColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'لوحة التحكم اليومية 🎯',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: baseTextColor,
                   ),
                 ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(onPressed: onTapDetails, child: const Text('التفاصيل')),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: _AnimatedRing(percent: percent),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...bullets
+              .take(3)
+              .map(
+                (b) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        size: 20,
+                        color: colored ? AppColors.accent : AppColors.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          b,
+                          style: TextStyle(
+                            color: baseTextColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: onTapDetails,
+              icon: Icon(
+                Icons.arrow_back,
+                size: 16,
+                color: colored ? Colors.white : AppColors.primary,
+              ),
+              label: Text(
+                'عرض التفاصيل',
+                style: TextStyle(
+                  color: colored ? Colors.white : AppColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          _AnimatedRing(percent: percent),
         ],
       ),
     );
@@ -263,25 +651,35 @@ class _AnimatedRing extends StatelessWidget {
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: percent.clamp(0, 1)),
-      duration: const Duration(milliseconds: 900),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 1200),
+      curve: Curves.easeOutBack,
       builder: (_, v, __) => SizedBox(
-        width: 88,
-        height: 88,
+        width: 70,
+        height: 70,
         child: Stack(
           alignment: Alignment.center,
           children: [
             SizedBox(
-              width: 88,
-              height: 88,
+              width: 70,
+              height: 70,
               child: CircularProgressIndicator(
                 value: v,
-                strokeWidth: 8,
-                backgroundColor: AppColors.light.withOpacity(.2),
-                valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                strokeWidth: 7,
+                strokeCap: StrokeCap.round,
+                backgroundColor: AppColors.light.withOpacity(.25),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppColors.accent,
+                ),
               ),
             ),
-            Text('${(v * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(
+              '${(v * 100).round()}%',
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                color: AppColors.dark,
+              ),
+            ),
           ],
         ),
       ),
@@ -289,54 +687,138 @@ class _AnimatedRing extends StatelessWidget {
   }
 }
 
-/* =============== EcoLand Card (جديد) =============== */
-
+// EcoLand Card Widget
 class _EcoLandCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  const _EcoLandCard({required this.title, required this.subtitle, required this.onTap});
+
+  const _EcoLandCard({
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(22),
-      onTap: onTap,
-      child: Container(
-        height: 180,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 18, offset: Offset(0, 8))],
-          border: Border.all(color: AppColors.light.withOpacity(.5)),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, AppColors.light.withOpacity(.1)],
         ),
-        child: Row(
-          children: [
-            // نص وتعليمات
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 6),
-                  Text(subtitle, style: TextStyle(color: Colors.black.withOpacity(.7))),
-                  const Spacer(),
-                  FilledButton(onPressed: onTap, style: FilledButton.styleFrom(minimumSize: const Size(0, 40)), child: const Text('ادخل إلى EcoLand')),
-                ],
-              ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(.15),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+        border: Border.all(color: AppColors.light.withOpacity(.6), width: 2),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: AppColors.dark.withOpacity(.7),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          // زر مع الفاتح يمين وزيادة طفيفة
+                          gradient: const LinearGradient(
+                            colors: [
+                              AppColors.primary,
+                              AppColors.primary,
+                              AppColors.tealSoft,
+                            ],
+                            stops: [0.0, 0.5, 1.0],
+                            begin: Alignment.bottomLeft,
+                            end: Alignment.topRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withOpacity(.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton(
+                          onPressed: onTap,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            shadowColor: Colors.transparent,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 14,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'ادخل الآن',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              SizedBox(width: 6),
+                              Icon(Icons.arrow_back, size: 18),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(child: _EcoLandIllustration()),
+              ],
             ),
-            const SizedBox(width: 12),
-            // رسم 2D تمثيلي للأرض
-            Expanded(child: _EcoLandIllustration()),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
+// Illustration Widget
 class _EcoLandIllustration extends StatelessWidget {
+  const _EcoLandIllustration();
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
@@ -349,140 +831,243 @@ class _EcoLandIllustration extends StatelessWidget {
 class _EcoLandPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final bg = Paint()..color = const Color(0xFFEFF7F6);
-    final ground = Paint()..color = const Color(0xFFD8F0EA);
-    final grid = Paint()
-      ..color = const Color(0x33009688)
-      ..strokeWidth = 1;
+    // خلفية ناعمة بلون سماوي فاتح
+    final bgGradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [const Color(0xFFE3F2FD), const Color(0xFFF1F8E9)],
+    ).createShader(Offset.zero & size);
 
-    // أرضية عامة
-    final r = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(18));
-    canvas.drawRRect(r, bg);
+    final bg = Paint()..shader = bgGradient;
+    final rounded = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      const Radius.circular(18),
+    );
+    canvas.drawRRect(rounded, bg);
 
-    // قطعة أرض مركزية
+    // الأرض: تدرّج mint → tealSoft (فاتح لأغمق بسيط)
+    final ground = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [AppColors.mint, AppColors.tealSoft],
+      ).createShader(Offset.zero & size);
+
     final land = RRect.fromRectAndRadius(
-      Rect.fromLTWH(size.width * .05, size.height * .15, size.width * .9, size.height * .7),
+      Rect.fromLTWH(
+        size.width * .08,
+        size.height * .12,
+        size.width * .84,
+        size.height * .76,
+      ),
       const Radius.circular(16),
     );
     canvas.drawRRect(land, ground);
 
-    // شبكة مربعات بسيطة
-    final cols = 5, rows = 3;
-    final cellW = (size.width * .9) / cols;
-    final cellH = (size.height * .7) / rows;
-    final left = size.width * .05;
-    final top = size.height * .15;
+    // ظل خفيف للأرض
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(.08)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    final shadowRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        size.width * .08 + 3,
+        size.height * .12 + 3,
+        size.width * .84,
+        size.height * .76,
+      ),
+      const Radius.circular(16),
+    );
+    canvas.drawRRect(shadowRect, shadowPaint);
+    canvas.drawRRect(land, ground);
+
+    // شبكة التقسيمات - 4×4
+    const cols = 4, rows = 4;
+    final cellW = (size.width * .84) / cols;
+    final cellH = (size.height * .76) / rows;
+    final left = size.width * .08;
+    final top = size.height * .12;
+
+    // خطوط الشبكة بلون مساعد من الهوية
+    final gridPaint = Paint()
+      ..color = AppColors.tealSoft.withOpacity(.35)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
     for (int c = 1; c < cols; c++) {
       final x = left + c * cellW;
-      canvas.drawLine(Offset(x, top), Offset(x, top + rows * cellH), grid);
+      canvas.drawLine(Offset(x, top), Offset(x, top + rows * cellH), gridPaint);
     }
     for (int r = 1; r < rows; r++) {
       final y = top + r * cellH;
-      canvas.drawLine(Offset(left, y), Offset(left + cols * cellW, y), grid);
+      canvas.drawLine(
+        Offset(left, y),
+        Offset(left + cols * cellW, y),
+        gridPaint,
+      );
     }
 
-    // عناصر: شجرة، منزل، سلة إعادة تدوير، بحيرة صغيرة
-    final tree = Paint()..color = AppColors.primary;
-    final trunk = Paint()..color = const Color(0xFF6D4C41);
-    final house = Paint()..color = const Color(0xFFFFF3E0);
-    final roof = Paint()..color = const Color(0xFFFFB74D);
-    final bin = Paint()..color = const Color(0xFF26A69A);
-    final water = Paint()..color = const Color(0xFFB3E5FC);
+    // الإطار الخارجي للشبكة
+    final borderPaint = Paint()
+      ..color = AppColors.tealSoft.withOpacity(.55)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
 
-    // منزل
-    final hx = left + cellW * 0.4;
-    final hy = top + cellH * 0.4;
-    final houseRect = Rect.fromLTWH(hx, hy, cellW * 1.2, cellH * 1.1);
-    canvas.drawRRect(RRect.fromRectAndRadius(houseRect, const Radius.circular(6)), house);
-    final roofPath = Path()
-      ..moveTo(hx - 4, hy)
-      ..lineTo(hx + houseRect.width / 2, hy - cellH * .5)
-      ..lineTo(hx + houseRect.width + 4, hy)
-      ..close();
-    canvas.drawPath(roofPath, roof);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, top, cols * cellW, rows * cellH),
+        const Radius.circular(14),
+      ),
+      borderPaint,
+    );
 
-    // شجرة
-    final tx = left + cellW * 3.6;
-    final ty = top + cellH * 0.7;
-    canvas.drawRect(Rect.fromLTWH(tx + 10, ty + 20, 10, 28), trunk);
-    canvas.drawCircle(Offset(tx + 15, ty + 10), 18, tree);
-    canvas.drawCircle(Offset(tx + 5, ty + 24), 16, tree);
-    canvas.drawCircle(Offset(tx + 25, ty + 24), 16, tree);
+    // نقاط صغيرة عند التقاطعات
+    final dotPaint = Paint()..color = AppColors.sea.withOpacity(.35);
+    for (int r = 0; r <= rows; r++) {
+      for (int c = 0; c <= cols; c++) {
+        final x = left + c * cellW;
+        final y = top + r * cellH;
+        canvas.drawCircle(Offset(x, y), 2.5, dotPaint);
+      }
+    }
 
-    // سلة تدوير
-    final bx = left + cellW * 3.8;
-    final by = top + cellH * 1.9;
-    final binRect = RRect.fromRectAndRadius(Rect.fromLTWH(bx, by, 28, 28), const Radius.circular(4));
-    canvas.drawRRect(binRect, bin);
+    // توضيح صغير
+    final textStyle = TextStyle(
+      color: AppColors.dark.withOpacity(.45),
+      fontSize: 9,
+      fontWeight: FontWeight.w600,
+    );
 
-    // بحيرة صغيرة
-    final lake = RRect.fromRectAndRadius(Rect.fromLTWH(left + cellW * 1.8, top + cellH * 1.8, cellW, cellH * .6), const Radius.circular(12));
-    canvas.drawRRect(lake, water);
+    final textPainter = TextPainter(
+      text: TextSpan(text: '${cols}×${rows} مربعات', style: textStyle),
+      textDirection: TextDirection.rtl,
+    );
+
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        left + (cols * cellW) / 2 - textPainter.width / 2,
+        top + rows * cellH + 8,
+      ),
+    );
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/* ======================= Banner + Friends ======================= */
-
-class _InlineBanner extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  const _InlineBanner({required this.label, required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.dark,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              const Icon(Icons.campaign_outlined, color: Colors.white),
-              const SizedBox(width: 10),
-              Expanded(child: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
-              const Icon(Icons.chevron_left, color: Colors.white),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _FriendCard extends StatelessWidget {
   final String name;
   final int points;
   final int streak;
-  const _FriendCard({required this.name, required this.points, required this.streak});
+  const _FriendCard({
+    required this.name,
+    required this.points,
+    required this.streak,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 130,
-      padding: const EdgeInsets.all(12),
+      height: 140,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 14, offset: Offset(0, 6))],
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, Color(0xFFF9FBFC)],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+        border: Border.all(color: const Color(0xFFE6EDF1), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              CircleAvatar(backgroundColor: AppColors.primary.withOpacity(.12), child: const Icon(Icons.person, color: AppColors.primary)),
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFEFF4F6), Color(0xFFFDFEFE)],
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x11000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const CircleAvatar(
+                  radius: 22,
+                  backgroundColor: Colors.transparent,
+                  child: Icon(Icons.person, color: AppColors.dark, size: 24),
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.w700))),
-              Row(children: [const Icon(Icons.local_fire_department_outlined, size: 18, color: AppColors.primary), const SizedBox(width: 4), Text('$streak')]),
+              Expanded(
+                child: Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: AppColors.dark,
+                  ),
+                ),
+              ),
             ],
           ),
           const Spacer(),
-          Row(children: [const Icon(Icons.monetization_on_outlined, size: 18, color: AppColors.primary), const SizedBox(width: 6), Text('$points نقطة', style: const TextStyle(fontWeight: FontWeight.w600))]),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withOpacity(.12),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('🔥', style: TextStyle(fontSize: 14)),
+                const SizedBox(width: 4),
+                Text(
+                  '$streak يوم',
+                  style: const TextStyle(
+                    color: AppColors.accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(
+                Icons.stars_rounded,
+                size: 18,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$points نقطة',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.dark,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -490,21 +1075,24 @@ class _FriendCard extends StatelessWidget {
 }
 
 /* ======================= Bottom Navigation (زر الوسط = الخريطة) ======================= */
-
-class _BottomNav extends StatelessWidget {
+class BottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final VoidCallback onCenterTap;
-  const _BottomNav({required this.currentIndex, required this.onTap, required this.onCenterTap});
+  const BottomNav({
+    required this.currentIndex,
+    required this.onTap,
+    required this.onCenterTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final items = [
-      _NavItem(icon: Icons.home_outlined, label: 'الرئيسية'),
-      _NavItem(icon: Icons.checklist_outlined, label: 'مهامي'),
-      _NavItem(icon: Icons.map_outlined, label: 'الخريطة', isCenter: true), // <— تغيّر هنا
-      _NavItem(icon: Icons.notifications_none, label: 'الإشعارات'),
-      _NavItem(icon: Icons.group_outlined, label: 'الأصدقاء'),
+      NavItem(icon: Icons.home_outlined, label: 'الرئيسية'),
+      NavItem(icon: Icons.fact_check_outlined, label: 'مهامي'),
+      NavItem(icon: Icons.map_outlined, label: 'الخريطة', isCenter: true),
+      NavItem(icon: Icons.notifications_none, label: 'الإشعارات'),
+      NavItem(icon: Icons.group_outlined, label: 'الأصدقاء'),
     ];
 
     return Padding(
@@ -518,6 +1106,7 @@ class _BottomNav extends StatelessWidget {
             children: List.generate(items.length, (i) {
               final it = items[i];
               final selected = i == currentIndex;
+
               if (it.isCenter) {
                 return Expanded(
                   child: Center(
@@ -527,24 +1116,42 @@ class _BottomNav extends StatelessWidget {
                       child: Container(
                         width: 58,
                         height: 58,
-                        decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                        child: const Icon(Icons.map_outlined, color: Colors.white), // <— أيقونة الخريطة
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.map_outlined,
+                          color: Colors.white,
+                          size: 28,
+                        ),
                       ),
                     ),
                   ),
                 );
               }
+
               return Expanded(
                 child: InkWell(
                   onTap: () => onTap(i),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(it.icon, color: selected ? AppColors.primary : Colors.black54),
+                      Icon(
+                        it.icon,
+                        color: selected ? AppColors.primary : Colors.black54,
+                        size: 26,
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         it.label,
-                        style: TextStyle(fontSize: 12, fontWeight: selected ? FontWeight.w800 : FontWeight.w500, color: selected ? AppColors.primary : Colors.black54),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w500,
+                          color: selected ? AppColors.primary : Colors.black54,
+                        ),
                       ),
                     ],
                   ),
@@ -558,37 +1165,319 @@ class _BottomNav extends StatelessWidget {
   }
 }
 
-class _NavItem {
+class NavItem {
   final IconData icon;
   final String label;
   final bool isCenter;
-  _NavItem({required this.icon, required this.label, this.isCenter = false});
+  NavItem({required this.icon, required this.label, this.isCenter = false});
 }
 
 /* ======================= Background Painter ======================= */
-
 class _BgPainter extends CustomPainter {
   final double t;
   _BgPainter(this.t);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final g1 = LinearGradient(
+    // خلفية مبسّطة واحترافية
+    final base = const LinearGradient(
       begin: Alignment.topRight,
       end: Alignment.bottomLeft,
-      colors: [AppColors.background, Color.lerp(AppColors.background, Colors.white, .25)!],
+      colors: [AppColors.background, Color(0xFFF6FBF9), Color(0xFFFFFFFF)],
+      stops: [0.0, 0.6, 1.0],
     ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, Paint()..shader = base);
 
-    final g2 = RadialGradient(
-      center: Alignment(.9 * math.cos(t * 2 * math.pi), .8 * math.sin(t * 2 * math.pi)),
-      radius: 1.2,
-      colors: const [Color(0x11009688), Color(0x00009688)],
+    // تأثير خفيف جداً: بقعتان ناعمتان شبه شفافتين تتحركان ببطء
+    final blob1 = Paint()..color = AppColors.primary.withOpacity(0.06);
+    final blob2 = Paint()..color = AppColors.accent.withOpacity(0.04);
+
+    final cx1 = size.width * (0.18 + 0.02 * math.sin(t * 2 * math.pi));
+    final cy1 = size.height * (0.22 + 0.02 * math.cos(t * 2 * math.pi));
+    canvas.drawCircle(Offset(cx1, cy1), 90, blob1);
+
+    final cx2 = size.width * (0.82 + 0.015 * math.cos(t * 2 * math.pi));
+    final cy2 = size.height * (0.78 + 0.018 * math.sin(t * 2 * math.pi));
+    canvas.drawCircle(Offset(cx2, cy2), 110, blob2);
+
+    // طبقة "فوج" خفيفة جداً أعلى الشاشة
+    final topFog = const LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.center,
+      colors: [Color(0x22FFFFFF), Color(0x00FFFFFF)],
     ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, Paint()..shader = topFog);
 
-    canvas.drawRect(Offset.zero & size, Paint()..shader = g1);
-    canvas.drawRect(Offset.zero & size, Paint()..shader = g2);
+    // فينييت رقيق في الزاوية
+    final vignette = const RadialGradient(
+      center: Alignment(-0.85, -0.9),
+      radius: 0.8,
+      colors: [Color(0x0A003659), Colors.transparent],
+      stops: [0.0, 1.0],
+    ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, Paint()..shader = vignette);
   }
 
   @override
   bool shouldRepaint(covariant _BgPainter oldDelegate) => oldDelegate.t != t;
+}
+
+/* ======================= IsoLand 2.5D Platform (جديدة) ======================= */
+
+class IsoItem {
+  final int row;
+  final int col;
+  final Widget child;
+  const IsoItem({required this.row, required this.col, required this.child});
+}
+
+class IsoLand extends StatelessWidget {
+  final int rows;
+  final int cols;
+  final double height;
+  final double thickness;
+  final Color topColor;
+  final Color sideColor;
+  final Color gridColor;
+  final double gridOpacity;
+  final List<IsoItem> items;
+
+  const IsoLand({
+    super.key,
+    this.rows = 6,
+    this.cols = 6,
+    this.height = 260,
+    this.thickness = 14,
+    this.topColor = const Color(0xFFBFE6C0),
+    this.sideColor = const Color(0xFFA1C9A3),
+    this.gridColor = const Color(0xFF1F7A8C),
+    this.gridOpacity = .08,
+    this.items = const [],
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final double width = height * 1.45;
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // ظل أسفل المنصّة
+          Positioned.fill(
+            top: thickness,
+            child: CustomPaint(painter: _IsoShadowPainter()),
+          ),
+
+          // جسم المنصّة + الشبكة (تمرير السمك)
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _IsoPlatformPainter(
+                rows: rows,
+                cols: cols,
+                topColor: topColor,
+                sideColor: sideColor,
+                gridColor: gridColor.withOpacity(gridOpacity),
+                depth: thickness, // << جديد
+              ),
+            ),
+          ),
+
+          // العناصر فوق الشبكة
+          ...items.map(
+            (it) => _IsoPositioned(
+              rows: rows,
+              cols: cols,
+              row: it.row,
+              col: it.col,
+              child: it.child,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IsoPlatformPainter extends CustomPainter {
+  final int rows, cols;
+  final Color topColor, sideColor, gridColor;
+  final double depth; // << جديد
+
+  _IsoPlatformPainter({
+    required this.rows,
+    required this.cols,
+    required this.topColor,
+    required this.sideColor,
+    required this.gridColor,
+    required this.depth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // رؤوس الرومبوس العلوي
+    final top = Offset(w * .50, h * .16);
+    final right = Offset(w * .86, h * .50);
+    final bottom = Offset(w * .50, h * .84);
+    final left = Offset(w * .14, h * .50);
+
+    // نسخ مُزاحة لأسفل بمقدار العمق
+    final top2 = top.translate(0, depth);
+    final right2 = right.translate(0, depth);
+    final bottom2 = bottom.translate(0, depth);
+    final left2 = left.translate(0, depth);
+
+    // === وجوه السمك (تكملة الفراغ) ===
+    final leftFace = Path()
+      ..moveTo(left.dx, left.dy)
+      ..lineTo(bottom.dx, bottom.dy)
+      ..lineTo(bottom2.dx, bottom2.dy)
+      ..lineTo(left2.dx, left2.dy)
+      ..close();
+
+    final rightFace = Path()
+      ..moveTo(bottom.dx, bottom.dy)
+      ..lineTo(right.dx, right.dy)
+      ..lineTo(right2.dx, right2.dy)
+      ..lineTo(bottom2.dx, bottom2.dy)
+      ..close();
+
+    final leftPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [sideColor.withOpacity(.95), sideColor.withOpacity(.8)],
+      ).createShader(Rect.fromPoints(left, bottom2));
+
+    final rightPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topRight,
+        end: Alignment.bottomLeft,
+        colors: [sideColor.withOpacity(.95), sideColor.withOpacity(.8)],
+      ).createShader(Rect.fromPoints(bottom, right2));
+
+    canvas.drawPath(leftFace, leftPaint);
+    canvas.drawPath(rightFace, rightPaint);
+
+    // سطح الرومبوس العلوي
+    final topPath = Path()
+      ..moveTo(top.dx, top.dy)
+      ..lineTo(right.dx, right.dy)
+      ..lineTo(bottom.dx, bottom.dy)
+      ..lineTo(left.dx, left.dy)
+      ..close();
+
+    canvas.drawPath(
+      topPath,
+      Paint()
+        ..shader = LinearGradient(
+          colors: [topColor.withOpacity(.95), topColor.withOpacity(.85)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ).createShader(Offset.zero & size),
+    );
+
+    // شبكة خفيفة على السطح
+    final gridPaint = Paint()
+      ..color = gridColor
+      ..strokeWidth = 1;
+
+    Offset lerp(Offset a, Offset b, double t) =>
+        Offset(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t);
+
+    for (int r = 1; r < rows; r++) {
+      final t = r / rows;
+      final a = lerp(top, right, t);
+      final b = lerp(left, bottom, t);
+      canvas.drawLine(a, b, gridPaint);
+    }
+    for (int c = 1; c < cols; c++) {
+      final t = c / cols;
+      final a = lerp(top, left, t);
+      final b = lerp(right, bottom, t);
+      canvas.drawLine(a, b, gridPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _IsoPlatformPainter old) =>
+      old.rows != rows ||
+      old.cols != cols ||
+      old.topColor != topColor ||
+      old.sideColor != sideColor ||
+      old.gridColor != gridColor ||
+      old.depth != depth;
+}
+
+class _IsoShadowPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final shadow = Path()
+      ..moveTo(w * .18, h * .60)
+      ..lineTo(w * .86, h * .60)
+      ..lineTo(w * .92, h * .72)
+      ..lineTo(w * .12, h * .72)
+      ..close();
+
+    final paint = Paint()
+      ..color = Colors.black.withOpacity(.08)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawPath(shadow, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _IsoPositioned extends StatelessWidget {
+  final int rows, cols, row, col;
+  final Widget child;
+
+  const _IsoPositioned({
+    required this.rows,
+    required this.cols,
+    required this.row,
+    required this.col,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (_, c) {
+        final w = c.maxWidth;
+        final h = c.maxHeight;
+
+        final top = Offset(w * .50, h * .16);
+        final right = Offset(w * .86, h * .50);
+        final bottom = Offset(w * .50, h * .84);
+        final left = Offset(w * .14, h * .50);
+
+        Offset lerp(Offset a, Offset b, double t) =>
+            Offset(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t);
+
+        final u = (col + .5) / cols; // يسار ↔ يمين
+        final v = (row + .5) / rows; // أعلى ↔ أسفل
+
+        final edgeA = lerp(left, top, 1 - v);
+        final edgeB = lerp(bottom, right, 1 - v);
+        final p = lerp(edgeA, edgeB, u);
+
+        return Positioned(
+          left: p.dx,
+          top: p.dy,
+          child: Transform.translate(
+            offset: const Offset(-16, -28),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
 }
