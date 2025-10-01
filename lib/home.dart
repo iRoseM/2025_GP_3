@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'map.dart';
 
-
 // لوحة الألوان (هوية Nameer)
 class AppColors {
   static const primary = Color(0xFF4BAA98); // تركوازي مشبّع
@@ -341,12 +340,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ],
         ),
 
-        // ======== شريط التنقل (بدون أي تغيير) ========
+        // ======== شريط التنقل ========
         bottomNavigationBar: BottomNav(
           currentIndex: _currentIndex,
           onTap: (i) => setState(() => _currentIndex = i),
           onCenterTap: () {
-            // TODO: افتح صفحة الخريطة
+            // ينقله على صفحة الخريطة (map.dart)
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const MapPage()));
           },
         ),
       ),

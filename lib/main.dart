@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'home_page.dart'; // مسار الملف الذي أنشأناه
+import 'home.dart'; // مسار الملف الذي أنشأناه
 
 void main() => runApp(const MyApp());
 
@@ -35,8 +35,13 @@ class MyApp extends StatelessWidget {
           style: FilledButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
-            textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
+            ),
             minimumSize: const Size.fromHeight(52),
           ),
         ),
@@ -65,7 +70,6 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: const RegisterPage(),
-
     );
   }
 }
@@ -79,13 +83,14 @@ class RegisterPage extends StatefulWidget {
   State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMixin {
+class _RegisterPageState extends State<RegisterPage>
+    with TickerProviderStateMixin {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _obscure = true;
 
-  late final AnimationController _bgCtrl;    // خلفية متحركة
+  late final AnimationController _bgCtrl; // خلفية متحركة
   late final AnimationController _introCtrl; // دخول متدرج
   late final AnimationController _shakeCtrl; // اهتزاز خطأ
   late final AnimationController _pressCtrl; // ضغط الزر
@@ -93,10 +98,24 @@ class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMix
   @override
   void initState() {
     super.initState();
-    _bgCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 14))..repeat();
-    _introCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..forward();
-    _shakeCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
-    _pressCtrl = AnimationController(vsync: this, lowerBound: 0.0, upperBound: 0.06, duration: const Duration(milliseconds: 140));
+    _bgCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
+    _introCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..forward();
+    _shakeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _pressCtrl = AnimationController(
+      vsync: this,
+      lowerBound: 0.0,
+      upperBound: 0.06,
+      duration: const Duration(milliseconds: 140),
+    );
   }
 
   @override
@@ -114,14 +133,21 @@ class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMix
   Widget _stagger({required double start, required Widget child}) {
     final anim = CurvedAnimation(
       parent: _introCtrl,
-      curve: Interval(start, math.min(start + 0.25, 1.0), curve: Curves.easeOut),
+      curve: Interval(
+        start,
+        math.min(start + 0.25, 1.0),
+        curve: Curves.easeOut,
+      ),
     );
     return AnimatedBuilder(
       animation: anim,
       child: child,
       builder: (_, c) => Opacity(
         opacity: anim.value,
-        child: Transform.translate(offset: Offset(0, (1 - anim.value) * 24), child: c),
+        child: Transform.translate(
+          offset: Offset(0, (1 - anim.value) * 24),
+          child: c,
+        ),
       ),
     );
   }
@@ -139,21 +165,20 @@ class _RegisterPageState extends State<RegisterPage> with TickerProviderStateMix
     );
   }
 
-void _submit(BuildContext context) {
-  final ok = _formKey.currentState?.validate() ?? false;
-  if (!ok) {
-    _shakeCtrl
-      ..reset()
-      ..forward();
-    return;
+  void _submit(BuildContext context) {
+    final ok = _formKey.currentState?.validate() ?? false;
+    if (!ok) {
+      _shakeCtrl
+        ..reset()
+        ..forward();
+      return;
+    }
+
+    // التنقّل إلى الهوم بيج بعد نجاح التحقق
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
   }
-
-  // التنقّل إلى الهوم بيج بعد نجاح التحقق
-  Navigator.of(context).pushReplacement(
-    MaterialPageRoute(builder: (_) => const HomePage()),
-  );
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -180,20 +205,22 @@ void _submit(BuildContext context) {
                 animation: _bgCtrl,
                 builder: (_, __) {
                   final t = _bgCtrl.value;
-                  return Stack(children: [
-                    _blob(
-                      right: 20 + 10 * math.sin(2 * math.pi * t),
-                      top: 80 + 20 * math.cos(2 * math.pi * t),
-                      size: 180,
-                      color: AppColors.primary.withOpacity(.12),
-                    ),
-                    _blob(
-                      left: -40 + 30 * math.cos(2 * math.pi * (t + .3)),
-                      bottom: -10 + 25 * math.sin(2 * math.pi * (t + .3)),
-                      size: 220,
-                      color: AppColors.light.withOpacity(.10),
-                    ),
-                  ]);
+                  return Stack(
+                    children: [
+                      _blob(
+                        right: 20 + 10 * math.sin(2 * math.pi * t),
+                        top: 80 + 20 * math.cos(2 * math.pi * t),
+                        size: 180,
+                        color: AppColors.primary.withOpacity(.12),
+                      ),
+                      _blob(
+                        left: -40 + 30 * math.cos(2 * math.pi * (t + .3)),
+                        bottom: -10 + 25 * math.sin(2 * math.pi * (t + .3)),
+                        size: 220,
+                        color: AppColors.light.withOpacity(.10),
+                      ),
+                    ],
+                  );
                 },
               ),
             ),
@@ -203,9 +230,14 @@ void _submit(BuildContext context) {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   return SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
                       child: Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 440),
@@ -226,7 +258,10 @@ void _submit(BuildContext context) {
                                         child: SizedBox(
                                           width: 200,
                                           height: 200,
-                                          child: Image.asset('assets/img/logo.png', fit: BoxFit.contain),
+                                          child: Image.asset(
+                                            'assets/img/logo.png',
+                                            fit: BoxFit.contain,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -262,9 +297,13 @@ void _submit(BuildContext context) {
                                         hintText: 'name@example.com',
                                       ),
                                       validator: (v) {
-                                        if (v == null || v.trim().isEmpty) return 'أدخل البريد الإلكتروني';
-                                        final emailReg = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-                                        if (!emailReg.hasMatch(v.trim())) return 'بريد إلكتروني غير صالح';
+                                        if (v == null || v.trim().isEmpty)
+                                          return 'أدخل البريد الإلكتروني';
+                                        final emailReg = RegExp(
+                                          r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                                        );
+                                        if (!emailReg.hasMatch(v.trim()))
+                                          return 'بريد إلكتروني غير صالح';
                                         return null;
                                       },
                                     ),
@@ -296,20 +335,32 @@ void _submit(BuildContext context) {
                                       obscureText: _obscure,
                                       textInputAction: TextInputAction.done,
                                       decoration: InputDecoration(
-                                        prefixIcon: const Icon(Icons.lock_outline),
+                                        prefixIcon: const Icon(
+                                          Icons.lock_outline,
+                                        ),
                                         hintText: '••••••••',
                                         suffixIcon: AnimatedRotation(
                                           turns: _obscure ? 0 : .25,
-                                          duration: const Duration(milliseconds: 220),
+                                          duration: const Duration(
+                                            milliseconds: 220,
+                                          ),
                                           child: IconButton(
-                                            onPressed: () => setState(() => _obscure = !_obscure),
-                                            icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                                            onPressed: () => setState(
+                                              () => _obscure = !_obscure,
+                                            ),
+                                            icon: Icon(
+                                              _obscure
+                                                  ? Icons.visibility
+                                                  : Icons.visibility_off,
+                                            ),
                                           ),
                                         ),
                                       ),
                                       validator: (v) {
-                                        if (v == null || v.isEmpty) return 'أدخل كلمة المرور';
-                                        if (v.length < 6) return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                                        if (v == null || v.isEmpty)
+                                          return 'أدخل كلمة المرور';
+                                        if (v.length < 6)
+                                          return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
                                         return null;
                                       },
                                     ),
@@ -329,14 +380,18 @@ void _submit(BuildContext context) {
                                       onTapCancel: () => _pressCtrl.reverse(),
                                       onTapUp: (_) => _pressCtrl.reverse(),
                                       child: AnimatedBuilder(
-                                        animation: Listenable.merge([_bgCtrl, _pressCtrl]),
+                                        animation: Listenable.merge([
+                                          _bgCtrl,
+                                          _pressCtrl,
+                                        ]),
                                         builder: (_, __) {
                                           final scale = 1 - _pressCtrl.value;
                                           return Transform.scale(
                                             scale: scale,
                                             child: DecoratedBox(
                                               decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(28),
+                                                borderRadius:
+                                                    BorderRadius.circular(28),
                                                 boxShadow: const [
                                                   BoxShadow(
                                                     color: Color(0x33009688),
@@ -347,16 +402,25 @@ void _submit(BuildContext context) {
                                                 gradient: SweepGradient(
                                                   startAngle: 0,
                                                   endAngle: math.pi * 2,
-                                                  transform: GradientRotation(_bgCtrl.value * math.pi * 2),
-                                                  colors: const [AppColors.primary, AppColors.light, AppColors.primary],
+                                                  transform: GradientRotation(
+                                                    _bgCtrl.value * math.pi * 2,
+                                                  ),
+                                                  colors: const [
+                                                    AppColors.primary,
+                                                    AppColors.light,
+                                                    AppColors.primary,
+                                                  ],
                                                 ),
                                               ),
                                               child: FilledButton(
                                                 style: FilledButton.styleFrom(
-                                                  backgroundColor: Colors.transparent,
-                                                  shadowColor: Colors.transparent,
+                                                  backgroundColor:
+                                                      Colors.transparent,
+                                                  shadowColor:
+                                                      Colors.transparent,
                                                 ),
-                                                onPressed: () => _submit(context),
+                                                onPressed: () =>
+                                                    _submit(context),
                                                 child: const Text('تسجيل دخول'),
                                               ),
                                             ),
@@ -375,7 +439,9 @@ void _submit(BuildContext context) {
                                     label: ' انشاء حساب جديد',
                                     onTap: () {
                                       Navigator.of(context).push(
-                                        MaterialPageRoute(builder: (_) => const SignUpPage()),
+                                        MaterialPageRoute(
+                                          builder: (_) => const SignUpPage(),
+                                        ),
                                       );
                                     },
                                   ),
@@ -440,7 +506,10 @@ class _GradientBackgroundPainter extends CustomPainter {
       ],
     ).createShader(Offset.zero & size);
     final g2 = RadialGradient(
-      center: Alignment(0.8 * math.cos(t * 2 * math.pi), 0.8 * math.sin(t * 2 * math.pi)),
+      center: Alignment(
+        0.8 * math.cos(t * 2 * math.pi),
+        0.8 * math.sin(t * 2 * math.pi),
+      ),
       radius: 1.2,
       colors: const [Color(0x1A009688), Color(0x00009688)],
     ).createShader(Offset.zero & size);
@@ -470,7 +539,8 @@ class _GradientBackgroundPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GradientBackgroundPainter oldDelegate) => oldDelegate.t != t;
+  bool shouldRepaint(covariant _GradientBackgroundPainter oldDelegate) =>
+      oldDelegate.t != t;
 }
 
 /// رابط بنبض خفيف
@@ -483,13 +553,19 @@ class _BouncyLink extends StatefulWidget {
   State<_BouncyLink> createState() => _BouncyLinkState();
 }
 
-class _BouncyLinkState extends State<_BouncyLink> with SingleTickerProviderStateMixin {
+class _BouncyLinkState extends State<_BouncyLink>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, lowerBound: 0.0, upperBound: 0.04, duration: const Duration(milliseconds: 120));
+    _ctrl = AnimationController(
+      vsync: this,
+      lowerBound: 0.0,
+      upperBound: 0.04,
+      duration: const Duration(milliseconds: 120),
+    );
   }
 
   @override
@@ -550,16 +626,27 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
   bool _obscure = true;
   String _gender = 'male'; // 'male' or 'female'
 
-  late final AnimationController _bgCtrl;    // خلفية متحركة
+  late final AnimationController _bgCtrl; // خلفية متحركة
   late final AnimationController _introCtrl; // دخول متدرج
   late final AnimationController _pressCtrl; // ضغط الزر
 
   @override
   void initState() {
     super.initState();
-    _bgCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 14))..repeat();
-    _introCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..forward();
-    _pressCtrl = AnimationController(vsync: this, lowerBound: 0.0, upperBound: 0.06, duration: const Duration(milliseconds: 140));
+    _bgCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
+    _introCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..forward();
+    _pressCtrl = AnimationController(
+      vsync: this,
+      lowerBound: 0.0,
+      upperBound: 0.06,
+      duration: const Duration(milliseconds: 140),
+    );
   }
 
   @override
@@ -577,27 +664,33 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
   Widget _stagger({required double start, required Widget child}) {
     final anim = CurvedAnimation(
       parent: _introCtrl,
-      curve: Interval(start, math.min(start + 0.25, 1.0), curve: Curves.easeOut),
+      curve: Interval(
+        start,
+        math.min(start + 0.25, 1.0),
+        curve: Curves.easeOut,
+      ),
     );
     return AnimatedBuilder(
       animation: anim,
       child: child,
       builder: (_, c) => Opacity(
         opacity: anim.value,
-        child: Transform.translate(offset: Offset(0, (1 - anim.value) * 24), child: c),
+        child: Transform.translate(
+          offset: Offset(0, (1 - anim.value) * 24),
+          child: c,
+        ),
       ),
     );
   }
 
-void _submit() {
-  final ok = _formKey.currentState?.validate() ?? false;
-  if (!ok) return;
+  void _submit() {
+    final ok = _formKey.currentState?.validate() ?? false;
+    if (!ok) return;
 
-  Navigator.of(context).pushReplacement(
-    MaterialPageRoute(builder: (_) => const HomePage()),
-  );
-}
-
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -624,20 +717,22 @@ void _submit() {
                 animation: _bgCtrl,
                 builder: (_, __) {
                   final t = _bgCtrl.value;
-                  return Stack(children: [
-                    _blob(
-                      right: 24 + 10 * math.sin(2 * math.pi * t),
-                      top: 64 + 16 * math.cos(2 * math.pi * t),
-                      size: 160,
-                      color: AppColors.primary.withOpacity(.10),
-                    ),
-                    _blob(
-                      left: -36 + 24 * math.cos(2 * math.pi * (t + .35)),
-                      bottom: -8 + 20 * math.sin(2 * math.pi * (t + .35)),
-                      size: 200,
-                      color: AppColors.light.withOpacity(.10),
-                    ),
-                  ]);
+                  return Stack(
+                    children: [
+                      _blob(
+                        right: 24 + 10 * math.sin(2 * math.pi * t),
+                        top: 64 + 16 * math.cos(2 * math.pi * t),
+                        size: 160,
+                        color: AppColors.primary.withOpacity(.10),
+                      ),
+                      _blob(
+                        left: -36 + 24 * math.cos(2 * math.pi * (t + .35)),
+                        bottom: -8 + 20 * math.sin(2 * math.pi * (t + .35)),
+                        size: 200,
+                        color: AppColors.light.withOpacity(.10),
+                      ),
+                    ],
+                  );
                 },
               ),
             ),
@@ -646,9 +741,14 @@ void _submit() {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   return SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
                     child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
                       child: Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 520),
@@ -668,7 +768,10 @@ void _submit() {
                                         child: SizedBox(
                                           width: 140,
                                           height: 140,
-                                          child: Image.asset('assets/img/logo.png', fit: BoxFit.contain),
+                                          child: Image.asset(
+                                            'assets/img/logo.png',
+                                            fit: BoxFit.contain,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 6),
@@ -690,7 +793,8 @@ void _submit() {
                                 _stagger(
                                   start: .1,
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
                                     children: [
                                       _label('اسم المستخدم'),
                                       const SizedBox(height: 8),
@@ -698,12 +802,16 @@ void _submit() {
                                         controller: _usernameCtrl,
                                         textInputAction: TextInputAction.next,
                                         decoration: const InputDecoration(
-                                          prefixIcon: Icon(Icons.person_outline),
+                                          prefixIcon: Icon(
+                                            Icons.person_outline,
+                                          ),
                                           hintText: 'nameer_user',
                                         ),
                                         validator: (v) {
-                                          if (v == null || v.trim().isEmpty) return 'أدخل اسم المستخدم';
-                                          if (v.trim().length < 3) return 'اسم المستخدم قصير جداً';
+                                          if (v == null || v.trim().isEmpty)
+                                            return 'أدخل اسم المستخدم';
+                                          if (v.trim().length < 3)
+                                            return 'اسم المستخدم قصير جداً';
                                           return null;
                                         },
                                       ),
@@ -717,22 +825,30 @@ void _submit() {
                                 _stagger(
                                   start: .2,
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
                                     children: [
                                       _label('البريد الإلكتروني'),
                                       const SizedBox(height: 8),
                                       TextFormField(
                                         controller: _emailCtrl,
-                                        keyboardType: TextInputType.emailAddress,
+                                        keyboardType:
+                                            TextInputType.emailAddress,
                                         textInputAction: TextInputAction.next,
                                         decoration: const InputDecoration(
-                                          prefixIcon: Icon(Icons.email_outlined),
+                                          prefixIcon: Icon(
+                                            Icons.email_outlined,
+                                          ),
                                           hintText: 'name@example.com',
                                         ),
                                         validator: (v) {
-                                          if (v == null || v.trim().isEmpty) return 'أدخل البريد الإلكتروني';
-                                          final emailReg = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-                                          if (!emailReg.hasMatch(v.trim())) return 'بريد إلكتروني غير صالح';
+                                          if (v == null || v.trim().isEmpty)
+                                            return 'أدخل البريد الإلكتروني';
+                                          final emailReg = RegExp(
+                                            r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                                          );
+                                          if (!emailReg.hasMatch(v.trim()))
+                                            return 'بريد إلكتروني غير صالح';
                                           return null;
                                         },
                                       ),
@@ -746,7 +862,8 @@ void _submit() {
                                 _stagger(
                                   start: .3,
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
                                     children: [
                                       _label('كلمة المرور'),
                                       const SizedBox(height: 8),
@@ -755,20 +872,32 @@ void _submit() {
                                         obscureText: _obscure,
                                         textInputAction: TextInputAction.next,
                                         decoration: InputDecoration(
-                                          prefixIcon: const Icon(Icons.lock_outline),
+                                          prefixIcon: const Icon(
+                                            Icons.lock_outline,
+                                          ),
                                           hintText: '••••••••',
                                           suffixIcon: AnimatedRotation(
                                             turns: _obscure ? 0 : .25,
-                                            duration: const Duration(milliseconds: 220),
+                                            duration: const Duration(
+                                              milliseconds: 220,
+                                            ),
                                             child: IconButton(
-                                              onPressed: () => setState(() => _obscure = !_obscure),
-                                              icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                                              onPressed: () => setState(
+                                                () => _obscure = !_obscure,
+                                              ),
+                                              icon: Icon(
+                                                _obscure
+                                                    ? Icons.visibility
+                                                    : Icons.visibility_off,
+                                              ),
                                             ),
                                           ),
                                         ),
                                         validator: (v) {
-                                          if (v == null || v.isEmpty) return 'أدخل كلمة المرور';
-                                          if (v.length < 6) return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                                          if (v == null || v.isEmpty)
+                                            return 'أدخل كلمة المرور';
+                                          if (v.length < 6)
+                                            return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
                                           return null;
                                         },
                                       ),
@@ -786,24 +915,38 @@ void _submit() {
                                       // العمر
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
                                           children: [
                                             _label('العمر'),
                                             const SizedBox(height: 8),
                                             TextFormField(
                                               controller: _ageCtrl,
-                                              keyboardType: TextInputType.number,
-                                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                                              textInputAction: TextInputAction.done,
+                                              keyboardType:
+                                                  TextInputType.number,
+                                              inputFormatters: [
+                                                FilteringTextInputFormatter
+                                                    .digitsOnly,
+                                              ],
+                                              textInputAction:
+                                                  TextInputAction.done,
                                               decoration: const InputDecoration(
-                                                prefixIcon: Icon(Icons.cake_outlined),
+                                                prefixIcon: Icon(
+                                                  Icons.cake_outlined,
+                                                ),
                                                 hintText: 'مثال: 18',
                                               ),
                                               validator: (v) {
-                                                if (v == null || v.trim().isEmpty) return 'أدخل العمر';
-                                                final n = int.tryParse(v.trim());
-                                                if (n == null) return 'أدخل رقمًا صحيحًا';
-                                                if (n < 10 || n > 120) return 'العمر غير منطقي';
+                                                if (v == null ||
+                                                    v.trim().isEmpty)
+                                                  return 'أدخل العمر';
+                                                final n = int.tryParse(
+                                                  v.trim(),
+                                                );
+                                                if (n == null)
+                                                  return 'أدخل رقمًا صحيحًا';
+                                                if (n < 10 || n > 120)
+                                                  return 'العمر غير منطقي';
                                                 return null;
                                               },
                                             ),
@@ -814,34 +957,51 @@ void _submit() {
                                       // الجنس
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
                                           children: [
                                             _label('الجنس'),
                                             const SizedBox(height: 8),
                                             DecoratedBox(
                                               decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(14),
-                                                border: Border.all(color: AppColors.light, width: 1.2),
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                                border: Border.all(
+                                                  color: AppColors.light,
+                                                  width: 1.2,
+                                                ),
                                               ),
                                               child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 6,
+                                                    ),
                                                 child: Row(
                                                   children: [
                                                     Expanded(
                                                       child: _GenderChip(
-                                                        selected: _gender == 'male',
+                                                        selected:
+                                                            _gender == 'male',
                                                         icon: Icons.male,
                                                         label: 'ذكر',
-                                                        onTap: () => setState(() => _gender = 'male'),
+                                                        onTap: () => setState(
+                                                          () =>
+                                                              _gender = 'male',
+                                                        ),
                                                       ),
                                                     ),
                                                     const SizedBox(width: 8),
                                                     Expanded(
                                                       child: _GenderChip(
-                                                        selected: _gender == 'female',
+                                                        selected:
+                                                            _gender == 'female',
                                                         icon: Icons.female,
                                                         label: 'أنثى',
-                                                        onTap: () => setState(() => _gender = 'female'),
+                                                        onTap: () => setState(
+                                                          () => _gender =
+                                                              'female',
+                                                        ),
                                                       ),
                                                     ),
                                                   ],
@@ -868,14 +1028,18 @@ void _submit() {
                                       onTapCancel: () => _pressCtrl.reverse(),
                                       onTapUp: (_) => _pressCtrl.reverse(),
                                       child: AnimatedBuilder(
-                                        animation: Listenable.merge([_bgCtrl, _pressCtrl]),
+                                        animation: Listenable.merge([
+                                          _bgCtrl,
+                                          _pressCtrl,
+                                        ]),
                                         builder: (_, __) {
                                           final scale = 1 - _pressCtrl.value;
                                           return Transform.scale(
                                             scale: scale,
                                             child: DecoratedBox(
                                               decoration: BoxDecoration(
-                                                borderRadius: BorderRadius.circular(28),
+                                                borderRadius:
+                                                    BorderRadius.circular(28),
                                                 boxShadow: const [
                                                   BoxShadow(
                                                     color: Color(0x33009688),
@@ -886,14 +1050,22 @@ void _submit() {
                                                 gradient: SweepGradient(
                                                   startAngle: 0,
                                                   endAngle: math.pi * 2,
-                                                  transform: GradientRotation(_bgCtrl.value * math.pi * 2),
-                                                  colors: const [AppColors.primary, AppColors.light, AppColors.primary],
+                                                  transform: GradientRotation(
+                                                    _bgCtrl.value * math.pi * 2,
+                                                  ),
+                                                  colors: const [
+                                                    AppColors.primary,
+                                                    AppColors.light,
+                                                    AppColors.primary,
+                                                  ],
                                                 ),
                                               ),
                                               child: FilledButton(
                                                 style: FilledButton.styleFrom(
-                                                  backgroundColor: Colors.transparent,
-                                                  shadowColor: Colors.transparent,
+                                                  backgroundColor:
+                                                      Colors.transparent,
+                                                  shadowColor:
+                                                      Colors.transparent,
                                                 ),
                                                 onPressed: _submit,
                                                 child: const Text('إنشاء حساب'),
@@ -936,15 +1108,15 @@ void _submit() {
 
   // Label موحّد
   Widget _label(String text) => Align(
-        alignment: Alignment.centerRight,
-        child: Text(
-          text,
-          style: TextStyle(
-            color: Colors.black.withOpacity(0.75),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
+    alignment: Alignment.centerRight,
+    child: Text(
+      text,
+      style: TextStyle(
+        color: Colors.black.withOpacity(0.75),
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
 
   // Blob helper محلي
   Widget _blob({
@@ -989,7 +1161,9 @@ class _GenderChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? AppColors.primary.withOpacity(.12) : Colors.transparent;
+    final bg = selected
+        ? AppColors.primary.withOpacity(.12)
+        : Colors.transparent;
     final border = selected ? AppColors.primary : AppColors.light;
     final fg = selected ? AppColors.dark : Colors.black.withOpacity(.7);
 
@@ -1009,7 +1183,10 @@ class _GenderChip extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: AppColors.primary),
             const SizedBox(width: 6),
-            Text(label, style: TextStyle(fontWeight: FontWeight.w600, color: fg)),
+            Text(
+              label,
+              style: TextStyle(fontWeight: FontWeight.w600, color: fg),
+            ),
           ],
         ),
       ),
