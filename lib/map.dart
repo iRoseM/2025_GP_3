@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'home.dart';
 
-/// استورد AppColors من ملفك المشترك إن كان موجودًا.
-/// إن لم يكن لديك ملف ألوان مشترك، أبقِ هذا التعريف البسيط:
+// إذا عندك ملف ألوان مشترك، استورده بدله
 class AppColors {
   static const primary = Color(0xFF009688);
   static const dark = Color(0xFF00695C);
@@ -41,30 +41,34 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _seedDemoData() {
-    // علامات تجريبية (تقدر تغير الإحداثيات لاحقًا من الـ API الخاص بك)
     final m1 = Marker(
       markerId: const MarkerId('bin_1'),
       position: const LatLng(24.726, 46.680),
-      infoWindow: const InfoWindow(title: 'حاوية تدوير - شارع العليا', snippet: 'بلاستيك/علب معدنية'),
+      infoWindow: const InfoWindow(
+        title: 'حاوية تدوير - شارع العليا',
+        snippet: 'بلاستيك/علب معدنية',
+      ),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
     );
     final m2 = Marker(
       markerId: const MarkerId('bin_2'),
       position: const LatLng(24.708, 46.690),
-      infoWindow: const InfoWindow(title: 'حاوية تدوير - الحي الدبلوماسي', snippet: 'ورق/كرتون'),
+      infoWindow: const InfoWindow(
+        title: 'حاوية تدوير - الحي الدبلوماسي',
+        snippet: 'ورق/كرتون',
+      ),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
     );
     final m3 = Marker(
       markerId: const MarkerId('bin_3'),
       position: const LatLng(24.700, 46.660),
-      infoWindow: const InfoWindow(title: 'حاوية تدوير - الملك عبدالله', snippet: 'زجاج'),
+      infoWindow: const InfoWindow(
+        title: 'حاوية تدوير - الملك عبدالله',
+        snippet: 'زجاج',
+      ),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose),
-      onTap: () {
-        // مثال: تفعيل أي حدث عند الضغط
-      },
     );
 
-    // مسار/خط تجريبي يربط بين العلامات (يشبه الرسم بالسكتش)
     final poly = Polyline(
       polylineId: const PolylineId('route_demo'),
       width: 5,
@@ -90,7 +94,9 @@ class _MapPageState extends State<MapPage> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-    final granted = permission == LocationPermission.always || permission == LocationPermission.whileInUse;
+    final granted =
+        permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
     if (mounted) {
       setState(() => _myLocationEnabled = granted);
     }
@@ -99,19 +105,26 @@ class _MapPageState extends State<MapPage> {
   Future<void> _goToMyLocation() async {
     setState(() => _isLoadingLocation = true);
     try {
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
       final controller = await _mapCtrl.future;
-      await controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
-        target: LatLng(pos.latitude, pos.longitude),
-        zoom: 15.5,
-        tilt: 0,
-        bearing: 0,
-      )));
+      await controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(pos.latitude, pos.longitude),
+            zoom: 15.5,
+            tilt: 0,
+            bearing: 0,
+          ),
+        ),
+      );
     } catch (_) {
-      // تقدر تعرض Snackbar برسالة خطأ ودّية
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
+          const SnackBar(
+            content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS'),
+          ),
         );
       }
     } finally {
@@ -119,24 +132,30 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
-  void _onSearchSubmitted(String query) async {
-    // TODO: اربط مع Places API/خدمتك للبحث (نتائج أماكن تدوير مثلاً)
-    // مؤقتًا: مجرد سناكبار
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بحث: $query')));
+  void _onSearchSubmitted(String query) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('بحث: $query')));
   }
 
   @override
   Widget build(BuildContext context) {
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         body: Stack(
           children: [
             GoogleMap(
-              initialCameraPosition: const CameraPosition(target: _riyadh, zoom: _initZoom),
+              initialCameraPosition: const CameraPosition(
+                target: _riyadh,
+                zoom: _initZoom,
+              ),
               onMapCreated: (c) => _mapCtrl.complete(c),
               myLocationEnabled: _myLocationEnabled,
-              myLocationButtonEnabled: false, // بنوفر زر مخصص تحت
+              myLocationButtonEnabled: false,
               compassEnabled: true,
               zoomControlsEnabled: false,
               markers: _markers,
@@ -144,7 +163,7 @@ class _MapPageState extends State<MapPage> {
               mapToolbarEnabled: false,
             ),
 
-            // ترويسة + نقاط + شريط بحث
+            // Header + Search
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -155,19 +174,17 @@ class _MapPageState extends State<MapPage> {
                     _SearchBar(
                       controller: _searchCtrl,
                       onSubmitted: _onSearchSubmitted,
-                      onFilterTap: () {
-                        _showFiltersBottomSheet();
-                      },
+                      onFilterTap: _showFiltersBottomSheet,
                     ),
                   ],
                 ),
               ),
             ),
 
-            // أزرار عائمة أسفل/وسط
+            // Floating buttons (right)
             Positioned(
               right: 12,
-              bottom: 28,
+              bottom: isKeyboardOpen ? 12 : 28,
               child: Column(
                 children: [
                   _RoundBtn(
@@ -180,34 +197,41 @@ class _MapPageState extends State<MapPage> {
                   _RoundBtn(
                     icon: Icons.layers_outlined,
                     tooltip: 'طبقات الخريطة',
-                    onTap: () async {
-                      // TODO: تبديل نمط الخريطة/إظهار طبقات حرارية/نقاط ازدحام…
-                    },
+                    onTap: () {},
                   ),
                 ],
               ),
             ),
 
-            // شريط سفلي مصغّر (يشبه الذي في السكتش)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                  child: _MiniBottomBar(
-                    onCenterAction: () {
-                      // مثال: بدء مهمة "تنظيف/جمع نفايات" من الخريطة
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('بدء مهمة ميدانية من الخريطة')),
-                      );
-                    },
+            // Mini bottom bar — يختفي عند ظهور الكيبورد
+            if (!isKeyboardOpen)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                    child: _MiniBottomBar(
+                      onHomeTap: () {
+                        // ✅ الانتقال إلى الصفحة الرئيسية
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (_) => const HomePage()),
+                          (route) => false,
+                        );
+                      },
+                      onCenterAction: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('بدء مهمة ميدانية من الخريطة'),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -218,7 +242,9 @@ class _MapPageState extends State<MapPage> {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
       builder: (_) {
         bool fPlastic = true;
         bool fPaper = true;
@@ -233,7 +259,10 @@ class _MapPageState extends State<MapPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('فلاتر الحاويات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  const Text(
+                    'فلاتر الحاويات',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
@@ -266,10 +295,12 @@ class _MapPageState extends State<MapPage> {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: () {
-                        // TODO: طبّق الفلاتر على _markers حسب أنواعها
+                        // TODO: طبّق الفلاتر على _markers
                         Navigator.pop(context);
                       },
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                      ),
                       child: const Text('تطبيق'),
                     ),
                   ),
@@ -283,7 +314,7 @@ class _MapPageState extends State<MapPage> {
   }
 }
 
-/* ======================= Widgets (داخل صفحة الخريطة) ======================= */
+/* ======================= Widgets ======================= */
 
 class _Header extends StatelessWidget {
   final int points;
@@ -296,21 +327,49 @@ class _Header extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 16, offset: Offset(0, 8))],
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          const CircleAvatar(radius: 18, backgroundColor: Color(0x22009688), child: Icon(Icons.person_outline, color: AppColors.primary)),
+          const CircleAvatar(
+            radius: 18,
+            backgroundColor: Color(0x22009688),
+            child: Icon(Icons.person_outline, color: AppColors.primary),
+          ),
           const SizedBox(width: 8),
-          const Expanded(child: Text('مرحبًا، Nameer', style: TextStyle(fontWeight: FontWeight.w700))),
+          const Expanded(
+            child: Text(
+              'مرحبًا، Nameer',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(100)),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(100),
+            ),
             child: Row(
               children: [
-                const Icon(Icons.monetization_on_outlined, size: 18, color: Colors.white),
+                const Icon(
+                  Icons.monetization_on_outlined,
+                  size: 18,
+                  color: Colors.white,
+                ),
                 const SizedBox(width: 4),
-                Text('$points', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                Text(
+                  '$points',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ],
             ),
           ),
@@ -325,7 +384,11 @@ class _SearchBar extends StatelessWidget {
   final ValueChanged<String> onSubmitted;
   final VoidCallback onFilterTap;
 
-  const _SearchBar({required this.controller, required this.onSubmitted, required this.onFilterTap});
+  const _SearchBar({
+    required this.controller,
+    required this.onSubmitted,
+    required this.onFilterTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -344,7 +407,10 @@ class _SearchBar extends StatelessWidget {
                 hintText: 'ابحث عن أقرب حاوية/نقطة تدوير...',
                 prefixIcon: Icon(Icons.search),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -355,9 +421,17 @@ class _SearchBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           child: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: const [
-              BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6)),
-            ]),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
             child: const Icon(Icons.tune, color: AppColors.dark),
           ),
         ),
@@ -372,7 +446,12 @@ class _RoundBtn extends StatelessWidget {
   final VoidCallback onTap;
   final bool isLoading;
 
-  const _RoundBtn({required this.icon, required this.tooltip, required this.onTap, this.isLoading = false});
+  const _RoundBtn({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.isLoading = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -384,9 +463,17 @@ class _RoundBtn extends StatelessWidget {
         child: Container(
           width: 48,
           height: 48,
-          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [
-            BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 6)),
-          ]),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
           child: isLoading
               ? const Padding(
                   padding: EdgeInsets.all(12),
@@ -401,7 +488,8 @@ class _RoundBtn extends StatelessWidget {
 
 class _MiniBottomBar extends StatelessWidget {
   final VoidCallback onCenterAction;
-  const _MiniBottomBar({required this.onCenterAction});
+  final VoidCallback onHomeTap;
+  const _MiniBottomBar({required this.onCenterAction, required this.onHomeTap});
 
   @override
   Widget build(BuildContext context) {
@@ -412,7 +500,13 @@ class _MiniBottomBar extends StatelessWidget {
         color: Colors.white,
         child: Row(
           children: [
-            const _MiniIcon(icon: Icons.home_outlined),
+            // ✅ زر البيت → HomePage
+            Expanded(
+              child: IconButton(
+                onPressed: onHomeTap,
+                icon: const Icon(Icons.home_outlined, color: Colors.black54),
+              ),
+            ),
             const _MiniIcon(icon: Icons.camera_alt_outlined),
             Expanded(
               child: Center(
@@ -422,8 +516,11 @@ class _MiniBottomBar extends StatelessWidget {
                   child: Container(
                     width: 56,
                     height: 56,
-                    decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                    child: const Icon(Icons.flag_outlined, color: Colors.white), // زر مركزي (المهمّة)
+                    decoration: const BoxDecoration(
+                      color: AppColors.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.flag_outlined, color: Colors.white),
                   ),
                 ),
               ),
@@ -444,7 +541,10 @@ class _MiniIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: IconButton(onPressed: () {}, icon: Icon(icon, color: Colors.black54)),
+      child: IconButton(
+        onPressed: () {},
+        icon: Icon(icon, color: Colors.black54),
+      ),
     );
   }
 }
