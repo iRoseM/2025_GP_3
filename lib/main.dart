@@ -177,7 +177,7 @@ class _RegisterPageState extends State<RegisterPage>
     // التنقّل إلى الهوم بيج بعد نجاح التحقق
     Navigator.of(
       context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
+    ).pushReplacement(MaterialPageRoute(builder: (_) => const homePage()));
   }
 
   @override
@@ -689,7 +689,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
 
     Navigator.of(
       context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
+    ).pushReplacement(MaterialPageRoute(builder: (_) => const homePage()));
   }
 
   @override
