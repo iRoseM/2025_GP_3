@@ -217,7 +217,7 @@ class _MapPageState extends State<MapPage> {
                       onHomeTap: () {
                         // ✅ الانتقال إلى الصفحة الرئيسية
                         Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const HomePage()),
+                          MaterialPageRoute(builder: (_) => const homePage()),
                           (route) => false,
                         );
                       },
@@ -500,7 +500,7 @@ class _MiniBottomBar extends StatelessWidget {
         color: Colors.white,
         child: Row(
           children: [
-            // ✅ زر البيت → HomePage
+            // ✅ زر البيت → homePage
             Expanded(
               child: IconButton(
                 onPressed: onHomeTap,

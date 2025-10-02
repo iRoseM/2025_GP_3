@@ -3,6 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'map.dart';
 
+// استيرادات الصفحات المرتبطة بالناف بار
+import 'task.dart'; // يحتوي على Widget: TaskPage
+import 'community.dart'; // يحتوي على Widget: CommunityPage
+import 'profile.dart'; // يحتوي على Widget: ProfilePage
+
 // لوحة الألوان (هوية Nameer)
 class AppColors {
   static const primary = Color(0xFF4BAA98); // تركوازي مشبّع
@@ -19,13 +24,13 @@ class AppColors {
   static const tealSoft = Color(0xFF75BCAF); // #75bcaf
 }
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class homePage extends StatefulWidget {
+  const homePage({super.key});
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<homePage> createState() => _homePageState();
 }
 
-class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
+class _homePageState extends State<homePage> with TickerProviderStateMixin {
   int _currentIndex = 0;
   late final AnimationController _bgCtrl;
   late final AnimationController _floatingCtrl;
@@ -74,30 +79,44 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                       child: Row(
                         children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [
-                                  AppColors.primary.withOpacity(.2),
-                                  AppColors.sea.withOpacity(.1),
-                                ],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withOpacity(.2),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
+                          // صورة البروفايل → تودّي لصفحة البروفايل
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(999),
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const profilePage(),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppColors.primary.withOpacity(.2),
+                                      AppColors.sea.withOpacity(.1),
+                                    ],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primary.withOpacity(.2),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: const CircleAvatar(
-                              radius: 24,
-                              backgroundColor: Colors.transparent,
-                              child: Icon(
-                                Icons.person_outline,
-                                color: AppColors.primary,
-                                size: 28,
+                                child: const CircleAvatar(
+                                  radius: 24,
+                                  backgroundColor: Colors.transparent,
+                                  child: Icon(
+                                    Icons.person_outline,
+                                    color: AppColors.primary,
+                                    size: 28,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -149,7 +168,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                  // === بلوك الأرض: عنوان داخل نفس الـContainer وبنفس نمط عنوان الداشبورد ===
+                  // === بلوك الأرض مع العنوان داخل نفس الحاوية ===
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -173,7 +192,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // العنوان بنفس حركة الداشبورد
+                            // العنوان
                             Row(
                               children: [
                                 Container(
@@ -208,10 +227,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                               child: IsoLand(
                                 rows: 6,
                                 cols: 6,
-                                height: 150, // مكبّرة شوي
-                                topColor: AppColors.mint, // السطح فاتح
-                                sideColor:
-                                    AppColors.tealSoft, // الجوانب أغمق بشوي
+                                height: 150,
+                                topColor: AppColors.mint,
+                                sideColor: AppColors.tealSoft,
                                 gridColor: AppColors.sea,
                                 gridOpacity: .08,
                               ),
@@ -236,7 +254,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                  // EcoLand Card مع تحسينات
+                  // EcoLand Card (زر دخول)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -371,12 +389,11 @@ class _PointsChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          // تدرّج مع الفاتح في الزاوية اليمنى العليا + تكثيره شوي
           gradient: const LinearGradient(
             colors: [AppColors.primary, AppColors.primary, AppColors.mint],
-            stops: [0.0, 0.5, 1.0], // mint يأخذ مساحة أكبر قليلاً
+            stops: [0.0, 0.5, 1.0],
             begin: Alignment.bottomLeft,
-            end: Alignment.topRight, // الفاتح يظهر بالزاوية اليمين (فوق)
+            end: Alignment.topRight,
           ),
           borderRadius: BorderRadius.circular(100),
           boxShadow: [
@@ -424,7 +441,6 @@ class _InlineBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        // تدرّج مع الفاتح بالزاوية اليمنى العليا وزيادته شوي
         gradient: const LinearGradient(
           colors: [AppColors.primary, AppColors.primary, AppColors.mint],
           stops: [0.0, 0.5, 1.0],
@@ -754,7 +770,6 @@ class _EcoLandCard extends StatelessWidget {
                       Container(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
-                          // زر مع الفاتح يمين وزيادة طفيفة
                           gradient: const LinearGradient(
                             colors: [
                               AppColors.primary,
@@ -833,7 +848,7 @@ class _EcoLandIllustration extends StatelessWidget {
 class _EcoLandPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    // خلفية ناعمة بلون سماوي فاتح
+    // خلفية ناعمة
     final bgGradient = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -847,7 +862,7 @@ class _EcoLandPainter extends CustomPainter {
     );
     canvas.drawRRect(rounded, bg);
 
-    // الأرض: تدرّج mint → tealSoft (فاتح لأغمق بسيط)
+    // الأرض: mint → tealSoft
     final ground = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
@@ -866,7 +881,7 @@ class _EcoLandPainter extends CustomPainter {
     );
     canvas.drawRRect(land, ground);
 
-    // ظل خفيف للأرض
+    // ظل خفيف
     final shadowPaint = Paint()
       ..color = Colors.black.withOpacity(.08)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
@@ -882,14 +897,13 @@ class _EcoLandPainter extends CustomPainter {
     canvas.drawRRect(shadowRect, shadowPaint);
     canvas.drawRRect(land, ground);
 
-    // شبكة التقسيمات - 4×4
+    // شبكة 4×4
     const cols = 4, rows = 4;
     final cellW = (size.width * .84) / cols;
     final cellH = (size.height * .76) / rows;
     final left = size.width * .08;
     final top = size.height * .12;
 
-    // خطوط الشبكة بلون مساعد من الهوية
     final gridPaint = Paint()
       ..color = AppColors.tealSoft.withOpacity(.35)
       ..strokeWidth = 1.5
@@ -908,7 +922,6 @@ class _EcoLandPainter extends CustomPainter {
       );
     }
 
-    // الإطار الخارجي للشبكة
     final borderPaint = Paint()
       ..color = AppColors.tealSoft.withOpacity(.55)
       ..strokeWidth = 2
@@ -922,7 +935,6 @@ class _EcoLandPainter extends CustomPainter {
       borderPaint,
     );
 
-    // نقاط صغيرة عند التقاطعات
     final dotPaint = Paint()..color = AppColors.sea.withOpacity(.35);
     for (int r = 0; r <= rows; r++) {
       for (int c = 0; c <= cols; c++) {
@@ -932,7 +944,7 @@ class _EcoLandPainter extends CustomPainter {
       }
     }
 
-    // توضيح صغير
+    // توضيح
     final textStyle = TextStyle(
       color: AppColors.dark.withOpacity(.45),
       fontSize: 9,
@@ -1135,7 +1147,35 @@ class BottomNav extends StatelessWidget {
 
               return Expanded(
                 child: InkWell(
-                  onTap: () => onTap(i),
+                  onTap: () {
+                    // لا تتنقّل لو الزر الحالي
+                    if (i == currentIndex) return;
+
+                    switch (i) {
+                      case 0: // الرئيسية
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(builder: (_) => const homePage()),
+                        );
+                        break;
+
+                      case 1: // مهامي
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(builder: (_) => const taskPage()),
+                        );
+                        break;
+
+                      case 4: // الأصدقاء
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => const communityPage(),
+                          ),
+                        );
+                        break;
+
+                      default:
+                        onTap(i); // مثلاً الإشعارات حالياً يغير المؤشّر فقط
+                    }
+                  },
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
