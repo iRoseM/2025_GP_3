@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'home.dart'; // يحتوي على AppColors: primary / light / dark / background / mint
+import 'home.dart';
 
 class profilePage extends StatelessWidget {
   const profilePage({super.key});
@@ -25,7 +25,6 @@ class profilePage extends StatelessWidget {
                 color: Colors.white,
               ),
             ),
-            // تدرّج أخضر مثل شارة النقاط
             flexibleSpace: Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -116,7 +115,7 @@ class profilePage extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // ---------- زر تعديل الحساب (تدرّج معكوس: mint يمين -> primary, primary) ----------
+                  // ---------- زر تعديل الحساب ----------
                   SizedBox(
                     width: double.infinity,
                     child: DecoratedBox(
@@ -124,8 +123,7 @@ class profilePage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(14),
                         gradient: const LinearGradient(
                           colors: [
-                            AppColors
-                                .mint, // يبدأ من اليمين (begin = centerRight)
+                            AppColors.mint,
                             AppColors.primary,
                             AppColors.primary,
                           ],
@@ -810,7 +808,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           flexibleSpace: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppColors.mint, AppColors.primary, AppColors.primary],
+                colors: [AppColors.primary, AppColors.primary, AppColors.mint],
                 stops: [0.0, 0.5, 1.0],
                 begin: Alignment.bottomLeft,
                 end: Alignment.topRight,
@@ -982,7 +980,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
                       gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.mint],
+                        colors: [
+                          AppColors.mint,
+                          AppColors.primary,
+                          AppColors.primary,
+                        ],
                         begin: Alignment.centerRight,
                         end: Alignment.centerLeft,
                       ),
