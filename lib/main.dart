@@ -12,6 +12,8 @@ class AppColors {
   static const dark = Color(0xFF00695C);
   static const light = Color(0xFF4DB6AC);
   static const background = Color(0xFFFAFCFB);
+  // ✅ لجراديانت النقاط والزر
+  static const mint = Color(0xFFB6E9C1);
 }
 
 class MyApp extends StatelessWidget {
@@ -32,7 +34,7 @@ class MyApp extends StatelessWidget {
           onPrimary: Colors.white,
         ),
 
-        // ✅ تطبيق IBM Plex Sans Arabic على كل عناصر الواجهة
+        // ✅ تطبيق IBM Plex Sans Arabic
         fontFamily: GoogleFonts.ibmPlexSansArabic().fontFamily,
         textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(),
         primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(),
@@ -44,7 +46,6 @@ class MyApp extends StatelessWidget {
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
             textStyle: const TextStyle(
-              // لا تحدد fontFamily هنا — بياخذ من الثيم
               fontWeight: FontWeight.w700,
               fontSize: 16,
             ),
@@ -378,7 +379,7 @@ class _RegisterPageState extends State<RegisterPage>
 
                                 const SizedBox(height: 26),
 
-                                // زر متدرّج متحرك + ضغط
+                                // ===== زر متدرّج + حركة hover + ضغط (scale) =====
                                 _stagger(
                                   start: .7,
                                   child: SizedBox(
@@ -389,49 +390,14 @@ class _RegisterPageState extends State<RegisterPage>
                                       onTapCancel: () => _pressCtrl.reverse(),
                                       onTapUp: (_) => _pressCtrl.reverse(),
                                       child: AnimatedBuilder(
-                                        animation: Listenable.merge([
-                                          _bgCtrl,
-                                          _pressCtrl,
-                                        ]),
+                                        animation: _pressCtrl,
                                         builder: (_, __) {
                                           final scale = 1 - _pressCtrl.value;
                                           return Transform.scale(
                                             scale: scale,
-                                            child: DecoratedBox(
-                                              decoration: BoxDecoration(
-                                                borderRadius:
-                                                    BorderRadius.circular(28),
-                                                boxShadow: const [
-                                                  BoxShadow(
-                                                    color: Color(0x33009688),
-                                                    blurRadius: 18,
-                                                    offset: Offset(0, 8),
-                                                  ),
-                                                ],
-                                                gradient: SweepGradient(
-                                                  startAngle: 0,
-                                                  endAngle: math.pi * 2,
-                                                  transform: GradientRotation(
-                                                    _bgCtrl.value * math.pi * 2,
-                                                  ),
-                                                  colors: const [
-                                                    AppColors.primary,
-                                                    AppColors.light,
-                                                    AppColors.primary,
-                                                  ],
-                                                ),
-                                              ),
-                                              child: FilledButton(
-                                                style: FilledButton.styleFrom(
-                                                  backgroundColor:
-                                                      Colors.transparent,
-                                                  shadowColor:
-                                                      Colors.transparent,
-                                                ),
-                                                onPressed: () =>
-                                                    _submit(context),
-                                                child: const Text('تسجيل دخول'),
-                                              ),
+                                            child: _AnimatedGradientButton(
+                                              label: 'تسجيل دخول',
+                                              onPressed: () => _submit(context),
                                             ),
                                           );
                                         },
@@ -1026,7 +992,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
 
                                 const SizedBox(height: 24),
 
-                                // زر الإنشاء بتدرّج
+                                // ===== زر الإنشاء بنفس تدرّج النقاط + حركة hover + ضغط =====
                                 _stagger(
                                   start: .6,
                                   child: SizedBox(
@@ -1037,48 +1003,14 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                       onTapCancel: () => _pressCtrl.reverse(),
                                       onTapUp: (_) => _pressCtrl.reverse(),
                                       child: AnimatedBuilder(
-                                        animation: Listenable.merge([
-                                          _bgCtrl,
-                                          _pressCtrl,
-                                        ]),
+                                        animation: _pressCtrl,
                                         builder: (_, __) {
                                           final scale = 1 - _pressCtrl.value;
                                           return Transform.scale(
                                             scale: scale,
-                                            child: DecoratedBox(
-                                              decoration: BoxDecoration(
-                                                borderRadius:
-                                                    BorderRadius.circular(28),
-                                                boxShadow: const [
-                                                  BoxShadow(
-                                                    color: Color(0x33009688),
-                                                    blurRadius: 18,
-                                                    offset: Offset(0, 8),
-                                                  ),
-                                                ],
-                                                gradient: SweepGradient(
-                                                  startAngle: 0,
-                                                  endAngle: math.pi * 2,
-                                                  transform: GradientRotation(
-                                                    _bgCtrl.value * math.pi * 2,
-                                                  ),
-                                                  colors: const [
-                                                    AppColors.primary,
-                                                    AppColors.light,
-                                                    AppColors.primary,
-                                                  ],
-                                                ),
-                                              ),
-                                              child: FilledButton(
-                                                style: FilledButton.styleFrom(
-                                                  backgroundColor:
-                                                      Colors.transparent,
-                                                  shadowColor:
-                                                      Colors.transparent,
-                                                ),
-                                                onPressed: _submit,
-                                                child: const Text('إنشاء حساب'),
-                                              ),
+                                            child: _AnimatedGradientButton(
+                                              label: 'إنشاء حساب',
+                                              onPressed: _submit,
                                             ),
                                           );
                                         },
@@ -1148,6 +1080,98 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
           height: size,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
+      ),
+    );
+  }
+}
+
+/* ======================= زر متدرّج مع أنيميشن Hover ======================= */
+
+class _AnimatedGradientButton extends StatefulWidget {
+  final String label;
+  final VoidCallback onPressed;
+
+  const _AnimatedGradientButton({required this.label, required this.onPressed});
+
+  @override
+  State<_AnimatedGradientButton> createState() =>
+      _AnimatedGradientButtonState();
+}
+
+class _AnimatedGradientButtonState extends State<_AnimatedGradientButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _shift;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _shift = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => _ctrl.forward(),
+      onExit: (_) => _ctrl.reverse(),
+      child: AnimatedBuilder(
+        animation: _shift,
+        builder: (_, __) {
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33009688),
+                  blurRadius: 18,
+                  offset: Offset(0, 8),
+                ),
+              ],
+              // ✅ نفس تدرّج النقاط مع انزياح أفقي عند الـ hover
+              gradient: LinearGradient(
+                begin: Alignment(-1 + _shift.value, 0),
+                end: Alignment(1 + _shift.value, 0),
+                colors: const [
+                  AppColors.primary,
+                  AppColors.primary,
+                  AppColors.mint,
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
+            ),
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                minimumSize: const Size.fromHeight(54),
+              ),
+              onPressed: widget.onPressed,
+              child: Text(
+                widget.label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
