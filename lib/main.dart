@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'home.dart'; // مسار الملف الذي أنشأناه
@@ -30,12 +31,20 @@ class MyApp extends StatelessWidget {
           secondary: AppColors.light,
           onPrimary: Colors.white,
         ),
+
+        // ✅ تطبيق IBM Plex Sans Arabic على كل عناصر الواجهة
+        fontFamily: GoogleFonts.ibmPlexSansArabic().fontFamily,
+        textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(),
+        primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(),
+
         scaffoldBackgroundColor: AppColors.background,
+
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
             textStyle: const TextStyle(
+              // لا تحدد fontFamily هنا — بياخذ من الثيم
               fontWeight: FontWeight.w700,
               fontSize: 16,
             ),

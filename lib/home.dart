@@ -7,6 +7,7 @@ import 'map.dart';
 import 'task.dart'; // يحتوي على Widget: TaskPage
 import 'community.dart'; // يحتوي على Widget: CommunityPage
 import 'profile.dart'; // يحتوي على Widget: ProfilePage
+import 'levels.dart'; // يحتوي على Widget: levelsPage  ✅ جديد للزر الوسطي
 
 // لوحة الألوان (هوية Nameer)
 class AppColors {
@@ -363,10 +364,10 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
           currentIndex: _currentIndex,
           onTap: (i) => setState(() => _currentIndex = i),
           onCenterTap: () {
-            // ينقله على صفحة الخريطة (map.dart)
+            // ✅ الزر الوسطي الآن يفتح المراحل (levels.dart)
             Navigator.of(
               context,
-            ).push(MaterialPageRoute(builder: (_) => const MapPage()));
+            ).push(MaterialPageRoute(builder: (_) => const levelsPage()));
           },
         ),
       ),
@@ -1088,7 +1089,7 @@ class _FriendCard extends StatelessWidget {
   }
 }
 
-/* ======================= Bottom Navigation (زر الوسط = الخريطة) ======================= */
+/* ======================= Bottom Navigation (زر الوسط = المراحل) ======================= */
 class BottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -1101,12 +1102,34 @@ class BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ الترتيب: الرئيسية، مهامي، (الزر الوسطي = المراحل)، الخريطة، الأصدقاء
     final items = [
-      NavItem(icon: Icons.home_outlined, label: 'الرئيسية'),
-      NavItem(icon: Icons.fact_check_outlined, label: 'مهامي'),
-      NavItem(icon: Icons.map_outlined, label: 'الخريطة', isCenter: true),
-      NavItem(icon: Icons.notifications_none, label: 'الإشعارات'),
-      NavItem(icon: Icons.group_outlined, label: 'الأصدقاء'),
+      NavItem(
+        outlined: Icons.home_outlined,
+        filled: Icons.home,
+        label: 'الرئيسية',
+      ),
+      NavItem(
+        outlined: Icons.fact_check_outlined,
+        filled: Icons.fact_check,
+        label: 'مهامي',
+      ),
+      NavItem(
+        outlined: Icons.flag_outlined,
+        filled: Icons.flag,
+        label: 'المراحل',
+        isCenter: true,
+      ), // الوسط للمراحل
+      NavItem(
+        outlined: Icons.map_outlined,
+        filled: Icons.map,
+        label: 'الخريطة',
+      ),
+      NavItem(
+        outlined: Icons.group_outlined,
+        filled: Icons.group,
+        label: 'الأصدقاء',
+      ),
     ];
 
     return Padding(
@@ -1122,10 +1145,11 @@ class BottomNav extends StatelessWidget {
               final selected = i == currentIndex;
 
               if (it.isCenter) {
+                // زر دائري للمراحل
                 return Expanded(
                   child: Center(
                     child: InkResponse(
-                      onTap: onCenterTap,
+                      onTap: onCenterTap, // يفتح levelsPage
                       radius: 40,
                       child: Container(
                         width: 58,
@@ -1135,7 +1159,7 @@ class BottomNav extends StatelessWidget {
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
-                          Icons.map_outlined,
+                          Icons.flag_outlined,
                           color: Colors.white,
                           size: 28,
                         ),
@@ -1144,6 +1168,10 @@ class BottomNav extends StatelessWidget {
                   ),
                 );
               }
+
+              // ✅ المبدأ: غير المحدد = مفرّغ، المحدد = معبّأ وباللون الأخضر
+              final iconData = selected ? it.filled : it.outlined;
+              final color = selected ? AppColors.primary : Colors.black54;
 
               return Expanded(
                 child: InkWell(
@@ -1164,6 +1192,12 @@ class BottomNav extends StatelessWidget {
                         );
                         break;
 
+                      case 3: // الخريطة
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(builder: (_) => const mapPage()),
+                        ); // ✅ MapPage بحرف M كبير
+                        break;
+
                       case 4: // الأصدقاء
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(
@@ -1173,17 +1207,13 @@ class BottomNav extends StatelessWidget {
                         break;
 
                       default:
-                        onTap(i); // مثلاً الإشعارات حالياً يغير المؤشّر فقط
+                        onTap(i);
                     }
                   },
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        it.icon,
-                        color: selected ? AppColors.primary : Colors.black54,
-                        size: 26,
-                      ),
+                      Icon(iconData, color: color, size: 26),
                       const SizedBox(height: 2),
                       Text(
                         it.label,
@@ -1192,7 +1222,7 @@ class BottomNav extends StatelessWidget {
                           fontWeight: selected
                               ? FontWeight.w800
                               : FontWeight.w500,
-                          color: selected ? AppColors.primary : Colors.black54,
+                          color: color,
                         ),
                       ),
                     ],
@@ -1208,10 +1238,16 @@ class BottomNav extends StatelessWidget {
 }
 
 class NavItem {
-  final IconData icon;
+  final IconData outlined;
+  final IconData filled;
   final String label;
   final bool isCenter;
-  NavItem({required this.icon, required this.label, this.isCenter = false});
+  NavItem({
+    required this.outlined,
+    required this.filled,
+    required this.label,
+    this.isCenter = false,
+  });
 }
 
 /* ======================= Background Painter ======================= */

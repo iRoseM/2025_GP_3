@@ -3,9 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'home.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-// إذا عندك ملف ألوان مشترك، استورده بدله
+// صفحات أخرى (تأكد أنها في نفس المجلد وأن أسماء الويدجت صحيحة)
+import 'home.dart';
+import 'task.dart';
+import 'community.dart';
+import 'levels.dart';
+
+// ألوان عامة
 class AppColors {
   static const primary = Color(0xFF009688);
   static const dark = Color(0xFF00695C);
@@ -13,14 +19,14 @@ class AppColors {
   static const background = Color(0xFFFAFCFB);
 }
 
-class MapPage extends StatefulWidget {
-  const MapPage({super.key});
+class mapPage extends StatefulWidget {
+  const mapPage({super.key});
 
   @override
-  State<MapPage> createState() => _MapPageState();
+  State<mapPage> createState() => _mapPageState();
 }
 
-class _MapPageState extends State<MapPage> {
+class _mapPageState extends State<mapPage> {
   final Completer<GoogleMapController> _mapCtrl = Completer();
   final TextEditingController _searchCtrl = TextEditingController();
 
@@ -140,99 +146,121 @@ class _MapPageState extends State<MapPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    // لإخفاء الناف بار عند ظهور الكيبورد
+    final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+
+    // تطبيق خط IBM Plex Sans Arabic على مستوى الصفحة (بدون fontFamily لتجنب الخطأ)
+    final themeWithIbmPlex = Theme.of(context).copyWith(
+      textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
+        Theme.of(context).textTheme,
+      ),
+      primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
+        Theme.of(context).primaryTextTheme,
+      ),
+    );
 
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
-        resizeToAvoidBottomInset: true,
-        body: Stack(
-          children: [
-            GoogleMap(
-              initialCameraPosition: const CameraPosition(
-                target: _riyadh,
-                zoom: _initZoom,
+      child: Theme(
+        data: themeWithIbmPlex,
+        child: Scaffold(
+          resizeToAvoidBottomInset: true,
+          body: Stack(
+            children: [
+              GoogleMap(
+                initialCameraPosition: const CameraPosition(
+                  target: _riyadh,
+                  zoom: _initZoom,
+                ),
+                onMapCreated: (c) => _mapCtrl.complete(c),
+                myLocationEnabled: _myLocationEnabled,
+                myLocationButtonEnabled: false,
+                compassEnabled: true,
+                zoomControlsEnabled: false,
+                markers: _markers,
+                polylines: _polylines,
+                mapToolbarEnabled: false,
               ),
-              onMapCreated: (c) => _mapCtrl.complete(c),
-              myLocationEnabled: _myLocationEnabled,
-              myLocationButtonEnabled: false,
-              compassEnabled: true,
-              zoomControlsEnabled: false,
-              markers: _markers,
-              polylines: _polylines,
-              mapToolbarEnabled: false,
-            ),
 
-            // Header + Search
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              // Header + Search
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                  child: Column(
+                    children: [
+                      _Header(points: 1500),
+                      const SizedBox(height: 10),
+                      _SearchBar(
+                        controller: _searchCtrl,
+                        onSubmitted: _onSearchSubmitted,
+                        onFilterTap: _showFiltersBottomSheet,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Floating buttons (right)
+              Positioned(
+                right: 12,
+                bottom: isKeyboardOpen ? 12 : 28,
                 child: Column(
                   children: [
-                    _Header(points: 1500),
+                    _RoundBtn(
+                      icon: Icons.my_location,
+                      tooltip: 'موقعي الحالي',
+                      onTap: _goToMyLocation,
+                      isLoading: _isLoadingLocation,
+                    ),
                     const SizedBox(height: 10),
-                    _SearchBar(
-                      controller: _searchCtrl,
-                      onSubmitted: _onSearchSubmitted,
-                      onFilterTap: _showFiltersBottomSheet,
+                    _RoundBtn(
+                      icon: Icons.layers_outlined,
+                      tooltip: 'طبقات الخريطة',
+                      onTap: () {},
                     ),
                   ],
                 ),
               ),
-            ),
+            ],
+          ),
 
-            // Floating buttons (right)
-            Positioned(
-              right: 12,
-              bottom: isKeyboardOpen ? 12 : 28,
-              child: Column(
-                children: [
-                  _RoundBtn(
-                    icon: Icons.my_location,
-                    tooltip: 'موقعي الحالي',
-                    onTap: _goToMyLocation,
-                    isLoading: _isLoadingLocation,
-                  ),
-                  const SizedBox(height: 10),
-                  _RoundBtn(
-                    icon: Icons.layers_outlined,
-                    tooltip: 'طبقات الخريطة',
-                    onTap: () {},
-                  ),
-                ],
-              ),
-            ),
-
-            // Mini bottom bar — يختفي عند ظهور الكيبورد
-            if (!isKeyboardOpen)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                    child: _MiniBottomBar(
-                      onHomeTap: () {
-                        // ✅ الانتقال إلى الصفحة الرئيسية
+          // BottomNav — يختفي مع ظهور الكيبورد
+          bottomNavigationBar: isKeyboardOpen
+              ? null
+              : BottomNav(
+                  currentIndex: 3, // أنت على تبويب "الخريطة"
+                  onTap: (i) {
+                    if (i == 3) return; // نفس الصفحة
+                    switch (i) {
+                      case 0: // الرئيسية
                         Navigator.of(context).pushAndRemoveUntil(
                           MaterialPageRoute(builder: (_) => const homePage()),
                           (route) => false,
                         );
-                      },
-                      onCenterAction: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('بدء مهمة ميدانية من الخريطة'),
+                        break;
+                      case 1: // مهامي
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(builder: (_) => const taskPage()),
+                        );
+                        break;
+                      case 4: // المجتمع/الأصدقاء
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) => const communityPage(),
                           ),
                         );
-                      },
-                    ),
-                  ),
+                        break;
+                      default:
+                        break;
+                    }
+                  },
+                  onCenterTap: () {
+                    // المراحل
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const levelsPage()),
+                    );
+                  },
                 ),
-              ),
-          ],
         ),
       ),
     );
@@ -355,17 +383,18 @@ class _Header extends StatelessWidget {
               color: AppColors.primary,
               borderRadius: BorderRadius.circular(100),
             ),
-            child: Row(
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.monetization_on_outlined,
                   size: 18,
                   color: Colors.white,
                 ),
-                const SizedBox(width: 4),
+                SizedBox(width: 4),
                 Text(
-                  '$points',
-                  style: const TextStyle(
+                  '1500',
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
                   ),
@@ -421,10 +450,10 @@ class _SearchBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           child: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: const [
+              borderRadius: BorderRadius.all(Radius.circular(14)),
+              boxShadow: [
                 BoxShadow(
                   color: Color(0x14000000),
                   blurRadius: 12,
@@ -486,64 +515,128 @@ class _RoundBtn extends StatelessWidget {
   }
 }
 
-class _MiniBottomBar extends StatelessWidget {
-  final VoidCallback onCenterAction;
-  final VoidCallback onHomeTap;
-  const _MiniBottomBar({required this.onCenterAction, required this.onHomeTap});
+/* ======================= BottomNav ======================= */
 
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        height: 66,
-        color: Colors.white,
-        child: Row(
-          children: [
-            // ✅ زر البيت → homePage
-            Expanded(
-              child: IconButton(
-                onPressed: onHomeTap,
-                icon: const Icon(Icons.home_outlined, color: Colors.black54),
-              ),
-            ),
-            const _MiniIcon(icon: Icons.camera_alt_outlined),
-            Expanded(
-              child: Center(
-                child: InkResponse(
-                  onTap: onCenterAction,
-                  radius: 40,
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.flag_outlined, color: Colors.white),
-                  ),
-                ),
-              ),
-            ),
-            const _MiniIcon(icon: Icons.insert_chart_outlined),
-            const _MiniIcon(icon: Icons.person_outline),
-          ],
-        ),
-      ),
-    );
-  }
+class NavItem {
+  final IconData outlined;
+  final IconData filled;
+  final String label;
+  final bool isCenter;
+  const NavItem({
+    required this.outlined,
+    required this.filled,
+    required this.label,
+    this.isCenter = false,
+  });
 }
 
-class _MiniIcon extends StatelessWidget {
-  final IconData icon;
-  const _MiniIcon({required this.icon});
+class BottomNav extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+  final VoidCallback onCenterTap;
+
+  const BottomNav({
+    super.key,
+    required this.currentIndex,
+    required this.onTap,
+    required this.onCenterTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: IconButton(
-        onPressed: () {},
-        icon: Icon(icon, color: Colors.black54),
+    const items = [
+      NavItem(
+        outlined: Icons.home_outlined,
+        filled: Icons.home,
+        label: 'الرئيسية',
+      ),
+      NavItem(
+        outlined: Icons.fact_check_outlined,
+        filled: Icons.fact_check,
+        label: 'مهامي',
+      ),
+      NavItem(
+        outlined: Icons.flag_outlined,
+        filled: Icons.flag,
+        label: 'المراحل',
+        isCenter: true,
+      ),
+      NavItem(
+        outlined: Icons.map_outlined,
+        filled: Icons.map,
+        label: 'الخريطة',
+      ),
+      NavItem(
+        outlined: Icons.group_outlined,
+        filled: Icons.group,
+        label: 'الأصدقاء',
+      ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(26),
+        child: Container(
+          height: 70,
+          color: Colors.white,
+          child: Row(
+            children: List.generate(items.length, (i) {
+              final it = items[i];
+              final selected = i == currentIndex;
+
+              if (it.isCenter) {
+                return Expanded(
+                  child: Center(
+                    child: InkResponse(
+                      onTap: onCenterTap,
+                      radius: 40,
+                      child: Container(
+                        width: 58,
+                        height: 58,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.flag_outlined,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              final iconData = selected ? it.filled : it.outlined;
+              final color = selected ? AppColors.primary : Colors.black54;
+
+              return Expanded(
+                child: InkWell(
+                  onTap: () => onTap(i),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(iconData, color: color, size: 26),
+                      const SizedBox(height: 2),
+                      Text(
+                        it.label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w500,
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
       ),
     );
   }
