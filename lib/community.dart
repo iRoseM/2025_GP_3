@@ -44,14 +44,32 @@ class communityPage extends StatelessWidget {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
+          centerTitle: true,
           title: Text(
             "الأصدقاء",
             style: GoogleFonts.ibmPlexSansArabic(
               fontWeight: FontWeight.w700,
               fontSize: 20,
+              color: Colors.white, // العنوان أبيض فوق الجراديانت
             ),
           ),
-          backgroundColor: const Color(0xFF4BAA98),
+          // 👇 التدرّج على “الديف” العلوي (AppBar)
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF009688), // primary
+                  Color(0xFF009688),
+                  Color(0xFFB6E9C1), // mint
+                ],
+                stops: [0.0, 0.5, 1.0],
+                begin: Alignment.bottomLeft,
+                end: Alignment.topRight,
+              ),
+            ),
+          ),
+          elevation: 0,
+          backgroundColor: Colors.transparent, // مهم لإظهار التدرّج
         ),
         body: Center(
           child: Text(
@@ -90,7 +108,7 @@ class communityPage extends StatelessWidget {
   }
 }
 
-/* ======================= BottomNav ======================= */
+/* ======================= BottomNav (القديم الأبيض) ======================= */
 
 class NavItem {
   final IconData outlined;
@@ -116,6 +134,8 @@ class BottomNav extends StatelessWidget {
     required this.onTap,
     required this.onCenterTap,
   });
+
+  static const Color _primary = Color(0xFF009688);
 
   @override
   Widget build(BuildContext context) {
@@ -154,12 +174,13 @@ class BottomNav extends StatelessWidget {
         borderRadius: BorderRadius.circular(26),
         child: Container(
           height: 70,
-          color: Colors.white,
+          color: Colors.white, // 👈 رجعناه أبيض مثل القديم
           child: Row(
             children: List.generate(items.length, (i) {
               final it = items[i];
               final selected = i == currentIndex;
 
+              // زر الوسط (المراحل) — دائرة خضراء وأيقونة بيضاء
               if (it.isCenter) {
                 return Expanded(
                   child: Center(
@@ -170,8 +191,15 @@ class BottomNav extends StatelessWidget {
                         width: 58,
                         height: 58,
                         decoration: const BoxDecoration(
-                          color: Color(0xFF009688),
+                          color: _primary,
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0x22000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
                         ),
                         child: const Icon(
                           Icons.flag_outlined,
@@ -184,8 +212,9 @@ class BottomNav extends StatelessWidget {
                 );
               }
 
+              // العناصر الجانبية: المختار = معبّأ ولونه أخضر، غير المختار = مفرّغ ورمادي
               final iconData = selected ? it.filled : it.outlined;
-              final color = selected ? const Color(0xFF009688) : Colors.black54;
+              final color = selected ? _primary : Colors.black54;
 
               return Expanded(
                 child: InkWell(

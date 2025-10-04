@@ -32,7 +32,8 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/img/logo.png
+    - assets/img/
+    - assets/pfp/
 
 flutter_native_splash:
   color: "#FAFCFB"

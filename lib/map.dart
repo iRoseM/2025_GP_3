@@ -5,18 +5,22 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// صفحات أخرى (تأكد أنها في نفس المجلد وأن أسماء الويدجت صحيحة)
+// صفحات أخرى
 import 'home.dart';
 import 'task.dart';
 import 'community.dart';
 import 'levels.dart';
 
-// ألوان عامة
+// لوحة الألوان (محدّثة لتطابق الهوم)
 class AppColors {
   static const primary = Color(0xFF009688);
   static const dark = Color(0xFF00695C);
   static const light = Color(0xFF4DB6AC);
   static const background = Color(0xFFFAFCFB);
+
+  // إضافات لمطابقة ستايل الهوم
+  static const mint = Color(0xFFB6E9C1);
+  static const sea = Color(0xFF1F7A8C);
 }
 
 class mapPage extends StatefulWidget {
@@ -146,10 +150,9 @@ class _mapPageState extends State<mapPage> {
 
   @override
   Widget build(BuildContext context) {
-    // لإخفاء الناف بار عند ظهور الكيبورد
     final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
-    // تطبيق خط IBM Plex Sans Arabic على مستوى الصفحة (بدون fontFamily لتجنب الخطأ)
+    // تطبيق خط IBM Plex Sans Arabic على مستوى الصفحة
     final themeWithIbmPlex = Theme.of(context).copyWith(
       textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
         Theme.of(context).textTheme,
@@ -188,7 +191,7 @@ class _mapPageState extends State<mapPage> {
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                   child: Column(
                     children: [
-                      _Header(points: 1500),
+                      const _Header(points: 1500),
                       const SizedBox(height: 10),
                       _SearchBar(
                         controller: _searchCtrl,
@@ -224,13 +227,13 @@ class _mapPageState extends State<mapPage> {
             ],
           ),
 
-          // BottomNav — يختفي مع ظهور الكيبورد
+          // === BottomNav الكامل ويختفي مع ظهور الكيبورد ===
           bottomNavigationBar: isKeyboardOpen
               ? null
               : BottomNav(
-                  currentIndex: 3, // أنت على تبويب "الخريطة"
+                  currentIndex: 3, // تبويب "الخريطة"
                   onTap: (i) {
-                    if (i == 3) return; // نفس الصفحة
+                    if (i == 3) return; // أنت أصلاً على الخريطة
                     switch (i) {
                       case 0: // الرئيسية
                         Navigator.of(context).pushAndRemoveUntil(
@@ -238,24 +241,27 @@ class _mapPageState extends State<mapPage> {
                           (route) => false,
                         );
                         break;
+
                       case 1: // مهامي
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(builder: (_) => const taskPage()),
                         );
                         break;
-                      case 4: // المجتمع/الأصدقاء
+
+                      case 4: // الأصدقاء / المجتمع
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(
                             builder: (_) => const communityPage(),
                           ),
                         );
                         break;
+
                       default:
                         break;
                     }
                   },
                   onCenterTap: () {
-                    // المراحل
+                    // زر "المراحل"
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const levelsPage()),
                     );
@@ -365,38 +371,85 @@ class _Header extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const CircleAvatar(
-            radius: 18,
-            backgroundColor: Color(0x22009688),
-            child: Icon(Icons.person_outline, color: AppColors.primary),
+          // === أفاتار بستايل الهوم (جراديانت + ظل) ===
+          Material(
+            color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primary.withOpacity(.2),
+                    AppColors.sea.withOpacity(.1),
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(.2),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.transparent,
+                child: Icon(
+                  Icons.person_outline,
+                  color: AppColors.primary,
+                  size: 22,
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: 8),
+
           const Expanded(
             child: Text(
               'مرحبًا، Nameer',
-              style: TextStyle(fontWeight: FontWeight.w700),
+              style: TextStyle(fontWeight: FontWeight.w800),
             ),
           ),
+
+          // === شارة نقاط بستايل الهوم (جراديانت + ⭐︎ + "نقطة") ===
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.primary,
+              gradient: const LinearGradient(
+                colors: [AppColors.primary, AppColors.primary, AppColors.mint],
+                stops: [0.0, 0.5, 1.0],
+                begin: Alignment.bottomLeft,
+                end: Alignment.topRight,
+              ),
               borderRadius: BorderRadius.circular(100),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(.35),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.monetization_on_outlined,
-                  size: 18,
-                  color: Colors.white,
-                ),
-                SizedBox(width: 4),
+                const Icon(Icons.stars_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 6),
                 Text(
-                  '1500',
+                  '$points',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Text(
+                  'نقطة',
                   style: TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
                   ),
                 ),
               ],
@@ -450,10 +503,10 @@ class _SearchBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           child: Container(
             padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.all(Radius.circular(14)),
-              boxShadow: [
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
                 BoxShadow(
                   color: Color(0x14000000),
                   blurRadius: 12,
@@ -515,7 +568,7 @@ class _RoundBtn extends StatelessWidget {
   }
 }
 
-/* ======================= BottomNav ======================= */
+/* ======================= BottomNav (نسخة مضمنة هنا) ======================= */
 
 class NavItem {
   final IconData outlined;
@@ -544,7 +597,7 @@ class BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const items = [
+    final items = const [
       NavItem(
         outlined: Icons.home_outlined,
         filled: Icons.home,
