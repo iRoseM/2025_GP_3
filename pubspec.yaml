@@ -20,6 +20,7 @@ dependencies:
   google_maps_flutter: ^2.7.0
   geolocator: ^13.0.1
   google_fonts: ^6.3.2
+  flutter_native_splash: ^2.4.6
 
 
 dev_dependencies:
@@ -32,5 +33,12 @@ flutter:
 
   assets:
     - assets/img/logo.png
+
+flutter_native_splash:
+  color: "#FAFCFB"
+  image: assets/img/logo.png
+  android: true
+  ios: true
+
 
 
