@@ -14,6 +14,8 @@ class AppColors {
   static const dark = Color(0xFF00695C);
   static const light = Color(0xFF4DB6AC);
   static const background = Color(0xFFFAFCFB);
+
+  static const mint = Color(0xFFB6E9C1);
 }
 
 class taskPage extends StatelessWidget {
@@ -34,11 +36,10 @@ class taskPage extends StatelessWidget {
       child: Theme(
         data: baseTheme.copyWith(
           textTheme: textTheme,
-          // لو تحب تغير خط الأزرار/العناوين أيضاً
           primaryTextTheme: textTheme,
           appBarTheme: AppBarTheme(
-            backgroundColor: AppColors.primary,
             elevation: 0,
+            backgroundColor: Colors.transparent, // شفاف لإظهار التدرّج
             titleTextStyle: GoogleFonts.ibmPlexSansArabic(
               fontSize: 20,
               fontWeight: FontWeight.w700,
@@ -46,16 +47,26 @@ class taskPage extends StatelessWidget {
             ),
             iconTheme: const IconThemeData(color: Colors.white),
           ),
-          snackBarTheme: SnackBarThemeData(
-            contentTextStyle: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
         ),
         child: Scaffold(
-          appBar: AppBar(title: const Text("مهامي")),
+          appBar: AppBar(
+            centerTitle: true,
+            title: const Text("مهامي"),
+            flexibleSpace: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primary,
+                    AppColors.primary,
+                    AppColors.mint,
+                  ],
+                  stops: [0.0, 0.5, 1.0],
+                  begin: Alignment.bottomLeft,
+                  end: Alignment.topRight,
+                ),
+              ),
+            ),
+          ),
           body: const Center(
             child: Text(
               "هنا صفحة المهام 📝",
@@ -67,7 +78,7 @@ class taskPage extends StatelessWidget {
             ),
           ),
 
-          // === BottomNav نفسه، currentIndex=1 (مهامي) ويختفي مع الكيبورد ===
+          // === BottomNav القديم (أبيض) ويختفي مع الكيبورد ===
           bottomNavigationBar: isKeyboardOpen
               ? null
               : BottomNav(
@@ -81,13 +92,11 @@ class taskPage extends StatelessWidget {
                           (route) => false,
                         );
                         break;
-
                       case 3: // الخريطة
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(builder: (_) => const mapPage()),
                         );
                         break;
-
                       case 4: // الأصدقاء / المجتمع
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(
@@ -95,14 +104,11 @@ class taskPage extends StatelessWidget {
                           ),
                         );
                         break;
-
                       default:
-                        // (0,1,2,3,4) فقط مستخدمة هنا، والباقي لا شيء
                         break;
                     }
                   },
                   onCenterTap: () {
-                    // زر "المراحل"
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const levelsPage()),
                     );
@@ -114,7 +120,7 @@ class taskPage extends StatelessWidget {
   }
 }
 
-/* ======================= BottomNav ======================= */
+/* ======================= BottomNav (القديم الأبيض) ======================= */
 
 class NavItem {
   final IconData outlined;
@@ -178,7 +184,7 @@ class BottomNav extends StatelessWidget {
         borderRadius: BorderRadius.circular(26),
         child: Container(
           height: 70,
-          color: Colors.white,
+          color: Colors.white, // 👈 نفس القديم
           child: Row(
             children: List.generate(items.length, (i) {
               final it = items[i];
@@ -229,7 +235,7 @@ class BottomNav extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         it.label,
-                        // لا نحدد fontFamily هنا حتى يرث من الثيم (IBM Plex Sans Arabic)
+                        // يَرث الخط من الثيم (IBM Plex Sans Arabic)
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: selected
