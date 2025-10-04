@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'splash.dart'; // مسار ملف شاشة البداية
 import 'home.dart'; // مسار الملف الذي أنشأناه
 
 void main() => runApp(const MyApp());
@@ -78,7 +79,7 @@ class MyApp extends StatelessWidget {
           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
-      home: const RegisterPage(),
+    home: const SplashScreen(),
     );
   }
 }
@@ -202,7 +203,7 @@ class _RegisterPageState extends State<RegisterPage>
               builder: (_, __) {
                 final t = _bgCtrl.value;
                 return CustomPaint(
-                  painter: _GradientBackgroundPainter(t),
+                  painter: GradientBackgroundPainter(t),
                   child: const SizedBox.expand(),
                 );
               },
@@ -500,9 +501,9 @@ class _RegisterPageState extends State<RegisterPage>
 }
 
 /// رسام للخلفية المتدرجة المتحركة + تموّج خفيف
-class _GradientBackgroundPainter extends CustomPainter {
+class GradientBackgroundPainter extends CustomPainter {
   final double t;
-  const _GradientBackgroundPainter(this.t);
+  const GradientBackgroundPainter(this.t);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -548,7 +549,7 @@ class _GradientBackgroundPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GradientBackgroundPainter oldDelegate) =>
+  bool shouldRepaint(covariant GradientBackgroundPainter oldDelegate) =>
       oldDelegate.t != t;
 }
 
@@ -714,7 +715,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
               builder: (_, __) {
                 final t = _bgCtrl.value;
                 return CustomPaint(
-                  painter: _GradientBackgroundPainter(t),
+                  painter: GradientBackgroundPainter(t),
                   child: const SizedBox.expand(),
                 );
               },
