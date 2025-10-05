@@ -13,18 +13,28 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
   late final AnimationController _bgCtrl;
+  late final AnimationController _fadeCtrl;
+  late final Animation<double> _fadeAnim; 
 
-  @override
 @override
 void initState() {
   super.initState();
+
   _bgCtrl = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 14),
   )..repeat();
 
-  // ✅ delay navigation until after build
-  Future.delayed(const Duration(seconds: 3), () {
+  // fade-out controller
+  _fadeCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+    value: 1.0, // start fully visible
+  );
+
+  // run fade out before navigating
+  Future.delayed(const Duration(seconds: 3), () async {
+    await _fadeCtrl.reverse(); // fade to invisible
     if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const RegisterPage()),
@@ -35,10 +45,13 @@ void initState() {
 
 
   @override
-  void dispose() {
-    _bgCtrl.dispose();
-    super.dispose();
-  }
+@override
+void dispose() {
+  _bgCtrl.dispose();
+  _fadeCtrl.dispose();
+  super.dispose();
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -84,12 +97,15 @@ void initState() {
 
           // 🔹 Center logo
           Center(
-            child: Hero(
-              tag: 'logo',
-              child: Image.asset(
-                'assets/img/logo.png',
-                width: 160,
-                height: 160,
+            child: FadeTransition(
+              opacity: _fadeCtrl,
+              child: Hero(
+                tag: 'logo',
+                child: Image.asset(
+                  'assets/img/logo.png',
+                  width: 160,
+                  height: 160,
+                ),
               ),
             ),
           ),
@@ -98,7 +114,14 @@ void initState() {
     );
   }
 
-  Widget _blob({double? left, double? right, double? top, double? bottom, required double size, required Color color}) {
+  Widget _blob({
+    double? left,
+    double? right,
+    double? top,
+    double? bottom,
+    required double size,
+    required Color color,
+  }) {
     return Positioned(
       left: left,
       right: right,
