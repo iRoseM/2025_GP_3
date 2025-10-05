@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "188455017517",
+    "project_id": "nameer-f3b95",
+    "storage_bucket": "nameer-f3b95.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:188455017517:android:b08e70b0289cb277e36ca4",
+        "android_client_info": {
+          "package_name": "com.nameer.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4od8BFTgWbEzKAzKbazPMRvHRc15TtLg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
