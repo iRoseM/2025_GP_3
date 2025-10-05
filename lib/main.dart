@@ -2,11 +2,18 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:flutter/services.dart';
-import 'splash.dart'; // مسار ملف شاشة البداية
-import 'home.dart'; // مسار الملف الذي أنشأناه
+import 'splash.dart';
+import 'home.dart';
 
-void main() => runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  runApp(const MyApp());
+}
 
 class AppColors {
   static const primary = Color(0xFF009688);
@@ -80,7 +87,7 @@ class MyApp extends StatelessWidget {
           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
-    home: const SplashScreen(),
+      home: const SplashScreen(),
     );
   }
 }
