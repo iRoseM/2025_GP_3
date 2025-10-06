@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'main.dart'; // for AppColors and _GradientBackgroundPainter
+import 'onboarding.dart'; 
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -37,7 +38,7 @@ void initState() {
     await _fadeCtrl.reverse(); // fade to invisible
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const RegisterPage()),
+        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
       );
     }
   });

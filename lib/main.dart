@@ -20,8 +20,10 @@ class AppColors {
   static const dark = Color(0xFF00695C);
   static const light = Color(0xFF4DB6AC);
   static const background = Color(0xFFFAFCFB);
+  static const orange = Color(0xFFFFB74D); // 🟧 same orange as the dots in your design
   // ✅ لجراديانت النقاط والزر
   static const mint = Color(0xFFB6E9C1);
+
 }
 
 class MyApp extends StatelessWidget {

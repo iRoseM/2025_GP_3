@@ -40,6 +40,10 @@ flutter:
   assets:
     - assets/img/
     - assets/pfp/
+    - assets/img/onboarding1.png
+    - assets/img/onboarding2.png
+    - assets/img/onboarding3.png
+    - assets/img/welcome.png 
 
 flutter_native_splash:
   color: "#FAFCFB"
