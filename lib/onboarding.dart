@@ -22,11 +22,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       image: 'assets/img/onboarding1.png',
       title: 'أهلاً بك في نمير',
       subtitle:
-          'غيّر عاداتك اليومية، وجمّع النقاط لبناء مستقبلٍ أخضر مع السعودية!',
+          'غيّر عاداتك اليومية، واجمّع النقاط لبناء مستقبلٍ أخضر مع السعودية!',
     ),
     _OnbPageData(
       image: 'assets/img/onboarding2.png',
-      title: 'خطوات بسيطة = أثر كبير',
+      title: 'خطوات بسيطة بأثر كبير',
       subtitle:
           'أنجز مهام مستدامة يومية، اجمع نقاطًا واستبدلها بمكافآتٍ حقيقية.',
     ),
@@ -34,7 +34,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       image: 'assets/img/onboarding3.png',
       title: 'مستعد للتحدي؟',
       subtitle:
-          'كل خطوة تقرّبنا من مستقبلٍ أكثر خضرة — جاهز؟',
+          'كل خطوة تقرّبنا من مستقبل أكثر خضرة، جاهز؟',
     ),
   ];
 
@@ -155,32 +155,65 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     ),
 
                     const SizedBox(height: 8),
-
                     // dots + next (hide dots on welcome)
                     if (!_isWelcome) ...[
+                      // 🔹 Dots indicator (keep this)
                       _Dots(
                         current: _index,
                         total: _pages.length,
                       ),
                       const SizedBox(height: 16),
+
+                      // 🔸 Next button with animated orange ring
                       SizedBox(
-                        height: 68,
-                        width: 68,
-                        child: ElevatedButton(
-                          onPressed: _next,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            shape: const CircleBorder(),
-                            elevation: 1,
-                          ),
-                          child: const Text(
-                            'التالي',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 10,
+                        height: 64, // 🔹 slightly smaller
+                        width: 64,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Orange circular ring — tighter fit
+                            TweenAnimationBuilder<double>(
+                              tween: Tween<double>(
+                                begin: 0,
+                                end: (_index + 1) / _pages.length,
+                              ),
+                              duration: const Duration(milliseconds: 600),
+                              curve: Curves.easeInOut,
+                              builder: (context, value, _) {
+                                return SizedBox(
+                                  height: 66, // 🔹 just 2px larger than button
+                                  width: 66,
+                                  child: CircularProgressIndicator(
+                                    value: value,
+                                    strokeWidth: 3.0,
+                                    valueColor: const AlwaysStoppedAnimation<Color>(
+                                      AppColors.orange,
+                                    ),
+                                    backgroundColor: Colors.transparent,
+                                  ),
+                                );
+                              },
                             ),
-                          ),
+                            // Main green button
+                            ElevatedButton(
+                              onPressed: _next,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                shape: const CircleBorder(),
+                                padding: const EdgeInsets.all(0), // ✅ removes extra padding
+                                minimumSize: const Size(60, 60), // ✅ keeps a perfect circle
+                                elevation: 3,
+                              ),
+                              child: const Text(
+                                'التالي',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 8),
