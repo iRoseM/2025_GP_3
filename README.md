@@ -26,7 +26,7 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 
 ## 🛠️ Technology Stack
 - **Frontend**: Flutter (Dart)  
-- **Backend / Database**:  
+- **Backend / Database**:  NoSQL database 
 - **Machine Learning**: Python 
 - **Tools**: GitHub, Google Colab  
 
