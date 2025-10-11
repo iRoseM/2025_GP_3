@@ -7,6 +7,9 @@ import 'firebase_options.dart';
 import 'package:flutter/services.dart';
 import 'splash.dart';
 import 'home.dart';
+import 'admin_home.dart';
+
+const String adminEmail = "appNameer@gmail.com";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -185,20 +188,31 @@ class _RegisterPageState extends State<RegisterPage>
     );
   }
 
+  // تحقق من صحة النموذج والتنقل بناءً على البريد الإلكتروني
+  // Sign in as admin or user
   void _submit(BuildContext context) {
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) {
+      // keep your shake animation if you use it
       _shakeCtrl
         ..reset()
         ..forward();
       return;
     }
 
-    // التنقّل إلى الهوم بيج بعد نجاح التحقق
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const homePage()));
+    final email = _emailCtrl.text.trim().toLowerCase();
+    const adminEmail = "appnameer@gmail.com";
+    if (email == adminEmail) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const AdminHomePage()),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const homePage()),
+      );
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {
