@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:open_location_code/open_location_code.dart' as olc;
 
 // صفحات أخرى
 import 'home.dart';
@@ -27,15 +28,15 @@ class mapPage extends StatefulWidget {
   const mapPage({super.key});
 
   @override
-  State<mapPage> createState() => _mapPageState();
+  State<mapPage> createState() => _mapPage();
 }
 
-class _mapPageState extends State<mapPage> {
+class _mapPage extends State<mapPage> {
   final Completer<GoogleMapController> _mapCtrl = Completer();
   final TextEditingController _searchCtrl = TextEditingController();
 
   static const _riyadh = LatLng(24.7136, 46.6753);
-  static const _initZoom = 13.0;
+  static const _initZoom = 12.5;
 
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
@@ -46,54 +47,120 @@ class _mapPageState extends State<mapPage> {
   @override
   void initState() {
     super.initState();
-    _seedDemoData();
     _ensureLocationPermission();
+    _addAinyFromPlusCodes(); // ← نحط بينز جمعية عيني من Plus Codes
   }
 
-  void _seedDemoData() {
-    final m1 = Marker(
-      markerId: const MarkerId('bin_1'),
-      position: const LatLng(24.726, 46.680),
-      infoWindow: const InfoWindow(
-        title: 'حاوية تدوير - شارع العليا',
-        snippet: 'بلاستيك/علب معدنية',
-      ),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-    );
-    final m2 = Marker(
-      markerId: const MarkerId('bin_2'),
-      position: const LatLng(24.708, 46.690),
-      infoWindow: const InfoWindow(
-        title: 'حاوية تدوير - الحي الدبلوماسي',
-        snippet: 'ورق/كرتون',
-      ),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-    );
-    final m3 = Marker(
-      markerId: const MarkerId('bin_3'),
-      position: const LatLng(24.700, 46.660),
-      infoWindow: const InfoWindow(
-        title: 'حاوية تدوير - الملك عبدالله',
-        snippet: 'زجاج',
-      ),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose),
-    );
+  /// يحوّل Plus Code (قصير/ممتد) إلى LatLng باستخدام مركز الرياض كمرجع للأكواد القصيرة
+  LatLng? _decodePlusCodeToLatLng(String rawPlusCode) {
+    try {
+      final cleaned = rawPlusCode.replaceAll('،', ' ').trim(); // إزالة الفاصلة العربية
 
-    final poly = Polyline(
-      polylineId: const PolylineId('route_demo'),
-      width: 5,
-      color: AppColors.primary,
-      points: const [
-        LatLng(24.726, 46.680),
-        LatLng(24.715, 46.686),
-        LatLng(24.708, 46.690),
-        LatLng(24.705, 46.675),
-        LatLng(24.700, 46.660),
-      ],
-    );
+      // أنشئ PlusCode من النص (بدون المدينة)
+      var pc = olc.PlusCode.unverified(cleaned);
 
-    _markers.addAll([m1, m2, m3]);
-    _polylines.add(poly);
+      // إذا قصير، نكمّله اعتمادًا على مركز الرياض
+      if (pc.isShort()) {
+        pc = pc.recoverNearest(olc.LatLng(_riyadh.latitude, _riyadh.longitude));
+      }
+
+      // تحقّق من الصلاحية
+      if (!pc.isValid) return null;
+
+      // فك الكود واحصل على مركز المنطقة
+      final area = pc.decode();
+      final center = area.center; // olc.LatLng
+      return LatLng(center.latitude, center.longitude); // LatLng تبع خرائط جوجل
+    } catch (e) {
+      debugPrint('PlusCode decode error: $e');
+      return null;
+    }
+  }
+
+  /// يضيف جميع نقاط "جمعية عيني" من القائمة التي زوّدتني بها (Plus Codes)
+  Future<void> _addAinyFromPlusCodes() async {
+    // ملاحظة: عنصر واحد عبارة عن عنوان نصّي بدون Plus Code دقيق
+    final List<Map<String, String>> raw = [
+      {'code': 'HMG6+G7', 'name': 'شبرا', 'city': 'الرياض'},
+      {'code': 'HJJ9+VC', 'name': 'السويدي الغربي', 'city': 'الرياض'},
+      {'code': 'GMR8+VP', 'name': 'المروة', 'city': 'الرياض'},
+      {'code': 'HMPJ+8J', 'name': 'شبرا', 'city': 'الرياض'},
+      {'code': 'HHQR+CG', 'name': 'العريجاء الغربية', 'city': 'الرياض'},
+      {'code': 'JJPC+2H', 'name': 'هجرة لبن', 'city': 'الرياض'},
+      {'code': 'QP4X+7H', 'name': 'القدس', 'city': 'الرياض'},
+      {'code': 'JQC3+8R', 'name': 'الخالدية', 'city': 'الرياض'},
+      {'code': 'HQM5+7R', 'name': 'العزيزية', 'city': 'الرياض'},
+      {'code': 'QP35+RV', 'name': 'النزهة', 'city': 'الرياض'},
+      {'code': 'JG47+M4', 'name': 'ظهرة لبن', 'city': 'الرياض'},
+      {'code': 'JHR4+CG5', 'name': 'ظهرة لبن', 'city': 'الرياض'}, // كود ممتد
+      {'code': 'MG9W+MPC', 'name': 'طريق السيل الكبير، المهدية', 'city': 'الرياض'}, // ممتد
+      {'code': 'QQFR+6Q', 'name': 'الخليج', 'city': 'الرياض'},
+      {'code': 'PQVR+2P', 'name': 'الاندلس', 'city': 'الرياض'},
+      {'code': 'MRQH+24', 'name': 'السعادة', 'city': 'الرياض'},
+      {'code': 'RQGJ+62', 'name': 'المونسية', 'city': 'الرياض'},
+      {'code': 'QMRV+G8P', 'name': 'الوادي', 'city': 'الرياض'}, // ممتد
+      {'code': 'QJHM+25', 'name': 'العقيق', 'city': 'الرياض'},
+      {'code': 'QQ6X+8P', 'name': 'النهضة', 'city': 'الرياض'},
+      {'code': 'JJPC+2JC', 'name': 'طريق الأمير أحمد بن عبدالعزيز، هجرة لبن', 'city': 'الرياض'},
+    ];
+
+    final Set<Marker> markers = {};
+    LatLngBounds? bounds;
+
+    int idx = 0;
+    for (final item in raw) {
+      if (!item.containsKey('code')) continue; // تخطّي العنوان النصّي (بدون code)
+
+      final code = item['code']!.trim();
+      final areaName = item['name'] ?? '';
+      final city = item['city'] ?? 'الرياض';
+
+      // مَرّر الكود فقط بدون المدينة
+      final ll = _decodePlusCodeToLatLng(code);
+      if (ll == null) continue;
+
+      final marker = Marker(
+        markerId: MarkerId('ainy_$idx'),
+        position: ll,
+        infoWindow: InfoWindow(
+          title: 'إعادة تدوير الملابس – جمعية عيني',
+          snippet: '${areaName.isNotEmpty ? areaName : 'موقع'} • $city',
+        ),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+      );
+      markers.add(marker);
+      bounds = _extendBounds(bounds, ll);
+      idx++;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _markers
+        ..clear()
+        ..addAll(markers);
+      _polylines.clear();
+    });
+
+    // وسِّع الكاميرا لتضمّ كل النقاط
+    if (bounds != null) {
+      final ctrl = await _mapCtrl.future;
+      await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
+    }
+  }
+
+  LatLngBounds _extendBounds(LatLngBounds? current, LatLng p) {
+    if (current == null) {
+      return LatLngBounds(southwest: p, northeast: p);
+    }
+    final sw = LatLng(
+      p.latitude < current.southwest.latitude ? p.latitude : current.southwest.latitude,
+      p.longitude < current.southwest.longitude ? p.longitude : current.southwest.longitude,
+    );
+    final ne = LatLng(
+      p.latitude > current.northeast.latitude ? p.latitude : current.northeast.latitude,
+      p.longitude > current.northeast.longitude ? p.longitude : current.northeast.longitude,
+    );
+    return LatLngBounds(southwest: sw, northeast: ne);
   }
 
   Future<void> _ensureLocationPermission() async {
@@ -143,9 +210,8 @@ class _mapPageState extends State<mapPage> {
   }
 
   void _onSearchSubmitted(String query) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('بحث: $query')));
+    // بإمكانك لاحقًا تسوي فلترة/إعادة رسم حسب النص
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بحث: $query')));
   }
 
   @override
@@ -203,7 +269,7 @@ class _mapPageState extends State<mapPage> {
                 ),
               ),
 
-              // Floating buttons (right)
+              // أزرار عائمة يمين
               Positioned(
                 right: 12,
                 bottom: isKeyboardOpen ? 12 : 28,
@@ -217,17 +283,46 @@ class _mapPageState extends State<mapPage> {
                     ),
                     const SizedBox(height: 10),
                     _RoundBtn(
-                      icon: Icons.layers_outlined,
-                      tooltip: 'طبقات الخريطة',
-                      onTap: () {},
+                      icon: Icons.refresh_rounded,
+                      tooltip: 'تحديث نقاط جمعية عيني',
+                      onTap: _addAinyFromPlusCodes,
                     ),
                   ],
+                ),
+              ),
+
+              // لوجند بسيط للّون
+              Positioned(
+                left: 12,
+                bottom: isKeyboardOpen ? 12 : 28,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.place, size: 18, color: Colors.purple),
+                      SizedBox(width: 6),
+                      Text('إعادة تدوير الملابس – جمعية عيني',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
 
-          // === BottomNav الكامل ويختفي مع ظهور الكيبورد ===
+          // === BottomNav ===
           bottomNavigationBar: isKeyboardOpen
               ? null
               : BottomNav(
@@ -235,33 +330,27 @@ class _mapPageState extends State<mapPage> {
                   onTap: (i) {
                     if (i == 3) return; // أنت أصلاً على الخريطة
                     switch (i) {
-                      case 0: // الرئيسية
+                      case 0:
                         Navigator.of(context).pushAndRemoveUntil(
                           MaterialPageRoute(builder: (_) => const homePage()),
                           (route) => false,
                         );
                         break;
-
-                      case 1: // مهامي
+                      case 1:
                         Navigator.of(context).pushReplacement(
                           MaterialPageRoute(builder: (_) => const taskPage()),
                         );
                         break;
-
-                      case 4: // الأصدقاء / المجتمع
+                      case 4:
                         Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(
-                            builder: (_) => const communityPage(),
-                          ),
+                          MaterialPageRoute(builder: (_) => const communityPage()),
                         );
                         break;
-
                       default:
                         break;
                     }
                   },
                   onCenterTap: () {
-                    // زر "المراحل"
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const levelsPage()),
                     );
@@ -280,11 +369,7 @@ class _mapPageState extends State<mapPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (_) {
-        bool fPlastic = true;
-        bool fPaper = true;
-        bool fGlass = false;
-        bool fMetal = true;
-
+        bool fClothes = true;
         return StatefulBuilder(
           builder: (context, setSt) {
             return Padding(
@@ -294,48 +379,31 @@ class _mapPageState extends State<mapPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'فلاتر الحاويات',
+                    'فلاتر النقاط',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      FilterChip(
-                        label: const Text('بلاستيك'),
-                        selected: fPlastic,
-                        onSelected: (v) => setSt(() => fPlastic = v),
-                      ),
-                      FilterChip(
-                        label: const Text('ورق/كرتون'),
-                        selected: fPaper,
-                        onSelected: (v) => setSt(() => fPaper = v),
-                      ),
-                      FilterChip(
-                        label: const Text('زجاج'),
-                        selected: fGlass,
-                        onSelected: (v) => setSt(() => fGlass = v),
-                      ),
-                      FilterChip(
-                        label: const Text('معادن'),
-                        selected: fMetal,
-                        onSelected: (v) => setSt(() => fMetal = v),
-                      ),
-                    ],
+                  FilterChip(
+                    label: const Text('إعادة تدوير الملابس – جمعية عيني'),
+                    selected: fClothes,
+                    onSelected: (v) {
+                      setSt(() => fClothes = v);
+                      if (!v) {
+                        setState(() => _markers.clear());
+                      } else {
+                        _addAinyFromPlusCodes();
+                      }
+                    },
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: () {
-                        // TODO: طبّق الفلاتر على _markers
-                        Navigator.pop(context);
-                      },
+                      onPressed: () => Navigator.pop(context),
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.primary,
                       ),
-                      child: const Text('تطبيق'),
+                      child: const Text('تم'),
                     ),
                   ),
                 ],
@@ -371,7 +439,7 @@ class _Header extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // === أفاتار بستايل الهوم (جراديانت + ظل) ===
+          // أفاتار
           Material(
             color: Colors.transparent,
             child: Container(
@@ -411,7 +479,7 @@ class _Header extends StatelessWidget {
             ),
           ),
 
-          // === شارة نقاط بستايل الهوم (جراديانت + ⭐︎ + "نقطة") ===
+          // شارة النقاط
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
@@ -432,19 +500,19 @@ class _Header extends StatelessWidget {
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.stars_rounded, color: Colors.white, size: 18),
-                const SizedBox(width: 6),
+              children: const [
+                Icon(Icons.stars_rounded, color: Colors.white, size: 18),
+                SizedBox(width: 6),
                 Text(
-                  '$points',
-                  style: const TextStyle(
+                  '1500',
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,
                     fontSize: 14,
                   ),
                 ),
-                const SizedBox(width: 4),
-                const Text(
+                SizedBox(width: 4),
+                Text(
                   'نقطة',
                   style: TextStyle(
                     color: Colors.white,
@@ -510,7 +578,7 @@ class _SearchBar extends StatelessWidget {
                 BoxShadow(
                   color: Color(0x14000000),
                   blurRadius: 12,
-                  offset: Offset(0, 6),
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
@@ -552,7 +620,7 @@ class _RoundBtn extends StatelessWidget {
               BoxShadow(
                 color: Color(0x22000000),
                 blurRadius: 12,
-                offset: Offset(0, 6),
+                offset: const Offset(0, 6),
               ),
             ],
           ),
@@ -677,9 +745,7 @@ class BottomNav extends StatelessWidget {
                         it.label,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: selected
-                              ? FontWeight.w800
-                              : FontWeight.w500,
+                          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                           color: color,
                         ),
                       ),
