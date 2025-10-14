@@ -5,7 +5,6 @@ import 'admin_home.dart';
 import 'admin_reward.dart';
 import 'admin_map.dart';
 
-
 class AdminTasksPage extends StatefulWidget {
   const AdminTasksPage({super.key});
 
@@ -22,7 +21,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       case 0:
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const AdminRewardsPage()),
+          MaterialPageRoute(builder: (_) => AdminRewardsPage()),
         );
         break;
       case 1:
@@ -42,12 +41,13 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final baseTheme = Theme.of(context);
-    final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(baseTheme.textTheme);
+    final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(
+      baseTheme.textTheme,
+    );
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -97,10 +97,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           ),
           bottomNavigationBar: isKeyboardOpen
               ? null
-              : AdminBottomNav(
-                  currentIndex: _currentIndex,
-                  onTap: _onTap,
-                ),
+              : AdminBottomNav(currentIndex: _currentIndex, onTap: _onTap),
         ),
       ),
     );
