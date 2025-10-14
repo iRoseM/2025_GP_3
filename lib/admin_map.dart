@@ -1,9 +1,9 @@
-// lib/pages/admin_map.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:open_location_code/open_location_code.dart' as olc;
 
 // استيراد صفحات الأدمن
@@ -13,12 +13,14 @@ import 'admin_reward.dart' as reward;
 import 'admin_bottom_nav.dart';
 import 'admin_report.dart' as report;
 
+
 class AdminMapPage extends StatefulWidget {
   const AdminMapPage({super.key});
 
   @override
   State<AdminMapPage> createState() => _AdminMapPageState();
 }
+
 
 class _AdminMapPageState extends State<AdminMapPage> {
   final Completer<GoogleMapController> _mapCtrl = Completer();
@@ -42,11 +44,18 @@ class _AdminMapPageState extends State<AdminMapPage> {
 
   Set<Marker> _allMarkers = {}; // كل الماركرات الأصلية
 
+  /// 🔹 حالة إضافية لتفعيل وضع التحديد
+  bool _isSelecting = false;
+  LatLng? _tempLocation;
+  String? _lastAddedName;
+  String? _lastAddedType;
+
   @override
   void initState() {
     super.initState();
     _ensureLocationPermission();
-    _addDefaultRecyclingBins();
+    _loadFacilitiesFromFirestore(); // ✅ تحميل الفاسيلتيز الفعلية
+
   }
 
   LatLng? _decodePlusCodeToLatLng(String rawPlusCode) {
@@ -65,96 +74,64 @@ class _AdminMapPageState extends State<AdminMapPage> {
     }
   }
 
-  /// 🗺️ يضيف نقاط افتراضية لأنواع مختلفة من الحاويات
-  Future<void> _addDefaultRecyclingBins() async {
-    final List<Map<String, dynamic>> defaultBins = [
-      {
-        'name': 'حاوية إعادة تدوير القوارير – حي النخيل',
-        'type': 'حاوية إعادة تدوير القوارير',
-        'position': const LatLng(24.7425, 46.6532),
-      },
-      {
-        'name': 'حاوية إعادة تدوير الملابس – حي الياسمين',
-        'type': 'حاوية إعادة تدوير الملابس',
-        'position': const LatLng(24.8030, 46.6380),
-      },
-      {
-        'name': 'حاوية إعادة تدوير بقايا الطعام – حي المروج',
-        'type': 'حاوية إعادة تدوير بقايا الطعام',
-        'position': const LatLng(24.7568, 46.6615),
-      },
-      {
-        'name': 'حاوية إعادة تدوير الأوراق – حي العليا',
-        'type': 'حاوية إعادة تدوير الأوراق',
-        'position': const LatLng(24.6941, 46.6850),
-      },
-      {
-        'name': 'حاوية إعادة تدوير متعددة المواد – حي قرطبة',
-        'type': 'حاوية إعادة تدوير متعددة المواد',
-        'position': const LatLng(24.7900, 46.7500),
-      },
-    ];
+  /// ✅ تحميل كل الفاسيلتيز من Firestore وعرضها كعلامات
+  Future<void> _loadFacilitiesFromFirestore() async {
+    try {
+      final qs = await FirebaseFirestore.instance
+          .collection('facilities')
+          .get();
 
-    final Set<Marker> markers = {};
+      final markers = <Marker>{};
 
-    for (final item in defaultBins) {
-      final type = item['type'] as String;
-      final pos = item['position'] as LatLng;
-      final name = item['name'] as String;
+      for (final d in qs.docs) {
+        final m = d.data();
+        final name = (m['name'] ?? m['address'] ?? 'موقع بدون اسم').toString();
+        final type = (m['type'] ?? 'غير محدد').toString();
+        final lat = (m['lat'] as num?)?.toDouble();
+        final lng = (m['lng'] as num?)?.toDouble();
+        if (lat == null || lng == null) continue;
 
-      double hue;
-      switch (type) {
-        case 'حاوية إعادة تدوير القوارير':
-          hue = BitmapDescriptor.hueBlue;
-          break;
-        case 'حاوية إعادة تدوير الملابس':
-          hue = BitmapDescriptor.hueViolet;
-          break;
-        case 'حاوية إعادة تدوير بقايا الطعام':
-          hue = BitmapDescriptor.hueGreen;
-          break;
-        case 'حاوية إعادة تدوير الأوراق':
-          hue = BitmapDescriptor.hueOrange;
-          break;
-        case 'حاوية إعادة تدوير متعددة المواد':
-          hue = BitmapDescriptor.hueAzure;
-          break;
-        default:
-          hue = BitmapDescriptor.hueRed;
+        final hue = _hueForType(type);
+
+        markers.add(
+          Marker(
+            markerId: MarkerId(d.id),
+            position: LatLng(lat, lng),
+            infoWindow: InfoWindow(title: name, snippet: type),
+            icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+            onTap: () => _onMarkerTapped(MarkerId(d.id), name, type, LatLng(lat, lng)),
+          ),
+        );
       }
 
-      markers.add(
-        Marker(
-          markerId: MarkerId(name),
-          position: pos,
-          infoWindow: InfoWindow(title: name, snippet: type),
-          icon: BitmapDescriptor.defaultMarkerWithHue(hue),
-          onTap: () => _onMarkerTapped(MarkerId(name), name, type, pos),
-        ),
-      );
+      setState(() {
+        _markers
+          ..clear()
+          ..addAll(markers);
+        _allMarkers
+          ..clear()
+          ..addAll(markers);
+      });
+
+      // تقريب الكاميرا على النطاق لو فيه نقاط
+      if (markers.isNotEmpty) {
+        LatLngBounds? b;
+        for (final m in markers) {
+          b = _extendBounds(b, m.position);
+        }
+        final ctrl = await _mapCtrl.future;
+        await ctrl.animateCamera(CameraUpdate.newLatLngBounds(b!, 60));
+      }
+
+      debugPrint('✅ تم تحميل ${markers.length} موقع من Firestore');
+    } catch (e) {
+      debugPrint('❌ خطأ أثناء تحميل الفاسيلتيز: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر تحميل المواقع من السحابة')),
+        );
+      }
     }
-
-    setState(() {
-      _markers
-        ..clear()
-        ..addAll(markers);
-
-      // نحفظ النسخة الأصلية في allMarkers
-      _allMarkers
-        ..clear()
-        ..addAll(markers);
-    });
-
-    final controller = await _mapCtrl.future;
-    await controller.animateCamera(
-      CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: const LatLng(24.67, 46.60),
-          northeast: const LatLng(24.83, 46.76),
-        ),
-        50,
-      ),
-    );
   }
 
   LatLngBounds _extendBounds(LatLngBounds? current, LatLng p) {
@@ -178,6 +155,23 @@ class _AdminMapPageState extends State<AdminMapPage> {
           : current.northeast.longitude,
     );
     return LatLngBounds(southwest: sw, northeast: ne);
+  }
+
+  double _hueForType(String type) {
+    switch (type) {
+      case 'حاوية إعادة تدوير القوارير':
+        return BitmapDescriptor.hueBlue;
+      case 'حاوية إعادة تدوير الملابس':
+        return BitmapDescriptor.hueViolet;
+      case 'حاوية إعادة تدوير بقايا الطعام':
+        return BitmapDescriptor.hueGreen;
+      case 'حاوية إعادة تدوير الأوراق':
+        return BitmapDescriptor.hueOrange;
+      case 'حاوية إعادة تدوير متعددة المواد':
+        return BitmapDescriptor.hueAzure;
+      default:
+        return BitmapDescriptor.hueRed;
+    }
   }
 
   Future<void> _ensureLocationPermission() async {
@@ -244,24 +238,27 @@ class _AdminMapPageState extends State<AdminMapPage> {
       child: Theme(
         data: themeWithIbmPlex,
         child: Scaffold(
-          body: Stack(
-            children: [
-              GoogleMap(
-                initialCameraPosition: const CameraPosition(
-                  target: _riyadh,
-                  zoom: _initZoom,
-                ),
-                onMapCreated: (c) => _mapCtrl.complete(c),
-                myLocationEnabled: _myLocationEnabled,
-                myLocationButtonEnabled: false,
-                compassEnabled: true,
-                zoomControlsEnabled: false,
-                markers: _markers,
-                polylines: _polylines,
-                mapToolbarEnabled: false,
-                onTap: _onMapTap,
-              ),
-
+  resizeToAvoidBottomInset: true,
+  body: Stack(
+    children: [
+      GoogleMap(
+        mapType: MapType.normal,
+        initialCameraPosition: const CameraPosition(
+          target: _riyadh,
+          zoom: _initZoom,
+        ),
+        onMapCreated: (c) {
+          if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
+        },
+        myLocationEnabled: _myLocationEnabled,
+        myLocationButtonEnabled: false,
+        compassEnabled: true,
+        zoomControlsEnabled: false,
+        markers: _markers,
+        polylines: _polylines,
+        mapToolbarEnabled: false,
+        onTap: _onMapTap,
+      ),
               // شريط البحث
               SafeArea(
                 child: Padding(
@@ -294,7 +291,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     _RoundBtn(
                       icon: Icons.refresh_rounded,
                       tooltip: 'تحديث النقاط',
-                      onTap: _addDefaultRecyclingBins,
+                      onTap: _loadFacilitiesFromFirestore, // ✅ تحديث من Firestore
                     ),
                   ],
                 ),
@@ -494,8 +491,6 @@ class _AdminMapPageState extends State<AdminMapPage> {
       builder: (context) {
         final TextEditingController nameCtrl = TextEditingController();
         String selectedType = 'حاوية إعادة تدوير القوارير';
-        bool selectingFromMap = false;
-        LatLng? selectedLocation;
 
         return StatefulBuilder(
           builder: (context, setSt) {
@@ -603,7 +598,6 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   ),
                   const SizedBox(height: 6),
 
-                  // زرّي الموقع
                   Row(
                     children: [
                       Expanded(
@@ -614,18 +608,20 @@ class _AdminMapPageState extends State<AdminMapPage> {
                             );
                             if (!mounted) return;
 
-                            _addMarkerToMap(
+                            await _addMarkerToMapAndSave(
                               LatLng(pos.latitude, pos.longitude),
                               nameCtrl.text,
                               selectedType,
                             );
 
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('تمت إضافة الحاوية بنجاح ✅'),
-                              ),
-                            );
+                            if (mounted) Navigator.pop(context);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('تمت إضافة الحاوية بنجاح ✅'),
+                                ),
+                              );
+                            }
                           },
                           icon: const Icon(Icons.my_location),
                           label: const Text('استخدام موقعي الحالي'),
@@ -638,7 +634,6 @@ class _AdminMapPageState extends State<AdminMapPage> {
                       Expanded(
                         child: FilledButton.icon(
                           onPressed: () {
-                            // ✅ أولاً: نتأكد أنه كتب الاسم قبل ما يختار من الخريطة
                             if (nameCtrl.text.trim().isEmpty) {
                               showDialog(
                                 context: context,
@@ -669,7 +664,6 @@ class _AdminMapPageState extends State<AdminMapPage> {
                               return;
                             }
 
-                            // ✅ نغلق النافذة ونفعل وضع التحديد
                             Navigator.pop(context);
                             setState(() {
                               _isSelecting = true;
@@ -677,7 +671,6 @@ class _AdminMapPageState extends State<AdminMapPage> {
                               _lastAddedType = selectedType;
                             });
 
-                            // ✅ تنبيه لطيف أنه الحين لازم يختار الموقع من الخريطة
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
@@ -761,7 +754,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
     );
   }
 
-  /// ✏️ دالة تعديل بيانات الموقع
+  /// ✏️ دالة تعديل بيانات الموقع + تحديث Firestore
   void _editMarker(
     MarkerId markerId,
     String oldName,
@@ -860,7 +853,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                 width: double.infinity,
                 child: FilledButton(
                   style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-                  onPressed: () {
+                  onPressed: () async {
                     if (nameCtrl.text.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('يرجى إدخال اسم الموقع')),
@@ -868,15 +861,58 @@ class _AdminMapPageState extends State<AdminMapPage> {
                       return;
                     }
 
-                    setState(() {
-                      _markers.removeWhere((m) => m.markerId == markerId);
-                      _addMarkerToMap(position, nameCtrl.text, selectedType);
-                    });
+                    try {
+                      // ✅ تحديث Firestore أولًا
+                      await FirebaseFirestore.instance
+                          .collection('facilities')
+                          .doc(markerId.value)
+                          .set({
+                        'name': nameCtrl.text.trim(),
+                        'type': selectedType,
+                        'lat': position.latitude,
+                        'lng': position.longitude,
+                        'updatedAt': FieldValue.serverTimestamp(),
+                      }, SetOptions(merge: true));
 
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('تم تحديث الموقع بنجاح ✅')),
-                    );
+                      // ✅ تحديث العلامة في الخريطة
+                      setState(() {
+                        _markers.removeWhere((m) => m.markerId == markerId);
+                        final hue = _hueForType(selectedType);
+                        final marker = Marker(
+                          markerId: markerId,
+                          position: position,
+                          infoWindow: InfoWindow(
+                            title: nameCtrl.text.trim(),
+                            snippet: selectedType,
+                          ),
+                          icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+                          onTap: () => _onMarkerTapped(
+                            markerId,
+                            nameCtrl.text.trim(),
+                            selectedType,
+                            position,
+                          ),
+                        );
+                        _markers.add(marker);
+
+                        _allMarkers.removeWhere((m) => m.markerId == markerId);
+                        _allMarkers.add(marker);
+                      });
+
+                      if (mounted) Navigator.pop(context);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('تم تحديث الموقع بنجاح ✅')),
+                        );
+                      }
+                    } catch (e) {
+                      debugPrint('❌ تحديث Firestore فشل: $e');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('فشل تحديث السحابة')),
+                        );
+                      }
+                    }
                   },
                   child: const Text('حفظ التعديلات'),
                 ),
@@ -888,7 +924,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
     );
   }
 
-  /// 🗑️ دالة تأكيد الحذف
+  /// 🗑️ دالة تأكيد الحذف + حذف من Firestore
   void _confirmDelete(MarkerId markerId, String name) {
     showDialog(
       context: context,
@@ -901,14 +937,32 @@ class _AdminMapPageState extends State<AdminMapPage> {
             child: const Text('إلغاء'),
           ),
           TextButton(
-            onPressed: () {
-              setState(
-                () => _markers.removeWhere((m) => m.markerId == markerId),
-              );
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم حذف الموقع بنجاح ✅')),
-              );
+            onPressed: () async {
+              try {
+                await FirebaseFirestore.instance
+                    .collection('facilities')
+                    .doc(markerId.value)
+                    .delete();
+
+                setState(() {
+                  _markers.removeWhere((m) => m.markerId == markerId);
+                  _allMarkers.removeWhere((m) => m.markerId == markerId);
+                });
+
+                if (mounted) Navigator.pop(context);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('تم حذف الموقع بنجاح ✅')),
+                  );
+                }
+              } catch (e) {
+                debugPrint('❌ حذف Firestore فشل: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('فشل حذف السحابة')),
+                  );
+                }
+              }
             },
             child: const Text('حذف', style: TextStyle(color: Colors.red)),
           ),
@@ -917,13 +971,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
     );
   }
 
-  /// 🔹 حالة إضافية لتفعيل وضع التحديد
-  bool _isSelecting = false;
-  LatLng? _tempLocation;
-  String? _lastAddedName;
-  String? _lastAddedType;
-
-  /// 🔹 لما يضغط الأدمن على الخريطة
+  /// لما يضغط الأدمن على الخريطة في وضع التحديد
   void _onMapTap(LatLng position) {
     if (_isSelecting) {
       setState(() {
@@ -932,10 +980,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
     }
   }
 
-  /// 🔹 زر تأكيد الموقع (داخل build)
+  /// زر تأكيد الموقع (داخل build)
   Widget _buildConfirmButton() {
     if (_isSelecting) {
-      // ✅ نتحقق من أن كل البيانات مكتملة
       final bool isNameValid = _lastAddedName?.trim().isNotEmpty ?? false;
       final bool isTypeValid = _lastAddedType?.trim().isNotEmpty ?? false;
       final bool isLocationSelected = _tempLocation != null;
@@ -950,8 +997,8 @@ class _AdminMapPageState extends State<AdminMapPage> {
           icon: const Icon(Icons.check),
           label: const Text('تأكيد الموقع'),
           onPressed: isReady
-              ? () {
-                  _addMarkerToMap(
+              ? () async {
+                  await _addMarkerToMapAndSave(
                     _tempLocation!,
                     _lastAddedName!,
                     _lastAddedType!,
@@ -962,18 +1009,19 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     _tempLocation = null;
                   });
 
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('تمت إضافة "${_lastAddedName!}" بنجاح ✅'),
-                    ),
-                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('تمت إضافة "${_lastAddedName!}" بنجاح ✅'),
+                      ),
+                    );
+                  }
                 }
               : () {
                   String msg = 'رجاءً أكمل البيانات التالية:\n';
                   if (!isNameValid) msg += '• اسم الموقع 🏷️\n';
                   if (!isTypeValid) msg += '• نوع الحاوية ♻️\n';
-                  if (!isLocationSelected)
-                    msg += '• تحديد الموقع على الخريطة 📍';
+                  if (!isLocationSelected) msg += '• تحديد الموقع على الخريطة 📍';
 
                   ScaffoldMessenger.of(
                     context,
@@ -990,48 +1038,50 @@ class _AdminMapPageState extends State<AdminMapPage> {
     return const SizedBox.shrink();
   }
 
-  /// 🔹 يضيف الماركر فعليًا حسب اللون والنوع
-  void _addMarkerToMap(LatLng pos, String name, String type) {
-    double hue;
-    switch (type) {
-      case 'حاوية إعادة تدوير القوارير':
-        hue = BitmapDescriptor.hueBlue;
-        break;
-      case 'حاوية إعادة تدوير الملابس':
-        hue = BitmapDescriptor.hueViolet;
-        break;
-      case 'حاوية إعادة تدوير بقايا الطعام':
-        hue = BitmapDescriptor.hueGreen;
-        break;
-      case 'حاوية إعادة تدوير الأوراق':
-        hue = BitmapDescriptor.hueOrange;
-        break;
-      case 'حاوية إعادة تدوير متعددة المواد':
-        hue = BitmapDescriptor.hueAzure;
-        break;
-      default:
-        hue = BitmapDescriptor.hueRed;
+  /// ✅ يضيف ماركر + يحفظ المستند أولاً في Firestore للحصول على docId
+  Future<void> _addMarkerToMapAndSave(LatLng pos, String name, String type) async {
+    try {
+      // أنشئ مستندًا جديدًا أولًا للحصول على الـ ID
+      final docRef = FirebaseFirestore.instance.collection('facilities').doc();
+      await docRef.set({
+        'name': name.isEmpty ? 'موقع جديد' : name.trim(),
+        'type': type,
+        'lat': pos.latitude,
+        'lng': pos.longitude,
+        'status': 'نشط',
+        'city': 'الرياض',
+        'provider': 'الأدمن',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      final hue = _hueForType(type);
+
+      setState(() {
+        final markerId = MarkerId(docRef.id);
+        final marker = Marker(
+          markerId: markerId,
+          position: pos,
+          infoWindow: InfoWindow(
+            title: name.isEmpty ? 'موقع جديد' : name.trim(),
+            snippet: type,
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+          onTap: () => _onMarkerTapped(markerId, name.isEmpty ? 'موقع جديد' : name.trim(), type, pos),
+        );
+
+        _markers.add(marker);
+        _allMarkers.add(marker);
+      });
+
+      debugPrint('✅ تم حفظ الفاسيلتي في Firestore وإظهارها على الخريطة');
+    } catch (e) {
+      debugPrint('❌ خطأ في الحفظ: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('حدث خطأ أثناء حفظ البيانات')),
+        );
+      }
     }
-
-    setState(() {
-      final markerId = MarkerId(DateTime.now().toString());
-
-      final marker = Marker(
-        markerId: markerId,
-        position: pos,
-        infoWindow: InfoWindow(
-          title: name.isEmpty ? 'موقع جديد' : name,
-          snippet: type,
-        ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(hue),
-        onTap: () => _onMarkerTapped(markerId, name, type, pos),
-      );
-
-      // نضيف الماركر في القائمتين (الأساسية والفعلية)
-      _markers.add(marker);
-      _allMarkers.add(marker);
-    });
-    ;
   }
 }
 
