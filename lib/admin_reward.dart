@@ -5,7 +5,6 @@ import 'admin_home.dart';
 import 'admin_task.dart';
 import 'admin_map.dart';
 
-
 class AdminRewardsPage extends StatefulWidget {
   const AdminRewardsPage({super.key});
 
@@ -42,11 +41,13 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
     }
   }
 
-    @override
+  @override
   Widget build(BuildContext context) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final baseTheme = Theme.of(context);
-    final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(baseTheme.textTheme);
+    final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(
+      baseTheme.textTheme,
+    );
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -96,10 +97,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
           ),
           bottomNavigationBar: isKeyboardOpen
               ? null
-              : AdminBottomNav(
-                  currentIndex: _currentIndex,
-                  onTap: _onTap,
-                ),
+              : AdminBottomNav(currentIndex: _currentIndex, onTap: _onTap),
         ),
       ),
     );
