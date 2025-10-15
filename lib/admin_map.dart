@@ -1,4 +1,3 @@
-// lib/pages/admin_map_page.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -46,6 +45,31 @@ class _AdminMapPageState extends State<AdminMapPage> {
     super.initState();
     _ensureLocationPermission();
     _loadFacilitiesFromFirestore();
+  }
+
+  // ===== سلوك الناف بار (مطابق للـ AdminHome) =====
+  void _onTap(int i) {
+    if (i == 1) return; // أنت في تبويب الخريطة بالفعل
+    switch (i) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => reward.AdminRewardsPage()),
+        );
+        break;
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminTasksPage()),
+        );
+        break;
+      case 3:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => home.AdminHomePage()),
+        );
+        break;
+    }
   }
 
   // ===== Helpers (مطابقة لصفحة اليوزر) =====
@@ -318,34 +342,12 @@ class _AdminMapPageState extends State<AdminMapPage> {
             ],
           ),
 
-          // الناف بار الخاص بالأدمن
+          // ===== ناف بار مطابق لصفحة الـ AdminHome =====
           bottomNavigationBar: isKeyboardOpen
               ? null
               : AdminBottomNav(
-                  currentIndex: 2,
-                  onTap: (i) {
-                    if (i == 0) {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (_) => home.AdminHomePage()),
-                      );
-                    } else if (i == 1) {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (_) => const AdminTasksPage()),
-                      );
-                    } else if (i == 2) {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (_) => const AdminMapPage()),
-                      );
-                    } else if (i == 3) {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(builder: (_) => const report.AdminReportPage()),
-                      );
-                    }
-                  },
+                  currentIndex: 1, // تبويب الخريطة
+                  onTap: _onTap,
                 ),
         ),
       ),
