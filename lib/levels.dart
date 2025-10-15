@@ -5,6 +5,8 @@ import 'home.dart'; // homePage
 import 'task.dart'; // taskPage
 import 'map.dart'; // mapPage
 import 'community.dart'; // communityPage
+import 'background_container.dart';
+
 
 /// ملاحظة: أضف الحزمة في pubspec.yaml
 /// dependencies:
@@ -70,8 +72,8 @@ class _levelsPageState extends State<levelsPage> {
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-          // ✅ الخلفية خضراء من هوية التطبيق — لا نغيّرها
-          backgroundColor: AppColors.primary,
+          extendBody: true, // ✅ let the background go behind the nav bar
+          backgroundColor: Colors.transparent, // ✅ removes flat green and black gap
           appBar: AppBar(
             titleSpacing: 0,
             leading: IconButton(
@@ -81,115 +83,117 @@ class _levelsPageState extends State<levelsPage> {
             title: const Text('المراحل'),
             actions: const [SizedBox(width: 8)],
           ),
-          body: Column(
-            children: [
-              // بانر بسيط فوق
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Colors.white, Color(0xFFF8FCFA)],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: const Color(0xFFE6F1EC),
-                      width: 1.5,
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x14000000),
-                        blurRadius: 14,
-                        offset: Offset(0, 6),
+          body: AnimatedBackgroundContainer(
+            child: Column(
+              children: [
+                // ===== Banner =====
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Colors.white, Color(0xFFF8FCFA)],
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.flag_rounded,
-                          color: AppColors.primary,
-                          size: 22,
-                        ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFFE6F1EC),
+                        width: 1.5,
                       ),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Text(
-                          'تقدّم خطوة بخطوة! أكمل المراحل لفتح عناصر جديدة في EcoLand.',
-                          style: TextStyle(
-                            color: AppColors.dark,
-                            fontWeight: FontWeight.w600,
-                            height: 1.3,
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x14000000),
+                          blurRadius: 14,
+                          offset: Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.flag_rounded,
+                            color: AppColors.primary,
+                            size: 22,
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'تقدّم خطوة بخطوة! أكمل المراحل لفتح عناصر جديدة في EcoLand.',
+                            style: TextStyle(
+                              color: AppColors.dark,
+                              fontWeight: FontWeight.w600,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
-              // الشبكة
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                  child: GridView.builder(
-                    itemCount: 12, // عدّلها حسب عدد المراحل عندك
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: .88,
-                        ),
-                    itemBuilder: (context, index) {
-                      final levelNumber = index + 1;
-                      final isUnlocked = levelNumber <= unlockedUntil;
-                      final progress = isUnlocked
-                          ? (levelNumber == unlockedUntil ? 0.45 : 1.0)
-                          : 0.0;
+                // ===== Grid of Levels =====
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                    child: GridView.builder(
+                      itemCount: 12, // عدد المراحل
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: .88,
+                      ),
+                      itemBuilder: (context, index) {
+                        final levelNumber = index + 1;
+                        final isUnlocked = levelNumber <= unlockedUntil;
+                        final progress = isUnlocked
+                            ? (levelNumber == unlockedUntil ? 0.45 : 1.0)
+                            : 0.0;
 
-                      return _LevelCard(
-                        level: levelNumber,
-                        unlocked: isUnlocked,
-                        progress: progress,
-                        onTap: () {
-                          if (!isUnlocked) {
+                        return _LevelCard(
+                          level: levelNumber,
+                          unlocked: isUnlocked,
+                          progress: progress,
+                          onTap: () {
+                            if (!isUnlocked) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'المرحلة $levelNumber مقفلة، أكمل المراحل السابقة أولاً ✅',
+                                    textDirection: TextDirection.rtl,
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'المرحلة $levelNumber مقفلة، أكمل المراحل السابقة أولاً ✅',
+                                  'تم اختيار المرحلة $levelNumber 🎯',
                                   textDirection: TextDirection.rtl,
                                 ),
                               ),
                             );
-                            return;
-                          }
-                          // TODO: اربطها بصفحة المرحلة/اللعبة الخاصة بك
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'تم اختيار المرحلة $levelNumber 🎯',
-                                textDirection: TextDirection.rtl,
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
+                          },
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+
 
           // === BottomNav (مطابق لـ map page) + ربط الصفحات ===
           bottomNavigationBar: isKeyboardOpen

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
- // <-- make sure this matches where AppColors is defined
-
 class NavItem {
   final IconData outlined;
   final IconData filled;
