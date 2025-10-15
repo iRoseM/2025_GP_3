@@ -3,30 +3,31 @@ import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 👈 Firestore
 import 'firebase_options.dart';
 import 'package:flutter/services.dart';
 import 'splash.dart';
 import 'home.dart';
 import 'admin_home.dart';
 
-const String adminEmail = "appNameer@gmail.com";
+/* ======================= تهيئة ======================= */
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
   runApp(const MyApp());
 }
+
+/* ======================= ألوان وتيم ======================= */
 
 class AppColors {
   static const primary = Color(0xFF009688);
   static const dark = Color(0xFF00695C);
   static const light = Color(0xFF4DB6AC);
   static const background = Color(0xFFFAFCFB);
-  static const orange = Color(0xFFFFB74D); // 🟧 same orange as the dots in your design
-  // ✅ لجراديانت النقاط والزر
+  static const orange = Color(0xFFFFB74D);
   static const mint = Color(0xFFB6E9C1);
-
 }
 
 class MyApp extends StatelessWidget {
@@ -46,14 +47,10 @@ class MyApp extends StatelessWidget {
           secondary: AppColors.light,
           onPrimary: Colors.white,
         ),
-
-        // ✅ تطبيق IBM Plex Sans Arabic
         fontFamily: GoogleFonts.ibmPlexSansArabic().fontFamily,
         textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(),
         primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(),
-
         scaffoldBackgroundColor: AppColors.background,
-
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
             backgroundColor: AppColors.primary,
@@ -97,7 +94,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/* ======================= صفحة تسجيل الدخول (الموجودة لديك) ======================= */
+/* ======================= صفحة تسجيل الدخول ======================= */
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -188,31 +185,140 @@ class _RegisterPageState extends State<RegisterPage>
     );
   }
 
-  // تحقق من صحة النموذج والتنقل بناءً على البريد الإلكتروني
-  // Sign in as admin or user
-  void _submit(BuildContext context) {
+  // دالة "نسيت كلمة المرور"
+  Future<void> _resetPassword() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('أدخل البريد أولًا')));
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.setLanguageCode('ar');
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ تم إرسال رابط إعادة التعيين إلى بريدك'),
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      String msg = 'تعذّر الإرسال (${e.code})';
+      switch (e.code) {
+        case 'invalid-email':
+          msg = 'بريد إلكتروني غير صالح';
+          break;
+        case 'user-not-found':
+          msg = 'لا يوجد حساب بهذا البريد';
+          break;
+        case 'network-request-failed':
+          msg = 'تحقق من اتصال الإنترنت';
+          break;
+        case 'too-many-requests':
+          msg = 'محاولات كثيرة — جرّب لاحقًا';
+          break;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ $msg')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('❌ خطأ غير متوقع أثناء الإرسال')),
+      );
+    }
+  }
+
+  // ✅ تسجيل دخول + توجيه حسب الدور
+  Future<void> _submit() async {
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) {
-      // keep your shake animation if you use it
       _shakeCtrl
         ..reset()
         ..forward();
       return;
     }
 
-    final email = _emailCtrl.text.trim().toLowerCase();
-    const adminEmail = "appnameer@gmail.com";
-    if (email == adminEmail) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AdminHomePage()),
+    try {
+      final email = _emailCtrl.text.trim();
+      final password = _passCtrl.text.trim();
+
+      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
-    } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const homePage()),
+
+      await cred.user?.reload();
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) throw FirebaseAuthException(code: 'user-not-found');
+
+      if (user.emailVerified) {
+        // جب الدور ووجّه
+        final role = await _fetchUserRole(user.uid);
+        if (!mounted) return;
+        if (role == 'admin') {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const AdminHomePage()),
+            (r) => false,
+          );
+        } else {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const homePage()),
+            (r) => false,
+          );
+        }
+      } else {
+        // لو ما هو متحقق، روح لصفحة التحقق
+        await FirebaseAuth.instance.setLanguageCode('ar');
+        await user.sendEmailVerification();
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => VerifyEmailPage(email: email)),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      String msg = 'تعذّر تسجيل الدخول (${e.code})';
+      switch (e.code) {
+        case 'invalid-email':
+          msg = 'بريد إلكتروني غير صالح';
+          break;
+        case 'user-disabled':
+          msg = 'تم تعطيل هذا الحساب';
+          break;
+        case 'user-not-found':
+        case 'wrong-password':
+          msg = 'بيانات الدخول غير صحيحة';
+          break;
+        case 'network-request-failed':
+          msg = 'تعذّر الاتصال — تأكد من الإنترنت';
+          break;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ $msg')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('❌ خطأ غير متوقع أثناء تسجيل الدخول')),
       );
     }
   }
 
+  Future<String?> _fetchUserRole(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      return (doc.data() ?? const {})['role'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +327,7 @@ class _RegisterPageState extends State<RegisterPage>
         textDirection: TextDirection.rtl,
         child: Stack(
           children: [
-            // ===== الخلفية المتحركة =====
+            // الخلفية المتحركة
             AnimatedBuilder(
               animation: _bgCtrl,
               builder: (_, __) {
@@ -259,7 +365,7 @@ class _RegisterPageState extends State<RegisterPage>
               ),
             ),
 
-            // ===== المحتوى =====
+            // المحتوى
             SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -331,13 +437,15 @@ class _RegisterPageState extends State<RegisterPage>
                                         hintText: 'name@example.com',
                                       ),
                                       validator: (v) {
-                                        if (v == null || v.trim().isEmpty)
+                                        if (v == null || v.trim().isEmpty) {
                                           return 'أدخل البريد الإلكتروني';
+                                        }
                                         final emailReg = RegExp(
                                           r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
                                         );
-                                        if (!emailReg.hasMatch(v.trim()))
+                                        if (!emailReg.hasMatch(v.trim())) {
                                           return 'بريد إلكتروني غير صالح';
+                                        }
                                         return null;
                                       },
                                     ),
@@ -368,6 +476,7 @@ class _RegisterPageState extends State<RegisterPage>
                                       controller: _passCtrl,
                                       obscureText: _obscure,
                                       textInputAction: TextInputAction.done,
+                                      onFieldSubmitted: (_) => _submit(),
                                       decoration: InputDecoration(
                                         prefixIcon: const Icon(
                                           Icons.lock_outline,
@@ -391,10 +500,12 @@ class _RegisterPageState extends State<RegisterPage>
                                         ),
                                       ),
                                       validator: (v) {
-                                        if (v == null || v.isEmpty)
+                                        if (v == null || v.isEmpty) {
                                           return 'أدخل كلمة المرور';
-                                        if (v.length < 6)
-                                          return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                                        }
+                                        if (v.length < 8) {
+                                          return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+                                        }
                                         return null;
                                       },
                                     ),
@@ -403,7 +514,7 @@ class _RegisterPageState extends State<RegisterPage>
 
                                 const SizedBox(height: 26),
 
-                                // ===== زر متدرّج + حركة hover + ضغط (scale) =====
+                                // زر تسجيل دخول
                                 _stagger(
                                   start: .7,
                                   child: SizedBox(
@@ -421,7 +532,7 @@ class _RegisterPageState extends State<RegisterPage>
                                             scale: scale,
                                             child: _AnimatedGradientButton(
                                               label: 'تسجيل دخول',
-                                              onPressed: () => _submit(context),
+                                              onPressed: _submit,
                                             ),
                                           );
                                         },
@@ -430,7 +541,21 @@ class _RegisterPageState extends State<RegisterPage>
                                   ),
                                 ),
 
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 8),
+
+                                // زر نسيت كلمة المرور
+                                _stagger(
+                                  start: .78,
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: TextButton(
+                                      onPressed: _resetPassword,
+                                      child: const Text('نسيت كلمة المرور؟'),
+                                    ),
+                                  ),
+                                ),
+
+                                const SizedBox(height: 8),
 
                                 _stagger(
                                   start: .85,
@@ -489,7 +614,8 @@ class _RegisterPageState extends State<RegisterPage>
   }
 }
 
-/// رسام للخلفية المتدرجة المتحركة + تموّج خفيف
+/* ======================= خلفية متحركة ======================= */
+
 class GradientBackgroundPainter extends CustomPainter {
   final double t;
   const GradientBackgroundPainter(this.t);
@@ -542,7 +668,8 @@ class GradientBackgroundPainter extends CustomPainter {
       oldDelegate.t != t;
 }
 
-/// رابط بنبض خفيف
+/* ======================= رابط بنبض ======================= */
+
 class _BouncyLink extends StatefulWidget {
   final String label;
   final VoidCallback? onTap;
@@ -624,6 +751,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
 
   bool _obscure = true;
   String _gender = 'male'; // 'male' or 'female'
+  bool _reserving = false; // حالة الحجز/الإنشاء
 
   late final AnimationController _bgCtrl; // خلفية متحركة
   late final AnimationController _introCtrl; // دخول متدرج
@@ -682,13 +810,133 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     );
   }
 
-  void _submit() {
+  // ====== ترانزاكشن: احجز اسم المستخدم + اكتب users/{uid} ======
+  Future<void> _reserveUsernameAndCreateUserDoc({
+    required String uid,
+    required String usernameRaw,
+    required String email,
+    required int? age,
+    required String gender,
+  }) async {
+    final db = FirebaseFirestore.instance;
+    final username = usernameRaw.trim().toLowerCase();
+    final re = RegExp(r'^[a-z0-9._-]{3,24}$');
+    if (!re.hasMatch(username)) {
+      throw 'INVALID_USERNAME';
+    }
+
+    final usernameRef = db.collection('usernames').doc(username);
+    final userRef = db.collection('users').doc(uid);
+
+    await db.runTransaction((tx) async {
+      final snap = await tx.get(usernameRef);
+      if (snap.exists) {
+        final data = snap.data() as Map<String, dynamic>?;
+        final existingUid = data?['uid'];
+        if (existingUid != uid) {
+          throw 'USERNAME_TAKEN';
+        }
+        // لو محجوز لنفسه نكمل (idempotent)
+      } else {
+        tx.set(usernameRef, {
+          'uid': uid,
+          'reservedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      tx.set(userRef, {
+        'email': email.toLowerCase(),
+        'username': username,
+        'age': age,
+        'gender': gender,
+        'role': 'regular',
+        'isVerified': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
+  Future<void> _submit() async {
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const homePage()));
+    setState(() => _reserving = true);
+
+    try {
+      final email = _emailCtrl.text.trim();
+      final password = _passCtrl.text.trim();
+      final username = _usernameCtrl.text.trim();
+      final age = int.tryParse(_ageCtrl.text.trim());
+
+      // 1) أنشئ مستخدم Auth
+      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final uid = cred.user!.uid;
+
+      try {
+        // 2) احجز الاسم واكتب وثيقة المستخدم
+        await _reserveUsernameAndCreateUserDoc(
+          uid: uid,
+          usernameRaw: username,
+          email: email,
+          age: age,
+          gender: _gender,
+        );
+      } catch (e) {
+        // لو الاسم محجوز/غير صالح، نحذف مستخدم Auth اللي انعمل للتو
+        if (e.toString().contains('USERNAME_TAKEN') ||
+            e.toString().contains('INVALID_USERNAME')) {
+          try {
+            await cred.user?.delete();
+          } catch (_) {}
+          final msg = e.toString().contains('USERNAME_TAKEN')
+              ? 'اسم المستخدم محجوز، جرّب اسمًا آخر'
+              : 'اسم المستخدم غير صالح';
+          if (!mounted) return;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(msg)));
+          return;
+        } else {
+          rethrow;
+        }
+      }
+
+      // 3) أرسل بريد التحقق
+      await FirebaseAuth.instance.setLanguageCode('ar');
+      await FirebaseAuth.instance.currentUser?.sendEmailVerification();
+
+      // 4) الانتقال لصفحة التحقق
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => VerifyEmailPage(email: email)),
+      );
+    } on FirebaseAuthException catch (e) {
+      String message = "حدث خطأ غير متوقع";
+      if (e.code == 'email-already-in-use') {
+        message = 'البريد مستخدم مسبقًا';
+      } else if (e.code == 'invalid-email') {
+        message = 'البريد الإلكتروني غير صالح';
+      } else if (e.code == 'weak-password') {
+        message = 'كلمة المرور ضعيفة — استخدم 8 أحرف فأكثر';
+      } else if (e.code == 'network-request-failed') {
+        message = 'تعذّر الاتصال — تأكد من الإنترنت';
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("❌ $message")));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ تعذّر إنشاء الحساب (${e.toString()})")),
+      );
+    } finally {
+      if (mounted) setState(() => _reserving = false);
+    }
   }
 
   @override
@@ -711,7 +959,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
             ),
 
             // Blobs شفافة
-            Positioned.fill(
+            PositionedFill(
               child: AnimatedBuilder(
                 animation: _bgCtrl,
                 builder: (_, __) {
@@ -807,10 +1055,19 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                           hintText: 'nameer_user',
                                         ),
                                         validator: (v) {
-                                          if (v == null || v.trim().isEmpty)
+                                          final val = v?.trim() ?? '';
+                                          if (val.isEmpty) {
                                             return 'أدخل اسم المستخدم';
-                                          if (v.trim().length < 3)
+                                          }
+                                          if (val.length < 3) {
                                             return 'اسم المستخدم قصير جداً';
+                                          }
+                                          final re = RegExp(
+                                            r'^[a-zA-Z0-9._-]+$',
+                                          );
+                                          if (!re.hasMatch(val)) {
+                                            return 'استخدم حروف/أرقام و . _ - فقط';
+                                          }
                                           return null;
                                         },
                                       ),
@@ -841,13 +1098,15 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                           hintText: 'name@example.com',
                                         ),
                                         validator: (v) {
-                                          if (v == null || v.trim().isEmpty)
+                                          if (v == null || v.trim().isEmpty) {
                                             return 'أدخل البريد الإلكتروني';
+                                          }
                                           final emailReg = RegExp(
                                             r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
                                           );
-                                          if (!emailReg.hasMatch(v.trim()))
+                                          if (!emailReg.hasMatch(v.trim())) {
                                             return 'بريد إلكتروني غير صالح';
+                                          }
                                           return null;
                                         },
                                       ),
@@ -893,10 +1152,12 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                           ),
                                         ),
                                         validator: (v) {
-                                          if (v == null || v.isEmpty)
+                                          if (v == null || v.isEmpty) {
                                             return 'أدخل كلمة المرور';
-                                          if (v.length < 6)
-                                            return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                                          }
+                                          if (v.length < 8) {
+                                            return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+                                          }
                                           return null;
                                         },
                                       ),
@@ -937,15 +1198,18 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                               ),
                                               validator: (v) {
                                                 if (v == null ||
-                                                    v.trim().isEmpty)
+                                                    v.trim().isEmpty) {
                                                   return 'أدخل العمر';
+                                                }
                                                 final n = int.tryParse(
                                                   v.trim(),
                                                 );
-                                                if (n == null)
+                                                if (n == null) {
                                                   return 'أدخل رقمًا صحيحًا';
-                                                if (n < 10 || n > 120)
+                                                }
+                                                if (n < 10 || n > 120) {
                                                   return 'العمر غير منطقي';
+                                                }
                                                 return null;
                                               },
                                             ),
@@ -1016,7 +1280,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
 
                                 const SizedBox(height: 24),
 
-                                // ===== زر الإنشاء بنفس تدرّج النقاط + حركة hover + ضغط =====
+                                // زر الإنشاء
                                 _stagger(
                                   start: .6,
                                   child: SizedBox(
@@ -1033,8 +1297,12 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                           return Transform.scale(
                                             scale: scale,
                                             child: _AnimatedGradientButton(
-                                              label: 'إنشاء حساب',
-                                              onPressed: _submit,
+                                              label: _reserving
+                                                  ? '... جارٍ إنشاء الحساب'
+                                                  : 'إنشاء حساب',
+                                              onPressed: _reserving
+                                                  ? () {}
+                                                  : _submit,
                                             ),
                                           );
                                         },
@@ -1077,7 +1345,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     child: Text(
       text,
       style: TextStyle(
-        color: Colors.black.withOpacity(0.75),
+        color: Colors.black.withOpacity(.75),
         fontWeight: FontWeight.w600,
       ),
     ),
@@ -1109,7 +1377,239 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
   }
 }
 
-/* ======================= زر متدرّج مع أنيميشن Hover ======================= */
+/* ======================= صفحة إشعار التحقق من البريد ======================= */
+
+class VerifyEmailPage extends StatefulWidget {
+  final String email;
+  const VerifyEmailPage({super.key, required this.email});
+
+  @override
+  State<VerifyEmailPage> createState() => _VerifyEmailPageState();
+}
+
+class _VerifyEmailPageState extends State<VerifyEmailPage> {
+  bool _sending = false;
+  bool _checking = false;
+
+  Future<void> _resend() async {
+    try {
+      setState(() => _sending = true);
+      await FirebaseAuth.instance.setLanguageCode('ar');
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw FirebaseAuthException(
+          code: 'current-user-null',
+          message: 'No current user',
+        );
+      }
+      await user.sendEmailVerification();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ تم إرسال رسالة التحقق مجددًا')),
+      );
+    } on FirebaseAuthException catch (e) {
+      String msg = 'تعذّر الإرسال (${e.code})';
+      switch (e.code) {
+        case 'current-user-null':
+          msg = 'لا يوجد مستخدم مسجّل — سجّل دخول ثم حاول';
+          break;
+        case 'network-request-failed':
+          msg = 'تحقق من اتصال الإنترنت';
+          break;
+        case 'too-many-requests':
+          msg = 'محاولات كثيرة — جرّب لاحقًا';
+          break;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ $msg')));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  /// ✅ تحقق محلي: أعد تحميل المستخدم، إذا Verified حدّث users/{uid}.isVerified=true
+  Future<void> _markVerified() async {
+    try {
+      setState(() => _checking = true);
+
+      await FirebaseAuth.instance.currentUser?.reload();
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (!mounted) return;
+
+      if (user != null && user.emailVerified) {
+        // حدّث علم التحقق في Firestore (القواعد أثناء التطوير تسمح)
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'isVerified': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ تم تأكيد التحقق وتحديث الحساب')),
+        );
+
+        // وجّه حسب الدور
+        final role = await _fetchUserRole(user.uid);
+        if (!mounted) return;
+        if (role == 'admin') {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const AdminHomePage()),
+            (r) => false,
+          );
+        } else {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const homePage()),
+            (r) => false,
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'غير متحقق بعد — افتح رابط البريد ثم اضغط "تحققت الآن"',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('❌ حدث خطأ أثناء التحقق')));
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<String?> _fetchUserRole(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      return (doc.data() ?? const {})['role'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      // ✅ شريط علوي مع زر إغلاق يرجع للصفحة السابقة فقط
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: 'إغلاق',
+          icon: const Icon(Icons.close),
+          color: AppColors.dark,
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+        ),
+      ),
+
+      body: Directionality(
+        textDirection: TextDirection.rtl,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  color: Colors.white,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // أيقونة متدرجة
+                        ShaderMask(
+                          shaderCallback: (rect) => const LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [
+                              AppColors.primary,
+                              AppColors.primary,
+                              AppColors.mint,
+                            ],
+                            stops: [0.0, 0.5, 1.0],
+                          ).createShader(rect),
+                          child: const Icon(
+                            Icons.mark_email_read_outlined,
+                            size: 72,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'تم إرسال رسالة تحقق',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20,
+                            color: AppColors.dark,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'أرسلنا رسالة إلى:\n${widget.email}\nافتح بريدك واضغط رابط التحقق لإكمال إنشاء الحساب.',
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // زر "تحققت الآن"
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _AnimatedGradientButton(
+                                label: _checking
+                                    ? '... جارٍ التحقق'
+                                    : 'تحققت الآن',
+                                onPressed: _checking ? () {} : _markVerified,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        // زر "إعادة إرسال التحقق"
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _AnimatedGradientOutlineButton(
+                                label: _sending
+                                    ? '... جارٍ الإرسال'
+                                    : 'إعادة إرسال التحقق',
+                                onPressed: _sending ? () {} : _resend,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/* ======================= أزرار التدرّج ======================= */
 
 class _AnimatedGradientButton extends StatefulWidget {
   final String label;
@@ -1164,7 +1664,6 @@ class _AnimatedGradientButtonState extends State<_AnimatedGradientButton>
                   offset: Offset(0, 8),
                 ),
               ],
-              // ✅ نفس تدرّج النقاط مع انزياح أفقي عند الـ hover
               gradient: LinearGradient(
                 begin: Alignment(-1 + _shift.value, 0),
                 end: Alignment(1 + _shift.value, 0),
@@ -1191,6 +1690,112 @@ class _AnimatedGradientButtonState extends State<_AnimatedGradientButton>
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 16,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// زر بخلفية بيضاء وحدّ (إطار) متدرّج
+class _AnimatedGradientOutlineButton extends StatefulWidget {
+  final String label;
+  final VoidCallback onPressed;
+
+  const _AnimatedGradientOutlineButton({
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  State<_AnimatedGradientOutlineButton> createState() =>
+      _AnimatedGradientOutlineButtonState();
+}
+
+class _AnimatedGradientOutlineButtonState
+    extends State<_AnimatedGradientOutlineButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _shift;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _shift = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const double borderRadius = 28;
+    const double borderWidth = 2;
+
+    return MouseRegion(
+      onEnter: (_) => _ctrl.forward(),
+      onExit: (_) => _ctrl.reverse(),
+      child: AnimatedBuilder(
+        animation: _shift,
+        builder: (_, __) {
+          final gradient = LinearGradient(
+            begin: Alignment(-1 + _shift.value, 0),
+            end: Alignment(1 + _shift.value, 0),
+            colors: const [
+              AppColors.primary,
+              AppColors.primary,
+              AppColors.mint,
+            ],
+            stops: const [0.0, 0.5, 1.0],
+          );
+
+          return Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(borderRadius),
+              gradient: gradient,
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x1A009688),
+                  blurRadius: 14,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Container(
+              // داخل الإطار (خلفية بيضاء)
+              margin: const EdgeInsets.all(borderWidth),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(borderRadius - 1),
+              ),
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.dark,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(borderRadius - 1),
+                  ),
+                  minimumSize: const Size.fromHeight(54),
+                ),
+                onPressed: widget.onPressed,
+                child: Text(
+                  widget.label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
                 ),
               ),
             ),
@@ -1249,4 +1854,12 @@ class _GenderChip extends StatelessWidget {
       ),
     );
   }
+}
+
+// لتصحيح Positioned.fill بعد النسخ (بعض المحررات قد لا تعرفها كـ Widget)
+class PositionedFill extends StatelessWidget {
+  final Widget child;
+  const PositionedFill({super.key, required this.child});
+  @override
+  Widget build(BuildContext context) => Positioned.fill(child: child);
 }
