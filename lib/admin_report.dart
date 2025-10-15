@@ -407,7 +407,7 @@ class _ReportCardState extends State<_ReportCard> {
               children: [
                 Expanded(
                   child: Text(
-                    type.isEmpty ? 'بلاغ فاسيلتي' : type,
+                    type.isEmpty ? 'بلاغ حاوية' : type,
                     style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
                   ),
                 ),
@@ -464,7 +464,7 @@ class _ReportCardState extends State<_ReportCard> {
                   child: OutlinedButton.icon(
                     icon: const Icon(Icons.info_outline),
                     onPressed: facilityID.isEmpty ? null : () => _showFacilitySheet(facilityID),
-                    label: const Text('تفاصيل الفاسيلتي'),
+                    label: const Text('تفاصيل الحاوية'),
                   ),
                 ),
                 const SizedBox(width: 8),
