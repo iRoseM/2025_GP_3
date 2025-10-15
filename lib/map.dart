@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Firestore
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ لالتقاط UID عند الإبلاغ
 
 // صفحات أخرى
 import 'home.dart';
@@ -12,26 +13,44 @@ import 'task.dart';
 import 'community.dart';
 import 'levels.dart';
 
-// لوحة الألوان (محدّثة لتطابق الهوم)
+/// ================== ألوان الواجهة ==================
 class AppColors {
   static const primary = Color(0xFF009688);
   static const dark = Color(0xFF00695C);
   static const light = Color(0xFF4DB6AC);
   static const background = Color(0xFFFAFCFB);
-
-  // إضافات لمطابقة ستايل الهوم
   static const mint = Color(0xFFB6E9C1);
   static const sea = Color(0xFF1F7A8C);
 }
 
-class mapPage extends StatefulWidget {
-  const mapPage({super.key});
+/// نموذج مبسّط لعنصر Facility
+class Facility {
+  final String id;
+  final double lat;
+  final double lng;
+  final String type;      // مثل: RVM أو حاوية ملابس...
+  final String provider;  // ✅ مأخوذ من الداتابيس
+  final String city;
+  final String address;
 
-  @override
-  State<mapPage> createState() => _mapPage();
+  Facility({
+    required this.id,
+    required this.lat,
+    required this.lng,
+    required this.type,
+    required this.provider,
+    required this.city,
+    required this.address,
+  });
 }
 
-class _mapPage extends State<mapPage> {
+class mapPage extends StatefulWidget {
+  const mapPage({super.key});
+  @override
+  State<mapPage> createState() => _mapPageState();
+}
+
+class _mapPageState extends State<mapPage> {
   final Completer<GoogleMapController> _mapCtrl = Completer();
   final TextEditingController _searchCtrl = TextEditingController();
 
@@ -39,8 +58,11 @@ class _mapPage extends State<mapPage> {
   static const _initZoom = 12.5;
 
   final Set<Marker> _markers = {};
-  final Set<Marker> _allMarkers = {}; // ✅ نخزّن كل الماركرات للفلترة
+  final Set<Marker> _allMarkers = {};
   final Set<Polyline> _polylines = {};
+
+  // نحتاج نعرف أي ماركر لأي Facility
+  final Map<String, Facility> _facilitiesByMarkerId = {};
 
   bool _myLocationEnabled = false;
   bool _isLoadingLocation = false;
@@ -49,7 +71,7 @@ class _mapPage extends State<mapPage> {
   void initState() {
     super.initState();
     _ensureLocationPermission();
-    _loadFacilitiesFromFirestore(); // ✅ تحميل من Firestore
+    _loadFacilitiesFromFirestore();
   }
 
   // ===== Helpers =====
@@ -57,7 +79,8 @@ class _mapPage extends State<mapPage> {
     final t = (raw).trim();
     if (t.contains('ملابس')) return 'حاوية إعادة تدوير الملابس';
     if (t.contains('RVM') || t.contains('آلة استرجاع')) return 'آلة استرجاع (RVM)';
-    return t;
+    if (t.contains('قوارير') || t.contains('بلاستيك')) return 'حاوية إعادة تدوير القوارير';
+    return t.isEmpty ? 'نقطة استدامة' : t;
   }
 
   double _hueForType(String type) {
@@ -90,52 +113,72 @@ class _mapPage extends State<mapPage> {
     return LatLngBounds(southwest: sw, northeast: ne);
   }
 
-  // ===== Load from Firestore =====
+  // ===== Load facilities from Firestore =====
   Future<void> _loadFacilitiesFromFirestore() async {
     try {
       final qs = await FirebaseFirestore.instance
           .collection('facilities')
-          .where('status', isEqualTo: 'نشط') // اختياري
+          // .where('status', isEqualTo: 'نشط') // إن أردت
           .get();
 
       final markers = <Marker>{};
+      final mapFacilities = <String, Facility>{};
       LatLngBounds? bounds;
 
       for (final d in qs.docs) {
         final m = d.data();
+
         final double? lat = (m['lat'] as num?)?.toDouble();
         final double? lng = (m['lng'] as num?)?.toDouble();
         if (lat == null || lng == null) continue;
 
-        // تحقّق حدود منطقية
+        // تحقّق حدود منطقية حول الرياض
         final valid = lat > 20 && lat < 30 && lng > 40 && lng < 55;
         if (!valid) continue;
 
         final String type     = _normalizeType((m['type'] ?? '').toString());
-        final String provider = (m['provider'] ?? '').toString();
+        final String provider = (m['provider'] ?? '').toString(); // ✅
         final String city     = (m['city'] ?? '').toString();
         final String address  = (m['address'] ?? '').toString();
-        final String title    = type.isNotEmpty ? type : 'نقطة استدامة';
-        final String snippet  = address.isNotEmpty
-            ? address
-            : [if (provider.isNotEmpty) provider, if (city.isNotEmpty) city].join(' • ');
 
-        final hue = _hueForType(type);
         final pos = LatLng(lat, lng);
+        final markerId = MarkerId(d.id);
+
+        // نخزّن الموديل لسهولة الوصول وقت الضغط
+        final facility = Facility(
+          id: d.id,
+          lat: lat,
+          lng: lng,
+          type: type,
+          provider: provider,
+          city: city,
+          address: address,
+        );
+        mapFacilities[markerId.value] = facility;
 
         markers.add(
           Marker(
-            markerId: MarkerId(d.id),
+            markerId: markerId,
             position: pos,
-            infoWindow: InfoWindow(title: title, snippet: snippet),
-            icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+            icon: BitmapDescriptor.defaultMarkerWithHue(_hueForType(type)),
+            infoWindow: InfoWindow(
+              title: type,
+              snippet: address.isNotEmpty
+                  ? address
+                  : [if (provider.isNotEmpty) provider, if (city.isNotEmpty) city].join(' • '),
+            ),
+            onTap: () => _showFacilitySheet(facility), // ✅ فتح التفاصيل + زر إبلاغ
           ),
         );
+
         bounds = _extendBounds(bounds, pos);
       }
 
       if (!mounted) return;
       setState(() {
+        _facilitiesByMarkerId
+          ..clear()
+          ..addAll(mapFacilities);
         _markers
           ..clear()
           ..addAll(markers);
@@ -144,7 +187,6 @@ class _mapPage extends State<mapPage> {
           ..addAll(markers);
       });
 
-      // قرّبي الكاميرا على النطاق
       if (bounds != null && _markers.isNotEmpty) {
         final ctrl = await _mapCtrl.future;
         await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
@@ -173,9 +215,7 @@ class _mapPage extends State<mapPage> {
     final granted =
         permission == LocationPermission.always ||
         permission == LocationPermission.whileInUse;
-    if (mounted) {
-      setState(() => _myLocationEnabled = granted);
-    }
+    if (mounted) setState(() => _myLocationEnabled = granted);
   }
 
   Future<void> _goToMyLocation() async {
@@ -187,20 +227,13 @@ class _mapPage extends State<mapPage> {
       final controller = await _mapCtrl.future;
       await controller.animateCamera(
         CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(pos.latitude, pos.longitude),
-            zoom: 15.5,
-            tilt: 0,
-            bearing: 0,
-          ),
+          CameraPosition(target: LatLng(pos.latitude, pos.longitude), zoom: 15.5),
         ),
       );
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS'),
-          ),
+          const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
         );
       }
     } finally {
@@ -209,22 +242,162 @@ class _mapPage extends State<mapPage> {
   }
 
   void _onSearchSubmitted(String query) {
-    // (اختياري) فلترة نصية لاحقًا
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بحث: $query')));
+  }
+
+  // ===== Bottom sheet لتفاصيل الفاسيليتي =====
+  void _showFacilitySheet(Facility f) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(f.type, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Row(children: [
+                const Icon(Icons.factory_outlined, size: 18, color: AppColors.dark),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    f.provider.isEmpty ? 'مزود غير محدد' : f.provider, // ✅ إظهار provider
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              if (f.address.isNotEmpty || f.city.isNotEmpty)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.place_outlined, size: 18, color: AppColors.dark),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(f.address.isNotEmpty ? f.address : f.city)),
+                  ],
+                ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                icon: const Icon(Icons.report_gmailerrorred_outlined),
+                style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                onPressed: () {
+                  Navigator.pop(context);
+                  _openReportDialog(f); // ✅ إنشاء بلاغ
+                },
+                label: const Text('الإبلاغ عن مشكلة'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ===== Dialog لإرسال بلاغ =====
+  void _openReportDialog(Facility f) {
+    final descCtrl = TextEditingController();
+    String? selectedType;
+    final types = <String>[
+      'الموقع غير دقيق',
+      'الحاوية ممتلئة',
+      'عطل/مكسورة',
+      'غير نظيفة',
+      'أخرى',
+    ];
+
+    showDialog(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text('إرسال بلاغ عن الحاويات'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: 'نوع البلاغ'),
+                items: types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                onChanged: (v) => selectedType = v,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: descCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'وصف المشكلة (اختياري)',
+                  hintText: 'اكتب وصفًا مختصرًا للمشكلة',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            FilledButton(
+              onPressed: () async {
+                if (selectedType == null || selectedType!.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('اختر نوع البلاغ')),
+                  );
+                  return;
+                }
+                Navigator.pop(context);
+                await _submitFacilityReport(
+                  facility: f,
+                  type: selectedType!.trim(),
+                  description: descCtrl.text.trim(),
+                );
+              },
+              child: const Text('إرسال'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _submitFacilityReport({
+    required Facility facility,
+    required String type,
+    required String description,
+  }) async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
+      await FirebaseFirestore.instance.collection('facilityReports').add({
+        'decision': 'pending',     // في انتظار مراجعة الأدمن
+        'description': description,
+        'type': type,
+        'facilityID': facility.id,
+        'reportedBy': uid,
+        'managedBy': '',           // يملؤها الأدمن لاحقًا
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إرسال البلاغ بنجاح')),
+      );
+    } catch (e) {
+      debugPrint('❌ report error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذّر إرسال البلاغ، حاول لاحقًا')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
-    // تطبيق خط IBM Plex Sans Arabic على مستوى الصفحة
     final themeWithIbmPlex = Theme.of(context).copyWith(
-      textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
-        Theme.of(context).textTheme,
-      ),
-      primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
-        Theme.of(context).primaryTextTheme,
-      ),
+      textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(Theme.of(context).textTheme),
+      primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(Theme.of(context).primaryTextTheme),
     );
 
     return Directionality(
@@ -237,10 +410,7 @@ class _mapPage extends State<mapPage> {
             children: [
               GoogleMap(
                 mapType: MapType.normal,
-                initialCameraPosition: const CameraPosition(
-                  target: _riyadh,
-                  zoom: _initZoom,
-                ),
+                initialCameraPosition: const CameraPosition(target: _riyadh, zoom: _initZoom),
                 onMapCreated: (c) {
                   if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
                 },
@@ -287,7 +457,7 @@ class _mapPage extends State<mapPage> {
                     _RoundBtn(
                       icon: Icons.refresh_rounded,
                       tooltip: 'تحديث النقاط',
-                      onTap: _loadFacilitiesFromFirestore, // ✅ تحديث من Firestore
+                      onTap: _loadFacilitiesFromFirestore,
                     ),
                   ],
                 ),
@@ -303,11 +473,7 @@ class _mapPage extends State<mapPage> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x14000000),
-                        blurRadius: 12,
-                        offset: Offset(0, 6),
-                      ),
+                      BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6)),
                     ],
                   ),
                   child: Row(
@@ -315,8 +481,7 @@ class _mapPage extends State<mapPage> {
                     children: const [
                       Icon(Icons.place, size: 18, color: Colors.purple),
                       SizedBox(width: 6),
-                      Text('حاوية إعادة تدوير الملابس / RVM',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      Text('حاوية الملابس / RVM', style: TextStyle(fontWeight: FontWeight.w700)),
                     ],
                   ),
                 ),
@@ -328,9 +493,9 @@ class _mapPage extends State<mapPage> {
           bottomNavigationBar: isKeyboardOpen
               ? null
               : BottomNav(
-                  currentIndex: 3, // تبويب "الخريطة"
+                  currentIndex: 3,
                   onTap: (i) {
-                    if (i == 3) return; // أنت أصلاً على الخريطة
+                    if (i == 3) return;
                     switch (i) {
                       case 0:
                         Navigator.of(context).pushAndRemoveUntil(
@@ -363,7 +528,7 @@ class _mapPage extends State<mapPage> {
     );
   }
 
-  // ===== Filters (اختياري: ملابس / RVM) =====
+  // ===== Filters (اختياري) =====
   void _showFiltersBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -383,12 +548,9 @@ class _mapPage extends State<mapPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'فلاتر النقاط',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
+                  const Text('فلاتر النقاط',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 12),
-
                   FilterChip(
                     label: const Text('حاوية إعادة تدوير الملابس'),
                     selected: fClothes,
@@ -400,27 +562,22 @@ class _mapPage extends State<mapPage> {
                     selected: fRvm,
                     onSelected: (v) => setSt(() => fRvm = v),
                   ),
-
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: () {
                         Navigator.pop(context);
-
                         final allowed = <String>{};
                         if (fClothes) allowed.add('حاوية إعادة تدوير الملابس');
-                        if (fRvm)     allowed.add('آلة استرجاع (RVM)');
-
+                        if (fRvm) allowed.add('آلة استرجاع (RVM)');
                         setState(() {
                           _markers
                             ..clear()
-                            ..addAll(
-                              _allMarkers.where((m) {
-                                final t = m.infoWindow.title ?? '';
-                                return allowed.isEmpty || allowed.contains(t);
-                              }),
-                            );
+                            ..addAll(_allMarkers.where((m) {
+                              final t = m.infoWindow.title ?? '';
+                              return allowed.isEmpty || allowed.contains(t);
+                            }));
                         });
                       },
                       style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
@@ -451,26 +608,18 @@ class _Header extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 16,
-            offset: Offset(0, 8),
-          ),
+          BoxShadow(color: Color(0x14000000), blurRadius: 16, offset: Offset(0, 8)),
         ],
       ),
       child: Row(
         children: [
-          // أفاتار
           Material(
             color: Colors.transparent,
             child: Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [
-                    AppColors.primary.withOpacity(.2),
-                    AppColors.sea.withOpacity(.1),
-                  ],
+                  colors: [AppColors.primary.withOpacity(.2), AppColors.sea.withOpacity(.1)],
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -483,24 +632,14 @@ class _Header extends StatelessWidget {
               child: const CircleAvatar(
                 radius: 18,
                 backgroundColor: Colors.transparent,
-                child: Icon(
-                  Icons.person_outline,
-                  color: AppColors.primary,
-                  size: 22,
-                ),
+                child: Icon(Icons.person_outline, color: AppColors.primary, size: 22),
               ),
             ),
           ),
           const SizedBox(width: 8),
-
           const Expanded(
-            child: Text(
-              'مرحبًا، Nameer',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
+            child: Text('مرحبًا، Nameer', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
-
-          // شارة النقاط
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
@@ -524,23 +663,11 @@ class _Header extends StatelessWidget {
               children: const [
                 Icon(Icons.stars_rounded, color: Colors.white, size: 18),
                 SizedBox(width: 6),
-                Text(
-                  '1500',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                  ),
-                ),
+                Text('1500',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14)),
                 SizedBox(width: 4),
-                Text(
-                  'نقطة',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
+                Text('نقطة',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
               ],
             ),
           ),
@@ -578,10 +705,7 @@ class _SearchBar extends StatelessWidget {
                 hintText: 'ابحث عن أقرب حاوية/نقطة تدوير...',
                 prefixIcon: Icon(Icons.search),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               ),
             ),
           ),
@@ -596,11 +720,7 @@ class _SearchBar extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
               boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 12,
-                  offset: Offset(0, 6),
-                ),
+                BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6)),
               ],
             ),
             child: const Icon(Icons.tune, color: AppColors.dark),
@@ -637,19 +757,11 @@ class _RoundBtn extends StatelessWidget {
           decoration: const BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x22000000),
-                blurRadius: 12,
-                offset: Offset(0, 6),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 6))],
           ),
           child: isLoading
               ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+                  padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2))
               : Icon(icon, color: AppColors.dark),
         ),
       ),
@@ -657,7 +769,7 @@ class _RoundBtn extends StatelessWidget {
   }
 }
 
-/* ======================= BottomNav (نسخة مضمنة هنا) ======================= */
+/* ======================= BottomNav (نسخة مضمنة) ======================= */
 
 class NavItem {
   final IconData outlined;
@@ -686,33 +798,12 @@ class BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = const [
-      NavItem(
-        outlined: Icons.home_outlined,
-        filled: Icons.home,
-        label: 'الرئيسية',
-      ),
-      NavItem(
-        outlined: Icons.fact_check_outlined,
-        filled: Icons.fact_check,
-        label: 'مهامي',
-      ),
-      NavItem(
-        outlined: Icons.flag_outlined,
-        filled: Icons.flag,
-        label: 'المراحل',
-        isCenter: true,
-      ),
-      NavItem(
-        outlined: Icons.map_outlined,
-        filled: Icons.map,
-        label: 'الخريطة',
-      ),
-      NavItem(
-        outlined: Icons.group_outlined,
-        filled: Icons.group,
-        label: 'الأصدقاء',
-      ),
+    const items = [
+      NavItem(outlined: Icons.home_outlined, filled: Icons.home, label: 'الرئيسية'),
+      NavItem(outlined: Icons.fact_check_outlined, filled: Icons.fact_check, label: 'مهامي'),
+      NavItem(outlined: Icons.flag_outlined, filled: Icons.flag, label: 'المراحل', isCenter: true),
+      NavItem(outlined: Icons.map_outlined, filled: Icons.map, label: 'الخريطة'),
+      NavItem(outlined: Icons.group_outlined, filled: Icons.group, label: 'الأصدقاء'),
     ];
 
     return Padding(
@@ -740,11 +831,7 @@ class BottomNav extends StatelessWidget {
                           color: AppColors.primary,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
-                          Icons.flag_outlined,
-                          color: Colors.white,
-                          size: 28,
-                        ),
+                        child: const Icon(Icons.flag_outlined, color: Colors.white, size: 28),
                       ),
                     ),
                   ),
