@@ -5,6 +5,8 @@ import 'admin_home.dart';
 import 'admin_reward.dart';
 import 'admin_map.dart';
 import 'dart:ui';
+import 'background_container.dart';
+
 
 class AdminTasksPage extends StatefulWidget {
   const AdminTasksPage({super.key});
@@ -148,6 +150,9 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           ),
         ),
         child: Scaffold(
+          extendBody: true, // ✅ allow background to extend behind nav bar
+          backgroundColor: Colors.transparent, // ✅ prevent black area
+
           appBar: AppBar(
             centerTitle: true,
             title: const Text("قائمة المهام"),
@@ -167,14 +172,16 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           ),
 
           // ---------------- BODY ----------------
-          body: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _buildSearchBar(),
-                const SizedBox(height: 12),
-                _buildTaskList(filteredTasks),
-              ],
+          body: AnimatedBackgroundContainer( // ✅ use animated background here
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildSearchBar(),
+                  const SizedBox(height: 12),
+                  _buildTaskList(filteredTasks),
+                ],
+              ),
             ),
           ),
 
@@ -194,6 +201,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               ? null
               : AdminBottomNav(currentIndex: _currentIndex, onTap: _onTap),
         ),
+
       ),
     );
   }
@@ -258,7 +266,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               boxShadow: [ 
                 BoxShadow(
                   color: Colors.black.withOpacity(0.12), // soft gray tone
-                  blurRadius: 10,  // smoother, larger shadow
+                  blurRadius: 5,  // smoother, larger shadow
                   spreadRadius: 2, // more diffused
                   offset: const Offset(0, 1), // deeper drop
                 ),

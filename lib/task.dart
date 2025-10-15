@@ -1,6 +1,8 @@
 // lib/pages/task_page.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'background_container.dart';
+
 
 // صفحات التنقل
 import 'home.dart'; // homePage
@@ -49,6 +51,8 @@ class taskPage extends StatelessWidget {
           ),
         ),
         child: Scaffold(
+          extendBody: true, // ✅ allows background to extend under the nav bar
+          backgroundColor: Colors.transparent, // ✅ prevents black area
           appBar: AppBar(
             centerTitle: true,
             title: const Text("مهامي"),
@@ -67,13 +71,16 @@ class taskPage extends StatelessWidget {
               ),
             ),
           ),
-          body: const Center(
-            child: Text(
-              "هنا صفحة المهام 📝",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF3C3C3B),
+          // ✅ Wrap your body with AnimatedBackgroundContainer
+          body: AnimatedBackgroundContainer(
+            child: const Center(
+              child: Text(
+                "هنا صفحة المهام 📝",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF3C3C3B),
+                ),
               ),
             ),
           ),
