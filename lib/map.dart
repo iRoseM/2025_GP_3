@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:open_location_code/open_location_code.dart' as olc;
+import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Firestore
 
 // صفحات أخرى
 import 'home.dart';
@@ -39,6 +39,7 @@ class _mapPage extends State<mapPage> {
   static const _initZoom = 12.5;
 
   final Set<Marker> _markers = {};
+  final Set<Marker> _allMarkers = {}; // ✅ نخزّن كل الماركرات للفلترة
   final Set<Polyline> _polylines = {};
 
   bool _myLocationEnabled = false;
@@ -48,121 +49,119 @@ class _mapPage extends State<mapPage> {
   void initState() {
     super.initState();
     _ensureLocationPermission();
-    _addAinyFromPlusCodes(); // ← نحط بينز جمعية عيني من Plus Codes
+    _loadFacilitiesFromFirestore(); // ✅ تحميل من Firestore
   }
 
-  /// يحوّل Plus Code (قصير/ممتد) إلى LatLng باستخدام مركز الرياض كمرجع للأكواد القصيرة
-  LatLng? _decodePlusCodeToLatLng(String rawPlusCode) {
-    try {
-      final cleaned = rawPlusCode.replaceAll('،', ' ').trim(); // إزالة الفاصلة العربية
-
-      // أنشئ PlusCode من النص (بدون المدينة)
-      var pc = olc.PlusCode.unverified(cleaned);
-
-      // إذا قصير، نكمّله اعتمادًا على مركز الرياض
-      if (pc.isShort()) {
-        pc = pc.recoverNearest(olc.LatLng(_riyadh.latitude, _riyadh.longitude));
-      }
-
-      // تحقّق من الصلاحية
-      if (!pc.isValid) return null;
-
-      // فك الكود واحصل على مركز المنطقة
-      final area = pc.decode();
-      final center = area.center; // olc.LatLng
-      return LatLng(center.latitude, center.longitude); // LatLng تبع خرائط جوجل
-    } catch (e) {
-      debugPrint('PlusCode decode error: $e');
-      return null;
-    }
+  // ===== Helpers =====
+  String _normalizeType(String raw) {
+    final t = (raw).trim();
+    if (t.contains('ملابس')) return 'حاوية إعادة تدوير الملابس';
+    if (t.contains('RVM') || t.contains('آلة استرجاع')) return 'آلة استرجاع (RVM)';
+    return t;
   }
 
-  /// يضيف جميع نقاط "جمعية عيني" من القائمة التي زوّدتني بها (Plus Codes)
-  Future<void> _addAinyFromPlusCodes() async {
-    // ملاحظة: عنصر واحد عبارة عن عنوان نصّي بدون Plus Code دقيق
-    final List<Map<String, String>> raw = [
-      {'code': 'HMG6+G7', 'name': 'شبرا', 'city': 'الرياض'},
-      {'code': 'HJJ9+VC', 'name': 'السويدي الغربي', 'city': 'الرياض'},
-      {'code': 'GMR8+VP', 'name': 'المروة', 'city': 'الرياض'},
-      {'code': 'HMPJ+8J', 'name': 'شبرا', 'city': 'الرياض'},
-      {'code': 'HHQR+CG', 'name': 'العريجاء الغربية', 'city': 'الرياض'},
-      {'code': 'JJPC+2H', 'name': 'هجرة لبن', 'city': 'الرياض'},
-      {'code': 'QP4X+7H', 'name': 'القدس', 'city': 'الرياض'},
-      {'code': 'JQC3+8R', 'name': 'الخالدية', 'city': 'الرياض'},
-      {'code': 'HQM5+7R', 'name': 'العزيزية', 'city': 'الرياض'},
-      {'code': 'QP35+RV', 'name': 'النزهة', 'city': 'الرياض'},
-      {'code': 'JG47+M4', 'name': 'ظهرة لبن', 'city': 'الرياض'},
-      {'code': 'JHR4+CG5', 'name': 'ظهرة لبن', 'city': 'الرياض'}, // كود ممتد
-      {'code': 'MG9W+MPC', 'name': 'طريق السيل الكبير، المهدية', 'city': 'الرياض'}, // ممتد
-      {'code': 'QQFR+6Q', 'name': 'الخليج', 'city': 'الرياض'},
-      {'code': 'PQVR+2P', 'name': 'الاندلس', 'city': 'الرياض'},
-      {'code': 'MRQH+24', 'name': 'السعادة', 'city': 'الرياض'},
-      {'code': 'RQGJ+62', 'name': 'المونسية', 'city': 'الرياض'},
-      {'code': 'QMRV+G8P', 'name': 'الوادي', 'city': 'الرياض'}, // ممتد
-      {'code': 'QJHM+25', 'name': 'العقيق', 'city': 'الرياض'},
-      {'code': 'QQ6X+8P', 'name': 'النهضة', 'city': 'الرياض'},
-      {'code': 'JJPC+2JC', 'name': 'طريق الأمير أحمد بن عبدالعزيز، هجرة لبن', 'city': 'الرياض'},
-    ];
-
-    final Set<Marker> markers = {};
-    LatLngBounds? bounds;
-
-    int idx = 0;
-    for (final item in raw) {
-      if (!item.containsKey('code')) continue; // تخطّي العنوان النصّي (بدون code)
-
-      final code = item['code']!.trim();
-      final areaName = item['name'] ?? '';
-      final city = item['city'] ?? 'الرياض';
-
-      // مَرّر الكود فقط بدون المدينة
-      final ll = _decodePlusCodeToLatLng(code);
-      if (ll == null) continue;
-
-      final marker = Marker(
-        markerId: MarkerId('ainy_$idx'),
-        position: ll,
-        infoWindow: InfoWindow(
-          title: 'إعادة تدوير الملابس – جمعية عيني',
-          snippet: '${areaName.isNotEmpty ? areaName : 'موقع'} • $city',
-        ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
-      );
-      markers.add(marker);
-      bounds = _extendBounds(bounds, ll);
-      idx++;
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _markers
-        ..clear()
-        ..addAll(markers);
-      _polylines.clear();
-    });
-
-    // وسِّع الكاميرا لتضمّ كل النقاط
-    if (bounds != null) {
-      final ctrl = await _mapCtrl.future;
-      await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
+  double _hueForType(String type) {
+    switch (type) {
+      case 'حاوية إعادة تدوير الملابس':
+        return BitmapDescriptor.hueViolet;
+      case 'آلة استرجاع (RVM)':
+        return BitmapDescriptor.hueAzure;
+      case 'حاوية إعادة تدوير القوارير':
+        return BitmapDescriptor.hueBlue;
+      case 'حاوية إعادة تدوير بقايا الطعام':
+        return BitmapDescriptor.hueGreen;
+      case 'حاوية إعادة تدوير الأوراق':
+        return BitmapDescriptor.hueOrange;
+      default:
+        return BitmapDescriptor.hueRed;
     }
   }
 
   LatLngBounds _extendBounds(LatLngBounds? current, LatLng p) {
-    if (current == null) {
-      return LatLngBounds(southwest: p, northeast: p);
-    }
+    if (current == null) return LatLngBounds(southwest: p, northeast: p);
     final sw = LatLng(
-      p.latitude < current.southwest.latitude ? p.latitude : current.southwest.latitude,
+      p.latitude  < current.southwest.latitude  ? p.latitude  : current.southwest.latitude,
       p.longitude < current.southwest.longitude ? p.longitude : current.southwest.longitude,
     );
     final ne = LatLng(
-      p.latitude > current.northeast.latitude ? p.latitude : current.northeast.latitude,
+      p.latitude  > current.northeast.latitude  ? p.latitude  : current.northeast.latitude,
       p.longitude > current.northeast.longitude ? p.longitude : current.northeast.longitude,
     );
     return LatLngBounds(southwest: sw, northeast: ne);
   }
 
+  // ===== Load from Firestore =====
+  Future<void> _loadFacilitiesFromFirestore() async {
+    try {
+      final qs = await FirebaseFirestore.instance
+          .collection('facilities')
+          .where('status', isEqualTo: 'نشط') // اختياري
+          .get();
+
+      final markers = <Marker>{};
+      LatLngBounds? bounds;
+
+      for (final d in qs.docs) {
+        final m = d.data();
+        final double? lat = (m['lat'] as num?)?.toDouble();
+        final double? lng = (m['lng'] as num?)?.toDouble();
+        if (lat == null || lng == null) continue;
+
+        // تحقّق حدود منطقية
+        final valid = lat > 20 && lat < 30 && lng > 40 && lng < 55;
+        if (!valid) continue;
+
+        final String type     = _normalizeType((m['type'] ?? '').toString());
+        final String provider = (m['provider'] ?? '').toString();
+        final String city     = (m['city'] ?? '').toString();
+        final String address  = (m['address'] ?? '').toString();
+        final String title    = type.isNotEmpty ? type : 'نقطة استدامة';
+        final String snippet  = address.isNotEmpty
+            ? address
+            : [if (provider.isNotEmpty) provider, if (city.isNotEmpty) city].join(' • ');
+
+        final hue = _hueForType(type);
+        final pos = LatLng(lat, lng);
+
+        markers.add(
+          Marker(
+            markerId: MarkerId(d.id),
+            position: pos,
+            infoWindow: InfoWindow(title: title, snippet: snippet),
+            icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+          ),
+        );
+        bounds = _extendBounds(bounds, pos);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _markers
+          ..clear()
+          ..addAll(markers);
+        _allMarkers
+          ..clear()
+          ..addAll(markers);
+      });
+
+      // قرّبي الكاميرا على النطاق
+      if (bounds != null && _markers.isNotEmpty) {
+        final ctrl = await _mapCtrl.future;
+        await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
+      }
+
+      debugPrint('✅ Loaded ${markers.length} facilities from Firestore');
+    } catch (e) {
+      debugPrint('❌ Facilities load error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذّر تحميل نقاط الخريطة')),
+        );
+      }
+    }
+  }
+
+  // ===== Location =====
   Future<void> _ensureLocationPermission() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return;
@@ -210,7 +209,7 @@ class _mapPage extends State<mapPage> {
   }
 
   void _onSearchSubmitted(String query) {
-    // بإمكانك لاحقًا تسوي فلترة/إعادة رسم حسب النص
+    // (اختياري) فلترة نصية لاحقًا
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بحث: $query')));
   }
 
@@ -237,11 +236,14 @@ class _mapPage extends State<mapPage> {
           body: Stack(
             children: [
               GoogleMap(
+                mapType: MapType.normal,
                 initialCameraPosition: const CameraPosition(
                   target: _riyadh,
                   zoom: _initZoom,
                 ),
-                onMapCreated: (c) => _mapCtrl.complete(c),
+                onMapCreated: (c) {
+                  if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
+                },
                 myLocationEnabled: _myLocationEnabled,
                 myLocationButtonEnabled: false,
                 compassEnabled: true,
@@ -284,14 +286,14 @@ class _mapPage extends State<mapPage> {
                     const SizedBox(height: 10),
                     _RoundBtn(
                       icon: Icons.refresh_rounded,
-                      tooltip: 'تحديث نقاط جمعية عيني',
-                      onTap: _addAinyFromPlusCodes,
+                      tooltip: 'تحديث النقاط',
+                      onTap: _loadFacilitiesFromFirestore, // ✅ تحديث من Firestore
                     ),
                   ],
                 ),
               ),
 
-              // لوجند بسيط للّون
+              // لوجند بسيط
               Positioned(
                 left: 12,
                 bottom: isKeyboardOpen ? 12 : 28,
@@ -304,7 +306,7 @@ class _mapPage extends State<mapPage> {
                       BoxShadow(
                         color: Color(0x14000000),
                         blurRadius: 12,
-                        offset: const Offset(0, 6),
+                        offset: Offset(0, 6),
                       ),
                     ],
                   ),
@@ -313,7 +315,7 @@ class _mapPage extends State<mapPage> {
                     children: const [
                       Icon(Icons.place, size: 18, color: Colors.purple),
                       SizedBox(width: 6),
-                      Text('إعادة تدوير الملابس – جمعية عيني',
+                      Text('حاوية إعادة تدوير الملابس / RVM',
                           style: TextStyle(fontWeight: FontWeight.w700)),
                     ],
                   ),
@@ -361,6 +363,7 @@ class _mapPage extends State<mapPage> {
     );
   }
 
+  // ===== Filters (اختياري: ملابس / RVM) =====
   void _showFiltersBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -370,6 +373,8 @@ class _mapPage extends State<mapPage> {
       ),
       builder: (_) {
         bool fClothes = true;
+        bool fRvm = true;
+
         return StatefulBuilder(
           builder: (context, setSt) {
             return Padding(
@@ -383,27 +388,43 @@ class _mapPage extends State<mapPage> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 12),
+
                   FilterChip(
-                    label: const Text('إعادة تدوير الملابس – جمعية عيني'),
+                    label: const Text('حاوية إعادة تدوير الملابس'),
                     selected: fClothes,
-                    onSelected: (v) {
-                      setSt(() => fClothes = v);
-                      if (!v) {
-                        setState(() => _markers.clear());
-                      } else {
-                        _addAinyFromPlusCodes();
-                      }
-                    },
+                    onSelected: (v) => setSt(() => fClothes = v),
                   ),
+                  const SizedBox(height: 6),
+                  FilterChip(
+                    label: const Text('آلة استرجاع (RVM)'),
+                    selected: fRvm,
+                    onSelected: (v) => setSt(() => fRvm = v),
+                  ),
+
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                      ),
-                      child: const Text('تم'),
+                      onPressed: () {
+                        Navigator.pop(context);
+
+                        final allowed = <String>{};
+                        if (fClothes) allowed.add('حاوية إعادة تدوير الملابس');
+                        if (fRvm)     allowed.add('آلة استرجاع (RVM)');
+
+                        setState(() {
+                          _markers
+                            ..clear()
+                            ..addAll(
+                              _allMarkers.where((m) {
+                                final t = m.infoWindow.title ?? '';
+                                return allowed.isEmpty || allowed.contains(t);
+                              }),
+                            );
+                        });
+                      },
+                      style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                      child: const Text('تطبيق'),
                     ),
                   ),
                 ],
@@ -578,7 +599,7 @@ class _SearchBar extends StatelessWidget {
                 BoxShadow(
                   color: Color(0x14000000),
                   blurRadius: 12,
-                  offset: const Offset(0, 6),
+                  offset: Offset(0, 6),
                 ),
               ],
             ),
@@ -620,7 +641,7 @@ class _RoundBtn extends StatelessWidget {
               BoxShadow(
                 color: Color(0x22000000),
                 blurRadius: 12,
-                offset: const Offset(0, 6),
+                offset: Offset(0, 6),
               ),
             ],
           ),
