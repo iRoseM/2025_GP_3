@@ -1,6 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'home.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ إضافة
+import 'main.dart';
+import 'package:flutter/material.dart';
+
+class AppColors {
+  static const primary = Color(0xFF009688);
+  static const dark = Color(0xFF00695C);
+  static const light = Color(0xFF4DB6AC);
+  static const background = Color(0xFFFAFCFB);
+  static const orange = Color(0xFFFFB74D);
+  static const mint = Color(0xFFB6E9C1);
+}
 
 class profilePage extends StatelessWidget {
   const profilePage({super.key});
@@ -220,8 +232,22 @@ class profilePage extends StatelessWidget {
                         icon: Icons.logout,
                         iconColor: Colors.redAccent,
                         titleColor: Colors.redAccent,
-                        onTap: () {
-                          _showSnack(context, 'تم تسجيل الخروج');
+                        onTap: () async {
+                          try {
+                            await FirebaseAuth.instance
+                                .signOut(); // ✅ تسجيل الخروج
+                          } catch (_) {
+                            // نتجاهل أي خطأ بسيط هنا
+                          }
+                          // ✅ روّح لصفحة اللوجن وامسح الستاك
+                          if (context.mounted) {
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(
+                                builder: (_) => const RegisterPage(),
+                              ),
+                              (route) => false,
+                            );
+                          }
                         },
                       ),
                     ],

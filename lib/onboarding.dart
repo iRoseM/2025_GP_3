@@ -33,8 +33,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _OnbPageData(
       image: 'assets/img/onboarding3.png',
       title: 'مستعد للتحدي؟',
-      subtitle:
-          'كل خطوة تقرّبنا من مستقبل أكثر خضرة، جاهز؟',
+      subtitle: 'كل خطوة تقرّبنا من مستقبل أكثر خضرة، جاهز؟',
     ),
   ];
 
@@ -43,8 +42,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   @override
   void initState() {
     super.initState();
-    _bgCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 14))
-      ..repeat();
+    _bgCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
   }
 
   @override
@@ -110,23 +111,28 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             // ===== content =====
             SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 child: Column(
                   children: [
                     // back arrow (hidden on first page)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: (_index == 0 || _isWelcome)
-                            ? const SizedBox(height: 40) // ✅ hide on first & last (welcome) page
-                            : IconButton(
-                                tooltip: 'رجوع',
-                                onPressed: _prev,
-                                icon: const Icon(
-                                  Icons.arrow_forward_ios_rounded,
-                                  color: AppColors.dark,
-                                ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: (_index == 0 || _isWelcome)
+                          ? const SizedBox(
+                              height: 40,
+                            ) // ✅ hide on first & last (welcome) page
+                          : IconButton(
+                              tooltip: 'رجوع',
+                              onPressed: _prev,
+                              icon: const Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                color: AppColors.dark,
                               ),
-                      ),
+                            ),
+                    ),
                     const SizedBox(height: 6),
 
                     Expanded(
@@ -136,32 +142,28 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                 onLogin: () {
                                   Navigator.of(context).pushReplacement(
                                     MaterialPageRoute(
-                                      builder: (_) => const RegisterPage(), // لديك في main.dart (تسجيل الدخول)
+                                      builder: (_) =>
+                                          const RegisterPage(), // لديك في main.dart (تسجيل الدخول)
                                     ),
                                   );
                                 },
                                 onRegister: () {
                                   Navigator.of(context).pushReplacement(
                                     MaterialPageRoute(
-                                      builder: (_) => const SignUpPage(), // لديك في main.dart (إنشاء حساب)
+                                      builder: (_) =>
+                                          const SignUpPage(), // لديك في main.dart (إنشاء حساب)
                                     ),
                                   );
                                 },
                               )
-                            : _OnboardingSlide(
-                                data: _pages[_index],
-                              ),
+                            : _OnboardingSlide(data: _pages[_index]),
                       ),
                     ),
-
                     const SizedBox(height: 8),
                     // dots + next (hide dots on welcome)
                     if (!_isWelcome) ...[
                       // 🔹 Dots indicator (keep this)
-                      _Dots(
-                        current: _index,
-                        total: _pages.length,
-                      ),
+                      _Dots(current: _index, total: _pages.length),
                       const SizedBox(height: 16),
 
                       // 🔸 Next button with animated orange ring
@@ -186,9 +188,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                   child: CircularProgressIndicator(
                                     value: value,
                                     strokeWidth: 3.0,
-                                    valueColor: const AlwaysStoppedAnimation<Color>(
-                                      AppColors.orange,
-                                    ),
+                                    valueColor:
+                                        const AlwaysStoppedAnimation<Color>(
+                                          AppColors.orange,
+                                        ),
                                     backgroundColor: Colors.transparent,
                                   ),
                                 );
@@ -200,8 +203,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 shape: const CircleBorder(),
-                                padding: const EdgeInsets.all(0), // ✅ removes extra padding
-                                minimumSize: const Size(60, 60), // ✅ keeps a perfect circle
+                                padding: const EdgeInsets.all(
+                                  0,
+                                ), // ✅ removes extra padding
+                                minimumSize: const Size(
+                                  60,
+                                  60,
+                                ), // ✅ keeps a perfect circle
                                 elevation: 3,
                               ),
                               child: const Text(
@@ -280,12 +288,7 @@ class _OnboardingSlide extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           // mascot
-          Image.asset(
-            data.image,
-            fit: BoxFit.contain,
-            width: 280,
-            height: 280,
-          ),
+          Image.asset(data.image, fit: BoxFit.contain, width: 280, height: 280),
           const SizedBox(height: 8),
           Text(
             data.title,
@@ -320,13 +323,15 @@ class _WelcomeSlide extends StatelessWidget {
     final theme = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Center( // ✅ centers everything vertically
-        child: SingleChildScrollView( // ✅ allows scrolling if screen is small
+      child: Center(
+        // ✅ centers everything vertically
+        child: SingleChildScrollView(
+          // ✅ allows scrolling if screen is small
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center, // ✅ center vertically
             children: [
               Image.asset(
-               'assets/img/welcome.png',
+                'assets/img/welcome.png',
                 fit: BoxFit.contain,
                 width: 280,
                 height: 280,
@@ -350,7 +355,6 @@ class _WelcomeSlide extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 32), // adds space before buttons
-
               // Login button
               SizedBox(
                 width: double.infinity,
@@ -361,7 +365,8 @@ class _WelcomeSlide extends StatelessWidget {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     elevation: 2,
                   ),
                   child: const Text(
@@ -384,7 +389,8 @@ class _WelcomeSlide extends StatelessWidget {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white, // ✅ white text
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     elevation: 0,
                   ),
                   child: const Text(
@@ -402,17 +408,15 @@ class _WelcomeSlide extends StatelessWidget {
 }
 
 class _Dots extends StatelessWidget {
-  const _Dots({
-    required this.current,
-    required this.total,
-  });
+  const _Dots({required this.current, required this.total});
 
   final int current;
   final int total;
 
   @override
   Widget build(BuildContext context) {
-    return Directionality( // 👈 force left-to-right for the dots only
+    return Directionality(
+      // 👈 force left-to-right for the dots only
       textDirection: TextDirection.ltr,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -426,7 +430,8 @@ class _Dots extends StatelessWidget {
             width: isActive ? 22 : 8,
             decoration: BoxDecoration(
               color: isActive
-                  ? AppColors.orange // 🟧 orange for current page
+                  ? AppColors
+                        .orange // 🟧 orange for current page
                   : AppColors.primary.withOpacity(0.7),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -436,6 +441,3 @@ class _Dots extends StatelessWidget {
     );
   }
 }
-
-
-
