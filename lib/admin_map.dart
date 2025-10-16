@@ -76,10 +76,14 @@ class _AdminMapPageState extends State<AdminMapPage> {
   String _normalizeType(String raw) {
     final t = (raw).trim();
     if (t.contains('ملابس')) return 'حاوية إعادة تدوير الملابس';
-    if (t.contains('RVM') || t.contains('آلة استرجاع')) return 'آلة استرجاع (RVM)';
-    if (t.contains('قوارير') || t.contains('بلاستيك')) return 'حاوية إعادة تدوير القوارير';
-    if (t.contains('بقايا') || t.contains('طعام')) return 'حاوية إعادة تدوير بقايا الطعام';
-    if (t.contains('أوراق') || t.contains('ورق')) return 'حاوية إعادة تدوير الأوراق';
+    if (t.contains('RVM') || t.contains('آلة استرجاع'))
+      return 'آلة استرجاع (RVM)';
+    if (t.contains('قوارير') || t.contains('بلاستيك'))
+      return 'حاوية إعادة تدوير القوارير';
+    if (t.contains('بقايا') || t.contains('طعام'))
+      return 'حاوية إعادة تدوير بقايا الطعام';
+    if (t.contains('أوراق') || t.contains('ورق'))
+      return 'حاوية إعادة تدوير الأوراق';
     return t.isEmpty ? 'نقطة استدامة' : t;
   }
 
@@ -104,12 +108,20 @@ class _AdminMapPageState extends State<AdminMapPage> {
   LatLngBounds _extendBounds(LatLngBounds? current, LatLng p) {
     if (current == null) return LatLngBounds(southwest: p, northeast: p);
     final sw = LatLng(
-      p.latitude < current.southwest.latitude ? p.latitude : current.southwest.latitude,
-      p.longitude < current.southwest.longitude ? p.longitude : current.southwest.longitude,
+      p.latitude < current.southwest.latitude
+          ? p.latitude
+          : current.southwest.latitude,
+      p.longitude < current.southwest.longitude
+          ? p.longitude
+          : current.southwest.longitude,
     );
     final ne = LatLng(
-      p.latitude > current.northeast.latitude ? p.latitude : current.northeast.latitude,
-      p.longitude > current.northeast.longitude ? p.longitude : current.northeast.longitude,
+      p.latitude > current.northeast.latitude
+          ? p.latitude
+          : current.northeast.latitude,
+      p.longitude > current.northeast.longitude
+          ? p.longitude
+          : current.northeast.longitude,
     );
     return LatLngBounds(southwest: sw, northeast: ne);
   }
@@ -133,7 +145,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
   /// ✅ تحميل كل الفاسيلتيز من Firestore وعرضها كعلامات
   Future<void> _loadFacilitiesFromFirestore() async {
     try {
-      final qs = await FirebaseFirestore.instance.collection('facilities').get();
+      final qs = await FirebaseFirestore.instance
+          .collection('facilities')
+          .get();
 
       final markers = <Marker>{};
       LatLngBounds? bounds;
@@ -160,7 +174,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
         // ✅ مطابق لليوزر: العنوان في الـ snippet وإن لم يوجد نعرض provider • city
         final String snippet = address.isNotEmpty
             ? address
-            : [if (provider.isNotEmpty) provider, if (city.isNotEmpty) city].join(' • ');
+            : [
+                if (provider.isNotEmpty) provider,
+                if (city.isNotEmpty) city,
+              ].join(' • ');
 
         final marker = Marker(
           markerId: MarkerId(d.id),
@@ -212,7 +229,8 @@ class _AdminMapPageState extends State<AdminMapPage> {
     }
 
     final granted =
-        permission == LocationPermission.always || permission == LocationPermission.whileInUse;
+        permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
 
     if (mounted) setState(() => _myLocationEnabled = granted);
   }
@@ -220,17 +238,24 @@ class _AdminMapPageState extends State<AdminMapPage> {
   Future<void> _goToMyLocation() async {
     setState(() => _isLoadingLocation = true);
     try {
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
       final controller = await _mapCtrl.future;
       await controller.animateCamera(
         CameraUpdate.newCameraPosition(
-          CameraPosition(target: LatLng(pos.latitude, pos.longitude), zoom: 15.5),
+          CameraPosition(
+            target: LatLng(pos.latitude, pos.longitude),
+            zoom: 15.5,
+          ),
         ),
       );
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
+          const SnackBar(
+            content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS'),
+          ),
         );
       }
     } finally {
@@ -239,14 +264,18 @@ class _AdminMapPageState extends State<AdminMapPage> {
   }
 
   void _onSearchSubmitted(String query) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بحث: $query')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('بحث: $query')));
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final themeWithIbmPlex = Theme.of(context).copyWith(
-      textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(Theme.of(context).textTheme),
+      textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
+        Theme.of(context).textTheme,
+      ),
     );
 
     return Directionality(
@@ -259,7 +288,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
             children: [
               GoogleMap(
                 mapType: MapType.normal,
-                initialCameraPosition: const CameraPosition(target: _riyadh, zoom: _initZoom),
+                initialCameraPosition: const CameraPosition(
+                  target: _riyadh,
+                  zoom: _initZoom,
+                ),
                 onMapCreated: (c) {
                   if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
                 },
@@ -305,7 +337,8 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     _RoundBtn(
                       icon: Icons.refresh_rounded,
                       tooltip: 'تحديث النقاط',
-                      onTap: _loadFacilitiesFromFirestore, // ✅ تحديث من Firestore
+                      onTap:
+                          _loadFacilitiesFromFirestore, // ✅ تحديث من Firestore
                     ),
                   ],
                 ),
@@ -321,7 +354,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const report.AdminReportPage()),
+                      MaterialPageRoute(
+                        builder: (_) => const report.AdminReportPage(),
+                      ),
                     );
                   },
                 ),
@@ -374,8 +409,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('فلاتر النقاط',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  const Text(
+                    'فلاتر النقاط',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 12),
 
                   FilterChip(
@@ -413,7 +450,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
                             );
                         });
                       },
-                      style: FilledButton.styleFrom(backgroundColor: home.AppColors.primary),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: home.AppColors.primary,
+                      ),
                       child: const Text('تطبيق'),
                     ),
                   ),
@@ -454,24 +493,36 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   const Center(
                     child: Text(
                       'إضافة موقع استدامة جديد',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
 
                   // 🏷️ اسم الموقع
-                  const Text('اسم الموقع', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text(
+                    'اسم الموقع',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: nameCtrl,
+                    textAlign: TextAlign.right,
                     decoration: InputDecoration(
                       hintText: 'مثال: حي النخيل',
                       filled: true,
                       fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Colors.black12),
+                        borderSide: const BorderSide(
+                          color: home.AppColors.primary,
+                        ),
                       ),
                     ),
                   ),
@@ -479,42 +530,52 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   const SizedBox(height: 14),
 
                   // 🧩 نوع الحاوية
-                  const Text('نوع الحاوية', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text(
+                    'نوع الحاوية',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.black12),
+                      border: Border.all(color: home.AppColors.primary),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: selectedType,
                         isExpanded: true,
+                        alignment: Alignment.centerRight,
                         items: const [
                           DropdownMenuItem(
                             value: 'حاوية إعادة تدوير القوارير',
+                            alignment: Alignment.centerRight,
                             child: Text('حاوية إعادة تدوير القوارير'),
                           ),
                           DropdownMenuItem(
                             value: 'حاوية إعادة تدوير الملابس',
+                            alignment: Alignment.centerRight,
                             child: Text('حاوية إعادة تدوير الملابس'),
                           ),
                           DropdownMenuItem(
                             value: 'حاوية إعادة تدوير بقايا الطعام',
+                            alignment: Alignment.centerRight,
                             child: Text('حاوية إعادة تدوير بقايا الطعام'),
                           ),
                           DropdownMenuItem(
                             value: 'حاوية إعادة تدوير الأوراق',
+                            alignment: Alignment.centerRight,
                             child: Text('حاوية إعادة تدوير الأوراق'),
                           ),
                           DropdownMenuItem(
                             value: 'حاوية إعادة تدوير متعددة المواد',
+                            alignment: Alignment.centerRight,
                             child: Text('حاوية إعادة تدوير متعددة المواد'),
                           ),
                           DropdownMenuItem(
                             value: 'آلة استرجاع (RVM)',
+                            alignment: Alignment.centerRight,
                             child: Text('آلة استرجاع (RVM)'),
                           ),
                         ],
@@ -530,7 +591,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   const SizedBox(height: 20),
 
                   // 📍 تحديد الموقع
-                  const Text('الموقع', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text(
+                    'الموقع',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 6),
 
                   Row(
@@ -552,13 +616,17 @@ class _AdminMapPageState extends State<AdminMapPage> {
                             if (mounted) Navigator.pop(context);
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('تمت إضافة الحاوية بنجاح ✅')),
+                                const SnackBar(
+                                  content: Text('تمت إضافة الحاوية بنجاح ✅'),
+                                ),
                               );
                             }
                           },
                           icon: const Icon(Icons.my_location),
                           label: const Text('استخدام موقعي الحالي'),
-                          style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.teal,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -569,13 +637,20 @@ class _AdminMapPageState extends State<AdminMapPage> {
                               showDialog(
                                 context: context,
                                 builder: (context) => AlertDialog(
-                                  shape:
-                                      RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                  title: const Text('تنبيه',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(fontWeight: FontWeight.bold)),
-                                  content: const Text('رجاءً أدخل اسم الموقع أولاً 🏷️',
-                                      textAlign: TextAlign.center),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  title: const Text(
+                                    'تنبيه',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  content: const Text(
+                                    'رجاءً أدخل اسم الموقع أولاً 🏷️',
+                                    textAlign: TextAlign.center,
+                                  ),
                                   actionsAlignment: MainAxisAlignment.center,
                                   actions: [
                                     TextButton(
@@ -596,12 +671,18 @@ class _AdminMapPageState extends State<AdminMapPage> {
                             });
 
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('اضغط على الخريطة لتحديد موقع "$selectedType" 📍')),
+                              SnackBar(
+                                content: Text(
+                                  'اضغط على الخريطة لتحديد موقع "$selectedType" 📍',
+                                ),
+                              ),
                             );
                           },
                           icon: const Icon(Icons.add_location_alt_rounded),
                           label: const Text('اختيار من الخريطة'),
-                          style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                          ),
                         ),
                       ),
                     ],
@@ -635,7 +716,13 @@ class _AdminMapPageState extends State<AdminMapPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(nameOrType, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                nameOrType,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 6),
               Text(type, style: const TextStyle(color: Colors.grey)),
               const Divider(height: 20),
@@ -673,7 +760,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
     String oldType,
     LatLng position,
   ) {
-    final TextEditingController nameCtrl = TextEditingController(text: oldNameOrType);
+    final TextEditingController nameCtrl = TextEditingController(
+      text: oldNameOrType,
+    );
     String selectedType = oldType;
 
     showModalBottomSheet(
@@ -695,12 +784,17 @@ class _AdminMapPageState extends State<AdminMapPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Center(
-                child: Text('تعديل بيانات الموقع',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                child: Text(
+                  'تعديل بيانات الموقع',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ),
               const SizedBox(height: 20),
 
-              const Text('اسم / نوع الموقع', style: TextStyle(fontWeight: FontWeight.w700)),
+              const Text(
+                'اسم / نوع الموقع',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 6),
               TextField(
                 controller: nameCtrl,
@@ -715,7 +809,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
               ),
 
               const SizedBox(height: 14),
-              const Text('نوع الحاوية', style: TextStyle(fontWeight: FontWeight.w700)),
+              const Text(
+                'نوع الحاوية',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 6),
               DropdownButtonFormField<String>(
                 value: selectedType,
@@ -775,12 +872,12 @@ class _AdminMapPageState extends State<AdminMapPage> {
                           .collection('facilities')
                           .doc(markerId.value)
                           .set({
-                        'name': nameCtrl.text.trim(),
-                        'type': selectedType,
-                        'lat': position.latitude,
-                        'lng': position.longitude,
-                        'updatedAt': FieldValue.serverTimestamp(),
-                      }, SetOptions(merge: true));
+                            'name': nameCtrl.text.trim(),
+                            'type': selectedType,
+                            'lat': position.latitude,
+                            'lng': position.longitude,
+                            'updatedAt': FieldValue.serverTimestamp(),
+                          }, SetOptions(merge: true));
 
                       // ✅ تحديث العلامة في الخريطة
                       setState(() {
@@ -792,7 +889,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
                           infoWindow: InfoWindow(
                             // نخلي العنوان النوع (مطابق لليوزر)
                             title: _normalizeType(selectedType),
-                            snippet: nameCtrl.text.trim().isEmpty ? '' : nameCtrl.text.trim(),
+                            snippet: nameCtrl.text.trim().isEmpty
+                                ? ''
+                                : nameCtrl.text.trim(),
                           ),
                           icon: BitmapDescriptor.defaultMarkerWithHue(hue),
                           onTap: () => _onMarkerTapped(
@@ -811,7 +910,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
                       if (mounted) Navigator.pop(context);
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تم تحديث الموقع بنجاح ✅')),
+                          const SnackBar(
+                            content: Text('تم تحديث الموقع بنجاح ✅'),
+                          ),
                         );
                       }
                     } catch (e) {
@@ -841,11 +942,17 @@ class _AdminMapPageState extends State<AdminMapPage> {
         title: const Text('تأكيد الحذف'),
         content: Text('هل أنت متأكد من حذف "$name"؟'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
           TextButton(
             onPressed: () async {
               try {
-                await FirebaseFirestore.instance.collection('facilities').doc(markerId.value).delete();
+                await FirebaseFirestore.instance
+                    .collection('facilities')
+                    .doc(markerId.value)
+                    .delete();
 
                 setState(() {
                   _markers.removeWhere((m) => m.markerId == markerId);
@@ -901,7 +1008,11 @@ class _AdminMapPageState extends State<AdminMapPage> {
           label: const Text('تأكيد الموقع'),
           onPressed: isReady
               ? () async {
-                  await _addMarkerToMapAndSave(_tempLocation!, _lastAddedName!, _lastAddedType!);
+                  await _addMarkerToMapAndSave(
+                    _tempLocation!,
+                    _lastAddedName!,
+                    _lastAddedType!,
+                  );
 
                   setState(() {
                     _isSelecting = false;
@@ -910,7 +1021,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
 
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('تمت إضافة "${_lastAddedName!}" بنجاح ✅')),
+                      SnackBar(
+                        content: Text('تمت إضافة "${_lastAddedName!}" بنجاح ✅'),
+                      ),
                     );
                   }
                 }
@@ -918,9 +1031,12 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   String msg = 'رجاءً أكمل البيانات التالية:\n';
                   if (!isNameValid) msg += '• اسم الموقع 🏷️\n';
                   if (!isTypeValid) msg += '• نوع الحاوية ♻️\n';
-                  if (!isLocationSelected) msg += '• تحديد الموقع على الخريطة 📍';
+                  if (!isLocationSelected)
+                    msg += '• تحديد الموقع على الخريطة 📍';
 
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(msg)));
                 },
           style: FilledButton.styleFrom(
             backgroundColor: isReady ? Colors.teal : Colors.grey,
@@ -934,7 +1050,11 @@ class _AdminMapPageState extends State<AdminMapPage> {
   }
 
   /// ✅ إضافة ماركر + حفظ المستند أولًا في Firestore للحصول على docId
-  Future<void> _addMarkerToMapAndSave(LatLng pos, String name, String type) async {
+  Future<void> _addMarkerToMapAndSave(
+    LatLng pos,
+    String name,
+    String type,
+  ) async {
     try {
       final normalizedType = _normalizeType(type);
 
@@ -963,7 +1083,8 @@ class _AdminMapPageState extends State<AdminMapPage> {
             snippet: name.isEmpty ? '' : name.trim(),
           ),
           icon: BitmapDescriptor.defaultMarkerWithHue(hue),
-          onTap: () => _onMarkerTapped(markerId, normalizedType, normalizedType, pos),
+          onTap: () =>
+              _onMarkerTapped(markerId, normalizedType, normalizedType, pos),
         );
 
         _markers.add(marker);
@@ -1012,7 +1133,10 @@ class _SearchBar extends StatelessWidget {
                 hintText: 'ابحث عن أقرب حاوية/ نقطة تدوير...',
                 prefixIcon: Icon(Icons.search),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -1027,7 +1151,11 @@ class _SearchBar extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
               boxShadow: const [
-                BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6)),
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 6),
+                ),
               ],
             ),
             child: const Icon(Icons.tune, color: home.AppColors.dark),
@@ -1065,7 +1193,11 @@ class _RoundBtn extends StatelessWidget {
             color: Colors.white,
             shape: BoxShape.circle,
             boxShadow: [
-              BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 6)),
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
             ],
           ),
           child: isLoading
