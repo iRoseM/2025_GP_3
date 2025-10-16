@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "nameer-f3b95"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }
