@@ -2,8 +2,8 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
-// We reuse colors, painter, and pages that already live in main.dart
-import 'main.dart'; // AppColors, GradientBackgroundPainter, RegisterPage, SignUpPage
+// نستخدم الألوان والبنتر من main.dart
+import 'main.dart'; // AppColors, GradientBackgroundPainter, RegisterPage
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -15,7 +15,7 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen>
     with TickerProviderStateMixin {
   late final AnimationController _bgCtrl;
-  int _index = 0; // 0..2 = onboarding slides, 3 = welcome page
+  int _index = 0; // 0..2 = onboarding slides
 
   static const _pages = <_OnbPageData>[
     _OnbPageData(
@@ -37,8 +37,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     ),
   ];
 
-  bool get _isWelcome => _index == _pages.length;
-
   @override
   void initState() {
     super.initState();
@@ -55,9 +53,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _next() {
-    if (_index < _pages.length) {
-      setState(() => _index++);
+    // ✅ إذا كنا في آخر صفحة ننتقل مباشرة لصفحة تسجيل الدخول
+    if (_index >= _pages.length - 1) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const RegisterPage()),
+      );
+      return;
     }
+    setState(() => _index++);
   }
 
   void _prev() {
@@ -71,7 +74,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       child: Scaffold(
         body: Stack(
           children: [
-            // ===== animated background (same as register/splash) =====
             AnimatedBuilder(
               animation: _bgCtrl,
               builder: (_, __) {
@@ -82,7 +84,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 );
               },
             ),
-            // soft blobs
             Positioned.fill(
               child: AnimatedBuilder(
                 animation: _bgCtrl,
@@ -108,7 +109,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
             ),
 
-            // ===== content =====
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -117,13 +117,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ),
                 child: Column(
                   children: [
-                    // back arrow (hidden on first page)
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: (_index == 0 || _isWelcome)
-                          ? const SizedBox(
-                              height: 40,
-                            ) // ✅ hide on first & last (welcome) page
+                      child: (_index == 0)
+                          ? const SizedBox(height: 40)
                           : IconButton(
                               tooltip: 'رجوع',
                               onPressed: _prev,
@@ -134,98 +131,90 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             ),
                     ),
                     const SizedBox(height: 6),
-
                     Expanded(
                       child: Center(
-                        child: _isWelcome
-                            ? _WelcomeSlide(
-                                onLogin: () {
-                                  Navigator.of(context).pushReplacement(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const RegisterPage(), // لديك في main.dart (تسجيل الدخول)
-                                    ),
-                                  );
-                                },
-                                onRegister: () {
-                                  Navigator.of(context).pushReplacement(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const SignUpPage(), // لديك في main.dart (إنشاء حساب)
-                                    ),
-                                  );
-                                },
-                              )
-                            : _OnboardingSlide(data: _pages[_index]),
+                        child: _OnboardingSlide(data: _pages[_index]),
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // dots + next (hide dots on welcome)
-                    if (!_isWelcome) ...[
-                      // 🔹 Dots indicator (keep this)
-                      _Dots(current: _index, total: _pages.length),
-                      const SizedBox(height: 16),
+                    _Dots(current: _index, total: _pages.length),
+                    const SizedBox(height: 16),
 
-                      // 🔸 Next button with animated orange ring
-                      SizedBox(
-                        height: 64, // 🔹 slightly smaller
-                        width: 64,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Orange circular ring — tighter fit
-                            TweenAnimationBuilder<double>(
-                              tween: Tween<double>(
-                                begin: 0,
-                                end: (_index + 1) / _pages.length,
-                              ),
-                              duration: const Duration(milliseconds: 600),
-                              curve: Curves.easeInOut,
-                              builder: (context, value, _) {
-                                return SizedBox(
-                                  height: 66, // 🔹 just 2px larger than button
-                                  width: 66,
-                                  child: CircularProgressIndicator(
-                                    value: value,
-                                    strokeWidth: 3.0,
-                                    valueColor:
-                                        const AlwaysStoppedAnimation<Color>(
-                                          AppColors.orange,
-                                        ),
-                                    backgroundColor: Colors.transparent,
-                                  ),
-                                );
-                              },
+                    // 🔸 زر متدرّج الألوان
+                    SizedBox(
+                      height: 64,
+                      width: 64,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          TweenAnimationBuilder<double>(
+                            tween: Tween<double>(
+                              begin: 0,
+                              end: (_index + 1) / _pages.length,
                             ),
-                            // Main green button
-                            ElevatedButton(
-                              onPressed: _next,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                shape: const CircleBorder(),
-                                padding: const EdgeInsets.all(
-                                  0,
-                                ), // ✅ removes extra padding
-                                minimumSize: const Size(
-                                  60,
-                                  60,
-                                ), // ✅ keeps a perfect circle
-                                elevation: 3,
+                            duration: const Duration(milliseconds: 600),
+                            curve: Curves.easeInOut,
+                            builder: (context, value, _) {
+                              return SizedBox(
+                                height: 66,
+                                width: 66,
+                                child: CircularProgressIndicator(
+                                  value: value,
+                                  strokeWidth: 3.0,
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                        AppColors.orange,
+                                      ),
+                                  backgroundColor: Colors.transparent,
+                                ),
+                              );
+                            },
+                          ),
+                          Container(
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppColors.light,
+                                  AppColors.primary,
+                                  AppColors.primary,
+                                ],
+                                begin: Alignment.topRight,
+                                end: Alignment.bottomLeft,
                               ),
-                              child: const Text(
-                                'التالي',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 6,
+                                  offset: Offset(2, 3),
+                                ),
+                              ],
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              shape: const CircleBorder(),
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: _next,
+                                child: Center(
+                                  child: Text(
+                                    _index == _pages.length - 1
+                                        ? 'ابدأ'
+                                        : 'التالي',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                    ],
+                    ),
+                    const SizedBox(height: 8),
                   ],
                 ),
               ),
@@ -236,7 +225,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  // local blob helper (same style as your pages)
   static Widget _blob({
     double? left,
     double? right,
@@ -262,8 +250,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 }
 
-// ===== models & UI parts =====
-
 class _OnbPageData {
   final String image;
   final String title;
@@ -287,7 +273,6 @@ class _OnboardingSlide extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // mascot
           Image.asset(data.image, fit: BoxFit.contain, width: 280, height: 280),
           const SizedBox(height: 8),
           Text(
@@ -313,116 +298,19 @@ class _OnboardingSlide extends StatelessWidget {
   }
 }
 
-class _WelcomeSlide extends StatelessWidget {
-  const _WelcomeSlide({required this.onLogin, required this.onRegister});
-  final VoidCallback onLogin;
-  final VoidCallback onRegister;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Center(
-        // ✅ centers everything vertically
-        child: SingleChildScrollView(
-          // ✅ allows scrolling if screen is small
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center, // ✅ center vertically
-            children: [
-              Image.asset(
-                'assets/img/welcome.png',
-                fit: BoxFit.contain,
-                width: 280,
-                height: 280,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'مرحباً!',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'سجّل الدخول لبدء رحلتك مع نمير',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.black54,
-                  height: 1.6,
-                ),
-              ),
-              const SizedBox(height: 32), // adds space before buttons
-              // Login button
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: onLogin,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 2,
-                  ),
-                  child: const Text(
-                    'تسجيل الدخول',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              const Text('أو', style: TextStyle(color: Colors.black45)),
-              const SizedBox(height: 14),
-
-              // Register button
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: onRegister,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white, // ✅ white text
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'إنشاء حساب',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _Dots extends StatelessWidget {
   const _Dots({required this.current, required this.total});
-
   final int current;
   final int total;
 
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      // 👈 force left-to-right for the dots only
       textDirection: TextDirection.ltr,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: List.generate(total, (i) {
           final isActive = i == current;
-
           return AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -430,8 +318,7 @@ class _Dots extends StatelessWidget {
             width: isActive ? 22 : 8,
             decoration: BoxDecoration(
               color: isActive
-                  ? AppColors
-                        .orange // 🟧 orange for current page
+                  ? AppColors.orange
                   : AppColors.primary.withOpacity(0.7),
               borderRadius: BorderRadius.circular(8),
             ),
