@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'background_container.dart';
+
 
 // ⬇️ استورد صفحاتك الفعلية
 import 'home.dart' show homePage;
@@ -43,6 +45,8 @@ class communityPage extends StatelessWidget {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        extendBody: true, // ✅ allows background to extend under bottom nav
+        backgroundColor: Colors.transparent, // ✅ removes black area
         appBar: AppBar(
           centerTitle: true,
           title: Text(
@@ -71,13 +75,16 @@ class communityPage extends StatelessWidget {
           elevation: 0,
           backgroundColor: Colors.transparent, // مهم لإظهار التدرّج
         ),
-        body: Center(
-          child: Text(
-            "هنا صفحة الأصدقاء 👥",
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF3C3C3B),
+        // ✅ wrap body in AnimatedBackgroundContainer
+        body: AnimatedBackgroundContainer(
+          child: Center(
+            child: Text(
+              "هنا صفحة الأصدقاء 👥",
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF3C3C3B),
+              ),
             ),
           ),
         ),

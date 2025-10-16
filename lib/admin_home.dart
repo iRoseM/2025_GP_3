@@ -5,6 +5,7 @@ import 'admin_task.dart';
 import 'admin_reward.dart' as reward;
 import 'admin_map.dart';
 import 'profile.dart';
+import 'background_container.dart'; // ✅ for AnimatedBackgroundContainer
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -67,37 +68,20 @@ class _AdminHomePageState extends State<AdminHomePage> {
       child: Theme(
         data: baseTheme.copyWith(
           textTheme: textTheme,
-          scaffoldBackgroundColor: AppColors.background,
+          scaffoldBackgroundColor: Colors.transparent, // ✅ transparent to show bg
         ),
         child: Scaffold(
-          // appBar: AppBar(
-          //   centerTitle: true,
-          //   title: const Text("لوحة التحكم الإدارية"),
-          //   flexibleSpace: Container(
-          //     decoration: const BoxDecoration(
-          //       gradient: LinearGradient(
-          //         colors: [
-          //           AppColors.primary,
-          //           AppColors.tealSoft,
-          //           AppColors.mint,
-          //         ],
-          //         stops: [0.0, 0.5, 1.0],
-          //         begin: Alignment.bottomLeft,
-          //         end: Alignment.topRight,
-          //       ),
-          //     ),
-          //   ),
-          // ),
-
-          // --- Body ---
-          body: SafeArea(
+          extendBody: true, // ✅ allows background to extend behind the bottom nav bar
+          backgroundColor: AppColors.background, // ✅ instead of transparent
+          body: AnimatedBackgroundContainer( // ✅ wrap entire body here
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 🌿 Profile icon (far right) + Text (immediately beside it)
                   const SizedBox(height: 4),
+
+                  // 🌿 Profile Row
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -160,14 +144,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                     color: AppColors.dark,
                                   ),
                                 ),
-                                TextSpan(
-                                  text: " 👋",
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.dark,
-                                  ),
-                                ),
+                                const TextSpan(text: " 👋"),
                               ],
                             ),
                           ),
@@ -225,26 +202,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         _buildStat("إجمالي النقاط الموزعة", "148,900"),
                         _divider(),
                         _buildStat("الأثر الكربوني الإجمالي", "122.42 كجم"),
-
-                        const SizedBox(height: 18),
-                        // Container(
-                        //   width: double.infinity,
-                        //   padding: const EdgeInsets.symmetric(vertical: 12),
-                        //   decoration: BoxDecoration(
-                        //     color: AppColors.background,
-                        //     borderRadius: BorderRadius.circular(12),
-                        //   ),
-                        //   child: Center(
-                        //     child: Text(
-                        //       "لا توجد بيانات مسجلة بعد.",
-                        //       style: GoogleFonts.ibmPlexSansArabic(
-                        //         fontSize: 14,
-                        //         fontWeight: FontWeight.w500,
-                        //         color: AppColors.dark,
-                        //       ),
-                        //     ),
-                        //   ),
-                        // ),
                       ],
                     ),
                   ),
