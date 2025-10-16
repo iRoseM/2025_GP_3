@@ -4,6 +4,8 @@ import 'home.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // ✅ إضافة
 import 'main.dart';
 import 'package:flutter/material.dart';
+import 'background_container.dart';
+
 
 class AppColors {
   static const primary = Color(0xFF009688);
@@ -28,7 +30,8 @@ class profilePage extends StatelessWidget {
       child: Theme(
         data: Theme.of(context).copyWith(textTheme: textTheme),
         child: Scaffold(
-          backgroundColor: AppColors.background,
+        extendBody: true, // ✅ add this
+        backgroundColor: Colors.transparent, // ✅ replace old background
           appBar: AppBar(
             title: Text(
               'الحساب',
@@ -55,204 +58,206 @@ class profilePage extends StatelessWidget {
             elevation: 0,
             backgroundColor: Colors.transparent,
           ),
-          body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  // ---------- بطاقة معلومات المستخدم ----------
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.only(top: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFFE8F1EE),
-                        width: 1.2,
-                      ),
-                      boxShadow: const [
-                        BoxShadow(
-                          blurRadius: 10,
-                          offset: Offset(0, 6),
-                          color: Color(0x14000000),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        // صورة بروفايل داخل خلفية خضراء
-                        Container(
-                          decoration: const BoxDecoration(
-                            color: AppColors.light,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const CircleAvatar(
-                            radius: 28,
-                            backgroundColor: Colors.transparent,
-                            child: Icon(
-                              Icons.person_outline,
-                              color: Colors.white,
-                              size: 30,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // النصوص: اسم المستخدم + @username
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'اسم المستخدم',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.dark,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '@username',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 14,
-                                color: AppColors.dark.withOpacity(.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // ---------- زر تعديل الحساب ----------
-                  SizedBox(
-                    width: double.infinity,
-                    child: DecoratedBox(
+          body: AnimatedBackgroundContainer(
+            child:SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    // ---------- بطاقة معلومات المستخدم ----------
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(top: 16),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        gradient: const LinearGradient(
-                          colors: [
-                            AppColors.mint,
-                            AppColors.primary,
-                            AppColors.primary,
-                          ],
-                          stops: [0.0, 0.6, 1.0],
-                          begin: Alignment.centerRight,
-                          end: Alignment.centerLeft,
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFFE8F1EE),
+                          width: 1.2,
                         ),
                         boxShadow: const [
                           BoxShadow(
-                            color: Color(0x33000000),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
+                            blurRadius: 10,
+                            offset: Offset(0, 6),
+                            color: Color(0x14000000),
                           ),
                         ],
                       ),
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent, // لإظهار التدرّج
-                          shadowColor: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 16,
-                            horizontal: 20,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                        ),
-                        icon: const Icon(Icons.edit, color: Colors.white),
-                        label: Text(
-                          'تعديل الحساب',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                        onPressed: () {
-                          // افتح صفحة تعديل البيانات مع قيم افتراضيّة/حقيقية
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const EditProfilePage(
-                                initialUsername: 'اسم المستخدم',
-                                initialHandle: '@username',
-                                initialEmail: 'user@email.com',
-                                initialAge: 22,
-                                initialGender: 'male', // male/female
+                      child: Row(
+                        children: [
+                          // صورة بروفايل داخل خلفية خضراء
+                          Container(
+                            decoration: const BoxDecoration(
+                              color: AppColors.light,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const CircleAvatar(
+                              radius: 28,
+                              backgroundColor: Colors.transparent,
+                              child: Icon(
+                                Icons.person_outline,
+                                color: Colors.white,
+                                size: 30,
                               ),
                             ),
-                          );
-                        },
+                          ),
+                          const SizedBox(width: 12),
+                          // النصوص: اسم المستخدم + @username
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'اسم المستخدم',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.dark,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '@username',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  fontSize: 14,
+                                  color: AppColors.dark.withOpacity(.7),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 24),
 
-                  // ---------- خانات الإعدادات ----------
-                  _SettingsCard(
-                    children: [
-                      _SettingTile(
-                        title: 'اللغة',
-                        icon: Icons.language,
-                        trailing: Text(
-                          'العربية',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            color: AppColors.dark.withOpacity(.8),
-                            fontWeight: FontWeight.w600,
+                    // ---------- زر تعديل الحساب ----------
+                    SizedBox(
+                      width: double.infinity,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          gradient: const LinearGradient(
+                            colors: [
+                              AppColors.mint,
+                              AppColors.primary,
+                              AppColors.primary,
+                            ],
+                            stops: [0.0, 0.6, 1.0],
+                            begin: Alignment.centerRight,
+                            end: Alignment.centerLeft,
                           ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x33000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
                         ),
-                        onTap: () {
-                          _showSnack(context, 'تغيير اللغة قريباً ✨');
-                        },
-                      ),
-                      _SettingTile(
-                        title: 'الخصوصية والأمان',
-                        icon: Icons.lock_outline,
-                        onTap: () => _showPrivacySheet(context),
-                      ),
-                      _SettingTile(
-                        title: 'المساعدة والدعم',
-                        icon: Icons.help_outline,
-                        onTap: () => _showSupportSheet(context),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  _SettingsCard(
-                    children: [
-                      _SettingTile(
-                        title: 'تسجيل الخروج',
-                        icon: Icons.logout,
-                        iconColor: Colors.redAccent,
-                        titleColor: Colors.redAccent,
-                        onTap: () async {
-                          try {
-                            await FirebaseAuth.instance
-                                .signOut(); // ✅ تسجيل الخروج
-                          } catch (_) {
-                            // نتجاهل أي خطأ بسيط هنا
-                          }
-                          // ✅ روّح لصفحة اللوجن وامسح الستاك
-                          if (context.mounted) {
-                            Navigator.of(context).pushAndRemoveUntil(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent, // لإظهار التدرّج
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 16,
+                              horizontal: 20,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(Icons.edit, color: Colors.white),
+                          label: Text(
+                            'تعديل الحساب',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          onPressed: () {
+                            // افتح صفحة تعديل البيانات مع قيم افتراضيّة/حقيقية
+                            Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const RegisterPage(),
+                                builder: (_) => const EditProfilePage(
+                                  initialUsername: 'اسم المستخدم',
+                                  initialHandle: '@username',
+                                  initialEmail: 'user@email.com',
+                                  initialAge: 22,
+                                  initialGender: 'male', // male/female
+                                ),
                               ),
-                              (route) => false,
                             );
-                          }
-                        },
+                          },
+                        ),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // ---------- خانات الإعدادات ----------
+                    _SettingsCard(
+                      children: [
+                        _SettingTile(
+                          title: 'اللغة',
+                          icon: Icons.language,
+                          trailing: Text(
+                            'العربية',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              color: AppColors.dark.withOpacity(.8),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onTap: () {
+                            _showSnack(context, 'تغيير اللغة قريباً ✨');
+                          },
+                        ),
+                        _SettingTile(
+                          title: 'الخصوصية والأمان',
+                          icon: Icons.lock_outline,
+                          onTap: () => _showPrivacySheet(context),
+                        ),
+                        _SettingTile(
+                          title: 'المساعدة والدعم',
+                          icon: Icons.help_outline,
+                          onTap: () => _showSupportSheet(context),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    _SettingsCard(
+                      children: [
+                        _SettingTile(
+                          title: 'تسجيل الخروج',
+                          icon: Icons.logout,
+                          iconColor: Colors.redAccent,
+                          titleColor: Colors.redAccent,
+                          onTap: () async {
+                            try {
+                              await FirebaseAuth.instance
+                                  .signOut(); // ✅ تسجيل الخروج
+                            } catch (_) {
+                              // نتجاهل أي خطأ بسيط هنا
+                            }
+                            // ✅ روّح لصفحة اللوجن وامسح الستاك
+                            if (context.mounted) {
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(
+                                  builder: (_) => const RegisterPage(),
+                                ),
+                                (route) => false,
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

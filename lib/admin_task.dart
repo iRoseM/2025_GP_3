@@ -5,6 +5,8 @@ import 'admin_home.dart';
 import 'admin_reward.dart';
 import 'admin_map.dart';
 import 'dart:ui';
+import 'background_container.dart';
+
 
 class AdminTasksPage extends StatefulWidget {
   const AdminTasksPage({super.key});
@@ -16,6 +18,8 @@ class AdminTasksPage extends StatefulWidget {
 class _AdminTasksPageState extends State<AdminTasksPage> {
   int _currentIndex = 2;
   String searchQuery = '';
+Set<String> _selectedCategories = {}; // can hold multiple categories
+
 
   final List<Map<String, dynamic>> _tasks = [
     // ♻️ إعادة التدوير
@@ -121,15 +125,23 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       baseTheme.textTheme,
     );
 
-    final filteredTasks = _tasks
-        .where((task) =>
-            task['title'].toString().contains(searchQuery) ||
-            task['description'].toString().contains(searchQuery))
-        .toList()
+    final q = searchQuery.trim().toLowerCase();
+
+    final filteredTasks = _tasks.where((task) {
+      final title = task['title']?.toString().toLowerCase() ?? '';
+      final desc  = task['description']?.toString().toLowerCase() ?? '';
+      final cat   = task['category']?.toString() ?? ''; // 👈 define it here
+
+      final matchesSearch = q.isEmpty || title.contains(q) || desc.contains(q);
+      final matchesCategory = _selectedCategories.isEmpty || _selectedCategories.contains(cat);
+
+      return matchesSearch && matchesCategory;
+    }).toList()
       ..sort((a, b) {
         if (a['isActive'] == b['isActive']) return 0;
         return a['isActive'] == true ? -1 : 1;
       });
+
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -148,6 +160,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           ),
         ),
         child: Scaffold(
+          extendBody: true, // ✅ allow background to extend behind nav bar
+          backgroundColor: Colors.transparent, // ✅ prevent black area
           appBar: AppBar(
             centerTitle: true,
             title: const Text("قائمة المهام"),
@@ -167,14 +181,16 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           ),
 
           // ---------------- BODY ----------------
-          body: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _buildSearchBar(),
-                const SizedBox(height: 12),
-                _buildTaskList(filteredTasks),
-              ],
+          body: AnimatedBackgroundContainer( // ✅ use animated background here
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildSearchBar(),
+                  const SizedBox(height: 12),
+                  _buildTaskList(filteredTasks),
+                ],
+              ),
             ),
           ),
 
@@ -194,6 +210,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               ? null
               : AdminBottomNav(currentIndex: _currentIndex, onTap: _onTap),
         ),
+
       ),
     );
   }
@@ -202,21 +219,53 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   // 🔹 Components
 
   Widget _buildSearchBar() {
-    return TextField(
-      textAlign: TextAlign.right,
-      decoration: InputDecoration(
-        hintText: 'ابحث عن مهمة...',
-        prefixIcon: const Icon(Icons.search, color: AppColors.primary),
-        filled: true,
-        fillColor: Colors.grey.shade100,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+    final controller = TextEditingController(text: searchQuery);
+
+    return Row(
+      children: [
+        // Search Field
+        Expanded(
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            elevation: 4,
+            child: TextField(
+              controller: controller,
+              textInputAction: TextInputAction.search,
+              onChanged: (v) => setState(() => searchQuery = v),
+              decoration: const InputDecoration(
+                hintText: 'ابحث عن مهمة...',
+                prefixIcon: Icon(Icons.search, color: AppColors.primary),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+            ),
+          ),
         ),
-      ),
-      onChanged: (v) => setState(() => searchQuery = v),
+
+        const SizedBox(width: 8),
+
+        // Filter Button
+        InkWell(
+          onTap: _showFiltersBottomSheet,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [
+                BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6)),
+              ],
+            ),
+            child: const Icon(Icons.tune, color: AppColors.dark),
+          ),
+        ),
+      ],
     );
   }
+
+
 
   Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
     if (tasks.isEmpty) {
@@ -258,7 +307,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               boxShadow: [ 
                 BoxShadow(
                   color: Colors.black.withOpacity(0.12), // soft gray tone
-                  blurRadius: 10,  // smoother, larger shadow
+                  blurRadius: 5,  // smoother, larger shadow
                   spreadRadius: 2, // more diffused
                   offset: const Offset(0, 1), // deeper drop
                 ),
@@ -324,7 +373,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               ],
             ),
           );
-
         },
       ),
     );
@@ -373,7 +421,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                 onPressed: () => _showEditDialog(task),
               ),
               IconButton(
-                icon: const Icon(Icons.delete, color: Colors.redAccent),
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                 onPressed: () => _showDeleteDialog(task),
               ),
             ],
@@ -382,6 +430,89 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       ),
     );
   }
+  void _showFiltersBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) {
+        // Extract all available categories from current tasks
+        final allCats = _tasks
+            .map((t) => (t['category'] ?? '').toString())
+            .where((c) => c.isNotEmpty)
+            .toSet()
+            .toList();
+
+        // local copy to update chips interactively
+        final selectedLocal = Set<String>.from(_selectedCategories);
+
+        return StatefulBuilder(
+          builder: (context, setSt) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'تصفية المهام حسب الفئة',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 12),
+
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: allCats.map((cat) {
+                      final selected = selectedLocal.contains(cat);
+                      return FilterChip(
+                        label: Text(cat),
+                        selected: selected,
+                        onSelected: (v) {
+                          setSt(() {
+                            if (v) {
+                              selectedLocal.add(cat);
+                            } else {
+                              selectedLocal.remove(cat);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        setState(() => _selectedCategories = selectedLocal);
+                      },
+                      child: const Text('تطبيق'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() => _selectedCategories.clear());
+                    },
+                    child: const Text('إلغاء الفلاتر'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+
 
   // ============================================================
   // 🔸 Dialogs
@@ -390,26 +521,26 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   void _showEditDialog(Map<String, dynamic> task) =>
       _showTaskDialog(title: 'تعديل معلومات المهمة', task: task);
 
+  // ============================================================
+  // 🔸 Updated Add/Edit Form (Styled like Edit Profile)
   void _showTaskDialog({required String title, Map<String, dynamic>? task}) {
-    final titleController =
+    final formKey = GlobalKey<FormState>();
+    final titleCtrl =
         TextEditingController(text: task != null ? task['title'] : '');
-    final descriptionController =
+    final descCtrl =
         TextEditingController(text: task != null ? task['description'] : '');
-    final pointsController =
-        TextEditingController(text: task != null ? task['points'].toString() : '');
-
-    String? selectedValidationStrategy =
-        task != null ? task['validation'] : null; // dropdown value
-    bool isActive = task != null ? (task['isActive'] ?? false) : false; // new field
-    String? errorMessage;
+    final pointsCtrl =
+        TextEditingController(text: task != null ? '${task['points']}' : '');
+    String? validationType = task?['validation'];
+    bool isActive = task?['isActive'] ?? false;
 
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
       barrierLabel: '',
       barrierColor: Colors.black26,
-      transitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (context, anim1, anim2) {
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (context, a1, a2) {
         return StatefulBuilder(
           builder: (context, setState) {
             return BackdropFilter(
@@ -419,199 +550,245 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                   color: Colors.transparent,
                   child: Container(
                     width: MediaQuery.of(context).size.width * 0.9,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
+                      // color: AppColors.background,
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: const [
                         BoxShadow(
-                          color: Colors.black26,
+                          color: Color(0x33000000),
                           blurRadius: 10,
                           offset: Offset(0, 4),
                         ),
                       ],
                     ),
                     child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // ===== Title =====
-                          Center(
-                            child: Text(
-                              title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 18,
-                                color: Color(0xFF333333),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-
-                          // ===== Error message =====
-                          if (errorMessage != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: Text(
-                                errorMessage!,
-                                style: const TextStyle(
-                                    color: Colors.red, fontSize: 13),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-
-                          // ===== Title field =====
-                          _buildLabeledField(
-                            label: 'عنوان المهمة',
-                            controller: titleController,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // ===== Description field =====
-                          _buildLabeledField(
-                            label: 'وصف المهمة',
-                            controller: descriptionController,
-                            maxLines: 2,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // ===== Points field =====
-                          _buildLabeledField(
-                            label: 'النقاط',
-                            controller: pointsController,
-                            keyboardType: TextInputType.number,
-                          ),
-                          const SizedBox(height: 12),
-
-                          // ===== Validation Strategy dropdown =====
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: Text(
-                              'إستراتيجية التحقق',
-                              textAlign: TextAlign.right,
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Directionality(
+                      child: Form(
+                        key: formKey,
+                        child: Directionality(
                           textDirection: TextDirection.rtl,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE4F3ED),
-                              borderRadius: BorderRadius.circular(25),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: selectedValidationStrategy,
-                                isExpanded: true,
-                                alignment: Alignment.centerRight, // ← aligns selected value
-                                hint: const Text(
-                                  'اختر نوع التحقق',
-                                  style: TextStyle(color: Colors.grey),
-                                  textAlign: TextAlign.right,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // ---- Title ----
+                              Center(
+                                child: Text(
+                                  title,
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 18,
+                                    color: AppColors.dark,
+                                  ),
                                 ),
-                                items: const [
-                                  DropdownMenuItem(
-                                    alignment: Alignment.centerRight, // ← aligns menu items
-                                    value: 'التحقق عبر تتبع القراءة',
-                                    child: Text('التحقق عبر تتبع القراءة'),
-                                  ),
-                                  DropdownMenuItem(
-                                    alignment: Alignment.centerRight,
-                                    value: 'التحقق عبر معالجة الصور',
-                                    child: Text('التحقق عبر معالجة الصور'),
-                                  ),
-                                ],
-                                onChanged: (value) {
-                                  setState(() {
-                                    selectedValidationStrategy = value;
-                                  });
+                              ),
+                              const SizedBox(height: 18),
+
+                              // ---- Task title ----
+                              _fieldLabel('عنوان المهمة'),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: titleCtrl,
+                                decoration: const InputDecoration(
+                                  hintText: 'مثال: إعادة تدوير الورق',
+                                  prefixIcon: Icon(Icons.task_alt_outlined),
+                                ),
+                                validator: (v) =>
+                                    (v == null || v.isEmpty)
+                                        ? 'أدخل عنوان المهمة'
+                                        : null,
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              // ---- Description ----
+                              _fieldLabel('وصف المهمة'),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: descCtrl,
+                                maxLines: 2,
+                                decoration: const InputDecoration(
+                                  hintText: 'اكتب وصفًا موجزًا للمهمة...',
+                                  prefixIcon: Icon(Icons.description_outlined),
+                                ),
+                                validator: (v) =>
+                                    (v == null || v.isEmpty)
+                                        ? 'أدخل وصف المهمة'
+                                        : null,
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              // ---- Points ----
+                              _fieldLabel('عدد النقاط'),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: pointsCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  hintText: 'مثال: 30',
+                                  prefixIcon:
+                                      Icon(Icons.star_border_rounded),
+                                ),
+                                validator: (v) {
+                                  final n = int.tryParse(v ?? '');
+                                  if (n == null || n <= 0) {
+                                    return 'أدخل عددًا صحيحًا موجبًا';
+                                  }
+                                  return null;
                                 },
                               ),
-                            ),
+
+                              const SizedBox(height: 14),
+
+                              // ---- Validation Strategy ----
+                              _fieldLabel('إستراتيجية التحقق'),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  border: Border.all(
+                                    color: AppColors.light.withOpacity(.7),
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: validationType,
+                                    isExpanded: true,
+                                    dropdownColor: Colors.white, // 👈 color of the menu when opened
+                                    alignment: Alignment.centerRight,
+                                    hint: const Text('اختر نوع التحقق'),
+                                    items: const [
+                                      DropdownMenuItem(
+                                        value: 'التحقق عبر تتبع القراءة',
+                                        child:
+                                            Text('التحقق عبر تتبع القراءة'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'التحقق عبر معالجة الصور',
+                                        child:
+                                            Text('التحقق عبر معالجة الصور'),
+                                      ),
+                                    ],
+                                    onChanged: (v) =>
+                                        setState(() => validationType = v),
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              // ---- Active ----
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: isActive,
+                                    activeColor: AppColors.primary,
+                                    onChanged: (v) =>
+                                        setState(() => isActive = v ?? false),
+                                  ),
+                                  Text(
+                                    'تفعيل المهمة',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.dark.withOpacity(.9),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              // ---- Save button ----
+                              SizedBox(
+                                width: double.infinity,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        AppColors.mint,
+                                        AppColors.primary,
+                                        AppColors.primary,
+                                      ],
+                                      begin: Alignment.centerRight,
+                                      end: Alignment.centerLeft,
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x33000000),
+                                        blurRadius: 8,
+                                        offset: Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.transparent,
+                                      shadowColor: Colors.transparent,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                        horizontal: 18,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      if (!(formKey.currentState?.validate() ??
+                                          false)) return;
+                                      Navigator.pop(context);
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(SnackBar(
+                                        content: Text(
+                                          'تم حفظ التغييرات بنجاح ✅',
+                                          style: GoogleFonts
+                                              .ibmPlexSansArabic(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        behavior: SnackBarBehavior.floating,
+                                      ));
+                                    },
+                                    icon: const Icon(Icons.save,
+                                        color: Colors.white),
+                                    label: Text(
+                                      'حفظ التغييرات',
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              // ---- Cancel button ----
+                              OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Colors.redAccent),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 14),
+                                ),
+                                onPressed: () => Navigator.pop(context),
+                                child: Text(
+                                  'إلغاء',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.redAccent,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-
-                          const SizedBox(height: 16),
-
-                          // ===== Is Active checkbox =====
-                          Directionality(
-                            textDirection: TextDirection.rtl,
-                            child: Row(
-                              children: [
-                                const Text(
-                                  'هل المهمة مفعّلة؟',
-                                  style: TextStyle(fontSize: 14),
-                                ),
-                                Checkbox(
-                                  value: isActive,
-                                  activeColor: AppColors.primary,
-                                  onChanged: (val) {
-                                    setState(() => isActive = val ?? false);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // ===== Save button =====
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(25),
-                              ),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: () {
-                              if (titleController.text.isEmpty ||
-                                  descriptionController.text.isEmpty ||
-                                  pointsController.text.isEmpty ||
-                                  selectedValidationStrategy == null) {
-                                setState(() {
-                                  errorMessage =
-                                      'يرجى تعبئة جميع الحقول الإلزامية.';
-                                });
-                              } else {
-                                Navigator.pop(context);
-                              }
-                            },
-                            child: const Text(
-                              'حفظ التغييرات',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-
-                          // ===== Cancel button =====
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.redAccent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(25),
-                              ),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text(
-                              'إلغاء الأمر',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ),
@@ -621,20 +798,27 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           },
         );
       },
-      transitionBuilder: (context, anim1, anim2, child) {
-        return FadeTransition(
-          opacity: anim1,
-          child: ScaleTransition(
-            scale: CurvedAnimation(
-              parent: anim1,
-              curve: Curves.easeOutBack,
-            ),
-            child: child,
-          ),
-        );
-      },
+      transitionBuilder: (context, anim1, anim2, child) => FadeTransition(
+        opacity: anim1,
+        child: ScaleTransition(
+          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+          child: child,
+        ),
+      ),
     );
-  }
+  } // _showTaskDialog
+
+  Widget _fieldLabel(String text) => Align(
+        alignment: Alignment.centerRight,
+        child: Text(
+          text,
+          style: GoogleFonts.ibmPlexSansArabic(
+            fontWeight: FontWeight.w700,
+            color: AppColors.dark.withOpacity(.9),
+          ),
+        ),
+      );
+       
 
   Widget _buildLabeledField({
     required String label,
@@ -687,85 +871,131 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               color: Colors.transparent,
               child: Container(
                 width: MediaQuery.of(context).size.width * 0.85,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 25,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: const [
                     BoxShadow(
-                      color: Colors.black26,
+                      color: Color(0x33000000),
                       blurRadius: 10,
                       offset: Offset(0, 4),
                     ),
                   ],
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.redAccent,
-                      size: 48,
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'تأكيد الحذف',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                        color: Color(0xFF333333),
+                child: Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.redAccent,
+                        size: 48,
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'هل أنت متأكد من حذف هذه المهمة؟',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 15, color: Colors.black87),
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        minimumSize: const Size(double.infinity, 40),
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text(
+                      const SizedBox(height: 10),
+                      Text(
                         'تأكيد الحذف',
-                        style: TextStyle(
-                          color: Colors.white,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'هل أنت متأكد من حذف هذه المهمة؟',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.ibmPlexSansArabic(
                           fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(25),
+                      const SizedBox(height: 24),
+
+                      // ✅ Confirm delete (gradient)
+                      SizedBox(
+                        width: double.infinity,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            gradient: const LinearGradient(
+                              colors: [
+                                AppColors.mint,
+                                AppColors.primary,
+                                AppColors.primary,
+                              ],
+                              begin: Alignment.centerRight,
+                              end: Alignment.centerLeft,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x33000000),
+                                blurRadius: 8,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'تم حذف المهمة بنجاح 🗑️',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                              // TODO: Add Firestore delete logic later
+                            },
+                            icon: const Icon(Icons.delete_outline, color: Colors.white),
+                            label: Text(
+                              'تأكيد الحذف',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        minimumSize: const Size(double.infinity, 40),
                       ),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text(
-                        'إلغاء',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+
+                      const SizedBox(height: 10),
+
+                      // ❌ Cancel button (outlined red)
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.redAccent),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          'إلغاء',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

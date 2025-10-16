@@ -4,6 +4,7 @@ import 'admin_bottom_nav.dart';
 import 'admin_home.dart';
 import 'admin_task.dart';
 import 'admin_map.dart';
+import 'background_container.dart'; // ✅ add this import
 
 class AdminRewardsPage extends StatefulWidget {
   const AdminRewardsPage({super.key});
@@ -66,7 +67,12 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
             iconTheme: const IconThemeData(color: Colors.white),
           ),
         ),
+
+        // ✅ Scaffold changes below
         child: Scaffold(
+          extendBody: true, // ✅ allows background under bottom nav bar
+          backgroundColor: Colors.transparent, // ✅ no black background
+
           appBar: AppBar(
             centerTitle: true,
             title: const Text("صفحة الجوائز"),
@@ -85,16 +91,21 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
               ),
             ),
           ),
-          body: const Center(
-            child: Text(
-              "هنا صفحة الجوائز 🏆",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF3C3C3B),
+
+          // ✅ Wrap your body in the background container
+          body: AnimatedBackgroundContainer(
+            child: const Center(
+              child: Text(
+                "هنا صفحة الجوائز 🏆",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF3C3C3B),
+                ),
               ),
             ),
           ),
+
           bottomNavigationBar: isKeyboardOpen
               ? null
               : AdminBottomNav(currentIndex: _currentIndex, onTap: _onTap),

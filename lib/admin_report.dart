@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 
-/// ألوان خفيفة مستقلة (لو عندك AppColors استبدلها)
+/// ألوان المشروع
 class RColors {
   static const primary = Color(0xFF009688);
   static const dark = Color(0xFF00695C);
@@ -19,23 +19,16 @@ class AdminReportPage extends StatefulWidget {
   State<AdminReportPage> createState() => _AdminReportPageState();
 }
 
-class _AdminReportPageState extends State<AdminReportPage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tab;
+class _AdminReportPageState extends State<AdminReportPage> {
   final TextEditingController _searchCtrl = TextEditingController();
+  String selectedStatus = 'الكل';
 
-  @override
-  void initState() {
-    super.initState();
-    _tab = TabController(length: 4, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tab.dispose();
-    _searchCtrl.dispose();
-    super.dispose();
-  }
+  final statusMap = {
+    'الكل': null,
+    'قيد المراجعة': 'pending',
+    'مقبولة': 'approved',
+    'مرفوضة': 'rejected',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -54,38 +47,79 @@ class _AdminReportPageState extends State<AdminReportPage>
             title: const Text('تقارير الحاويات'),
             centerTitle: true,
             backgroundColor: RColors.primary,
-            bottom: TabBar(
-              controller: _tab,
-              isScrollable: true,
-              tabs: const [
-                Tab(text: 'الكل'),
-                Tab(text: 'قيد المراجعة'),
-                Tab(text: 'مقبولة'),
-                Tab(text: 'مرفوضة'),
-              ],
-            ),
           ),
           body: Column(
             children: [
-              // شريط البحث
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-                child: _SearchBar(
-                  controller: _searchCtrl,
-                  hint: 'ابحث بالوصف / النوع / معرف الحاوية…',
-                  onChanged: (_) => setState(() {}),
+                child: Row(
+                  children: [
+                    // شريط البحث (ياخذ المساحة الباقية)
+                    Expanded(
+                      child: _SearchBar(
+                        controller: _searchCtrl,
+                        hint: 'ابحث بالوصف / النوع / معرف الحاوية…',
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // أيقونة الفلتر (يسار)
+                    SizedBox(
+                      height: 48,
+                      width: 48,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x14000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: PopupMenuButton<String>(
+                          icon: const Icon(
+                            Icons.filter_list,
+                            color: RColors.primary,
+                            size: 24,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          itemBuilder: (context) {
+                            return statusMap.keys.map((label) {
+                              return PopupMenuItem<String>(
+                                value: label,
+                                child: Text(
+                                  label,
+                                  textDirection: TextDirection.rtl,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              );
+                            }).toList();
+                          },
+                          onSelected: (val) {
+                            setState(() => selectedStatus = val);
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+
               const SizedBox(height: 4),
               Expanded(
-                child: TabBarView(
-                  controller: _tab,
-                  children: [
-                    _ReportList(statusFilter: null, searchText: _searchCtrl.text),
-                    _ReportList(statusFilter: 'pending', searchText: _searchCtrl.text),
-                    _ReportList(statusFilter: 'approved', searchText: _searchCtrl.text),
-                    _ReportList(statusFilter: 'rejected', searchText: _searchCtrl.text),
-                  ],
+                child: _ReportList(
+                  statusFilter: statusMap[selectedStatus],
+                  searchText: _searchCtrl.text,
                 ),
               ),
             ],
@@ -98,22 +132,17 @@ class _AdminReportPageState extends State<AdminReportPage>
 
 /// قائمة التقارير مع فلترة الحالة والبحث
 class _ReportList extends StatelessWidget {
-  final String? statusFilter; // null = الكل
+  final String? statusFilter;
   final String searchText;
 
-  const _ReportList({
-    required this.statusFilter,
-    required this.searchText,
-  });
+  const _ReportList({required this.statusFilter, required this.searchText});
 
   Query<Map<String, dynamic>> _baseQuery() {
     final col = FirebaseFirestore.instance.collection('facilityReports');
 
     if (statusFilter == null) {
-      // تبويب "الكل": نرتّب زمنيًا من السحابة
       return col.orderBy('createdAt', descending: true);
     } else {
-      // تبويبات الحالة: فلترة فقط (بدون orderBy لتفادي الفهرس المركّب)
       return col.where('decision', isEqualTo: statusFilter);
     }
   }
@@ -124,28 +153,23 @@ class _ReportList extends StatelessWidget {
       stream: _baseQuery().snapshots(),
       builder: (context, snap) {
         if (snap.hasError) {
-          debugPrint('🔥 reports query error: ${snap.error}');
           return const Center(child: Text('حدث خطأ أثناء جلب البيانات'));
         }
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        // نأخذ نسخة قابلة للفرز محليًا
         final docs = snap.data!.docs.toList();
-
-        // فرز محلي تنازلي بحسب createdAt عند وجود statusFilter
         if (statusFilter != null) {
           docs.sort((a, b) {
             final ta = (a.data()['createdAt'] as Timestamp?);
             final tb = (b.data()['createdAt'] as Timestamp?);
             final va = ta?.millisecondsSinceEpoch ?? 0;
             final vb = tb?.millisecondsSinceEpoch ?? 0;
-            return vb.compareTo(va); // تنازلي
+            return vb.compareTo(va);
           });
         }
 
-        // فلترة نصية محلية
         final s = searchText.trim().toLowerCase();
         final filtered = s.isEmpty
             ? docs
@@ -183,7 +207,7 @@ class _ReportList extends StatelessWidget {
   }
 }
 
-/// بطاقة تقرير واحدة
+/// بطاقة التقرير
 class _ReportCard extends StatefulWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
   const _ReportCard({required this.doc});
@@ -194,19 +218,6 @@ class _ReportCard extends StatefulWidget {
 
 class _ReportCardState extends State<_ReportCard> {
   bool _busy = false;
-
-  String _statusLabel(String s) {
-    switch (s) {
-      case 'pending':
-        return 'قيد المراجعة';
-      case 'approved':
-        return 'مقبولة';
-      case 'rejected':
-        return 'مرفوضة';
-      default:
-        return s;
-    }
-  }
 
   Color _statusColor(String s) {
     switch (s) {
@@ -221,49 +232,43 @@ class _ReportCardState extends State<_ReportCard> {
     }
   }
 
-  Future<Map<String, dynamic>?> _fetchFacility(String id) async {
-    try {
-      final snap =
-          await FirebaseFirestore.instance.collection('facilities').doc(id).get();
-      return snap.data();
-    } catch (_) {
-      return null;
+  String _statusLabel(String s) {
+    switch (s) {
+      case 'pending':
+        return 'قيد المراجعة';
+      case 'approved':
+        return 'مقبولة';
+      case 'rejected':
+        return 'مرفوضة';
+      default:
+        return s;
     }
   }
 
-  Future<void> _updateDecision({
-    required String decision,
-    String? rejectionReason,
-  }) async {
+  Future<void> _updateDecision(String decision, {String? reason}) async {
     setState(() => _busy = true);
     try {
       final user = FirebaseAuth.instance.currentUser;
-      final managedBy = user?.uid ?? 'admin';
-      final managedByName = user?.displayName ?? user?.email ?? 'Admin';
-
-      final updates = <String, dynamic>{
+      final updates = {
         'decision': decision,
-        'managedBy': managedBy,
-        'managedByName': managedByName,
+        'managedBy': user?.uid ?? 'admin',
+        'managedByName': user?.displayName ?? user?.email ?? 'Admin',
         'resolvedAt': FieldValue.serverTimestamp(),
+        if (reason != null && reason.isNotEmpty) 'rejectionReason': reason,
       };
-
-      if (rejectionReason != null && rejectionReason.trim().isNotEmpty) {
-        updates['rejectionReason'] = rejectionReason.trim();
-      }
-
       await widget.doc.reference.update(updates);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تم تحديث الحالة إلى ${_statusLabel(decision)}')),
+          SnackBar(
+            content: Text('تم تحديث الحالة إلى ${_statusLabel(decision)}'),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذّر تحديث التقرير')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('تعذّر تحديث التقرير')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -285,11 +290,14 @@ class _ReportCardState extends State<_ReportCard> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
           FilledButton(
             onPressed: () async {
               Navigator.pop(context);
-              await _updateDecision(decision: 'rejected', rejectionReason: ctrl.text);
+              await _updateDecision('rejected', reason: ctrl.text);
             },
             child: const Text('رفض'),
           ),
@@ -298,7 +306,42 @@ class _ReportCardState extends State<_ReportCard> {
     );
   }
 
-  void _showFacilitySheet(String facilityID) async {
+  void _confirmReturn() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('إرجاع لقيد المراجعة'),
+        content: const Text('هل أنت متأكد من إرجاع هذا التقرير لقيد المراجعة؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _updateDecision('pending');
+            },
+            child: const Text('تأكيد'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>?> _fetchFacility(String id) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('facilities')
+          .doc(id)
+          .get();
+      return snap.data();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _showFacilitySheet(String id) {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -307,7 +350,7 @@ class _ReportCardState extends State<_ReportCard> {
       ),
       builder: (_) {
         return FutureBuilder<Map<String, dynamic>?>(
-          future: _fetchFacility(facilityID),
+          future: _fetchFacility(id),
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const SizedBox(
@@ -319,58 +362,41 @@ class _ReportCardState extends State<_ReportCard> {
             if (f == null) {
               return const Padding(
                 padding: EdgeInsets.all(16),
-                child: Text('تعذّر جلب بيانات الحاويات.'),
+                child: Text('تعذّر جلب بيانات الحاوية.'),
               );
             }
-            final name = (f['name'] ?? '').toString();
-            final type = (f['type'] ?? '').toString();
-            final provider = (f['provider'] ?? '').toString();
-            final address = (f['address'] ?? '').toString();
-            final city = (f['city'] ?? '').toString();
-            final lat = (f['lat'] as num?)?.toDouble();
-            final lng = (f['lng'] as num?)?.toDouble();
-
+            final name = f['name'] ?? '';
+            final type = f['type'] ?? '';
+            final address = f['address'] ?? '';
+            final city = f['city'] ?? '';
             return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name.isEmpty ? 'حاوية بدون اسم' : name,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 6),
+                  Text(
+                    name.isEmpty ? 'حاوية بدون اسم' : name,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   Text(type, style: const TextStyle(color: Colors.black54)),
                   const SizedBox(height: 8),
-                  if (provider.isNotEmpty)
-                    Row(children: [
-                      const Icon(Icons.factory_outlined, size: 18, color: RColors.dark),
-                      const SizedBox(width: 6),
-                      Text(provider, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    ]),
-                  const SizedBox(height: 6),
                   if (address.isNotEmpty || city.isNotEmpty)
-                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Icon(Icons.place_outlined, size: 18, color: RColors.dark),
-                      const SizedBox(width: 6),
-                      Expanded(child: Text(address.isNotEmpty ? address : city)),
-                    ]),
+                    Text('الموقع: $address، $city'),
                   const SizedBox(height: 8),
-                  if (lat != null && lng != null)
-                    Text('الإحداثيات: $lat, $lng',
-                        style: const TextStyle(color: Colors.black54, fontSize: 12)),
-                  const SizedBox(height: 10),
                   FilledButton.icon(
                     icon: const Icon(Icons.copy),
-                    onPressed: () async {
-                      try {
-                        await Clipboard.setData(ClipboardData(text: facilityID));
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تم نسخ معرف الحاوية')),
-                        );
-                      } catch (_) {}
-                    },
                     label: const Text('نسخ معرف الحاوية'),
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: id));
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('تم نسخ معرف الحاوية')),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -384,15 +410,12 @@ class _ReportCardState extends State<_ReportCard> {
   @override
   Widget build(BuildContext context) {
     final m = widget.doc.data();
-
-    final decision = (m['decision'] ?? 'pending').toString();
-    final description = (m['description'] ?? '').toString();
-    final type = (m['type'] ?? '').toString();
-    final facilityID = (m['facilityID'] ?? '').toString();
-    final reportedBy = (m['reportedBy'] ?? 'unknown').toString();
-    final managedBy = (m['managedBy'] ?? '').toString();
+    final decision = m['decision'] ?? 'pending';
+    final description = m['description'] ?? '';
+    final type = m['type'] ?? 'بلاغ حاوية';
+    final facilityID = m['facilityID'] ?? '';
+    final reportedBy = m['reportedBy'] ?? '';
     final createdAt = (m['createdAt'] as Timestamp?)?.toDate();
-    final rejectionReason = (m['rejectionReason'] ?? '').toString();
 
     return Card(
       elevation: 2,
@@ -400,19 +423,71 @@ class _ReportCardState extends State<_ReportCard> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // العنوان + الحالة
+            // الصف العلوي للأيقونات// الصف العلوي: العنوان + الأيقونات
             Row(
               children: [
+                // العنوان "الموقع غير دقيق"
                 Expanded(
                   child: Text(
-                    type.isEmpty ? 'بلاغ فاسيلتي' : type,
-                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                    type,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
+
+                // أيقونة التفاصيل
+                IconButton(
+                  icon: const Icon(Icons.info_outline, color: RColors.primary),
+                  tooltip: 'تفاصيل الحاوية',
+                  onPressed: facilityID.isEmpty
+                      ? null
+                      : () => _showFacilitySheet(facilityID),
+                ),
+
+                // أيقونة الإرجاع (تظهر فقط إذا التقرير مو "قيد المراجعة")
+                if (decision != 'pending')
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: RColors.primary),
+                    tooltip: 'إرجاع لقيد المراجعة',
+                    onPressed: _busy ? null : _confirmReturn,
+                  ),
+              ],
+            ),
+
+            const SizedBox(height: 4),
+
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // location + الوصف
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (description.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            description,
+                            style: const TextStyle(fontSize: 13),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                // الحالة (مقبولة / مرفوضة)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: _statusColor(decision).withOpacity(.12),
                     borderRadius: BorderRadius.circular(100),
@@ -421,85 +496,56 @@ class _ReportCardState extends State<_ReportCard> {
                     _statusLabel(decision),
                     style: TextStyle(
                       color: _statusColor(decision),
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
                   ),
                 ),
               ],
             ),
+
             const SizedBox(height: 8),
-
-            if (description.isNotEmpty) ...[
-              Text(description),
-              const SizedBox(height: 8),
-            ],
-
             Wrap(
-              spacing: 10,
+              spacing: 8,
               runSpacing: 6,
               children: [
-                _Chip(icon: Icons.pin_drop_outlined, label: 'Facility: $facilityID'),
-                _Chip(icon: Icons.person_outline, label: 'المبلِّغ: $reportedBy'),
-                if (managedBy.isNotEmpty)
-                  _Chip(icon: Icons.verified_user_outlined, label: 'المعالج: $managedBy'),
+                _Chip(
+                  icon: Icons.pin_drop_outlined,
+                  label: 'Facility: $facilityID',
+                ),
+                _Chip(
+                  icon: Icons.person_outline,
+                  label: 'المبلِّغ: $reportedBy',
+                ),
                 if (createdAt != null)
                   _Chip(
-                      icon: Icons.calendar_month_outlined,
-                      label:
-                          'التاريخ: ${createdAt.year}/${createdAt.month}/${createdAt.day}'),
+                    icon: Icons.calendar_month_outlined,
+                    label:
+                        'التاريخ: ${createdAt.year}/${createdAt.month}/${createdAt.day}',
+                  ),
               ],
             ),
-
-            if (rejectionReason.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text('سبب الرفض: $rejectionReason',
-                  style: const TextStyle(color: Colors.redAccent)),
-            ],
-
             const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.info_outline),
-                    onPressed: facilityID.isEmpty ? null : () => _showFacilitySheet(facilityID),
-                    label: const Text('تفاصيل الفاسيلتي'),
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text('اعتماد'),
+                    onPressed: _busy || decision == 'approved'
+                        ? null
+                        : () => _updateDecision('approved'),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    icon: const Icon(Icons.check_circle_outline),
-                    onPressed: _busy || decision == 'approved'
-                        ? null
-                        : () => _updateDecision(decision: 'approved'),
-                    label: const Text('اعتماد'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
                 Expanded(
                   child: FilledButton.icon(
                     style: FilledButton.styleFrom(backgroundColor: Colors.red),
                     icon: const Icon(Icons.cancel_outlined),
+                    label: const Text('رفض'),
                     onPressed: _busy || decision == 'rejected'
                         ? null
                         : _confirmReject,
-                    label: const Text('رفض'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: _busy || decision == 'pending'
-                        ? null
-                        : () => _updateDecision(decision: 'pending'),
-                    label: const Text('إرجاع لقيد المراجعة'),
                   ),
                 ),
               ],
@@ -511,13 +557,11 @@ class _ReportCardState extends State<_ReportCard> {
   }
 }
 
-/* ------------- Widgets صغيرة مساعدة ------------- */
-
+/// عناصر واجهة صغيرة
 class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
   final ValueChanged<String>? onChanged;
-
   const _SearchBar({
     required this.controller,
     required this.hint,
@@ -538,7 +582,10 @@ class _SearchBar extends StatelessWidget {
           hintText: hint,
           prefixIcon: const Icon(Icons.search),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
         ),
       ),
     );
