@@ -425,27 +425,10 @@ class _ReportCardState extends State<_ReportCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // الصف العلوي للأيقونات
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (decision != 'pending')
-                  IconButton(
-                    icon: const Icon(Icons.refresh, color: RColors.primary),
-                    tooltip: 'إرجاع لقيد المراجعة',
-                    onPressed: _busy ? null : _confirmReturn,
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.info_outline, color: RColors.primary),
-                  tooltip: 'تفاصيل الحاوية',
-                  onPressed: facilityID.isEmpty
-                      ? null
-                      : () => _showFacilitySheet(facilityID),
-                ),
-              ],
-            ),
+            // الصف العلوي للأيقونات// الصف العلوي: العنوان + الأيقونات
             Row(
               children: [
+                // العنوان "الموقع غير دقيق"
                 Expanded(
                   child: Text(
                     type,
@@ -455,6 +438,51 @@ class _ReportCardState extends State<_ReportCard> {
                     ),
                   ),
                 ),
+
+                // أيقونة التفاصيل
+                IconButton(
+                  icon: const Icon(Icons.info_outline, color: RColors.primary),
+                  tooltip: 'تفاصيل الحاوية',
+                  onPressed: facilityID.isEmpty
+                      ? null
+                      : () => _showFacilitySheet(facilityID),
+                ),
+
+                // أيقونة الإرجاع (تظهر فقط إذا التقرير مو "قيد المراجعة")
+                if (decision != 'pending')
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: RColors.primary),
+                    tooltip: 'إرجاع لقيد المراجعة',
+                    onPressed: _busy ? null : _confirmReturn,
+                  ),
+              ],
+            ),
+
+            const SizedBox(height: 4),
+
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // location + الوصف
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (description.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            description,
+                            style: const TextStyle(fontSize: 13),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+                // الحالة (مقبولة / مرفوضة)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -475,10 +503,7 @@ class _ReportCardState extends State<_ReportCard> {
                 ),
               ],
             ),
-            if (description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(description),
-            ],
+
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
