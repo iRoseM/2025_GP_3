@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'home.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ✅ إضافة
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'main.dart';
-import 'package:flutter/material.dart';
 import 'background_container.dart';
-
 
 class AppColors {
   static const primary = Color(0xFF009688);
@@ -25,13 +24,15 @@ class profilePage extends StatelessWidget {
       Theme.of(context).textTheme,
     );
 
+    final user = FirebaseAuth.instance.currentUser;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Theme(
         data: Theme.of(context).copyWith(textTheme: textTheme),
         child: Scaffold(
-        extendBody: true, // ✅ add this
-        backgroundColor: Colors.transparent, // ✅ replace old background
+          extendBody: true,
+          backgroundColor: Colors.transparent,
           appBar: AppBar(
             title: Text(
               'الحساب',
@@ -59,140 +60,202 @@ class profilePage extends StatelessWidget {
             backgroundColor: Colors.transparent,
           ),
           body: AnimatedBackgroundContainer(
-            child:SafeArea(
+            child: SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
                     // ---------- بطاقة معلومات المستخدم ----------
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      margin: const EdgeInsets.only(top: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: const Color(0xFFE8F1EE),
-                          width: 1.2,
-                        ),
-                        boxShadow: const [
-                          BoxShadow(
-                            blurRadius: 10,
-                            offset: Offset(0, 6),
-                            color: Color(0x14000000),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          // صورة بروفايل داخل خلفية خضراء
-                          Container(
-                            decoration: const BoxDecoration(
-                              color: AppColors.light,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const CircleAvatar(
-                              radius: 28,
-                              backgroundColor: Colors.transparent,
-                              child: Icon(
-                                Icons.person_outline,
+                    StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                      stream: user == null
+                          ? const Stream.empty()
+                          : FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .snapshots(),
+                      builder: (context, snap) {
+                        final isLoading =
+                            snap.connectionState == ConnectionState.waiting;
+                        final data = snap.data?.data();
+
+                        final username = (data?['username'] ?? 'مستخدم')
+                            .toString();
+                        final email = (data?['email'] ?? user?.email ?? '')
+                            .toString();
+                        final age = (data?['age'] is int)
+                            ? (data?['age'] as int)
+                            : int.tryParse('${data?['age'] ?? ''}') ?? 0;
+                        final gender = (data?['gender'] ?? 'male').toString();
+
+                        // ✅ نقرأ pfpIndex من الداتابيس
+                        final int? pfpIndex = (data?['pfpIndex'] is int)
+                            ? (data?['pfpIndex'] as int)
+                            : int.tryParse('${data?['pfpIndex'] ?? ''}');
+
+                        // مسار الأفاتار لو متوفر (0..7) -> pfp1..pfp8
+                        String? avatarPath;
+                        if (pfpIndex != null && pfpIndex >= 0 && pfpIndex < 8) {
+                          avatarPath = 'assets/pfp/pfp${pfpIndex + 1}.png';
+                        }
+
+                        return Column(
+                          children: [
+                            // ✅ لم تعد قابلة للنقر – فقط عرض
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              margin: const EdgeInsets.only(top: 16),
+                              decoration: BoxDecoration(
                                 color: Colors.white,
-                                size: 30,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFFE8F1EE),
+                                  width: 1.2,
+                                ),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    blurRadius: 10,
+                                    offset: Offset(0, 6),
+                                    color: Color(0x14000000),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  // صورة بروفايل داخل خلفية خضراء (أفاتار إن وُجد)
+                                  Container(
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.light,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: CircleAvatar(
+                                      radius: 28,
+                                      backgroundColor: Colors.transparent,
+                                      backgroundImage:
+                                          (avatarPath != null && !isLoading)
+                                          ? AssetImage(avatarPath)
+                                          : null,
+                                      child: (avatarPath == null || isLoading)
+                                          ? const Icon(
+                                              Icons.person_outline,
+                                              color: Colors.white,
+                                              size: 30,
+                                            )
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // اسم العرض
+                                        Text(
+                                          isLoading
+                                              ? 'جارٍ التحميل…'
+                                              : username,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.ibmPlexSansArabic(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.dark,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        // ✅ السطر الثاني = البريد الإلكتروني
+                                        Text(
+                                          isLoading ? '...' : email,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.ibmPlexSansArabic(
+                                            fontSize: 14,
+                                            color: AppColors.dark.withOpacity(
+                                              .7,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // ✅ شلنا أيقونة التعديل
+                                ],
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          // النصوص: اسم المستخدم + @username
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'اسم المستخدم',
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.dark,
+
+                            const SizedBox(height: 24),
+
+                            // ---------- زر تعديل الحساب (الوحيد الذي يفتح صفحة التعديل) ----------
+                            SizedBox(
+                              width: double.infinity,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      AppColors.mint,
+                                      AppColors.primary,
+                                      AppColors.primary,
+                                    ],
+                                    stops: [0.0, 0.6, 1.0],
+                                    begin: Alignment.centerRight,
+                                    end: Alignment.centerLeft,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x33000000),
+                                      blurRadius: 8,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                      horizontal: 20,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    color: Colors.white,
+                                  ),
+                                  label: Text(
+                                    'تعديل الحساب',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  onPressed: (user == null || isLoading)
+                                      ? null
+                                      : () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) => EditProfilePage(
+                                                initialUsername: username,
+                                                initialHandle: '@$username',
+                                                initialEmail: email,
+                                                initialAge: age == 0 ? 18 : age,
+                                                initialGender:
+                                                    gender, // male/female
+                                                initialPfpIndex: pfpIndex,
+                                              ),
+                                            ),
+                                          );
+                                        },
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '@username',
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  fontSize: 14,
-                                  color: AppColors.dark.withOpacity(.7),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // ---------- زر تعديل الحساب ----------
-                    SizedBox(
-                      width: double.infinity,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          gradient: const LinearGradient(
-                            colors: [
-                              AppColors.mint,
-                              AppColors.primary,
-                              AppColors.primary,
-                            ],
-                            stops: [0.0, 0.6, 1.0],
-                            begin: Alignment.centerRight,
-                            end: Alignment.centerLeft,
-                          ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x33000000),
-                              blurRadius: 8,
-                              offset: Offset(0, 4),
                             ),
                           ],
-                        ),
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent, // لإظهار التدرّج
-                            shadowColor: Colors.transparent,
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 16,
-                              horizontal: 20,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            elevation: 0,
-                          ),
-                          icon: const Icon(Icons.edit, color: Colors.white),
-                          label: Text(
-                            'تعديل الحساب',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                          onPressed: () {
-                            // افتح صفحة تعديل البيانات مع قيم افتراضيّة/حقيقية
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const EditProfilePage(
-                                  initialUsername: 'اسم المستخدم',
-                                  initialHandle: '@username',
-                                  initialEmail: 'user@email.com',
-                                  initialAge: 22,
-                                  initialGender: 'male', // male/female
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                        );
+                      },
                     ),
 
                     const SizedBox(height: 16),
@@ -238,12 +301,8 @@ class profilePage extends StatelessWidget {
                           titleColor: Colors.redAccent,
                           onTap: () async {
                             try {
-                              await FirebaseAuth.instance
-                                  .signOut(); // ✅ تسجيل الخروج
-                            } catch (_) {
-                              // نتجاهل أي خطأ بسيط هنا
-                            }
-                            // ✅ روّح لصفحة اللوجن وامسح الستاك
+                              await FirebaseAuth.instance.signOut();
+                            } catch (_) {}
                             if (context.mounted) {
                               Navigator.of(context).pushAndRemoveUntil(
                                 MaterialPageRoute(
@@ -589,6 +648,7 @@ class EditProfilePage extends StatefulWidget {
   final String initialEmail;
   final int initialAge;
   final String initialGender; // 'male' or 'female'
+  final int? initialPfpIndex; // اختياري
 
   const EditProfilePage({
     super.key,
@@ -597,6 +657,7 @@ class EditProfilePage extends StatefulWidget {
     required this.initialEmail,
     required this.initialAge,
     required this.initialGender,
+    this.initialPfpIndex,
   });
 
   @override
@@ -610,9 +671,20 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late final TextEditingController _handleCtrl;
   late final TextEditingController _emailCtrl;
   late final TextEditingController _ageCtrl;
-  late final TextEditingController _passCtrl;
 
-  bool _obscure = true;
+  // إدارة تغيير كلمة المرور (عرض كنقاط ثم وضع التغيير)
+  bool _changePassword = false;
+  late final TextEditingController _currentPassCtrl;
+  late final TextEditingController _newPassCtrl;
+  late final TextEditingController _confirmPassCtrl;
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+
+  // تغيير الإيميل (BottomSheet)
+  final _currentPassForEmailCtrl = TextEditingController();
+  final _newEmailCtrl = TextEditingController();
+
   late String _gender;
 
   // ✅ قائمة صور الأفاتار من مجلد assets/pfp
@@ -626,7 +698,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     'assets/pfp/pfp7.png',
     'assets/pfp/pfp8.png',
   ];
-  int? _avatarIndex; // null = أيقونة افتراضية
+  int? _pfpIndex; // null = أيقونة افتراضية
 
   @override
   void initState() {
@@ -635,8 +707,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _handleCtrl = TextEditingController(text: widget.initialHandle);
     _emailCtrl = TextEditingController(text: widget.initialEmail);
     _ageCtrl = TextEditingController(text: widget.initialAge.toString());
-    _passCtrl = TextEditingController();
+
+    _currentPassCtrl = TextEditingController();
+    _newPassCtrl = TextEditingController();
+    _confirmPassCtrl = TextEditingController();
+
     _gender = widget.initialGender;
+    _pfpIndex = widget.initialPfpIndex; // الافتراضي من الداتابيس
   }
 
   @override
@@ -645,24 +722,346 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _handleCtrl.dispose();
     _emailCtrl.dispose();
     _ageCtrl.dispose();
-    _passCtrl.dispose();
+
+    _currentPassCtrl.dispose();
+    _newPassCtrl.dispose();
+    _confirmPassCtrl.dispose();
+
+    _currentPassForEmailCtrl.dispose();
+    _newEmailCtrl.dispose();
+
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    // TODO: احفظ القيم في قاعدة البيانات/الخدمة، بما فيها الصورة المختارة (_avatarIndex)
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'تم حفظ التغييرات بنجاح ✅',
-          style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w700),
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'لا يوجد مستخدم مسجّل.',
+            style: GoogleFonts.ibmPlexSansArabic(),
+          ),
         ),
-        behavior: SnackBarBehavior.floating,
+      );
+      return;
+    }
+
+    try {
+      // تجهيز البيانات
+      final usernameWithoutAt = _handleCtrl.text.trim().startsWith('@')
+          ? _handleCtrl.text.trim().substring(1)
+          : _handleCtrl.text.trim();
+
+      final update = <String, dynamic>{
+        'username': usernameWithoutAt.isEmpty
+            ? widget.initialUsername
+            : usernameWithoutAt,
+        'email': _emailCtrl.text.trim(),
+        'age': int.tryParse(_ageCtrl.text.trim()) ?? widget.initialAge,
+        'gender': _gender, // 'male' أو 'female'
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // ✅ حفظ فهرس صورة البروفايل pfpIndex
+      if (_pfpIndex != null) {
+        update['pfpIndex'] = _pfpIndex;
+      }
+
+      // 1) تحديث Firestore (دمج)
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set(update, SetOptions(merge: true));
+
+      // 2) تغيير كلمة المرور (إذا تم تفعيل وضع التغيير)
+      if (_changePassword) {
+        final email = user.email ?? _emailCtrl.text.trim();
+        if (email.isEmpty) {
+          throw 'لا يمكن إعادة المصادقة: البريد غير متوفر.';
+        }
+
+        final current = _currentPassCtrl.text;
+        final newPass = _newPassCtrl.text;
+
+        // إعادة المصادقة
+        final cred = EmailAuthProvider.credential(
+          email: email,
+          password: current,
+        );
+        await user.reauthenticateWithCredential(cred);
+
+        // تحديث كلمة المرور
+        await user.updatePassword(newPass);
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'تم حفظ التغييرات بنجاح ✅',
+            style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w700),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'حدث خطأ أثناء الحفظ: $e',
+            style: GoogleFonts.ibmPlexSansArabic(),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  // ===== تغيير الإيميل بنفس منطق الأوث (reauth → updateEmail → verify → Firestore → VerifyEmailPage)
+  void _showChangeEmailSheet() {
+    _currentPassForEmailCtrl.clear();
+    _newEmailCtrl.text = _emailCtrl.text;
+
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
+      builder: (ctx) {
+        bool _obsc = true;
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: StatefulBuilder(
+            builder: (ctx, setSt) => Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0x22000000),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  Row(
+                    children: const [
+                      Icon(
+                        Icons.mark_email_read_outlined,
+                        color: AppColors.primary,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'تغيير البريد الإلكتروني',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _newEmailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      hintText: 'new@example.com',
+                      prefixIcon: Icon(Icons.email_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _currentPassForEmailCtrl,
+                    obscureText: _obsc,
+                    decoration: InputDecoration(
+                      hintText: 'كلمة المرور الحالية',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        onPressed: () => setSt(() => _obsc = !_obsc),
+                        icon: Icon(
+                          _obsc ? Icons.visibility : Icons.visibility_off,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: const LinearGradient(
+                              colors: [
+                                AppColors.mint,
+                                AppColors.primary,
+                                AppColors.primary,
+                              ],
+                              stops: [0.0, 0.5, 1.0],
+                              begin: Alignment.centerRight,
+                              end: Alignment.centerLeft,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x33000000),
+                                blurRadius: 8,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 14,
+                                horizontal: 18,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                            ),
+                            onPressed: () async {
+                              final newEmail = _newEmailCtrl.text.trim();
+                              final pass = _currentPassForEmailCtrl.text;
+                              if (newEmail.isEmpty || pass.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'أدخل البريد الجديد وكلمة المرور الحالية',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              Navigator.pop(ctx);
+                              await _changeEmailSecure(
+                                currentPassword: pass,
+                                newEmail: newEmail,
+                              );
+                            },
+                            icon: const Icon(Icons.check, color: Colors.white),
+                            label: const Text(
+                              'تأكيد التغيير',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('إلغاء'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
-    Navigator.of(context).pop(); // رجوع للملف الشخصي
+  }
+
+  Future<void> _changeEmailSecure({
+    required String currentPassword,
+    required String newEmail,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('لا يوجد مستخدم مسجّل')));
+      return;
+    }
+
+    try {
+      // reauth
+      final cred = EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(cred);
+
+      // update email
+      await user.updateEmail(newEmail);
+
+      // send verification
+      await FirebaseAuth.instance.setLanguageCode('ar');
+      await user.sendEmailVerification();
+
+      // update Firestore
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'email': newEmail.toLowerCase(),
+        'isVerified': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // reflect locally
+      setState(() {
+        _emailCtrl.text = newEmail;
+      });
+
+      if (!mounted) return;
+      // go to VerifyEmailPage from main.dart
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => VerifyEmailPage(email: newEmail)),
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إرسال رسالة تحقق إلى بريدك الجديد')),
+      );
+    } on FirebaseAuthException catch (e) {
+      String msg = 'تعذّر تغيير البريد';
+      switch (e.code) {
+        case 'requires-recent-login':
+          msg = 'لأسباب أمان، سجّل دخولك مجددًا ثم حاول.';
+          break;
+        case 'wrong-password':
+          msg = 'كلمة المرور الحالية غير صحيحة.';
+          break;
+        case 'invalid-email':
+          msg = 'بريد إلكتروني غير صالح.';
+          break;
+        case 'email-already-in-use':
+          msg = 'هذا البريد مستخدم بالفعل.';
+          break;
+        case 'network-request-failed':
+          msg = 'تعذّر الاتصال — تأكد من الإنترنت.';
+          break;
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ $msg')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('❌ خطأ غير متوقع أثناء تغيير البريد')),
+      );
+    }
   }
 
   void _openAvatarPicker() {
@@ -715,11 +1114,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     crossAxisSpacing: 12,
                   ),
                   itemBuilder: (_, i) {
-                    final selected = _avatarIndex == i;
+                    final selected = _pfpIndex == i;
                     return InkWell(
                       borderRadius: BorderRadius.circular(999),
                       onTap: () {
-                        setState(() => _avatarIndex = i);
+                        setState(() => _pfpIndex = i);
                         Navigator.pop(ctx);
                       },
                       child: Stack(
@@ -782,10 +1181,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
           child: CircleAvatar(
             radius: 32,
             backgroundColor: Colors.transparent,
-            backgroundImage: _avatarIndex != null
-                ? AssetImage(_avatars[_avatarIndex!])
+            backgroundImage: _pfpIndex != null
+                ? AssetImage(_avatars[_pfpIndex!])
                 : null,
-            child: _avatarIndex == null
+            child: _pfpIndex == null
                 ? const Icon(
                     Icons.person_outline,
                     color: Colors.white,
@@ -857,56 +1256,52 @@ class _EditProfilePageState extends State<EditProfilePage> {
             child: Column(
               children: [
                 // صورة رمزية + قلم تعديل
-                Row(
-                  children: [
-                    avatarWidget,
-                    const SizedBox(width: 10),
-                    Text(
-                      'حدّث بياناتك بسهولة',
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.dark,
-                      ),
-                    ),
-                  ],
-                ),
+                Row(children: [avatarWidget, const SizedBox(width: 10)]),
 
                 const SizedBox(height: 14),
 
-                // اليوزر
+                // اليوزر (الهاندل)
                 _fieldLabel('اسم المستخدم'),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _handleCtrl,
                   decoration: const InputDecoration(
-                    hintText: '@username',
+                    hintText: 'username',
                     prefixIcon: Icon(Icons.alternate_email),
                   ),
-                  validator: (v) =>
-                      (v == null || !v.startsWith('@') || v.length < 4)
-                      ? 'أدخل يوزر صحيح يبدأ بـ @'
-                      : null,
+                  validator: (v) {
+                    final val = v?.trim() ?? '';
+                    if (val.isEmpty) {
+                      return 'أدخل اسم المستخدم';
+                    }
+                    if (val.length < 3) {
+                      return 'اسم المستخدم قصير جداً';
+                    }
+                    final re = RegExp(r'^[a-zA-Z0-9._-]+$');
+                    if (!re.hasMatch(val)) {
+                      return 'استخدم حروف/أرقام و . _ - فقط';
+                    }
+                    return null;
+                  },
                 ),
 
                 const SizedBox(height: 14),
 
-                // الإيميل
+                // الإيميل (readOnly + زر تغيير)
                 _fieldLabel('البريد الإلكتروني'),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
+                  readOnly: true,
+                  enableInteractiveSelection: false,
+                  decoration: InputDecoration(
                     hintText: 'name@example.com',
-                    prefixIcon: Icon(Icons.email_outlined),
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    suffixIcon: TextButton(
+                      onPressed: _showChangeEmailSheet,
+                      child: const Text('تغيير'),
+                    ),
                   ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'أدخل البريد';
-                    final re = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-                    if (!re.hasMatch(v.trim())) return 'بريد غير صالح';
-                    return null;
-                  },
                 ),
 
                 const SizedBox(height: 14),
@@ -978,33 +1373,127 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                 const SizedBox(height: 14),
 
-                // كلمة المرور (اختياري)
-                _fieldLabel('كلمة المرور (اختياري)'),
+                // ===== كلمة المرور =====
+                _fieldLabel('كلمة المرور'),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: _passCtrl,
-                  obscureText: _obscure,
-                  decoration: InputDecoration(
-                    hintText: 'اتركها فارغة إن لم ترغب بالتغيير',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                      icon: Icon(
-                        _obscure ? Icons.visibility : Icons.visibility_off,
-                      ),
+
+                if (!_changePassword) ...[
+                  TextFormField(
+                    enabled: false,
+                    initialValue: '••••••••',
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.lock_outline),
+                      hintText: '••••••••',
                     ),
                   ),
-                  validator: (v) {
-                    if (v != null && v.isNotEmpty && v.length < 6) {
-                      return '6 أحرف على الأقل';
-                    }
-                    return null;
-                  },
-                ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => setState(() => _changePassword = true),
+                      icon: const Icon(Icons.edit),
+                      label: const Text('تغيير كلمة المرور'),
+                    ),
+                  ),
+                ] else ...[
+                  TextFormField(
+                    controller: _currentPassCtrl,
+                    obscureText: _obscureCurrent,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      hintText: 'كلمة المرور الحالية',
+                      suffixIcon: IconButton(
+                        onPressed: () =>
+                            setState(() => _obscureCurrent = !_obscureCurrent),
+                        icon: Icon(
+                          _obscureCurrent
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                      ),
+                    ),
+                    validator: (v) {
+                      if (_changePassword && (v == null || v.isEmpty)) {
+                        return 'أدخل كلمة المرور الحالية';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _newPassCtrl,
+                    obscureText: _obscureNew,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.lock_reset),
+                      hintText: 'كلمة المرور الجديدة',
+                      suffixIcon: IconButton(
+                        onPressed: () =>
+                            setState(() => _obscureNew = !_obscureNew),
+                        icon: Icon(
+                          _obscureNew ? Icons.visibility : Icons.visibility_off,
+                        ),
+                      ),
+                    ),
+                    validator: (v) {
+                      if (_changePassword) {
+                        if (v == null || v.isEmpty) {
+                          return 'أدخل كلمة المرور الجديدة';
+                        }
+                        if (v.length < 6) return '6 أحرف على الأقل';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _confirmPassCtrl,
+                    obscureText: _obscureConfirm,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.check_circle_outline),
+                      hintText: 'تأكيد كلمة المرور الجديدة',
+                      suffixIcon: IconButton(
+                        onPressed: () =>
+                            setState(() => _obscureConfirm = !_obscureConfirm),
+                        icon: Icon(
+                          _obscureConfirm
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                      ),
+                    ),
+                    validator: (v) {
+                      if (_changePassword) {
+                        if (v == null || v.isEmpty) {
+                          return 'أعد إدخال كلمة المرور';
+                        }
+                        if (v != _newPassCtrl.text) {
+                          return 'كلمتا المرور غير متطابقتين';
+                        }
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _changePassword = false;
+                          _currentPassCtrl.clear();
+                          _newPassCtrl.clear();
+                          _confirmPassCtrl.clear();
+                        });
+                      },
+                      child: const Text('إلغاء التغيير'),
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 22),
 
-                // زر حفظ (تدرّج بسيط)
+                // زر حفظ (تدرّج)
                 SizedBox(
                   width: double.infinity,
                   child: DecoratedBox(

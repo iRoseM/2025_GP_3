@@ -1208,7 +1208,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                                 if (n == null) {
                                                   return 'أدخل رقمًا صحيحًا';
                                                 }
-                                                if (n < 10 || n > 120) {
+                                                if (n < 7 || n > 120) {
                                                   return 'العمر غير منطقي';
                                                 }
                                                 return null;
