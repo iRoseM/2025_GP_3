@@ -174,11 +174,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             decoration: const BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: LinearGradient(
-                                colors: [
-                                  AppColors.light,
-                                  AppColors.primary,
-                                  AppColors.primary,
-                                ],
+                                colors: [AppColors.mint, AppColors.primary],
                                 begin: Alignment.topRight,
                                 end: Alignment.bottomLeft,
                               ),

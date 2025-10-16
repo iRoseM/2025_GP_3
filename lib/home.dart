@@ -3,7 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'map.dart';
 import 'background_container.dart';
-
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // استيرادات الصفحات المرتبطة بالناف بار
 import 'task.dart'; // يحتوي على Widget: TaskPage
@@ -65,85 +66,267 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
       child: Scaffold(
         extendBody: true, // ✅ allows the background to extend under the nav bar
         backgroundColor: Colors.transparent, // ✅ removes the solid/black layer
-        body: AnimatedBackgroundContainer( // ✅ unified animated background
+        body: AnimatedBackgroundContainer(
+          // ✅ unified animated background
           child: SafeArea(
             bottom: false,
             child: CustomScrollView(
               slivers: [
                 // Header
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                    child: Row(
-                      children: [
-                        // صورة البروفايل → تودّي لصفحة البروفايل
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(999),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const profilePage(),
+                  child: Builder(
+                    builder: (context) {
+                      final uid = FirebaseAuth.instance.currentUser?.uid;
+
+                      // لو ما فيه مستخدم مسجل
+                      if (uid == null) {
+                        return Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                          child: Row(
+                            children: [
+                              // صورة البروفايل → تودّي لصفحة البروفايل
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(999),
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const profilePage(),
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          AppColors.primary.withOpacity(.2),
+                                          AppColors.sea.withOpacity(.1),
+                                        ],
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppColors.primary.withOpacity(
+                                            .2,
+                                          ),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const CircleAvatar(
+                                      radius: 24,
+                                      backgroundColor: Colors.transparent,
+                                      child: Icon(
+                                        Icons.person_outline,
+                                        color: AppColors.primary,
+                                        size: 28,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              );
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppColors.primary.withOpacity(.2),
-                                    AppColors.sea.withOpacity(.1),
+                              ),
+
+                              const SizedBox(width: 12),
+
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'مرحبًا 👋',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.dark,
+                                      ),
+                                    ),
+                                    Text(
+                                      'لنجعل اليوم مميزاً!',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.sea,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ],
                                 ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primary.withOpacity(.2),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
                               ),
-                              child: const CircleAvatar(
-                                radius: 24,
-                                backgroundColor: Colors.transparent,
-                                child: Icon(
-                                  Icons.person_outline,
-                                  color: AppColors.primary,
-                                  size: 28,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'مرحبًا، Nameer 👋',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.dark,
-                                ),
-                              ),
-                              Text(
-                                'لنجعل اليوم مميزاً!',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.sea,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                              _PointsChip(points: 0, onTap: () {}),
                             ],
                           ),
-                        ),
-                        _PointsChip(points: 1500, onTap: () {}),
-                      ],
-                    ),
+                        );
+                      }
+
+                      // لو فيه مستخدم، نجلب بياناته من Firestore
+                      return StreamBuilder<
+                        DocumentSnapshot<Map<String, dynamic>>
+                      >(
+                        stream: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(uid)
+                            .snapshots(),
+                        builder: (context, snap) {
+                          final data = snap.data?.data();
+
+                          final String username =
+                              (data?['username'] ?? 'مستخدم').toString();
+
+                          int wallet = 0;
+                          final w = data?['wallet'];
+                          if (w is int) {
+                            wallet = w;
+                          } else if (w is double) {
+                            wallet = w.toInt();
+                          } else if (w != null) {
+                            wallet = int.tryParse('$w') ?? 0;
+                          }
+
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                            child: Row(
+                              children: [
+                                // صورة البروفايل → تودّي لصفحة البروفايل
+                                StreamBuilder<
+                                  DocumentSnapshot<Map<String, dynamic>>
+                                >(
+                                  stream:
+                                      FirebaseAuth.instance.currentUser == null
+                                      ? const Stream.empty()
+                                      : FirebaseFirestore.instance
+                                            .collection('users')
+                                            .doc(
+                                              FirebaseAuth
+                                                  .instance
+                                                  .currentUser!
+                                                  .uid,
+                                            )
+                                            .snapshots(),
+                                  builder: (context, snapshot) {
+                                    final data = snapshot.data?.data();
+                                    final int? pfpIndex =
+                                        (data?['pfpIndex'] is int)
+                                        ? (data?['pfpIndex'] as int)
+                                        : int.tryParse(
+                                            '${data?['pfpIndex'] ?? ''}',
+                                          );
+                                    String? avatarPath;
+                                    if (pfpIndex != null &&
+                                        pfpIndex >= 0 &&
+                                        pfpIndex < 8) {
+                                      avatarPath =
+                                          'assets/pfp/pfp${pfpIndex + 1}.png';
+                                    }
+
+                                    return Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                        onTap: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const profilePage(),
+                                            ),
+                                          );
+                                        },
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                AppColors.primary.withOpacity(
+                                                  .2,
+                                                ),
+                                                AppColors.mint.withOpacity(.1),
+                                              ],
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: AppColors.primary
+                                                    .withOpacity(.2),
+                                                blurRadius: 12,
+                                                offset: const Offset(0, 4),
+                                              ),
+                                            ],
+                                          ),
+                                          child: CircleAvatar(
+                                            radius: 24,
+                                            backgroundColor: Colors.transparent,
+                                            backgroundImage:
+                                                (avatarPath != null)
+                                                ? AssetImage(avatarPath)
+                                                : null,
+                                            child: (avatarPath == null)
+                                                ? const Icon(
+                                                    Icons.person_outline,
+                                                    color: AppColors.primary,
+                                                    size: 28,
+                                                  )
+                                                : null,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+
+                                const SizedBox(width: 12),
+
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (snap.connectionState ==
+                                          ConnectionState.waiting)
+                                        const Text(
+                                          'مرحبًا 👋',
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.dark,
+                                          ),
+                                        )
+                                      else
+                                        Text(
+                                          'مرحبًا، $username 👋',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.dark,
+                                          ),
+                                        ),
+                                      const Text(
+                                        'لنجعل اليوم مميزاً!',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: AppColors.sea,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                _PointsChip(
+                                  points:
+                                      snap.connectionState ==
+                                          ConnectionState.waiting
+                                      ? 0
+                                      : wallet,
+                                  onTap: () {},
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
                   ),
                 ),
 
@@ -166,6 +349,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
                 // === بلوك الأرض مع العنوان داخل نفس الحاوية ===
+                // === بلوك الأرض مع العنوان داخل نفس الحاوية ===
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -182,7 +366,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                           ),
                         ],
                         border: Border.all(
-                          color: const Color(0xFFE8F1EE),
+                          color: Color(0xFFE8F1EE),
                           width: 1.5,
                         ),
                       ),
@@ -219,8 +403,10 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                           ),
                           const SizedBox(height: 14),
 
-                          // المنصّة
-                          Center(
+                          // المنصّة (بقيود صريحة تمنع NaN)
+                          SizedBox(
+                            width: double.infinity,
+                            height: 170, // ارتفاع ثابت يضمن قيود واضحة للرسم
                             child: IsoLand(
                               rows: 6,
                               cols: 6,
@@ -251,18 +437,20 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                 ),
                 const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                // EcoLand Card (زر دخول)
+                // EcoLand Card (زر دخول) مع معالجة NaN
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: AnimatedBuilder(
                       animation: _floatingCtrl,
                       builder: (context, child) {
+                        // نحسب الإزاحة العمودية ونضمن أنها ليست NaN/Infinite
+                        double dy =
+                            -4 * math.sin(_floatingCtrl.value * math.pi);
+                        if (dy.isNaN || dy.isInfinite) dy = 0;
+
                         return Transform.translate(
-                          offset: Offset(
-                            0,
-                            -4 * math.sin(_floatingCtrl.value * math.pi),
-                          ),
+                          offset: Offset(0, dy),
                           child: child,
                         );
                       },
@@ -359,13 +547,12 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
           currentIndex: _currentIndex,
           onTap: (i) => setState(() => _currentIndex = i),
           onCenterTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const levelsPage()),
-            );
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const levelsPage()));
           },
         ),
       ),
-
     );
   }
 }
