@@ -1,11 +1,15 @@
 // lib/pages/map_page.dart
 import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ✅ لالتقاط UID عند الإبلاغ
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart'; // 👈 جديد: فتح الخرائط
 
 // صفحات أخرى
 import 'home.dart';
@@ -28,10 +32,11 @@ class Facility {
   final String id;
   final double lat;
   final double lng;
-  final String type; // مثل: RVM أو حاوية ملابس...
-  final String provider; // ✅ مأخوذ من الداتابيس
+  final String type;     // مثل: RVM أو حاوية ملابس...
+  final String provider; // من الداتابيس
   final String city;
   final String address;
+  final String status;   // 'نشط' أو 'متوقف'
 
   Facility({
     required this.id,
@@ -41,6 +46,7 @@ class Facility {
     required this.provider,
     required this.city,
     required this.address,
+    required this.status,
   });
 }
 
@@ -61,64 +67,95 @@ class _mapPageState extends State<mapPage> {
   final Set<Marker> _allMarkers = {};
   final Set<Polyline> _polylines = {};
 
-  // نحتاج نعرف أي ماركر لأي Facility
   final Map<String, Facility> _facilitiesByMarkerId = {};
 
   bool _myLocationEnabled = false;
   bool _isLoadingLocation = false;
 
+  // === أيقونات مخصّصة للماركرز
+  BitmapDescriptor? _iconClothes;
+  BitmapDescriptor? _iconPapers;
+  BitmapDescriptor? _iconRvm;
+  BitmapDescriptor? _iconFood;
+  BitmapDescriptor? _iconDefault;
+
   @override
   void initState() {
     super.initState();
     _ensureLocationPermission();
-    _loadFacilitiesFromFirestore();
+    _loadMarkerIcons().then((_) => _loadFacilitiesFromFirestore());
+  }
+
+  /// تحميل صور الأيقونات كـ BitmapDescriptor حادّ (يدعم كثافات الشاشة)
+  Future<void> _loadMarkerIcons() async {
+    _iconClothes = await _bitmapFromAsset('assets/img/clothes.png', width: 200);
+    _iconPapers  = await _bitmapFromAsset('assets/img/papers.png',  width: 200);
+    _iconRvm     = await _bitmapFromAsset('assets/img/rvm.png',     width: 200);
+    _iconFood    = await _bitmapFromAsset('assets/img/food.png',    width: 200);
+    _iconDefault = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+  }
+
+  Future<BitmapDescriptor> _bitmapFromAsset(String path, {int width = 112}) async {
+    final data = await rootBundle.load(path);
+    final codec = await ui.instantiateImageCodec(
+      data.buffer.asUint8List(),
+      targetWidth: width,
+      targetHeight: width,
+    );
+    final fi = await codec.getNextFrame();
+    final byteData = await fi.image.toByteData(format: ui.ImageByteFormat.png);
+    final bytes = byteData!.buffer.asUint8List();
+    return BitmapDescriptor.fromBytes(bytes);
   }
 
   // ===== Helpers =====
   String _normalizeType(String raw) {
-    final t = (raw).trim();
-    if (t.contains('ملابس')) return 'حاوية إعادة تدوير الملابس';
-    if (t.contains('RVM') || t.contains('آلة استرجاع'))
-      return 'آلة استرجاع (RVM)';
-    if (t.contains('قوارير') || t.contains('بلاستيك'))
+    final t = raw.trim();
+
+    // كلمات مفتاحية بالعربي لتحديد النوع
+    final lower = t;
+    final isClothes = lower.contains('ملابس') || lower.contains('كسوة') || lower.contains('clothes');
+    final isRvm = lower.contains('rvm') || lower.contains('آلة') || lower.contains('استرجاع') || lower.contains('reverse vending');
+    final isPapers = lower.contains('ورق') || lower.contains('أوراق') || lower.contains('كتب') || lower.contains('paper') || lower.contains('books');
+    final isFood = lower.contains('أكل') || lower.contains('طعام') || lower.contains('عضوي') || lower.contains('بقايا') || lower.contains('food') || lower.contains('organic');
+
+    if (isClothes) return 'حاوية إعادة تدوير الملابس';
+    if (isRvm) return 'آلة استرجاع (RVM)';
+    if (isPapers) return 'حاوية إعادة تدوير الأوراق';
+    if (isFood) return 'حاوية إعادة تدوير بقايا الطعام';
+
+    // أنواع أخرى شائعة
+    if (lower.contains('قوارير') || lower.contains('بلاستيك') || lower.contains('علب') || lower.contains('bottle') || lower.contains('plastic')) {
       return 'حاوية إعادة تدوير القوارير';
+    }
+
     return t.isEmpty ? 'نقطة استدامة' : t;
   }
 
-  double _hueForType(String type) {
+  BitmapDescriptor _iconForType(String type) {
     switch (type) {
       case 'حاوية إعادة تدوير الملابس':
-        return BitmapDescriptor.hueViolet;
-      case 'آلة استرجاع (RVM)':
-        return BitmapDescriptor.hueAzure;
-      case 'حاوية إعادة تدوير القوارير':
-        return BitmapDescriptor.hueBlue;
-      case 'حاوية إعادة تدوير بقايا الطعام':
-        return BitmapDescriptor.hueGreen;
+        return _iconClothes ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet);
       case 'حاوية إعادة تدوير الأوراق':
-        return BitmapDescriptor.hueOrange;
+        return _iconPapers ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
+      case 'آلة استرجاع (RVM)':
+        return _iconRvm ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
+      case 'حاوية إعادة تدوير بقايا الطعام':
+        return _iconFood ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
       default:
-        return BitmapDescriptor.hueRed;
+        return _iconDefault ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
     }
   }
 
   LatLngBounds _extendBounds(LatLngBounds? current, LatLng p) {
     if (current == null) return LatLngBounds(southwest: p, northeast: p);
     final sw = LatLng(
-      p.latitude < current.southwest.latitude
-          ? p.latitude
-          : current.southwest.latitude,
-      p.longitude < current.southwest.longitude
-          ? p.longitude
-          : current.southwest.longitude,
+      p.latitude < current.southwest.latitude ? p.latitude : current.southwest.latitude,
+      p.longitude < current.southwest.longitude ? p.longitude : current.southwest.longitude,
     );
     final ne = LatLng(
-      p.latitude > current.northeast.latitude
-          ? p.latitude
-          : current.northeast.latitude,
-      p.longitude > current.northeast.longitude
-          ? p.longitude
-          : current.northeast.longitude,
+      p.latitude > current.northeast.latitude ? p.latitude : current.northeast.latitude,
+      p.longitude > current.northeast.longitude ? p.longitude : current.northeast.longitude,
     );
     return LatLngBounds(southwest: sw, northeast: ne);
   }
@@ -128,7 +165,7 @@ class _mapPageState extends State<mapPage> {
     try {
       final qs = await FirebaseFirestore.instance
           .collection('facilities')
-          // .where('status', isEqualTo: 'نشط') // إن أردت
+          // .where('status', isEqualTo: 'نشط') // << نعرض الكل للمستخدم؛ الحالة تُعرض في التفاصيل
           .get();
 
       final markers = <Marker>{};
@@ -147,9 +184,10 @@ class _mapPageState extends State<mapPage> {
         if (!valid) continue;
 
         final String type = _normalizeType((m['type'] ?? '').toString());
-        final String provider = (m['provider'] ?? '').toString(); // ✅
+        final String provider = (m['provider'] ?? '').toString();
         final String city = (m['city'] ?? '').toString();
         final String address = (m['address'] ?? '').toString();
+        final String status = (m['status'] ?? 'نشط').toString(); // 👈 قراءة الحالة
 
         final pos = LatLng(lat, lng);
         final markerId = MarkerId(d.id);
@@ -163,6 +201,7 @@ class _mapPageState extends State<mapPage> {
           provider: provider,
           city: city,
           address: address,
+          status: status, // 👈 تخزين الحالة
         );
         mapFacilities[markerId.value] = facility;
 
@@ -170,7 +209,8 @@ class _mapPageState extends State<mapPage> {
           Marker(
             markerId: markerId,
             position: pos,
-            icon: BitmapDescriptor.defaultMarkerWithHue(_hueForType(type)),
+            icon: _iconForType(type),
+            consumeTapEvents: true, // 👈 يضمن إن الضغط يفتح ورقة التفاصيل
             infoWindow: InfoWindow(
               title: type,
               snippet: address.isNotEmpty
@@ -179,9 +219,9 @@ class _mapPageState extends State<mapPage> {
                       if (provider.isNotEmpty) provider,
                       if (city.isNotEmpty) city,
                     ].join(' • '),
+              onTap: () => _showFacilitySheet(facility), // 👈 فتح الورقة من البابل
             ),
-            onTap: () =>
-                _showFacilitySheet(facility), // ✅ فتح التفاصيل + زر إبلاغ
+            onTap: () => _showFacilitySheet(facility),   // 👈 فتح الورقة من البن
           ),
         );
 
@@ -214,6 +254,25 @@ class _mapPageState extends State<mapPage> {
           const SnackBar(content: Text('تعذّر تحميل نقاط الخريطة')),
         );
       }
+    }
+  }
+
+  // ===== فتح الاتجاهات في Google Maps =====
+  Future<void> _openInMaps(Facility f) async {
+    // نحاول أولًا مخطط comgooglemaps:// (يفتح التطبيق مباشرة على iOS/Android إن كان مثبت)
+    final googleMapsUri = Uri.parse('comgooglemaps://?daddr=${f.lat},${f.lng}&directionsmode=driving');
+    // رابط ويب عام يفتح التطبيق إن كان مثبت أو المتصفح كخيار احتياطي
+    final webUri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}&travelmode=driving');
+
+    try {
+      if (await canLaunchUrl(googleMapsUri)) {
+        await launchUrl(googleMapsUri, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      // لو صار فشل، جرّب فتح رابط الويب
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -268,6 +327,8 @@ class _mapPageState extends State<mapPage> {
 
   // ===== Bottom sheet لتفاصيل الفاسيليتي =====
   void _showFacilitySheet(Facility f) {
+    final bool isActive = (f.status == 'نشط'); // 👈 تحديد الحالة
+
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -281,14 +342,26 @@ class _mapPageState extends State<mapPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                f.type,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      f.type,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Chip(
+                    label: Text(isActive ? 'نشطة' : 'متوقفة',
+                        style: const TextStyle(color: Colors.white)),
+                    backgroundColor: isActive ? Colors.teal : Colors.redAccent,
+                  ), // 👈 شارة الحالة
+                ],
               ),
               const SizedBox(height: 6),
+
               Row(
                 children: [
                   const Icon(
@@ -299,15 +372,14 @@ class _mapPageState extends State<mapPage> {
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
-                      f.provider.isEmpty
-                          ? 'مزود غير محدد'
-                          : f.provider, // ✅ إظهار provider
+                      f.provider.isEmpty ? 'مزود غير محدد' : f.provider,
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
+
               if (f.address.isNotEmpty || f.city.isNotEmpty)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -323,18 +395,53 @@ class _mapPageState extends State<mapPage> {
                     ),
                   ],
                 ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                icon: const Icon(Icons.report_gmailerrorred_outlined),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
+
+              if (!isActive) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0x1FFF5252),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    'تنبيه: هذه الحاوية حالياً متوقفة عن العمل.',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
-                onPressed: () {
-                  Navigator.pop(context);
-                  _openReportDialog(f); // ✅ إنشاء بلاغ
-                },
-                label: const Text('الإبلاغ عن مشكلة'),
+              ],
+
+              const SizedBox(height: 12),
+
+              // 👇 أزرار الإجراءات: الاتجاهات + الإبلاغ
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.directions_outlined),
+                      style: FilledButton.styleFrom(backgroundColor: Colors.blue),
+                      onPressed: () {
+                        Navigator.pop(context); // نغلق الورقة قبل الانتقال
+                        _openInMaps(f);
+                      },
+                      label: const Text('عرض الاتجاهات'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.report_gmailerrorred_outlined),
+                      style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _openReportDialog(f);
+                      },
+                      label: const Text('الإبلاغ عن مشكلة'),
+                    ),
+                  ),
+                ],
               ),
+
               const SizedBox(height: 8),
             ],
           ),
@@ -417,18 +524,17 @@ class _mapPageState extends State<mapPage> {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
       await FirebaseFirestore.instance.collection('facilityReports').add({
-        'decision': 'pending', // في انتظار مراجعة الأدمن
+        'decision': 'pending',
         'description': description,
         'type': type,
         'facilityID': facility.id,
         'reportedBy': uid,
-        'managedBy': '', // يملؤها الأدمن لاحقًا
+        'managedBy': '',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
 
-      // ✅ بعد الإرسال بنجاح، نعرض بوب-أب شكر
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
@@ -538,15 +644,12 @@ class _mapPageState extends State<mapPage> {
                 ),
               ),
 
-              // لوجند بسيط
+              // لوجند يطابق الأيقونات
               Positioned(
                 left: 12,
                 bottom: isKeyboardOpen ? 12 : 28,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -560,13 +663,14 @@ class _mapPageState extends State<mapPage> {
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.place, size: 18, color: Colors.purple),
-                      SizedBox(width: 6),
-                      Text(
-                        'حاوية الملابس / RVM',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
+                    children: [
+                      _LegendIcon(path: 'assets/img/clothes.png', label: 'ملابس'),
+                      const SizedBox(width: 10),
+                      _LegendIcon(path: 'assets/img/papers.png', label: 'أوراق'),
+                      const SizedBox(width: 10),
+                      _LegendIcon(path: 'assets/img/rvm.png', label: 'RVM'),
+                      const SizedBox(width: 10),
+                      _LegendIcon(path: 'assets/img/food.png', label: 'أكل'),
                     ],
                   ),
                 ),
@@ -626,6 +730,8 @@ class _mapPageState extends State<mapPage> {
       builder: (_) {
         bool fClothes = true;
         bool fRvm = true;
+        bool fPapers = true;
+        bool fFood = true;
 
         return StatefulBuilder(
           builder: (context, setSt) {
@@ -647,9 +753,21 @@ class _mapPageState extends State<mapPage> {
                   ),
                   const SizedBox(height: 6),
                   FilterChip(
+                    label: const Text('حاوية إعادة تدوير الأوراق'),
+                    selected: fPapers,
+                    onSelected: (v) => setSt(() => fPapers = v),
+                  ),
+                  const SizedBox(height: 6),
+                  FilterChip(
                     label: const Text('آلة استرجاع (RVM)'),
                     selected: fRvm,
                     onSelected: (v) => setSt(() => fRvm = v),
+                  ),
+                  const SizedBox(height: 6),
+                  FilterChip(
+                    label: const Text('حاوية إعادة تدوير بقايا الطعام'),
+                    selected: fFood,
+                    onSelected: (v) => setSt(() => fFood = v),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -659,7 +777,10 @@ class _mapPageState extends State<mapPage> {
                         Navigator.pop(context);
                         final allowed = <String>{};
                         if (fClothes) allowed.add('حاوية إعادة تدوير الملابس');
+                        if (fPapers) allowed.add('حاوية إعادة تدوير الأوراق');
                         if (fRvm) allowed.add('آلة استرجاع (RVM)');
+                        if (fFood) allowed.add('حاوية إعادة تدوير بقايا الطعام');
+
                         setState(() {
                           _markers
                             ..clear()
@@ -688,6 +809,23 @@ class _mapPageState extends State<mapPage> {
 }
 
 /* ======================= Widgets ======================= */
+
+class _LegendIcon extends StatelessWidget {
+  final String path;
+  final String label;
+  const _LegendIcon({required this.path, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Image.asset(path, width: 18, height: 18),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+      ],
+    );
+  }
+}
 
 class _Header extends StatelessWidget {
   final int points;
@@ -845,7 +983,7 @@ class _SearchBar extends StatelessWidget {
                 BoxShadow(
                   color: Color(0x14000000),
                   blurRadius: 12,
-                  offset: Offset(0, 6),
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
@@ -887,7 +1025,7 @@ class _RoundBtn extends StatelessWidget {
               BoxShadow(
                 color: Color(0x22000000),
                 blurRadius: 12,
-                offset: Offset(0, 6),
+                offset: const Offset(0, 6),
               ),
             ],
           ),
@@ -1012,9 +1150,7 @@ class BottomNav extends StatelessWidget {
                         it.label,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: selected
-                              ? FontWeight.w800
-                              : FontWeight.w500,
+                          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
                           color: color,
                         ),
                       ),

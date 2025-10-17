@@ -30,6 +30,8 @@ dependencies:
   firebase_analytics: ^11.3.1
   flutter_iconpicker: ^4.0.3
   cloud_functions: ^5.0.4
+  url_launcher: ^6.3.0
+
   
   
 
@@ -49,6 +51,10 @@ flutter:
     - assets/img/onboarding2.png
     - assets/img/onboarding3.png
     - assets/img/welcome.png 
+    - assets/img/clothes.png
+    - assets/img/papers.png
+    - assets/img/rvm.png
+    - assets/img/food.png
 
 flutter_native_splash:
   color: "#FAFCFB"
