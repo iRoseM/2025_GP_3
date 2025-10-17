@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'background_container.dart';
+import 'dart:math';
 
 // Navigation pages
 import 'home.dart';
@@ -90,33 +91,90 @@ class _taskPageState extends State<taskPage> {
                         .collection('tasks')
                         .where('isActive', isEqualTo: true)
                         .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                            child: CircularProgressIndicator(
-                                color: AppColors.primary));
-                      }
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(color: AppColors.primary),
+                            );
+                          }
 
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return const Center(
-                          child: Text(
-                            'لا توجد مهام متاحة اليوم 🌱',
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey),
-                          ),
-                        );
-                      }
+                          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                'لا توجد مهام متاحة اليوم 🌱',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            );
+                          }
 
-                      // For now → show one active task per day
-                      final docs = snapshot.data!.docs;
-                      final task = docs.isNotEmpty ? docs.first : null;
+                          final docs = snapshot.data!.docs;
 
-                      return _buildTodayTaskCard(task);
-                    },
+                          // ✅ Get today's date boundaries
+                          final now = DateTime.now();
+                          final todayStart = DateTime(now.year, now.month, now.day);
+                          final todayEnd = todayStart.add(const Duration(days: 1));
+
+                          // ✅ Filter: keep only active and valid (unexpired or no expiry)
+                          final validTasks = docs.where((doc) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final expiry = (data['expiryDate'] as Timestamp?)?.toDate();
+                            final isActive = data['isActive'] == true;
+                            return isActive && (expiry == null || expiry.isAfter(todayStart));
+                          }).toList();
+
+                          if (validTasks.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                'لا توجد مهمة متاحة لهذا اليوم ⏳',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            );
+                          }
+
+                          // ✅ Daily shuffle logic — consistent per day
+                          final seed = now.year * 10000 + now.month * 100 + now.day;
+                          validTasks.shuffle(Random(seed));
+
+                          // ✅ Pick one task per day (changes daily)
+                          final task = validTasks.first;
+
+                          // ✅ Determine if selected date is today
+                          final isToday = _selectedDay == null
+                              ? true
+                              : _selectedDay!.year == now.year &&
+                                  _selectedDay!.month == now.month &&
+                                  _selectedDay!.day == now.day;
+
+                          return Column(
+                            children: [
+                              _buildTodayTaskCard(task, isToday),
+                              if (!isToday)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    'يمكنك تنفيذ المهام اليومية فقط في يومها المحدد ⏳',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+
                   ),
                 ),
+
               ],
             ),
           ),
@@ -242,13 +300,13 @@ class _taskPageState extends State<taskPage> {
 
   // ============================================================
   // 🔹 Daily Task Card
-  Widget _buildTodayTaskCard(QueryDocumentSnapshot? task) {
-    final data = task?.data() as Map<String, dynamic>?;
+  Widget _buildTodayTaskCard(QueryDocumentSnapshot task, bool isToday) {
+    final data = task.data() as Map<String, dynamic>;
 
-    final title = data?['title'] ?? 'مهمة غير محددة';
-    final description = data?['description'] ?? 'لا يوجد وصف متاح.';
-    final points = data?['points'] ?? 0;
-    final validation = data?['validationStrategy'] ?? 'غير محددة';
+    final title = data['title'] ?? 'مهمة غير محددة';
+    final description = data['description'] ?? 'لا يوجد وصف متاح.';
+    final points = data['points'] ?? 0;
+    final validation = data['validationStrategy'] ?? 'غير محددة';
 
     return Container(
       width: double.infinity,
@@ -312,9 +370,10 @@ class _taskPageState extends State<taskPage> {
               Text(
                 '$points نقطة',
                 style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primary,
-                    fontSize: 14),
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                  fontSize: 14,
+                ),
               ),
               const Spacer(),
               Text(
@@ -329,23 +388,56 @@ class _taskPageState extends State<taskPage> {
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                // UI-only button for now
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-                shape: RoundedRectangleBorder(
+            child: InkWell(
+              onTap: isToday
+                  ? () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'بدأت المهمة ✅',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                          backgroundColor: AppColors.primary,
+                        ),
+                      );
+                    }
+                  : null, // 🔹 Disable tap if not today
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
+                  gradient: isToday
+                      ? const LinearGradient(
+                          colors: [AppColors.primary, AppColors.mint],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        )
+                      : LinearGradient(
+                          colors: [Colors.grey.shade400, Colors.grey.shade300],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                  boxShadow: [
+                    if (isToday)
+                      const BoxShadow(
+                        color: Color(0x33000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
+                      ),
+                  ],
                 ),
-              ),
-              child: Text(
-                "ابدأ المهمة",
-                style: GoogleFonts.ibmPlexSansArabic(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
+                alignment: Alignment.center,
+                child: Text(
+                  isToday ? "ابدأ المهمة" : "غير متاحة الآن",
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
                 ),
               ),
             ),
@@ -354,6 +446,7 @@ class _taskPageState extends State<taskPage> {
       ),
     );
   }
+
 }
 
 /* ======================= BottomNav (same structure) ======================= */
