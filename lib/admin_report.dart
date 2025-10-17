@@ -26,8 +26,8 @@ class _AdminReportPageState extends State<AdminReportPage> {
   final statusMap = {
     'الكل': null,
     'قيد المراجعة': 'pending',
-    'مقبولة': 'approved',
-    'مرفوضة': 'rejected',
+    'تمت المعالجة': 'approved',
+    'البلاغ غير صحيح': 'rejected',
   };
 
   @override
@@ -44,7 +44,7 @@ class _AdminReportPageState extends State<AdminReportPage> {
         data: theme,
         child: Scaffold(
           appBar: AppBar(
-            title: const Text('تقارير الحاويات'),
+            title: const Text('بلاغات الحاويات'),
             centerTitle: true,
             backgroundColor: RColors.primary,
           ),
@@ -237,9 +237,9 @@ class _ReportCardState extends State<_ReportCard> {
       case 'pending':
         return 'قيد المراجعة';
       case 'approved':
-        return 'مقبولة';
+        return 'تمت المعالجة';
       case 'rejected':
-        return 'مرفوضة';
+        return 'البلاغ غير صحيح';
       default:
         return s;
     }

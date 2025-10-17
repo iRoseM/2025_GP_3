@@ -28,8 +28,8 @@ class Facility {
   final String id;
   final double lat;
   final double lng;
-  final String type;      // مثل: RVM أو حاوية ملابس...
-  final String provider;  // ✅ مأخوذ من الداتابيس
+  final String type; // مثل: RVM أو حاوية ملابس...
+  final String provider; // ✅ مأخوذ من الداتابيس
   final String city;
   final String address;
 
@@ -78,8 +78,10 @@ class _mapPageState extends State<mapPage> {
   String _normalizeType(String raw) {
     final t = (raw).trim();
     if (t.contains('ملابس')) return 'حاوية إعادة تدوير الملابس';
-    if (t.contains('RVM') || t.contains('آلة استرجاع')) return 'آلة استرجاع (RVM)';
-    if (t.contains('قوارير') || t.contains('بلاستيك')) return 'حاوية إعادة تدوير القوارير';
+    if (t.contains('RVM') || t.contains('آلة استرجاع'))
+      return 'آلة استرجاع (RVM)';
+    if (t.contains('قوارير') || t.contains('بلاستيك'))
+      return 'حاوية إعادة تدوير القوارير';
     return t.isEmpty ? 'نقطة استدامة' : t;
   }
 
@@ -103,12 +105,20 @@ class _mapPageState extends State<mapPage> {
   LatLngBounds _extendBounds(LatLngBounds? current, LatLng p) {
     if (current == null) return LatLngBounds(southwest: p, northeast: p);
     final sw = LatLng(
-      p.latitude  < current.southwest.latitude  ? p.latitude  : current.southwest.latitude,
-      p.longitude < current.southwest.longitude ? p.longitude : current.southwest.longitude,
+      p.latitude < current.southwest.latitude
+          ? p.latitude
+          : current.southwest.latitude,
+      p.longitude < current.southwest.longitude
+          ? p.longitude
+          : current.southwest.longitude,
     );
     final ne = LatLng(
-      p.latitude  > current.northeast.latitude  ? p.latitude  : current.northeast.latitude,
-      p.longitude > current.northeast.longitude ? p.longitude : current.northeast.longitude,
+      p.latitude > current.northeast.latitude
+          ? p.latitude
+          : current.northeast.latitude,
+      p.longitude > current.northeast.longitude
+          ? p.longitude
+          : current.northeast.longitude,
     );
     return LatLngBounds(southwest: sw, northeast: ne);
   }
@@ -136,10 +146,10 @@ class _mapPageState extends State<mapPage> {
         final valid = lat > 20 && lat < 30 && lng > 40 && lng < 55;
         if (!valid) continue;
 
-        final String type     = _normalizeType((m['type'] ?? '').toString());
+        final String type = _normalizeType((m['type'] ?? '').toString());
         final String provider = (m['provider'] ?? '').toString(); // ✅
-        final String city     = (m['city'] ?? '').toString();
-        final String address  = (m['address'] ?? '').toString();
+        final String city = (m['city'] ?? '').toString();
+        final String address = (m['address'] ?? '').toString();
 
         final pos = LatLng(lat, lng);
         final markerId = MarkerId(d.id);
@@ -165,9 +175,13 @@ class _mapPageState extends State<mapPage> {
               title: type,
               snippet: address.isNotEmpty
                   ? address
-                  : [if (provider.isNotEmpty) provider, if (city.isNotEmpty) city].join(' • '),
+                  : [
+                      if (provider.isNotEmpty) provider,
+                      if (city.isNotEmpty) city,
+                    ].join(' • '),
             ),
-            onTap: () => _showFacilitySheet(facility), // ✅ فتح التفاصيل + زر إبلاغ
+            onTap: () =>
+                _showFacilitySheet(facility), // ✅ فتح التفاصيل + زر إبلاغ
           ),
         );
 
@@ -227,13 +241,18 @@ class _mapPageState extends State<mapPage> {
       final controller = await _mapCtrl.future;
       await controller.animateCamera(
         CameraUpdate.newCameraPosition(
-          CameraPosition(target: LatLng(pos.latitude, pos.longitude), zoom: 15.5),
+          CameraPosition(
+            target: LatLng(pos.latitude, pos.longitude),
+            zoom: 15.5,
+          ),
         ),
       );
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
+          const SnackBar(
+            content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS'),
+          ),
         );
       }
     } finally {
@@ -242,7 +261,9 @@ class _mapPageState extends State<mapPage> {
   }
 
   void _onSearchSubmitted(String query) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بحث: $query')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('بحث: $query')));
   }
 
   // ===== Bottom sheet لتفاصيل الفاسيليتي =====
@@ -260,32 +281,54 @@ class _mapPageState extends State<mapPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(f.type, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 6),
-              Row(children: [
-                const Icon(Icons.factory_outlined, size: 18, color: AppColors.dark),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    f.provider.isEmpty ? 'مزود غير محدد' : f.provider, // ✅ إظهار provider
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
+              Text(
+                f.type,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
                 ),
-              ]),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.factory_outlined,
+                    size: 18,
+                    color: AppColors.dark,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      f.provider.isEmpty
+                          ? 'مزود غير محدد'
+                          : f.provider, // ✅ إظهار provider
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 6),
               if (f.address.isNotEmpty || f.city.isNotEmpty)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.place_outlined, size: 18, color: AppColors.dark),
+                    const Icon(
+                      Icons.place_outlined,
+                      size: 18,
+                      color: AppColors.dark,
+                    ),
                     const SizedBox(width: 6),
-                    Expanded(child: Text(f.address.isNotEmpty ? f.address : f.city)),
+                    Expanded(
+                      child: Text(f.address.isNotEmpty ? f.address : f.city),
+                    ),
                   ],
                 ),
               const SizedBox(height: 12),
               FilledButton.icon(
                 icon: const Icon(Icons.report_gmailerrorred_outlined),
-                style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                ),
                 onPressed: () {
                   Navigator.pop(context);
                   _openReportDialog(f); // ✅ إنشاء بلاغ
@@ -322,7 +365,9 @@ class _mapPageState extends State<mapPage> {
             children: [
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'نوع البلاغ'),
-                items: types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                items: types
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
                 onChanged: (v) => selectedType = v,
               ),
               const SizedBox(height: 8),
@@ -337,7 +382,10 @@ class _mapPageState extends State<mapPage> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إلغاء'),
+            ),
             FilledButton(
               onPressed: () async {
                 if (selectedType == null || selectedType!.trim().isEmpty) {
@@ -369,18 +417,38 @@ class _mapPageState extends State<mapPage> {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
       await FirebaseFirestore.instance.collection('facilityReports').add({
-        'decision': 'pending',     // في انتظار مراجعة الأدمن
+        'decision': 'pending', // في انتظار مراجعة الأدمن
         'description': description,
         'type': type,
         'facilityID': facility.id,
         'reportedBy': uid,
-        'managedBy': '',           // يملؤها الأدمن لاحقًا
+        'managedBy': '', // يملؤها الأدمن لاحقًا
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم إرسال البلاغ بنجاح')),
+
+      // ✅ بعد الإرسال بنجاح، نعرض بوب-أب شكر
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          title: const Text('شكرًا لك 💚', textAlign: TextAlign.center),
+          content: const Text(
+            'تم استلام بلاغك بنجاح وسنقوم بمراجعته قريبًا\n\nنقدّر مساهمتك في تحسين نقاط الاستدامة',
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('تم'),
+            ),
+          ],
+        ),
       );
     } catch (e) {
       debugPrint('❌ report error: $e');
@@ -396,8 +464,12 @@ class _mapPageState extends State<mapPage> {
     final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
     final themeWithIbmPlex = Theme.of(context).copyWith(
-      textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(Theme.of(context).textTheme),
-      primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(Theme.of(context).primaryTextTheme),
+      textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
+        Theme.of(context).textTheme,
+      ),
+      primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
+        Theme.of(context).primaryTextTheme,
+      ),
     );
 
     return Directionality(
@@ -410,7 +482,10 @@ class _mapPageState extends State<mapPage> {
             children: [
               GoogleMap(
                 mapType: MapType.normal,
-                initialCameraPosition: const CameraPosition(target: _riyadh, zoom: _initZoom),
+                initialCameraPosition: const CameraPosition(
+                  target: _riyadh,
+                  zoom: _initZoom,
+                ),
                 onMapCreated: (c) {
                   if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
                 },
@@ -468,12 +543,19 @@ class _mapPageState extends State<mapPage> {
                 left: 12,
                 bottom: isKeyboardOpen ? 12 : 28,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: const [
-                      BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6)),
+                      BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 12,
+                        offset: Offset(0, 6),
+                      ),
                     ],
                   ),
                   child: Row(
@@ -481,7 +563,10 @@ class _mapPageState extends State<mapPage> {
                     children: const [
                       Icon(Icons.place, size: 18, color: Colors.purple),
                       SizedBox(width: 6),
-                      Text('حاوية الملابس / RVM', style: TextStyle(fontWeight: FontWeight.w700)),
+                      Text(
+                        'حاوية الملابس / RVM',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ],
                   ),
                 ),
@@ -510,7 +595,9 @@ class _mapPageState extends State<mapPage> {
                         break;
                       case 4:
                         Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const communityPage()),
+                          MaterialPageRoute(
+                            builder: (_) => const communityPage(),
+                          ),
                         );
                         break;
                       default:
@@ -548,8 +635,10 @@ class _mapPageState extends State<mapPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('فلاتر النقاط',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  const Text(
+                    'فلاتر النقاط',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 12),
                   FilterChip(
                     label: const Text('حاوية إعادة تدوير الملابس'),
@@ -574,13 +663,17 @@ class _mapPageState extends State<mapPage> {
                         setState(() {
                           _markers
                             ..clear()
-                            ..addAll(_allMarkers.where((m) {
-                              final t = m.infoWindow.title ?? '';
-                              return allowed.isEmpty || allowed.contains(t);
-                            }));
+                            ..addAll(
+                              _allMarkers.where((m) {
+                                final t = m.infoWindow.title ?? '';
+                                return allowed.isEmpty || allowed.contains(t);
+                              }),
+                            );
                         });
                       },
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                      ),
                       child: const Text('تطبيق'),
                     ),
                   ),
@@ -608,7 +701,11 @@ class _Header extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(color: Color(0x14000000), blurRadius: 16, offset: Offset(0, 8)),
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
         ],
       ),
       child: Row(
@@ -619,7 +716,10 @@ class _Header extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
-                  colors: [AppColors.primary.withOpacity(.2), AppColors.sea.withOpacity(.1)],
+                  colors: [
+                    AppColors.primary.withOpacity(.2),
+                    AppColors.sea.withOpacity(.1),
+                  ],
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -632,13 +732,20 @@ class _Header extends StatelessWidget {
               child: const CircleAvatar(
                 radius: 18,
                 backgroundColor: Colors.transparent,
-                child: Icon(Icons.person_outline, color: AppColors.primary, size: 22),
+                child: Icon(
+                  Icons.person_outline,
+                  color: AppColors.primary,
+                  size: 22,
+                ),
               ),
             ),
           ),
           const SizedBox(width: 8),
           const Expanded(
-            child: Text('مرحبًا، Nameer', style: TextStyle(fontWeight: FontWeight.w800)),
+            child: Text(
+              'مرحبًا، Nameer',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -663,11 +770,23 @@ class _Header extends StatelessWidget {
               children: const [
                 Icon(Icons.stars_rounded, color: Colors.white, size: 18),
                 SizedBox(width: 6),
-                Text('1500',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14)),
+                Text(
+                  '1500',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
                 SizedBox(width: 4),
-                Text('نقطة',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+                Text(
+                  'نقطة',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ),
           ),
@@ -705,7 +824,10 @@ class _SearchBar extends StatelessWidget {
                 hintText: 'ابحث عن أقرب حاوية/نقطة تدوير...',
                 prefixIcon: Icon(Icons.search),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -720,7 +842,11 @@ class _SearchBar extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
               boxShadow: const [
-                BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6)),
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 6),
+                ),
               ],
             ),
             child: const Icon(Icons.tune, color: AppColors.dark),
@@ -757,11 +883,19 @@ class _RoundBtn extends StatelessWidget {
           decoration: const BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 6))],
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
+            ],
           ),
           child: isLoading
               ? const Padding(
-                  padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2))
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : Icon(icon, color: AppColors.dark),
         ),
       ),
@@ -799,11 +933,32 @@ class BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const items = [
-      NavItem(outlined: Icons.home_outlined, filled: Icons.home, label: 'الرئيسية'),
-      NavItem(outlined: Icons.fact_check_outlined, filled: Icons.fact_check, label: 'مهامي'),
-      NavItem(outlined: Icons.flag_outlined, filled: Icons.flag, label: 'المراحل', isCenter: true),
-      NavItem(outlined: Icons.map_outlined, filled: Icons.map, label: 'الخريطة'),
-      NavItem(outlined: Icons.group_outlined, filled: Icons.group, label: 'الأصدقاء'),
+      NavItem(
+        outlined: Icons.home_outlined,
+        filled: Icons.home,
+        label: 'الرئيسية',
+      ),
+      NavItem(
+        outlined: Icons.fact_check_outlined,
+        filled: Icons.fact_check,
+        label: 'مهامي',
+      ),
+      NavItem(
+        outlined: Icons.flag_outlined,
+        filled: Icons.flag,
+        label: 'المراحل',
+        isCenter: true,
+      ),
+      NavItem(
+        outlined: Icons.map_outlined,
+        filled: Icons.map,
+        label: 'الخريطة',
+      ),
+      NavItem(
+        outlined: Icons.group_outlined,
+        filled: Icons.group,
+        label: 'الأصدقاء',
+      ),
     ];
 
     return Padding(
@@ -831,7 +986,11 @@ class BottomNav extends StatelessWidget {
                           color: AppColors.primary,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.flag_outlined, color: Colors.white, size: 28),
+                        child: const Icon(
+                          Icons.flag_outlined,
+                          color: Colors.white,
+                          size: 28,
+                        ),
                       ),
                     ),
                   ),
@@ -853,7 +1012,9 @@ class BottomNav extends StatelessWidget {
                         it.label,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w500,
                           color: color,
                         ),
                       ),
