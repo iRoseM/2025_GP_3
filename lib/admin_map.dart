@@ -56,11 +56,23 @@ class _AdminMapPageState extends State<AdminMapPage> {
   BitmapDescriptor? _iconFood;
   BitmapDescriptor? _iconDefault;
 
+  // ===== حالات الإظهار للرسالة المؤقّتة =====
+  bool _isLoadingFacilities = false; // تحميل قائمة الحاويات من السحابة
+  bool _didInitialLoad = false;      // هل انتهى التحميل الأولي مرة واحدة؟
+  bool _showEmptyOverlay = false;    // عرض تراكب "لا توجد حاويات" مؤقّتًا
+  Timer? _emptyTimer;                // مؤقّت الإخفاء
+
   @override
   void initState() {
     super.initState();
     _ensureLocationPermission();
     _loadMarkerIcons().then((_) => _loadFacilitiesFromFirestore());
+  }
+
+  @override
+  void dispose() {
+    _emptyTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadMarkerIcons() async {
@@ -158,8 +170,18 @@ class _AdminMapPageState extends State<AdminMapPage> {
     }
   }
 
+  // ===== وميض رسالة "لا توجد حاويات" لمدة 3 ثوانٍ =====
+  void _flashEmptyMsg() {
+    _emptyTimer?.cancel();
+    setState(() => _showEmptyOverlay = true);
+    _emptyTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showEmptyOverlay = false);
+    });
+  }
+
   /// ✅ تحميل كل الفاسيلتيز من Firestore (بدون فلترة حالة)
   Future<void> _loadFacilitiesFromFirestore() async {
+    setState(() => _isLoadingFacilities = true);
     try {
       final qs = await FirebaseFirestore.instance.collection('facilities').get();
 
@@ -195,21 +217,18 @@ class _AdminMapPageState extends State<AdminMapPage> {
         final snippet = snippetParts.join(' • ');
 
         final markerId = MarkerId(d.id);
-final marker = Marker(
-  markerId: markerId,
-  position: pos,
-  // (اختياري) ممكن تخليه بدون نص إذا تبي تعتمد فقط على الورقة:
-  // infoWindow: const InfoWindow.noText,
-  infoWindow: InfoWindow(
-    title: title,
-    snippet: snippet,
-    onTap: () => _showMarkerSheet(markerId, pos), // 👈 فتح الورقة من فقاعة المعلومات
-  ),
-  icon: _iconForType(type),
-  consumeTapEvents: true, // 👈 مهم
-  onTap: () => _showMarkerSheet(markerId, pos),  // 👈 فتح الورقة مباشرة عند ضغط البن
-);
-
+        final marker = Marker(
+          markerId: markerId,
+          position: pos,
+          infoWindow: InfoWindow(
+            title: title,
+            snippet: snippet,
+            onTap: () => _showMarkerSheet(markerId, pos),
+          ),
+          icon: _iconForType(type),
+          consumeTapEvents: true,
+          onTap: () => _showMarkerSheet(markerId, pos),
+        );
 
         markers.add(marker);
         bounds = _extendBounds(bounds, pos);
@@ -240,6 +259,18 @@ final marker = Marker(
           const SnackBar(content: Text('تعذر تحميل المواقع من السحابة')),
         );
       }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingFacilities = false;
+          if (!_didInitialLoad) _didInitialLoad = true;
+
+          // بعد اكتمال التحميل وتطبيق الفلاتر: إن كانت فارغة أومِضي الرسالة
+          if (_markers.isEmpty && !_isSelecting) {
+            _flashEmptyMsg();
+          }
+        });
+      }
     }
   }
 
@@ -258,6 +289,11 @@ final marker = Marker(
           }),
         );
     });
+
+    // بعد الفلترة: إن صارت صفر ماركرات (وخلاص خلّصنا التحميل) أومضي الرسالة
+    if (_didInitialLoad && !_isLoadingFacilities && _markers.isEmpty && !_isSelecting) {
+      _flashEmptyMsg();
+    }
   }
 
   Future<void> _ensureLocationPermission() async {
@@ -329,6 +365,9 @@ final marker = Marker(
                 mapToolbarEnabled: false,
                 onTap: _onMapTap,
               ),
+
+              // تراكب "لا توجد حاويات" المؤقّت
+              _buildEmptyStateOverlay(),
 
               // شريط البحث + (بدون سويتش الحالة)
               SafeArea(
@@ -818,18 +857,18 @@ final marker = Marker(
 
                             _markers.removeWhere((m) => m.markerId == markerId);
                             final normalized = _normalizeType(selectedType);
-final marker = Marker(
-  markerId: markerId,
-  position: position,
-  infoWindow: InfoWindow(
-    title: nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : normalized,
-    snippet: '${normalized}${providerCtrl.text.trim().isNotEmpty ? ' • ${providerCtrl.text.trim()}' : ''}',
-    onTap: () => _showMarkerSheet(markerId, position), // 👈
-  ),
-  icon: _iconForType(normalized),
-  consumeTapEvents: true, // 👈
-  onTap: () => _showMarkerSheet(markerId, position),   // 👈
-);
+                            final marker = Marker(
+                              markerId: markerId,
+                              position: position,
+                              infoWindow: InfoWindow(
+                                title: nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : normalized,
+                                snippet: '${normalized}${providerCtrl.text.trim().isNotEmpty ? ' • ${providerCtrl.text.trim()}' : ''}',
+                                onTap: () => _showMarkerSheet(markerId, position),
+                              ),
+                              icon: _iconForType(normalized),
+                              consumeTapEvents: true,
+                              onTap: () => _showMarkerSheet(markerId, position),
+                            );
 
                             _allMarkers.removeWhere((m) => m.markerId == markerId);
                             _allMarkers.add(marker);
@@ -946,6 +985,40 @@ final marker = Marker(
     return const SizedBox.shrink();
   }
 
+  /// يُظهر تراكبًا لطيفًا لرسالة "لا توجد حاويات" بشكل مؤقّت
+  Widget _buildEmptyStateOverlay() {
+    // لا نعرضه أثناء اختيار موقع ولا أثناء التحميل، ونظهره فقط عندما يفعّل الفلاغ
+    if (!_showEmptyOverlay || _isSelecting || _isLoadingFacilities) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned.fill(
+      child: IgnorePointer( // لا يمنع تفاعل المستخدم مع الخريطة
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x22000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
+            child: const Text(
+              'لا توجد حاويات',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// ✅ إضافة ماركر + حفظ المستند
   Future<void> _addMarkerToMapAndSave(
     LatLng pos,
@@ -973,19 +1046,18 @@ final marker = Marker(
         _statusById[docRef.id] = statusStr;
 
         final markerId = MarkerId(docRef.id);
-final marker = Marker(
-  markerId: markerId,
-  position: pos,
-  infoWindow: InfoWindow(
-    title: name.trim().isNotEmpty ? name.trim() : normalizedType,
-    snippet: '$normalizedType${provider.trim().isNotEmpty ? ' • ${provider.trim()}' : ''}',
-    onTap: () => _showMarkerSheet(markerId, pos), // 👈
-  ),
-  icon: _iconForType(normalizedType),
-  consumeTapEvents: true, // 👈
-  onTap: () => _showMarkerSheet(markerId, pos),   // 👈
-);
-
+        final marker = Marker(
+          markerId: markerId,
+          position: pos,
+          infoWindow: InfoWindow(
+            title: name.trim().isNotEmpty ? name.trim() : normalizedType,
+            snippet: '$normalizedType${provider.trim().isNotEmpty ? ' • ${provider.trim()}' : ''}',
+            onTap: () => _showMarkerSheet(markerId, pos),
+          ),
+          icon: _iconForType(normalizedType),
+          consumeTapEvents: true,
+          onTap: () => _showMarkerSheet(markerId, pos),
+        );
 
         _allMarkers.add(marker);
       });
