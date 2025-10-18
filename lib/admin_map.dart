@@ -282,15 +282,12 @@ class _AdminMapPageState extends State<AdminMapPage> {
         ..addAll(
           _allMarkers.where((m) {
             final typeInSnippet = (m.infoWindow.snippet ?? '');
-            // إذا ما في فلاتر، الكل يظهر
             if (_allowedTypes.isEmpty) return true;
-            // نتحقق هل النوع الموجود ضمن الشرح يطابق أحد الأنواع المسموحة
             return _allowedTypes.any((t) => typeInSnippet.contains(t) || (m.infoWindow.title ?? '').contains(t));
           }),
         );
     });
 
-    // بعد الفلترة: إن صارت صفر ماركرات (وخلاص خلّصنا التحميل) أومضي الرسالة
     if (_didInitialLoad && !_isLoadingFacilities && _markers.isEmpty && !_isSelecting) {
       _flashEmptyMsg();
     }
@@ -369,7 +366,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
               // تراكب "لا توجد حاويات" المؤقّت
               _buildEmptyStateOverlay(),
 
-              // شريط البحث + (بدون سويتش الحالة)
+              // شريط البحث
               SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -584,8 +581,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   ),
 
                   const SizedBox(height: 6),
+                  // لاحظ: هذا السويتش في "إضافة" كان يعمل أساسًا — تركته كما هو
                   SwitchListTile(
-                    title: const Text('الحالة: نشطة'),
+                    title: Text(isActive ? 'الحالة: نشطة' : 'الحالة: متوقفة'),
                     value: isActive,
                     onChanged: (v) => setSt(() => isActive = v),
                     contentPadding: EdgeInsets.zero,
@@ -748,6 +746,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
     );
   }
 
+  /// 🔧 تعديل الماركر — (تم إصلاح السويتش ليعمل فعليًا بتحديث واجهة المستخدم)
   void _editMarker(MarkerId markerId, String oldNameOrType, String oldType, LatLng position) {
     showModalBottomSheet(
       context: context,
@@ -766,132 +765,153 @@ class _AdminMapPageState extends State<AdminMapPage> {
             final TextEditingController providerCtrl = TextEditingController(text: (data['provider'] ?? '').toString());
             bool isActive = ((data['status'] ?? 'نشط') == 'نشط');
 
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 16, right: 16, top: 12, bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Center(child: Text('تعديل بيانات الموقع', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-                  const SizedBox(height: 20),
-
-                  const Text('اسم الموقع', style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: InputDecoration(
-                      filled: true, fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.black12)),
-                    ),
+            // 👇 StatefulBuilder يخلّي السويتش يغيّر الحالة في الواجهة فورًا
+            return StatefulBuilder(
+              builder: (context, setSt) {
+                return Padding(
+                  padding: EdgeInsets.only(
+                    left: 16, right: 16, top: 12, bottom: MediaQuery.of(context).viewInsets.bottom + 20,
                   ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Center(child: Text('تعديل بيانات الموقع', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                      const SizedBox(height: 20),
 
-                  const SizedBox(height: 14),
-                  const Text('نوع الحاوية', style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
-                    value: selectedType,
-                    decoration: InputDecoration(
-                      filled: true, fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.black12)),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'حاوية إعادة تدوير القوارير', child: Text('حاوية إعادة تدوير القوارير')),
-                      DropdownMenuItem(value: 'حاوية إعادة تدوير الملابس', child: Text('حاوية إعادة تدوير الملابس')),
-                      DropdownMenuItem(value: 'حاوية إعادة تدوير بقايا الطعام', child: Text('حاوية إعادة تدوير بقايا الطعام')),
-                      DropdownMenuItem(value: 'حاوية إعادة تدوير الأوراق', child: Text('حاوية إعادة تدوير الأوراق')),
-                      DropdownMenuItem(value: 'حاوية إعادة تدوير متعددة المواد', child: Text('حاوية إعادة تدوير متعددة المواد')),
-                      DropdownMenuItem(value: 'آلة استرجاع (RVM)', child: Text('آلة استرجاع (RVM)')),
+                      const Text('اسم الموقع', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: nameCtrl,
+                        decoration: InputDecoration(
+                          filled: true, fillColor: Colors.white,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.black12)),
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+                      const Text('نوع الحاوية', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        value: selectedType,
+                        decoration: InputDecoration(
+                          filled: true, fillColor: Colors.white,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.black12)),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'حاوية إعادة تدوير القوارير', child: Text('حاوية إعادة تدوير القوارير')),
+                          DropdownMenuItem(value: 'حاوية إعادة تدوير الملابس', child: Text('حاوية إعادة تدوير الملابس')),
+                          DropdownMenuItem(value: 'حاوية إعادة تدوير بقايا الطعام', child: Text('حاوية إعادة تدوير بقايا الطعام')),
+                          DropdownMenuItem(value: 'حاوية إعادة تدوير الأوراق', child: Text('حاوية إعادة تدوير الأوراق')),
+                          DropdownMenuItem(value: 'حاوية إعادة تدوير متعددة المواد', child: Text('حاوية إعادة تدوير متعددة المواد')),
+                          DropdownMenuItem(value: 'آلة استرجاع (RVM)', child: Text('آلة استرجاع (RVM)')),
+                        ],
+                        onChanged: (val) => setSt(() => selectedType = val ?? selectedType),
+                      ),
+
+                      const SizedBox(height: 14),
+                      const Text('مقدم الخدمة', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: providerCtrl,
+                        decoration: InputDecoration(
+                          filled: true, fillColor: Colors.white,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.black12)),
+                        ),
+                      ),
+
+                      const SizedBox(height: 6),
+                      // ✅ هنا الإصلاح: العنوان والدالة يتحدّثان ديناميكيًا
+                      SwitchListTile(
+                        title: Text(isActive ? 'الحالة: نشطة' : 'الحالة: متوقفة'),
+                        value: isActive,
+                        onChanged: (v) => setSt(() => isActive = v),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+
+                      const SizedBox(height: 20),
+SizedBox(
+  width: double.infinity,
+  child: FilledButton(
+    style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+    onPressed: () async {
+      try {
+        final normalized = _normalizeType(selectedType);
+        final inputName = nameCtrl.text.trim();
+        final currentName = (data['name'] ?? '').toString().trim();
+        final finalName = inputName.isNotEmpty ? inputName : currentName; // احتفظ بالقديم إذا فاضي
+
+        final String statusStr = isActive ? 'نشط' : 'متوقف';
+        final String providerFinal = providerCtrl.text.trim().isEmpty
+            ? 'غير محدد'
+            : providerCtrl.text.trim();
+
+        // نبني الـ payload بدون name إذا كان فاضي حتى لا نمسح القديم
+        final Map<String, dynamic> payload = {
+          'type': normalized,
+          'lat': position.latitude,
+          'lng': position.longitude,
+          'provider': providerFinal,
+          'status': statusStr,
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+        if (finalName.isNotEmpty) {
+          payload['name'] = finalName;
+        }
+
+        await FirebaseFirestore.instance
+            .collection('facilities')
+            .doc(markerId.value)
+            .set(payload, SetOptions(merge: true));
+
+        // تحديث الماركر محليًا
+        setState(() {
+          _statusById[markerId.value] = statusStr;
+          _markers.removeWhere((m) => m.markerId == markerId);
+
+          final titleForMarker = (finalName.isNotEmpty ? finalName : normalized);
+          final marker = Marker(
+            markerId: markerId,
+            position: position,
+            infoWindow: InfoWindow(
+              title: titleForMarker,
+              snippet:
+                  '$normalized${providerFinal.isNotEmpty ? ' • $providerFinal' : ''}',
+              onTap: () => _showMarkerSheet(markerId, position),
+            ),
+            icon: _iconForType(normalized),
+            consumeTapEvents: true,
+            onTap: () => _showMarkerSheet(markerId, position),
+          );
+
+          _allMarkers.removeWhere((m) => m.markerId == markerId);
+          _allMarkers.add(marker);
+        });
+
+        _applyCurrentFilters();
+
+        if (mounted) Navigator.pop(context);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم حفظ التعديلات ✅')),
+          );
+        }
+      } catch (e) {
+        debugPrint('❌ تحديث Firestore فشل: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('فشل تحديث السحابة')),
+          );
+        }
+      }
+    },
+    child: const Text('حفظ التعديلات'),
+  ),
+),
+
                     ],
-                    onChanged: (val) => selectedType = val ?? selectedType,
                   ),
-
-                  const SizedBox(height: 14),
-                  const Text('مقدم الخدمة', style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 6),
-                  TextField(
-                    controller: providerCtrl,
-                    decoration: InputDecoration(
-                      filled: true, fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.black12)),
-                    ),
-                  ),
-
-                  const SizedBox(height: 6),
-                  SwitchListTile(
-                    title: const Text('الحالة: نشطة'),
-                    value: isActive,
-                    onChanged: (v) => isActive = v,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-                      onPressed: () async {
-                        if (nameCtrl.text.trim().isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى إدخال اسم الموقع')));
-                          return;
-                        }
-
-                        try {
-                          final statusStr = isActive ? 'نشط' : 'متوقف';
-                          await FirebaseFirestore.instance
-                              .collection('facilities')
-                              .doc(markerId.value)
-                              .set({
-                                'name': nameCtrl.text.trim(),
-                                'type': _normalizeType(selectedType),
-                                'lat': position.latitude,
-                                'lng': position.longitude,
-                                'provider': providerCtrl.text.trim().isEmpty ? 'غير محدد' : providerCtrl.text.trim(),
-                                'status': statusStr,
-                                'updatedAt': FieldValue.serverTimestamp(),
-                              }, SetOptions(merge: true));
-
-                          // تحديث الخريطة + حالة الماركر
-                          setState(() {
-                            _statusById[markerId.value] = statusStr;
-
-                            _markers.removeWhere((m) => m.markerId == markerId);
-                            final normalized = _normalizeType(selectedType);
-                            final marker = Marker(
-                              markerId: markerId,
-                              position: position,
-                              infoWindow: InfoWindow(
-                                title: nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : normalized,
-                                snippet: '${normalized}${providerCtrl.text.trim().isNotEmpty ? ' • ${providerCtrl.text.trim()}' : ''}',
-                                onTap: () => _showMarkerSheet(markerId, position),
-                              ),
-                              icon: _iconForType(normalized),
-                              consumeTapEvents: true,
-                              onTap: () => _showMarkerSheet(markerId, position),
-                            );
-
-                            _allMarkers.removeWhere((m) => m.markerId == markerId);
-                            _allMarkers.add(marker);
-                          });
-
-                          _applyCurrentFilters();
-
-                          if (mounted) Navigator.pop(context);
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث الموقع بنجاح ✅')));
-                          }
-                        } catch (e) {
-                          debugPrint('❌ تحديث Firestore فشل: $e');
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل تحديث السحابة')));
-                          }
-                        }
-                      },
-                      child: const Text('حفظ التعديلات'),
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             );
           },
         );
@@ -987,13 +1007,12 @@ class _AdminMapPageState extends State<AdminMapPage> {
 
   /// يُظهر تراكبًا لطيفًا لرسالة "لا توجد حاويات" بشكل مؤقّت
   Widget _buildEmptyStateOverlay() {
-    // لا نعرضه أثناء اختيار موقع ولا أثناء التحميل، ونظهره فقط عندما يفعّل الفلاغ
     if (!_showEmptyOverlay || _isSelecting || _isLoadingFacilities) {
       return const SizedBox.shrink();
     }
 
     return Positioned.fill(
-      child: IgnorePointer( // لا يمنع تفاعل المستخدم مع الخريطة
+      child: IgnorePointer(
         child: Center(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
