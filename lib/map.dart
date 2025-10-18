@@ -16,6 +16,7 @@ import 'home.dart';
 import 'task.dart';
 import 'community.dart';
 import 'levels.dart';
+import 'profile.dart';
 
 /// ================== ألوان الواجهة ==================
 class AppColors {
@@ -32,11 +33,11 @@ class Facility {
   final String id;
   final double lat;
   final double lng;
-  final String type;     // مثل: RVM أو حاوية ملابس...
+  final String type; // مثل: RVM أو حاوية ملابس...
   final String provider; // من الداتابيس
   final String city;
   final String address;
-  final String status;   // 'نشط' أو 'متوقف'
+  final String status; // 'نشط' أو 'متوقف'
 
   Facility({
     required this.id,
@@ -82,9 +83,9 @@ class _mapPageState extends State<mapPage> {
 
   // === حالة التحميل/الرسالة المؤقتة ===
   bool _isLoadingFacilities = false; // تحميل بيانات الحاويات
-  bool _didInitialLoad = false;      // تمّ أول تحميل؟
-  bool _showEmptyOverlay = false;    // إظهار "لا توجد حاويات" مؤقتًا
-  Timer? _emptyTimer;                // مؤقّت الإخفاء
+  bool _didInitialLoad = false; // تمّ أول تحميل؟
+  bool _showEmptyOverlay = false; // إظهار "لا توجد حاويات" مؤقتًا
+  Timer? _emptyTimer; // مؤقّت الإخفاء
 
   @override
   void initState() {
@@ -113,13 +114,18 @@ class _mapPageState extends State<mapPage> {
   /// تحميل صور الأيقونات كـ BitmapDescriptor حادّ (يدعم كثافات الشاشة)
   Future<void> _loadMarkerIcons() async {
     _iconClothes = await _bitmapFromAsset('assets/img/clothes.png', width: 200);
-    _iconPapers  = await _bitmapFromAsset('assets/img/papers.png',  width: 200);
-    _iconRvm     = await _bitmapFromAsset('assets/img/rvm.png',     width: 200);
-    _iconFood    = await _bitmapFromAsset('assets/img/food.png',    width: 200);
-    _iconDefault = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+    _iconPapers = await _bitmapFromAsset('assets/img/papers.png', width: 200);
+    _iconRvm = await _bitmapFromAsset('assets/img/rvm.png', width: 200);
+    _iconFood = await _bitmapFromAsset('assets/img/food.png', width: 200);
+    _iconDefault = BitmapDescriptor.defaultMarkerWithHue(
+      BitmapDescriptor.hueRed,
+    );
   }
 
-  Future<BitmapDescriptor> _bitmapFromAsset(String path, {int width = 112}) async {
+  Future<BitmapDescriptor> _bitmapFromAsset(
+    String path, {
+    int width = 112,
+  }) async {
     final data = await rootBundle.load(path);
     final codec = await ui.instantiateImageCodec(
       data.buffer.asUint8List(),
@@ -136,16 +142,38 @@ class _mapPageState extends State<mapPage> {
   String _normalizeType(String raw) {
     final t = raw.trim();
     final lower = t;
-    final isClothes = lower.contains('ملابس') || lower.contains('كسوة') || lower.contains('clothes');
-    final isRvm = lower.contains('rvm') || lower.contains('آلة') || lower.contains('استرجاع') || lower.contains('reverse vending');
-    final isPapers = lower.contains('ورق') || lower.contains('أوراق') || lower.contains('كتب') || lower.contains('paper') || lower.contains('books');
-    final isFood = lower.contains('أكل') || lower.contains('طعام') || lower.contains('عضوي') || lower.contains('بقايا') || lower.contains('food') || lower.contains('organic');
+    final isClothes =
+        lower.contains('ملابس') ||
+        lower.contains('كسوة') ||
+        lower.contains('clothes');
+    final isRvm =
+        lower.contains('rvm') ||
+        lower.contains('آلة') ||
+        lower.contains('استرجاع') ||
+        lower.contains('reverse vending');
+    final isPapers =
+        lower.contains('ورق') ||
+        lower.contains('أوراق') ||
+        lower.contains('كتب') ||
+        lower.contains('paper') ||
+        lower.contains('books');
+    final isFood =
+        lower.contains('أكل') ||
+        lower.contains('طعام') ||
+        lower.contains('عضوي') ||
+        lower.contains('بقايا') ||
+        lower.contains('food') ||
+        lower.contains('organic');
 
     if (isClothes) return 'حاوية إعادة تدوير الملابس';
     if (isRvm) return 'آلة استرجاع (RVM)';
     if (isPapers) return 'حاوية إعادة تدوير الأوراق';
     if (isFood) return 'حاوية إعادة تدوير بقايا الطعام';
-    if (lower.contains('قوارير') || lower.contains('بلاستيك') || lower.contains('علب') || lower.contains('bottle') || lower.contains('plastic')) {
+    if (lower.contains('قوارير') ||
+        lower.contains('بلاستيك') ||
+        lower.contains('علب') ||
+        lower.contains('bottle') ||
+        lower.contains('plastic')) {
       return 'حاوية إعادة تدوير القوارير';
     }
     return t.isEmpty ? 'نقطة استدامة' : t;
@@ -154,27 +182,40 @@ class _mapPageState extends State<mapPage> {
   BitmapDescriptor _iconForType(String type) {
     switch (type) {
       case 'حاوية إعادة تدوير الملابس':
-        return _iconClothes ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet);
+        return _iconClothes ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet);
       case 'حاوية إعادة تدوير الأوراق':
-        return _iconPapers ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
+        return _iconPapers ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
       case 'آلة استرجاع (RVM)':
-        return _iconRvm ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
+        return _iconRvm ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
       case 'حاوية إعادة تدوير بقايا الطعام':
-        return _iconFood ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+        return _iconFood ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
       default:
-        return _iconDefault ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+        return _iconDefault ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
     }
   }
 
   LatLngBounds _extendBounds(LatLngBounds? current, LatLng p) {
     if (current == null) return LatLngBounds(southwest: p, northeast: p);
     final sw = LatLng(
-      p.latitude < current.southwest.latitude ? p.latitude : current.southwest.latitude,
-      p.longitude < current.southwest.longitude ? p.longitude : current.southwest.longitude,
+      p.latitude < current.southwest.latitude
+          ? p.latitude
+          : current.southwest.latitude,
+      p.longitude < current.southwest.longitude
+          ? p.longitude
+          : current.southwest.longitude,
     );
     final ne = LatLng(
-      p.latitude > current.northeast.latitude ? p.latitude : current.northeast.latitude,
-      p.longitude > current.northeast.longitude ? p.longitude : current.northeast.longitude,
+      p.latitude > current.northeast.latitude
+          ? p.latitude
+          : current.northeast.latitude,
+      p.longitude > current.northeast.longitude
+          ? p.longitude
+          : current.northeast.longitude,
     );
     return LatLngBounds(southwest: sw, northeast: ne);
   }
@@ -302,8 +343,12 @@ class _mapPageState extends State<mapPage> {
 
   // ===== فتح الاتجاهات في Google Maps =====
   Future<void> _openInMaps(Facility f) async {
-    final googleMapsUri = Uri.parse('comgooglemaps://?daddr=${f.lat},${f.lng}&directionsmode=driving');
-    final webUri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}&travelmode=driving');
+    final googleMapsUri = Uri.parse(
+      'comgooglemaps://?daddr=${f.lat},${f.lng}&directionsmode=driving',
+    );
+    final webUri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}&travelmode=driving',
+    );
 
     try {
       if (await canLaunchUrl(googleMapsUri)) {
@@ -338,7 +383,9 @@ class _mapPageState extends State<mapPage> {
 
   Future<void> _centerOnUserAndFilterNearby() async {
     try {
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
       final userLatLng = LatLng(pos.latitude, pos.longitude);
 
       // حرّك الكاميرا
@@ -382,7 +429,9 @@ class _mapPageState extends State<mapPage> {
     if (nearby.isEmpty) {
       // لا توجد نقاط قريبة — نعرض الكل ونبلغ المستخدم
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا توجد نقاط قريبة ضمن النطاق — تم عرض جميع النقاط')),
+        const SnackBar(
+          content: Text('لا توجد نقاط قريبة ضمن النطاق — تم عرض جميع النقاط'),
+        ),
       );
     }
   }
@@ -397,10 +446,7 @@ class _mapPageState extends State<mapPage> {
       final controller = await _mapCtrl.future;
       await controller.animateCamera(
         CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: user,
-            zoom: 15.5,
-          ),
+          CameraPosition(target: user, zoom: 15.5),
         ),
       );
 
@@ -420,7 +466,9 @@ class _mapPageState extends State<mapPage> {
   }
 
   void _onSearchSubmitted(String query) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('بحث: $query')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('بحث: $query')));
   }
 
   // ===== Bottom sheet لتفاصيل الفاسيليتي =====
@@ -445,11 +493,17 @@ class _mapPageState extends State<mapPage> {
                   Expanded(
                     child: Text(
                       f.type,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
                   Chip(
-                    label: Text(isActive ? 'نشطة' : 'متوقفة', style: const TextStyle(color: Colors.white)),
+                    label: Text(
+                      isActive ? 'نشطة' : 'متوقفة',
+                      style: const TextStyle(color: Colors.white),
+                    ),
                     backgroundColor: isActive ? Colors.teal : Colors.redAccent,
                   ),
                 ],
@@ -458,7 +512,11 @@ class _mapPageState extends State<mapPage> {
 
               Row(
                 children: [
-                  const Icon(Icons.factory_outlined, size: 18, color: AppColors.dark),
+                  const Icon(
+                    Icons.factory_outlined,
+                    size: 18,
+                    color: AppColors.dark,
+                  ),
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
@@ -474,9 +532,15 @@ class _mapPageState extends State<mapPage> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.place_outlined, size: 18, color: AppColors.dark),
+                    const Icon(
+                      Icons.place_outlined,
+                      size: 18,
+                      color: AppColors.dark,
+                    ),
                     const SizedBox(width: 6),
-                    Expanded(child: Text(f.address.isNotEmpty ? f.address : f.city)),
+                    Expanded(
+                      child: Text(f.address.isNotEmpty ? f.address : f.city),
+                    ),
                   ],
                 ),
 
@@ -502,7 +566,9 @@ class _mapPageState extends State<mapPage> {
                   Expanded(
                     child: FilledButton.icon(
                       icon: const Icon(Icons.directions_outlined),
-                      style: FilledButton.styleFrom(backgroundColor: Colors.blue),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                      ),
                       onPressed: () {
                         Navigator.pop(context);
                         _openInMaps(f);
@@ -514,7 +580,9 @@ class _mapPageState extends State<mapPage> {
                   Expanded(
                     child: FilledButton.icon(
                       icon: const Icon(Icons.report_gmailerrorred_outlined),
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                      ),
                       onPressed: () {
                         Navigator.pop(context);
                         _openReportDialog(f);
@@ -555,7 +623,9 @@ class _mapPageState extends State<mapPage> {
             children: [
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'نوع البلاغ'),
-                items: types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                items: types
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
                 onChanged: (v) => selectedType = v,
               ),
               const SizedBox(height: 8),
@@ -570,11 +640,16 @@ class _mapPageState extends State<mapPage> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('إلغاء'),
+            ),
             FilledButton(
               onPressed: () async {
                 if (selectedType == null || selectedType!.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اختر نوع البلاغ')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('اختر نوع البلاغ')),
+                  );
                   return;
                 }
                 Navigator.pop(context);
@@ -614,7 +689,9 @@ class _mapPageState extends State<mapPage> {
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           title: const Text('شكرًا لك 💚', textAlign: TextAlign.center),
           content: const Text(
             'تم استلام بلاغك بنجاح وسنقوم بمراجعته قريبًا\n\nنقدّر مساهمتك في تحسين نقاط الاستدامة',
@@ -653,7 +730,11 @@ class _mapPageState extends State<mapPage> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               boxShadow: const [
-                BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 6)),
+                BoxShadow(
+                  color: Color(0x22000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 6),
+                ),
               ],
             ),
             child: const Text(
@@ -672,9 +753,15 @@ class _mapPageState extends State<mapPage> {
     final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
     final themeWithIbmPlex = Theme.of(context).copyWith(
-      textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(Theme.of(context).textTheme),
-      primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(Theme.of(context).primaryTextTheme),
+      textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
+        Theme.of(context).textTheme,
+      ),
+      primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
+        Theme.of(context).primaryTextTheme,
+      ),
     );
+
+    final _authUser = FirebaseAuth.instance.currentUser;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -686,7 +773,10 @@ class _mapPageState extends State<mapPage> {
             children: [
               GoogleMap(
                 mapType: MapType.normal,
-                initialCameraPosition: const CameraPosition(target: _riyadh, zoom: _initZoom),
+                initialCameraPosition: const CameraPosition(
+                  target: _riyadh,
+                  zoom: _initZoom,
+                ),
                 onMapCreated: (c) {
                   if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
                 },
@@ -708,7 +798,96 @@ class _mapPageState extends State<mapPage> {
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                   child: Column(
                     children: [
-                      const _Header(points: 1500),
+                      // ✅ الهيدر الآن من Firestore بدل القيم الثابتة
+                      (_authUser == null)
+                          ? const SizedBox.shrink()
+                          : StreamBuilder<
+                              DocumentSnapshot<Map<String, dynamic>>
+                            >(
+                              stream: FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(_authUser.uid)
+                                  .snapshots(),
+                              builder: (context, snap) {
+                                final isLoading =
+                                    snap.connectionState ==
+                                    ConnectionState.waiting;
+                                final data = snap.data?.data() ?? {};
+
+                                final username = (data['username'] ?? 'مستخدم')
+                                    .toString();
+                                final points = (data['points'] is int)
+                                    ? data['points'] as int
+                                    : int.tryParse('${data['points'] ?? 0}') ??
+                                          0;
+
+                                final int? pfpIndex = (data['pfpIndex'] is int)
+                                    ? data['pfpIndex'] as int
+                                    : int.tryParse('${data['pfpIndex'] ?? ''}');
+                                final String? avatarPath =
+                                    (pfpIndex != null &&
+                                        pfpIndex >= 0 &&
+                                        pfpIndex < 8)
+                                    ? 'assets/pfp/pfp${pfpIndex + 1}.png'
+                                    : null;
+
+                                if (isLoading) {
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Color(0x14000000),
+                                          blurRadius: 16,
+                                          offset: Offset(0, 8),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const CircleAvatar(
+                                          radius: 18,
+                                          backgroundColor: Color(0x11009688),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Container(
+                                            height: 14,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0x11000000),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          width: 98,
+                                          height: 30,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0x11000000),
+                                            borderRadius: BorderRadius.circular(
+                                              100,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
+
+                                return _HeaderUser(
+                                  name: username,
+                                  points: points,
+                                  avatarPath: avatarPath,
+                                );
+                              },
+                            ),
                       const SizedBox(height: 10),
                       _SearchBar(
                         controller: _searchCtrl,
@@ -747,23 +926,36 @@ class _mapPageState extends State<mapPage> {
                 left: 12,
                 bottom: isKeyboardOpen ? 12 : 28,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: const [
-                      BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6)),
+                      BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 12,
+                        offset: Offset(0, 6),
+                      ),
                     ],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _LegendIcon(path: 'assets/img/clothes.png', label: 'ملابس'),
-                      const SizedBox(width: 10),
-                      _LegendIcon(path: 'assets/img/papers.png', label: 'أوراق'),
-                      const SizedBox(width: 10),
+                    children: const [
+                      _LegendIcon(
+                        path: 'assets/img/clothes.png',
+                        label: 'ملابس',
+                      ),
+                      SizedBox(width: 10),
+                      _LegendIcon(
+                        path: 'assets/img/papers.png',
+                        label: 'أوراق',
+                      ),
+                      SizedBox(width: 10),
                       _LegendIcon(path: 'assets/img/rvm.png', label: 'RVM'),
-                      const SizedBox(width: 10),
+                      SizedBox(width: 10),
                       _LegendIcon(path: 'assets/img/food.png', label: 'أكل'),
                     ],
                   ),
@@ -793,7 +985,9 @@ class _mapPageState extends State<mapPage> {
                         break;
                       case 4:
                         Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const communityPage()),
+                          MaterialPageRoute(
+                            builder: (_) => const communityPage(),
+                          ),
                         );
                         break;
                       default:
@@ -833,15 +1027,34 @@ class _mapPageState extends State<mapPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('فلاتر النقاط', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  const Text(
+                    'فلاتر النقاط',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 12),
-                  FilterChip(label: const Text('حاوية إعادة تدوير الملابس'), selected: fClothes, onSelected: (v) => setSt(() => fClothes = v)),
+                  FilterChip(
+                    label: const Text('حاوية إعادة تدوير الملابس'),
+                    selected: fClothes,
+                    onSelected: (v) => setSt(() => fClothes = v),
+                  ),
                   const SizedBox(height: 6),
-                  FilterChip(label: const Text('حاوية إعادة تدوير الأوراق'), selected: fPapers, onSelected: (v) => setSt(() => fPapers = v)),
+                  FilterChip(
+                    label: const Text('حاوية إعادة تدوير الأوراق'),
+                    selected: fPapers,
+                    onSelected: (v) => setSt(() => fPapers = v),
+                  ),
                   const SizedBox(height: 6),
-                  FilterChip(label: const Text('آلة استرجاع (RVM)'), selected: fRvm, onSelected: (v) => setSt(() => fRvm = v)),
+                  FilterChip(
+                    label: const Text('آلة استرجاع (RVM)'),
+                    selected: fRvm,
+                    onSelected: (v) => setSt(() => fRvm = v),
+                  ),
                   const SizedBox(height: 6),
-                  FilterChip(label: const Text('حاوية إعادة تدوير بقايا الطعام'), selected: fFood, onSelected: (v) => setSt(() => fFood = v)),
+                  FilterChip(
+                    label: const Text('حاوية إعادة تدوير بقايا الطعام'),
+                    selected: fFood,
+                    onSelected: (v) => setSt(() => fFood = v),
+                  ),
 
                   const SizedBox(height: 16),
                   SizedBox(
@@ -853,7 +1066,8 @@ class _mapPageState extends State<mapPage> {
                         if (fClothes) allowed.add('حاوية إعادة تدوير الملابس');
                         if (fPapers) allowed.add('حاوية إعادة تدوير الأوراق');
                         if (fRvm) allowed.add('آلة استرجاع (RVM)');
-                        if (fFood) allowed.add('حاوية إعادة تدوير بقايا الطعام');
+                        if (fFood)
+                          allowed.add('حاوية إعادة تدوير بقايا الطعام');
 
                         setState(() {
                           _markers
@@ -867,11 +1081,15 @@ class _mapPageState extends State<mapPage> {
                         });
 
                         // بعد تطبيق الفلاتر: لو ما فيه نتائج وخلصنا التحميل، أظهري الرسالة مؤقتًا
-                        if (_didInitialLoad && !_isLoadingFacilities && _markers.isEmpty) {
+                        if (_didInitialLoad &&
+                            !_isLoadingFacilities &&
+                            _markers.isEmpty) {
                           _flashEmptyMsg();
                         }
                       },
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                      ),
                       child: const Text('تطبيق'),
                     ),
                   ),
@@ -904,95 +1122,6 @@ class _LegendIcon extends StatelessWidget {
   }
 }
 
-class _Header extends StatelessWidget {
-  final int points;
-  const _Header({required this.points});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 16,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Material(
-            color: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.primary.withOpacity(.2),
-                    AppColors.sea.withOpacity(.1),
-                  ],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(.2),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const CircleAvatar(
-                radius: 18,
-                backgroundColor: Colors.transparent,
-                child: Icon(Icons.person_outline, color: AppColors.primary, size: 22),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'مرحبًا، Nameer',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.primary, AppColors.primary, AppColors.mint],
-                stops: [0.0, 0.5, 1.0],
-                begin: Alignment.bottomLeft,
-                end: Alignment.topRight,
-              ),
-              borderRadius: BorderRadius.circular(100),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(.35),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(Icons.stars_rounded, color: Colors.white, size: 18),
-                SizedBox(width: 6),
-                Text('1500', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14)),
-                SizedBox(width: 4),
-                Text('نقطة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onSubmitted;
@@ -1021,7 +1150,10 @@ class _SearchBar extends StatelessWidget {
                 hintText: 'ابحث عن أقرب حاوية/نقطة تدوير...',
                 prefixIcon: Icon(Icons.search),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -1035,7 +1167,13 @@ class _SearchBar extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
-              boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6))],
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 6),
+                ),
+              ],
             ),
             child: const Icon(Icons.tune, color: AppColors.dark),
           ),
@@ -1071,10 +1209,19 @@ class _RoundBtn extends StatelessWidget {
           decoration: const BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 6))],
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 12,
+                offset: Offset(0, 6),
+              ),
+            ],
           ),
           child: isLoading
-              ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2))
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : Icon(icon, color: AppColors.dark),
         ),
       ),
@@ -1112,11 +1259,32 @@ class BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const items = [
-      NavItem(outlined: Icons.home_outlined,  filled: Icons.home,  label: 'الرئيسية'),
-      NavItem(outlined: Icons.fact_check_outlined, filled: Icons.fact_check, label: 'مهامي'),
-      NavItem(outlined: Icons.flag_outlined,  filled: Icons.flag,  label: 'المراحل', isCenter: true),
-      NavItem(outlined: Icons.map_outlined,   filled: Icons.map,   label: 'الخريطة'),
-      NavItem(outlined: Icons.group_outlined, filled: Icons.group, label: 'الأصدقاء'),
+      NavItem(
+        outlined: Icons.home_outlined,
+        filled: Icons.home,
+        label: 'الرئيسية',
+      ),
+      NavItem(
+        outlined: Icons.fact_check_outlined,
+        filled: Icons.fact_check,
+        label: 'مهامي',
+      ),
+      NavItem(
+        outlined: Icons.flag_outlined,
+        filled: Icons.flag,
+        label: 'المراحل',
+        isCenter: true,
+      ),
+      NavItem(
+        outlined: Icons.map_outlined,
+        filled: Icons.map,
+        label: 'الخريطة',
+      ),
+      NavItem(
+        outlined: Icons.group_outlined,
+        filled: Icons.group,
+        label: 'الأصدقاء',
+      ),
     ];
 
     return Padding(
@@ -1140,8 +1308,15 @@ class BottomNav extends StatelessWidget {
                       child: Container(
                         width: 58,
                         height: 58,
-                        decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                        child: const Icon(Icons.flag_outlined, color: Colors.white, size: 28),
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.flag_outlined,
+                          color: Colors.white,
+                          size: 28,
+                        ),
                       ),
                     ),
                   ),
@@ -1163,7 +1338,9 @@ class BottomNav extends StatelessWidget {
                         it.label,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w500,
                           color: color,
                         ),
                       ),
@@ -1175,6 +1352,253 @@ class BottomNav extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// =================== الهيدر الجديد ببيانات المستخدم (قابل للنقر) ===================
+class _HeaderUser extends StatelessWidget {
+  final String name;
+  final int points;
+  final String? avatarPath; // Asset path (اختياري): مثال assets/pfp/pfp1.png
+  final VoidCallback? onTap; // لو حاب تمرّر أكشن مخصص
+
+  const _HeaderUser({
+    required this.name,
+    required this.points,
+    this.avatarPath,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final card = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // أفاتار
+          Material(
+            color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primary.withOpacity(.2),
+                    AppColors.sea.withOpacity(.1),
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(.2),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.transparent,
+                backgroundImage: (avatarPath != null && avatarPath!.isNotEmpty)
+                    ? AssetImage(avatarPath!)
+                    : null,
+                child: (avatarPath == null || avatarPath!.isEmpty)
+                    ? const Icon(
+                        Icons.person_outline,
+                        color: AppColors.primary,
+                        size: 22,
+                      )
+                    : null,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // الترحيب بالاسم
+          Expanded(
+            child: Text(
+              'مرحبًا، $name',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+
+          // شارة النقاط
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.primary, AppColors.primary, AppColors.mint],
+                stops: [0.0, 0.5, 1.0],
+                begin: Alignment.bottomLeft,
+                end: Alignment.topRight,
+              ),
+              borderRadius: BorderRadius.circular(100),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(.35),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.stars_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  '$points',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Text(
+                  'نقطة',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // 👇 نفس فكرة التنقل: البطاقة كلها قابلة للنقر وتفتح صفحة البروفايل
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap:
+          onTap ??
+          () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const profilePage()),
+            );
+          },
+      child: card,
+    );
+  }
+}
+
+/// ===== نسخة Live: تجيب الاسم + النقاط + الأفاتار من Firestore وتستعمل _HeaderUser =====
+class HeaderUserLiveWithPoints extends StatelessWidget {
+  final VoidCallback? onTap;
+
+  const HeaderUserLiveWithPoints({super.key, this.onTap});
+
+  String _extractName(Map<String, dynamic> data, User? user) {
+    return (data['displayName'] ??
+            data['fullName'] ??
+            data['name'] ??
+            data['username'] ??
+            user?.displayName ??
+            user?.email ??
+            'مسؤول')
+        .toString();
+  }
+
+  int _extractPoints(Map<String, dynamic> data) {
+    final p = data['points'] ?? data['score'] ?? 0;
+    if (p is int) return p;
+    return int.tryParse(p.toString()) ?? 0;
+  }
+
+  /// يختار صورة الأفاتار من pfpIndex (0..7) -> assets/pfp/pfp{index+1}.png
+  String? _extractAvatarAsset(Map<String, dynamic> data) {
+    final raw = data['pfpIndex'];
+    int? idx;
+    if (raw is int) {
+      idx = raw;
+    } else if (raw != null) {
+      idx = int.tryParse(raw.toString());
+    }
+    if (idx != null && idx >= 0 && idx < 8) {
+      return 'assets/pfp/pfp${idx + 1}.png';
+    }
+    // لو عندك حقل جاهز لمسار الأصول (avatarPath) استخدمه:
+    final asset = data['avatarPath']?.toString();
+    if (asset != null && asset.trim().isNotEmpty) return asset.trim();
+
+    return null; // سيظهر أيقونة افتراضية
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return _HeaderUser(
+        name: 'مسؤول',
+        points: 0,
+        avatarPath: null,
+        onTap:
+            onTap ??
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const profilePage()),
+              );
+            },
+      );
+    }
+
+    final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: docRef.snapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return _HeaderUser(
+            name: '...',
+            points: 0,
+            avatarPath: null,
+            onTap:
+                onTap ??
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const profilePage()),
+                  );
+                },
+          );
+        }
+
+        final data = snap.data?.data() ?? {};
+        final name = _extractName(data, user);
+        final points = _extractPoints(data);
+        final avatarPath = _extractAvatarAsset(data);
+
+        return _HeaderUser(
+          name: name,
+          points: points,
+          avatarPath: avatarPath,
+          onTap:
+              onTap ??
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const profilePage()),
+                );
+              },
+        );
+      },
     );
   }
 }

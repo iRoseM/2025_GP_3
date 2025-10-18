@@ -240,7 +240,7 @@ class profilePage extends StatelessWidget {
                                             MaterialPageRoute(
                                               builder: (_) => EditProfilePage(
                                                 initialUsername: username,
-                                                initialHandle: '@$username',
+                                                initialHandle: '$username',
                                                 initialEmail: email,
                                                 initialAge: age == 0 ? 18 : age,
                                                 initialGender:
