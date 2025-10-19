@@ -120,6 +120,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   // 🔹 UI
   @override
   Widget build(BuildContext context) {
+    
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final baseTheme = Theme.of(context);
     final textTheme =
@@ -146,6 +147,35 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       child: Theme(
         data: baseTheme.copyWith(
           textTheme: textTheme,
+          inputDecorationTheme: InputDecorationTheme(
+            errorStyle: const TextStyle(
+              color: Colors.redAccent,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+            contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.light, width: 1.4),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.primary, width: 1.6),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.light, width: 1.2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.redAccent, width: 1.4),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.redAccent, width: 1.6),
+            ),
+          ),
+
           appBarTheme: AppBarTheme(
             elevation: 0,
             backgroundColor: Colors.transparent,
@@ -163,6 +193,29 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           appBar: AppBar(
             centerTitle: true,
             title: const Text("قائمة المهام"),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.white),
+                tooltip: 'تحديث المهام',
+                onPressed: () async {
+                  setState(() => _isLoading = true);
+                  await _loadTasks();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: AppColors.primary,
+                      behavior: SnackBarBehavior.floating,
+                      content: Text(
+                        'تم تحديث المهام بنجاح ✅',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
             flexibleSpace: Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -277,101 +330,107 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
         ),
       );
     }
-
-    return Expanded(
-      child: ListView.builder(
-        padding: const EdgeInsets.only(bottom: 120),
-        itemCount: tasks.length,
-        itemBuilder: (context, index) {
-          final task = tasks[index];
-          final isExpanded = _expandedIndexes.contains(index);
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade200, width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.12),
-                  blurRadius: 5,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-              ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                title: Text(
-                  task['title'] ?? 'بدون عنوان',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-                  subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.category_outlined,
-                          size: 16, color: AppColors.dark),
-                      const SizedBox(width: 6),
-                      Text(
-                        task['category'] ?? 'غير مصنف',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF666666),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isExpanded
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: (task['isActive'] == true)
-                            ? Colors.green
-                            : Colors.grey.shade400,
-                        shape: BoxShape.circle,
-                      ),
+      return Expanded(
+        child: RefreshIndicator(
+          color: AppColors.primary,
+          onRefresh: () async {
+            await _loadTasks();
+          },
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 120),
+            itemCount: tasks.length,
+            itemBuilder: (context, index) {
+              final task = tasks[index];
+              final isExpanded = _expandedIndexes.contains(index);
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200, width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.12),
+                      blurRadius: 5,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 1),
                     ),
                   ],
                 ),
-                onTap: () {
-                  setState(() {
-                    if (isExpanded) {
-                      _expandedIndexes.remove(index);
-                    } else {
-                      _expandedIndexes.add(index);
-                    }
-                  });
-                },
-              ),
-                if (isExpanded) _buildExpandedTaskContent(task, index),
-              ],
-            ),
-          );
-        },
-      ),
+                child: Column(
+                  children: [
+                    ListTile(
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      title: Text(
+                        task['title'] ?? 'بدون عنوان',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF333333),
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.category_outlined,
+                                size: 16, color: AppColors.dark),
+                            const SizedBox(width: 6),
+                            Text(
+                              task['category'] ?? 'غير مصنف',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF666666),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isExpanded
+                                ? Icons.keyboard_arrow_up
+                                : Icons.keyboard_arrow_down,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: (task['isActive'] == true)
+                                  ? Colors.green
+                                  : Colors.grey.shade400,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ),
+                      onTap: () {
+                        setState(() {
+                          if (isExpanded) {
+                            _expandedIndexes.remove(index);
+                          } else {
+                            _expandedIndexes.add(index);
+                          }
+                        });
+                      },
+                    ),
+                    if (isExpanded) _buildExpandedTaskContent(task, index),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
     );
   }
+
 
   Widget _buildExpandedTaskContent(Map<String, dynamic> task, int index) {
     return Padding(
@@ -416,333 +475,515 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   void _showEditDialog(Map<String, dynamic> task) =>
       _showTaskDialog(title: 'تعديل معلومات المهمة', task: task);
 
-void _showTaskDialog({required String title, Map<String, dynamic>? task}) {
-  final formKey = GlobalKey<FormState>();
-  final titleCtrl = TextEditingController(text: task?['title'] ?? '');
-  final descCtrl = TextEditingController(text: task?['description'] ?? '');
-  final pointsCtrl = TextEditingController(text: task != null ? '${task['points']}' : '');
-  String? validationType = task?['validationStrategy'];
-  String? selectedCategory = task?['category'];
+  void _showTaskDialog({required String title, Map<String, dynamic>? task}) {
+    final formKey = GlobalKey<FormState>();
+    final titleCtrl = TextEditingController(text: task?['title'] ?? '');
+    final descCtrl = TextEditingController(text: task?['description'] ?? '');
+    final pointsCtrl = TextEditingController(text: task != null ? '${task['points']}' : '');
+    String? validationType = task?['validationStrategy'];
+    String? selectedCategory = task?['category'];
 
-  bool hasExpiry = task?['hasExpiry'] ?? ((task?['expiryDate'] as Timestamp?) != null);
-  DateTime? expiryDate = (task?['expiryDate'] as Timestamp?)?.toDate();
-  bool isActive = task?['isActive'] ?? (!hasExpiry ? false : true);
+    bool hasExpiry = task?['hasExpiry'] ?? ((task?['expiryDate'] as Timestamp?) != null);
+    DateTime? expiryDate = (task?['expiryDate'] as Timestamp?)?.toDate();
+    bool isActive = task?['isActive'] ?? (!hasExpiry ? false : true);
 
-  showModalBottomSheet(
-    context: context,
-    useSafeArea: true,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (sheetContext) => Builder(
-      builder: (rootContext) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 24 + 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              boxShadow: const [
-                BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 4)),
-              ],
-            ),
-            child: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: Text(title,
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                            color: AppColors.dark,
-                          )),
-                    ),
-                    const SizedBox(height: 18),
-
-                    _fieldLabel('عنوان المهمة', required: true),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: titleCtrl,
-                      decoration: const InputDecoration(
-                        hintText: 'مثال: إعادة تدوير الورق',
-                        prefixIcon: Icon(Icons.task_alt_outlined),
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => Builder(
+        builder: (rootContext) {
+          return Directionality(
+            textDirection: TextDirection.rtl,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 24 + 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 4)),
+                ],
+              ),
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Text(title,
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              color: AppColors.dark,
+                            )),
                       ),
-                      validator: (v) => (v == null || v.isEmpty) ? 'أدخل عنوان المهمة' : null,
-                    ),
-                    const SizedBox(height: 14),
+                      const SizedBox(height: 18),
 
-                    _fieldLabel('وصف المهمة', required: true),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: descCtrl,
-                      maxLines: 2,
-                      decoration: const InputDecoration(
-                        hintText: 'اكتب وصفًا موجزًا للمهمة...',
-                        prefixIcon: Icon(Icons.description_outlined),
-                      ),
-                      validator: (v) => (v == null || v.isEmpty) ? 'أدخل وصف المهمة' : null,
-                    ),
-                    const SizedBox(height: 14),
-
-                    _fieldLabel('عدد النقاط', required: true),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: pointsCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        hintText: 'مثال: 30',
-                        prefixIcon: Icon(Icons.star_border_rounded),
-                      ),
-                      validator: (v) {
-                        final n = int.tryParse(v ?? '');
-                        if (n == null || n <= 0) return 'أدخل عددًا صحيحًا موجبًا';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 14),
-
-                    _fieldLabel('تصنيف المهمة', required: true),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: AppColors.light.withOpacity(.7)),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: selectedCategory,
-                          isExpanded: true,
-                          hint: _isCatsLoading
-                              ? const Text('...يتم تحميل الفئات')
-                              : const Text('اختر الفئة'),
-                          items: _categories.map((name) {
-                            return DropdownMenuItem(value: name, child: Text(name));
-                          }).toList(),
-                          onChanged: (v) => selectedCategory = v,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    _fieldLabel('صلاحية المهمة', required: true),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.transparent,
-                        border: Border.all(color: AppColors.light.withOpacity(.6)),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        children: [
-                          RadioListTile<bool>(
-                            value: false,
-                            groupValue: hasExpiry,
-                            activeColor: AppColors.primary,
-                            title: const Text('بدون تاريخ انتهاء'),
-                            onChanged: (v) {
-                              hasExpiry = v ?? false;
-                              expiryDate = null;
-                            },
-                          ),
-                          const Divider(height: 0),
-                          RadioListTile<bool>(
-                            value: true,
-                            groupValue: hasExpiry,
-                            activeColor: AppColors.primary,
-                            title: const Text('تاريخ انتهاء محدد'),
-                            onChanged: (v) {
-                              hasExpiry = v ?? true;
-                              if (expiryDate == null) {
-                                expiryDate = DateTime.now().add(const Duration(days: 7));
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    if (hasExpiry) ...[
-                      _fieldLabel('تاريخ الانتهاء', required: true),
+                      _fieldLabel('عنوان المهمة', required: true),
                       const SizedBox(height: 8),
-                      InkWell(
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: expiryDate ?? DateTime.now().add(const Duration(days: 7)),
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime(2030),
-                            builder: (context, child) => Directionality(
-                              textDirection: TextDirection.rtl,
-                              child: Theme(
-                                data: Theme.of(context).copyWith(
-                                  colorScheme: const ColorScheme.light(
-                                    primary: AppColors.primary,
-                                    onPrimary: Colors.white,
-                                    onSurface: AppColors.dark,
+                      TextFormField(
+                        controller: titleCtrl,
+                        decoration: const InputDecoration(
+                          hintText: 'مثال: إعادة تدوير الورق',
+                          prefixIcon: Icon(Icons.task_alt_outlined),
+                        ),
+                        validator: (v) => (v == null || v.isEmpty) ? 'أدخل عنوان المهمة' : null,
+                      ),
+                      const SizedBox(height: 14),
+
+                      _fieldLabel('وصف المهمة', required: true),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: descCtrl,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          hintText: 'اكتب وصفًا موجزًا للمهمة...',
+                          prefixIcon: Icon(Icons.description_outlined),
+                        ),
+                        validator: (v) => (v == null || v.isEmpty) ? 'أدخل وصف المهمة' : null,
+                      ),
+                      const SizedBox(height: 14),
+
+                      _fieldLabel('عدد النقاط', required: true),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: pointsCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          hintText: 'مثال: 30',
+                          prefixIcon: Icon(Icons.star_border_rounded),
+                        ),
+                        validator: (v) {
+                          final n = int.tryParse(v ?? '');
+                          if (n == null || n <= 0) return 'أدخل عددًا صحيحًا موجبًا';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                      _fieldLabel('تصنيف المهمة', required: true),
+                      const SizedBox(height: 8),
+                      FormField<String>(
+                        validator: (value) {
+                          if (selectedCategory == null || selectedCategory!.isEmpty) {
+                            return 'اختر تصنيف المهمة';
+                          }
+                          return null;
+                        },
+                        builder: (FormFieldState<String> state) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                border: Border.all(
+                                  color: state.hasError
+                                      ? Colors.redAccent
+                                      : AppColors.light.withOpacity(0.7),
+                                  width: 1.4,
+                                ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: selectedCategory,
+                                    isExpanded: true,
+                                    hint: _isCatsLoading
+                                        ? const Text('...يتم تحميل الفئات')
+                                        : const Text('اختر الفئة'),
+                                    items: _categories.map((name) {
+                                      return DropdownMenuItem(
+                                          value: name, child: Text(name));
+                                    }).toList(),
+                                    onChanged: (v) {
+                                      setState(() {
+                                        selectedCategory = v;
+                                        state.didChange(v);
+                                      });
+                                    },
                                   ),
                                 ),
-                                child: child!,
                               ),
-                            ),
-                          );
-                          if (picked != null) expiryDate = picked;
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.light.withOpacity(.6)),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                expiryDate == null
-                                    ? 'اختر تاريخ الانتهاء'
-                                    : 'تاريخ الانتهاء: ${expiryDate!.day}-${expiryDate!.month}-${expiryDate!.year}',
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                    color: AppColors.dark, fontWeight: FontWeight.w700),
-                              ),
-                              const Icon(Icons.calendar_today,
-                                  color: AppColors.primary, size: 20),
+                              if (state.hasError)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6, right: 4),
+                                  child: Text(
+                                    state.errorText!,
+                                    style: const TextStyle(
+                                      color: Colors.redAccent,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
                             ],
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 14),
+                      _fieldLabel('صلاحية المهمة', required: true),
+                      const SizedBox(height: 8),
+
+                      FormField<bool>(
+                        validator: (value) {
+                          if (hasExpiry && expiryDate == null) {
+                            return 'يرجى اختيار تاريخ انتهاء المهمة';
+                          }
+                          return null;
+                        },
+                        builder: (state) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.transparent,
+                                  border: Border.all(
+                                    color: state.hasError
+                                        ? Colors.redAccent
+                                        : AppColors.light.withOpacity(0.7),
+                                    width: 1.4,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Column(
+                                  children: [
+                                    RadioListTile<bool>(
+                                      value: false,
+                                      groupValue: hasExpiry,
+                                      activeColor: AppColors.primary,
+                                      title: const Text('بدون تاريخ انتهاء'),
+                                      onChanged: (v) {
+                                        setState(() {
+                                          hasExpiry = v ?? false;
+                                          expiryDate = null;
+                                          state.didChange(hasExpiry);
+                                        });
+                                      },
+                                    ),
+                                    const Divider(height: 0),
+                                    RadioListTile<bool>(
+                                      value: true,
+                                      groupValue: hasExpiry,
+                                      activeColor: AppColors.primary,
+                                      title: const Text('تاريخ انتهاء محدد'),
+                                      onChanged: (v) {
+                                        setState(() {
+                                          hasExpiry = v ?? true;
+                                          if (expiryDate == null) {
+                                            expiryDate =
+                                                DateTime.now().add(const Duration(days: 7));
+                                          }
+                                          state.didChange(hasExpiry);
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+
+                              // 🔹 Date picker (visible only if hasExpiry == true)
+                              if (hasExpiry)
+                                InkWell(
+                                  onTap: () async {
+                                    final picked = await showDatePicker(
+                                      context: context,
+                                      initialDate:
+                                          expiryDate ?? DateTime.now().add(const Duration(days: 7)),
+                                      firstDate: DateTime.now(),
+                                      lastDate: DateTime(2030),
+                                      builder: (context, child) => Directionality(
+                                        textDirection: TextDirection.rtl,
+                                        child: Theme(
+                                          data: Theme.of(context).copyWith(
+                                            colorScheme: const ColorScheme.light(
+                                              primary: AppColors.primary,
+                                              onPrimary: Colors.white,
+                                              onSurface: AppColors.dark,
+                                            ),
+                                          ),
+                                          child: child!,
+                                        ),
+                                      ),
+                                    );
+                                    if (picked != null) {
+                                      setState(() {
+                                        expiryDate = picked;
+                                        state.validate();
+                                      });
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                                    decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: state.hasError
+                                          ? Colors.redAccent
+                                          : AppColors.light.withOpacity(0.7),
+                                      width: 1.4,
+                                    ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          expiryDate == null
+                                              ? 'اختر تاريخ الانتهاء'
+                                              : 'تاريخ الانتهاء: ${expiryDate!.day}-${expiryDate!.month}-${expiryDate!.year}',
+                                          style: GoogleFonts.ibmPlexSansArabic(
+                                              color: AppColors.dark,
+                                              fontWeight: FontWeight.w700),
+                                        ),
+                                        const Icon(Icons.calendar_today,
+                                            color: AppColors.primary, size: 20),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+
+                              // 🔹 Inline error message
+                              if (state.hasError)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6, right: 4),
+                                  child: Text(
+                                    state.errorText!,
+                                    style: const TextStyle(
+                                      color: Colors.redAccent,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      if (hasExpiry) ...[
+                        _fieldLabel('تاريخ الانتهاء', required: true),
+                        const SizedBox(height: 8),
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: expiryDate ?? DateTime.now().add(const Duration(days: 7)),
+                              firstDate: DateTime.now(),
+                              lastDate: DateTime(2030),
+                              builder: (context, child) => Directionality(
+                                textDirection: TextDirection.rtl,
+                                child: Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: const ColorScheme.light(
+                                      primary: AppColors.primary,
+                                      onPrimary: Colors.white,
+                                      onSurface: AppColors.dark,
+                                    ),
+                                  ),
+                                  child: child!,
+                                ),
+                              ),
+                            );
+                            if (picked != null) expiryDate = picked;
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: AppColors.light.withOpacity(.6)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  expiryDate == null
+                                      ? 'اختر تاريخ الانتهاء'
+                                      : 'تاريخ الانتهاء: ${expiryDate!.day}-${expiryDate!.month}-${expiryDate!.year}',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                      color: AppColors.dark, fontWeight: FontWeight.w700),
+                                ),
+                                const Icon(Icons.calendar_today,
+                                    color: AppColors.primary, size: 20),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ] else ...[
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: isActive,
-                            activeColor: AppColors.primary,
-                            onChanged: (v) => isActive = v ?? false,
+                      ] else ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppColors.light.withOpacity(0.7),
+                            width: 1.4,
                           ),
-                          Text('تفعيل المهمة',
+                        ),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: isActive,
+                              activeColor: AppColors.primary,
+                              onChanged: (v) {
+                                setState(() => isActive = v ?? false);
+                              },
+                            ),
+                            Text(
+                              'تفعيل المهمة',
                               style: GoogleFonts.ibmPlexSansArabic(
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.dark.withOpacity(.9),
-                              )),
-                        ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      ],
+
+                      const SizedBox(height: 20),
+
+                      // ✅ Save button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.save, color: Colors.white),
+                          label: Text('حفظ التغييرات',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                  color: Colors.white, fontWeight: FontWeight.w800)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+                          ),
+                          onPressed: () async {
+                            // if (!(formKey.currentState?.validate() ?? false)) return;
+                            final form = formKey.currentState!;
+                            if (!form.validate()) {
+                              // Force rebuild to show red borders on all invalid fields
+                              setState(() {});
+                              return;
+                            }
+                            // if (selectedCategory == null || selectedCategory!.isEmpty) {
+                            //   ScaffoldMessenger.of(rootContext).showSnackBar(SnackBar(
+                            //     backgroundColor: Colors.redAccent,
+                            //     behavior: SnackBarBehavior.floating,
+                            //     content: Text('اختر تصنيف المهمة',
+                            //         style: GoogleFonts.ibmPlexSansArabic(
+                            //             fontWeight: FontWeight.w700,
+                            //             color: Colors.white)),
+                            //   ));
+                            //   return;
+                            // }
+                            try {
+                              final newTitle = titleCtrl.text
+                                  .trim()
+                                  .replaceAll(RegExp(r'\s+'), ' ')
+                                  .toLowerCase();
+
+                              if (task == null) {
+                                final existingTask = await _taskCollection
+                                    .where('title_normalized', isEqualTo: newTitle)
+                                    .limit(1)
+                                    .get();
+
+                                if (existingTask.docs.isNotEmpty) {
+                                  ScaffoldMessenger.of(rootContext).showSnackBar(SnackBar(
+                                    backgroundColor: Colors.redAccent,
+                                    behavior: SnackBarBehavior.floating,
+                                    content: Text(
+                                      'اسم المهمة "${titleCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white),
+                                    ),
+                                  ));
+                                  return;
+                                }
+                              }
+
+                              final data = {
+                                'title': titleCtrl.text.trim(),
+                                'title_normalized': newTitle,
+                                'description': descCtrl.text.trim(),
+                                'points': int.parse(pointsCtrl.text),
+                                'validationStrategy': validationType,
+                                'category': selectedCategory,
+                                'hasExpiry': hasExpiry,
+                                'expiryDate': hasExpiry && expiryDate != null
+                                    ? Timestamp.fromDate(expiryDate!)
+                                    : null,
+                                'isActive': hasExpiry ? true : isActive,
+                                'managedBy': 'nameer admin',
+                                'createdAt': FieldValue.serverTimestamp(),
+                              };
+
+                              if (task == null) {
+                                await _taskCollection.add(data);
+                              } else {
+                                await _taskCollection.doc(task['id']).update(data);
+                              }
+
+                              if (mounted) {
+                                Navigator.pop(rootContext);
+                                _loadTasks();
+                                ScaffoldMessenger.of(rootContext).showSnackBar(SnackBar(
+                                  backgroundColor: Colors.green,
+                                  behavior: SnackBarBehavior.floating,
+                                  content: Text('تم الحفظ بنجاح ✅',
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white)),
+                                ));
+                              }
+                            } catch (e) {
+                              debugPrint('Error saving: $e');
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.redAccent, width: 1.4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          backgroundColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                        onPressed: () => Navigator.pop(rootContext),
+                        child: Text(
+                          'إلغاء',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ],
-
-                    const SizedBox(height: 20),
-
-                    // ✅ Save button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.save, color: Colors.white),
-                        label: Text('حفظ التغييرات',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                                color: Colors.white, fontWeight: FontWeight.w800)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
-                        ),
-                        onPressed: () async {
-                          if (!(formKey.currentState?.validate() ?? false)) return;
-
-                          if (selectedCategory == null || selectedCategory!.isEmpty) {
-                            ScaffoldMessenger.of(rootContext).showSnackBar(SnackBar(
-                              backgroundColor: Colors.redAccent,
-                              behavior: SnackBarBehavior.floating,
-                              content: Text('اختر تصنيف المهمة',
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white)),
-                            ));
-                            return;
-                          }
-
-                          try {
-                            final newTitle = titleCtrl.text
-                                .trim()
-                                .replaceAll(RegExp(r'\s+'), ' ')
-                                .toLowerCase();
-
-                            if (task == null) {
-                              final existingTask = await _taskCollection
-                                  .where('title_normalized', isEqualTo: newTitle)
-                                  .limit(1)
-                                  .get();
-
-                              if (existingTask.docs.isNotEmpty) {
-                                ScaffoldMessenger.of(rootContext).showSnackBar(SnackBar(
-                                  backgroundColor: Colors.redAccent,
-                                  behavior: SnackBarBehavior.floating,
-                                  content: Text(
-                                    'اسم المهمة "${titleCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
-                                    style: GoogleFonts.ibmPlexSansArabic(
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white),
-                                  ),
-                                ));
-                                return;
-                              }
-                            }
-
-                            final data = {
-                              'title': titleCtrl.text.trim(),
-                              'title_normalized': newTitle,
-                              'description': descCtrl.text.trim(),
-                              'points': int.parse(pointsCtrl.text),
-                              'validationStrategy': validationType,
-                              'category': selectedCategory,
-                              'hasExpiry': hasExpiry,
-                              'expiryDate': hasExpiry && expiryDate != null
-                                  ? Timestamp.fromDate(expiryDate!)
-                                  : null,
-                              'isActive': hasExpiry ? true : isActive,
-                              'managedBy': 'nameer admin',
-                              'createdAt': FieldValue.serverTimestamp(),
-                            };
-
-                            if (task == null) {
-                              await _taskCollection.add(data);
-                            } else {
-                              await _taskCollection.doc(task['id']).update(data);
-                            }
-
-                            if (mounted) {
-                              Navigator.pop(rootContext);
-                              _loadTasks();
-                              ScaffoldMessenger.of(rootContext).showSnackBar(SnackBar(
-                                backgroundColor: Colors.green,
-                                behavior: SnackBarBehavior.floating,
-                                content: Text('تم الحفظ بنجاح ✅',
-                                    style: GoogleFonts.ibmPlexSansArabic(
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white)),
-                              ));
-                            }
-                          } catch (e) {
-                            debugPrint('Error saving: $e');
-                          }
-                        },
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
-    ),
-  );
-}
+          );
+        },
+      ),
+    );
+  }
 
 
 
@@ -1156,31 +1397,68 @@ void _showTaskDialog({required String title, Map<String, dynamic>? task}) {
                             : null,
                       ),
                       const SizedBox(height: 14),
-
+                      
                       _fieldLabel('الفئة الرئيسية', required: true),
                       const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppColors.light.withOpacity(.7)),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: parentCategory,
-                            isExpanded: true,
-                            hint: const Text('اختر الفئة الرئيسية'),
-                            items: const [
-                              DropdownMenuItem(value: 'سلوك مباشر', child: Text('سلوك مباشر')),
-                              DropdownMenuItem(value: 'سلوك غير مباشر', child: Text('سلوك غير مباشر')),
+                      FormField<String>(
+                        validator: (value) {
+                          if (parentCategory == null || parentCategory!.isEmpty) {
+                            return 'اختر الفئة الرئيسية';
+                          }
+                          return null;
+                        },
+                        builder: (FormFieldState<String> state) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: state.hasError
+                                      ? Colors.redAccent
+                                      : AppColors.light.withOpacity(0.7),
+                                  width: 1.4,
+                                ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: parentCategory,
+                                    isExpanded: true,
+                                    hint: const Text('اختر الفئة الرئيسية'),
+                                    items: const [
+                                      DropdownMenuItem(value: 'سلوك مباشر', child: Text('سلوك مباشر')),
+                                      DropdownMenuItem(value: 'سلوك غير مباشر', child: Text('سلوك غير مباشر')),
+                                    ],
+                                    onChanged: (v) {
+                                      setState(() {
+                                        parentCategory = v;
+                                        state.didChange(v);
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                              if (state.hasError)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6, right: 4),
+                                  child: Text(
+                                    state.errorText!,
+                                    style: const TextStyle(
+                                      color: Colors.redAccent,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
                             ],
-                            onChanged: (v) => parentCategory = v,
-                          ),
-                        ),
+                          );
+                        },
                       ),
-                      const SizedBox(height: 14),
 
-                      _fieldLabel('وصف الفئة'),
+                      const SizedBox(height: 14),
+                      _fieldLabel('وصف الفئة', required: true),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: descCtrl,
@@ -1189,7 +1467,14 @@ void _showTaskDialog({required String title, Map<String, dynamic>? task}) {
                           hintText: 'اكتب وصفًا موجزًا للفئة...',
                           prefixIcon: Icon(Icons.description_outlined),
                         ),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) {
+                            return 'أدخل وصف الفئة';
+                          }
+                          return null;
+                        },
                       ),
+
                       const SizedBox(height: 20),
 
                       SizedBox(
@@ -1205,7 +1490,42 @@ void _showTaskDialog({required String title, Map<String, dynamic>? task}) {
                             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
                           ),
                           onPressed: () async {
-                            if (!(formKey.currentState?.validate() ?? false)) return;
+                            // Validate the form
+                            if (!(formKey.currentState?.validate() ?? false)) {
+                              setState(() {}); // ensure all invalid fields highlight in red
+                              return;
+                            }
+
+                            // Extra manual checks for dropdown and description
+                            if (parentCategory == null || parentCategory!.isEmpty) {
+                              ScaffoldMessenger.of(rootContext).showSnackBar(SnackBar(
+                                backgroundColor: Colors.redAccent,
+                                behavior: SnackBarBehavior.floating,
+                                content: Text(
+                                  'يرجى اختيار الفئة الرئيسية',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ));
+                              return;
+                            }
+
+                            // if (descCtrl.text.trim().isEmpty) {
+                            //   ScaffoldMessenger.of(rootContext).showSnackBar(SnackBar(
+                            //     backgroundColor: Colors.redAccent,
+                            //     behavior: SnackBarBehavior.floating,
+                            //     content: Text(
+                            //       'يرجى إدخال وصف الفئة',
+                            //       style: GoogleFonts.ibmPlexSansArabic(
+                            //         fontWeight: FontWeight.w700,
+                            //         color: Colors.white,
+                            //       ),
+                            //     ),
+                            //   ));
+                            //   return;
+                            // }
 
                             try {
                               final newName = nameCtrl.text
@@ -1226,8 +1546,9 @@ void _showTaskDialog({required String title, Map<String, dynamic>? task}) {
                                   content: Text(
                                     'اسم الفئة "${nameCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
                                     style: GoogleFonts.ibmPlexSansArabic(
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white),
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ));
                                 return;
@@ -1247,16 +1568,40 @@ void _showTaskDialog({required String title, Map<String, dynamic>? task}) {
                                 ScaffoldMessenger.of(rootContext).showSnackBar(SnackBar(
                                   backgroundColor: Colors.green,
                                   behavior: SnackBarBehavior.floating,
-                                  content: Text('تمت إضافة الفئة بنجاح ✅',
-                                      style: GoogleFonts.ibmPlexSansArabic(
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white)),
+                                  content: Text(
+                                    'تمت إضافة الفئة بنجاح ✅',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                                 ));
                               }
                             } catch (e) {
                               debugPrint('❌ خطأ أثناء حفظ الفئة: $e');
                             }
                           },
+
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.redAccent, width: 1.4),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          backgroundColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                        onPressed: () => Navigator.pop(rootContext),
+                        child: Text(
+                          'إلغاء',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ],
