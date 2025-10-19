@@ -32,11 +32,11 @@ class Facility {
   final String id;
   final double lat;
   final double lng;
-  final String type;     // مثل: RVM أو حاوية ملابس...
+  final String type; // مثل: RVM أو حاوية ملابس...
   final String provider; // من الداتابيس
   final String city;
   final String address;
-  final String status;   // 'نشط' أو 'متوقف'
+  final String status; // 'نشط' أو 'متوقف'
 
   Facility({
     required this.id,
@@ -89,13 +89,18 @@ class _mapPageState extends State<mapPage> {
   /// تحميل صور الأيقونات كـ BitmapDescriptor حادّ (يدعم كثافات الشاشة)
   Future<void> _loadMarkerIcons() async {
     _iconClothes = await _bitmapFromAsset('assets/img/clothes.png', width: 200);
-    _iconPapers  = await _bitmapFromAsset('assets/img/papers.png',  width: 200);
-    _iconRvm     = await _bitmapFromAsset('assets/img/rvm.png',     width: 200);
-    _iconFood    = await _bitmapFromAsset('assets/img/food.png',    width: 200);
-    _iconDefault = BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+    _iconPapers = await _bitmapFromAsset('assets/img/papers.png', width: 200);
+    _iconRvm = await _bitmapFromAsset('assets/img/rvm.png', width: 200);
+    _iconFood = await _bitmapFromAsset('assets/img/food.png', width: 200);
+    _iconDefault = BitmapDescriptor.defaultMarkerWithHue(
+      BitmapDescriptor.hueRed,
+    );
   }
 
-  Future<BitmapDescriptor> _bitmapFromAsset(String path, {int width = 112}) async {
+  Future<BitmapDescriptor> _bitmapFromAsset(
+    String path, {
+    int width = 112,
+  }) async {
     final data = await rootBundle.load(path);
     final codec = await ui.instantiateImageCodec(
       data.buffer.asUint8List(),
@@ -114,10 +119,28 @@ class _mapPageState extends State<mapPage> {
 
     // كلمات مفتاحية بالعربي لتحديد النوع
     final lower = t;
-    final isClothes = lower.contains('ملابس') || lower.contains('كسوة') || lower.contains('clothes');
-    final isRvm = lower.contains('rvm') || lower.contains('آلة') || lower.contains('استرجاع') || lower.contains('reverse vending');
-    final isPapers = lower.contains('ورق') || lower.contains('أوراق') || lower.contains('كتب') || lower.contains('paper') || lower.contains('books');
-    final isFood = lower.contains('أكل') || lower.contains('طعام') || lower.contains('عضوي') || lower.contains('بقايا') || lower.contains('food') || lower.contains('organic');
+    final isClothes =
+        lower.contains('ملابس') ||
+        lower.contains('كسوة') ||
+        lower.contains('clothes');
+    final isRvm =
+        lower.contains('rvm') ||
+        lower.contains('آلة') ||
+        lower.contains('استرجاع') ||
+        lower.contains('reverse vending');
+    final isPapers =
+        lower.contains('ورق') ||
+        lower.contains('أوراق') ||
+        lower.contains('كتب') ||
+        lower.contains('paper') ||
+        lower.contains('books');
+    final isFood =
+        lower.contains('أكل') ||
+        lower.contains('طعام') ||
+        lower.contains('عضوي') ||
+        lower.contains('بقايا') ||
+        lower.contains('food') ||
+        lower.contains('organic');
 
     if (isClothes) return 'حاوية إعادة تدوير الملابس';
     if (isRvm) return 'آلة استرجاع (RVM)';
@@ -125,7 +148,11 @@ class _mapPageState extends State<mapPage> {
     if (isFood) return 'حاوية إعادة تدوير بقايا الطعام';
 
     // أنواع أخرى شائعة
-    if (lower.contains('قوارير') || lower.contains('بلاستيك') || lower.contains('علب') || lower.contains('bottle') || lower.contains('plastic')) {
+    if (lower.contains('قوارير') ||
+        lower.contains('بلاستيك') ||
+        lower.contains('علب') ||
+        lower.contains('bottle') ||
+        lower.contains('plastic')) {
       return 'حاوية إعادة تدوير القوارير';
     }
 
@@ -135,27 +162,40 @@ class _mapPageState extends State<mapPage> {
   BitmapDescriptor _iconForType(String type) {
     switch (type) {
       case 'حاوية إعادة تدوير الملابس':
-        return _iconClothes ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet);
+        return _iconClothes ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet);
       case 'حاوية إعادة تدوير الأوراق':
-        return _iconPapers ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
+        return _iconPapers ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
       case 'آلة استرجاع (RVM)':
-        return _iconRvm ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
+        return _iconRvm ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
       case 'حاوية إعادة تدوير بقايا الطعام':
-        return _iconFood ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
+        return _iconFood ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen);
       default:
-        return _iconDefault ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
+        return _iconDefault ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed);
     }
   }
 
   LatLngBounds _extendBounds(LatLngBounds? current, LatLng p) {
     if (current == null) return LatLngBounds(southwest: p, northeast: p);
     final sw = LatLng(
-      p.latitude < current.southwest.latitude ? p.latitude : current.southwest.latitude,
-      p.longitude < current.southwest.longitude ? p.longitude : current.southwest.longitude,
+      p.latitude < current.southwest.latitude
+          ? p.latitude
+          : current.southwest.latitude,
+      p.longitude < current.southwest.longitude
+          ? p.longitude
+          : current.southwest.longitude,
     );
     final ne = LatLng(
-      p.latitude > current.northeast.latitude ? p.latitude : current.northeast.latitude,
-      p.longitude > current.northeast.longitude ? p.longitude : current.northeast.longitude,
+      p.latitude > current.northeast.latitude
+          ? p.latitude
+          : current.northeast.latitude,
+      p.longitude > current.northeast.longitude
+          ? p.longitude
+          : current.northeast.longitude,
     );
     return LatLngBounds(southwest: sw, northeast: ne);
   }
@@ -187,7 +227,8 @@ class _mapPageState extends State<mapPage> {
         final String provider = (m['provider'] ?? '').toString();
         final String city = (m['city'] ?? '').toString();
         final String address = (m['address'] ?? '').toString();
-        final String status = (m['status'] ?? 'نشط').toString(); // 👈 قراءة الحالة
+        final String status = (m['status'] ?? 'نشط')
+            .toString(); // 👈 قراءة الحالة
 
         final pos = LatLng(lat, lng);
         final markerId = MarkerId(d.id);
@@ -219,9 +260,10 @@ class _mapPageState extends State<mapPage> {
                       if (provider.isNotEmpty) provider,
                       if (city.isNotEmpty) city,
                     ].join(' • '),
-              onTap: () => _showFacilitySheet(facility), // 👈 فتح الورقة من البابل
+              onTap: () =>
+                  _showFacilitySheet(facility), // 👈 فتح الورقة من البابل
             ),
-            onTap: () => _showFacilitySheet(facility),   // 👈 فتح الورقة من البن
+            onTap: () => _showFacilitySheet(facility), // 👈 فتح الورقة من البن
           ),
         );
 
@@ -260,9 +302,13 @@ class _mapPageState extends State<mapPage> {
   // ===== فتح الاتجاهات في Google Maps =====
   Future<void> _openInMaps(Facility f) async {
     // نحاول أولًا مخطط comgooglemaps:// (يفتح التطبيق مباشرة على iOS/Android إن كان مثبت)
-    final googleMapsUri = Uri.parse('comgooglemaps://?daddr=${f.lat},${f.lng}&directionsmode=driving');
+    final googleMapsUri = Uri.parse(
+      'comgooglemaps://?daddr=${f.lat},${f.lng}&directionsmode=driving',
+    );
     // رابط ويب عام يفتح التطبيق إن كان مثبت أو المتصفح كخيار احتياطي
-    final webUri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}&travelmode=driving');
+    final webUri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}&travelmode=driving',
+    );
 
     try {
       if (await canLaunchUrl(googleMapsUri)) {
@@ -319,10 +365,292 @@ class _mapPageState extends State<mapPage> {
     }
   }
 
-  void _onSearchSubmitted(String query) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('بحث: $query')));
+  Future<void> _onSearchSubmitted(String query) async {
+    query = query.trim();
+    if (query.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يرجى إدخال نص البحث أولاً.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // 🔤 توحيد الحروف العربية
+    String normalizeArabic(String input) {
+      return input
+          .replaceAll(RegExp(r'[إأآا]'), 'ا')
+          .replaceAll('ى', 'ي')
+          .replaceAll('ئ', 'ي')
+          .replaceAll('ؤ', 'و')
+          .replaceAll('ة', 'ه')
+          .replaceAll(RegExp(r'[ًٌٍَُِّْ]'), '')
+          .replaceAll(RegExp(r'[^\u0621-\u064Aa-z0-9 ]'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim()
+          .toLowerCase();
+    }
+
+    // 🧹 إزالة كلمات عامة غير مؤثرة
+    String cleanInput(String input) {
+      final wordsToRemove = [
+        'اقرب',
+        'الاقرب',
+        'وين',
+        'فين',
+        'ابي',
+        'ابغى',
+        'اريد',
+        'دلني',
+        'دليني',
+        'فيه',
+        'مكان',
+        'نقطه',
+        'نقطة',
+        'تدوير',
+        'حول',
+        'قريب',
+        'قريبه',
+        'في',
+        'الحي',
+        'حي',
+        'شارع',
+        'طريق',
+        'اين',
+      ];
+      for (final w in wordsToRemove) {
+        input = input.replaceAll(w, '');
+      }
+      return input.trim();
+    }
+
+    final normalizedQuery = normalizeArabic(cleanInput(query.toLowerCase()));
+
+    // 🧠 نحدد نية المستخدم (نوع البحث)
+    final isNearestSearch = query.contains('اقرب');
+    final isAreaSearch = query.contains('حي') || query.contains('شارع');
+
+    // 🧩 قاموس المترادفات
+    final Map<String, List<String>> synonyms = {
+      'قوارير': [
+        'قوارير',
+        'علب',
+        'بلاستيك',
+        'زجاج',
+        'bottle',
+        'bottles',
+        'plastic',
+      ],
+      'ملابس': [
+        'ملابس',
+        'تبرع',
+        'كسوة',
+        'cloth',
+        'clothes',
+        'clothing',
+        'donation',
+        'clothes box',
+      ],
+      'اوراق': ['اوراق', 'ورق', 'كتب', 'paper', 'papers', 'books'],
+      'طعام': ['طعام', 'اكل', 'بقايا', 'عضوي', 'organic', 'food'],
+      'rvm': ['rvm', 'اله', 'آلة', 'استرجاع', 'reverse vending', 'rvm machine'],
+    };
+
+    // ✅ تحديد نوع البحث
+    String? searchCategory;
+    for (final entry in synonyms.entries) {
+      if (entry.value.any(
+        (w) => normalizedQuery.contains(normalizeArabic(w)),
+      )) {
+        searchCategory = entry.key;
+        break;
+      }
+    }
+
+    // 📍 تحديد موقع المستخدم (افتراضي الرياض)
+    Position pos;
+    try {
+      pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (_) {
+      pos = Position(
+        latitude: 24.7136,
+        longitude: 46.6753,
+        timestamp: DateTime.now(),
+        accuracy: 10,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0,
+      );
+    }
+
+    // 🔍 نبحث عن الحاويات المطابقة
+    final List<Map<String, dynamic>> matches = [];
+
+    for (final f in _facilitiesByMarkerId.values) {
+      final combined = normalizeArabic(
+        '${f.type} ${f.address} ${f.city} ${f.provider}',
+      );
+      bool isMatch = false;
+
+      // 🟢 نتحقق من نوع الحاوية
+      if (searchCategory != null) {
+        final keywords = synonyms[searchCategory]!
+            .map(normalizeArabic)
+            .toList();
+        for (final k in keywords) {
+          if (combined.contains(k)) {
+            isMatch = true;
+            break;
+          }
+        }
+      } else {
+        isMatch = combined.contains(normalizedQuery);
+      }
+
+      // 🟣 نتحقق من الموقع (حي أو شارع)
+      final addressNorm = normalizeArabic(f.address);
+      final cityNorm = normalizeArabic(f.city);
+      final queryNorm = normalizeArabic(normalizedQuery);
+
+      String? possibleArea;
+
+      // 🔍 نحاول نكتشف اسم الحي أو الشارع من الجملة
+      final areaMatch = RegExp(
+        r'(?:حي|شارع|طريق)\s*([^\s]+)',
+      ).firstMatch(query);
+      if (areaMatch != null && areaMatch.groupCount >= 1) {
+        possibleArea = normalizeArabic(areaMatch.group(1)!);
+      } else {
+        // لو ما فيه كلمة "حي" أو "شارع"، ناخذ آخر كلمة (احتمال تكون اسم الحي)
+        final words = queryNorm.split(' ');
+        if (words.isNotEmpty) {
+          possibleArea = words.last;
+        }
+      }
+
+      // 🔎 نتحقق فعلاً من وجودها في العنوان أو المدينة
+      if (possibleArea != null &&
+          (addressNorm.contains(possibleArea) ||
+              cityNorm.contains(possibleArea))) {
+        isMatch = true;
+      }
+
+      if (isMatch) {
+        final dist = Geolocator.distanceBetween(
+          pos.latitude,
+          pos.longitude,
+          f.lat,
+          f.lng,
+        );
+        matches.add({'facility': f, 'dist': dist});
+      }
+    }
+
+    // 🚫 في حال ما لقى نتائج
+    if (matches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('لم يتم العثور على مواقع مطابقة لعبارة "$query".'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // 📏 نقرر كيف نعرض النتائج (أقرب أو الكل)
+    List<Map<String, dynamic>> top = [];
+    if (isNearestSearch || (!isAreaSearch && searchCategory != null)) {
+      matches.sort((a, b) => a['dist'].compareTo(b['dist']));
+      top = matches.take(5).toList();
+    } else if (isAreaSearch) {
+      top = matches;
+    } else {
+      top = matches;
+    }
+
+    final nearest = top.first['facility'] as Facility;
+    final nearestDist = top.first['dist'] as double;
+
+    // 🗺️ نعرض النتائج على الخريطة
+    setState(() {
+      _markers
+        ..clear()
+        ..addAll(
+          _allMarkers.where((m) {
+            return top.any(
+              (t) =>
+                  (m.position.latitude == (t['facility'] as Facility).lat) &&
+                  (m.position.longitude == (t['facility'] as Facility).lng),
+            );
+          }),
+        );
+    });
+
+    // 🎯 تقريب الكاميرا لتشمل كل النتائج (سواء أقرب أو حي/شارع)
+    final ctrl = await _mapCtrl.future;
+    LatLngBounds? bounds;
+
+    for (final t in top) {
+      final f = t['facility'] as Facility;
+      final p = LatLng(f.lat, f.lng);
+
+      if (bounds == null) {
+        bounds = LatLngBounds(southwest: p, northeast: p);
+      } else {
+        bounds = LatLngBounds(
+          southwest: LatLng(
+            p.latitude < bounds.southwest.latitude
+                ? p.latitude
+                : bounds.southwest.latitude,
+            p.longitude < bounds.southwest.longitude
+                ? p.longitude
+                : bounds.southwest.longitude,
+          ),
+          northeast: LatLng(
+            p.latitude > bounds.northeast.latitude
+                ? p.latitude
+                : bounds.northeast.latitude,
+            p.longitude > bounds.northeast.longitude
+                ? p.longitude
+                : bounds.northeast.longitude,
+          ),
+        );
+      }
+    }
+
+    // إذا عندنا نتائج، نقرب الكاميرا لتشملها كلها
+    if (bounds != null) {
+      await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+    }
+
+    // 📢 نص الرسالة حسب نوع البحث
+    String message;
+    final categoryText = searchCategory ?? 'نقطة استدامة';
+    if (isNearestSearch || (!isAreaSearch && searchCategory != null)) {
+      message =
+          'تم العثور على ${top.length} من $categoryText. أقربها يبعد ${nearestDist > 1000 ? (nearestDist / 1000).toStringAsFixed(1) + " كم" : nearestDist.toStringAsFixed(0) + " متر"}.';
+    } else if (isAreaSearch) {
+      message = 'تم العثور على ${top.length} من $categoryText .';
+    } else {
+      message = 'تم العثور على ${top.length} من نقاط الاستدامة.';
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+
+    // 🕓 نعرض السناك بار أول، وبعدها بثانية نظهر تفاصيل الحاوية
+    if (isNearestSearch || (!isAreaSearch && searchCategory != null)) {
+      Future.delayed(const Duration(seconds: 1), () {
+        _showFacilitySheet(nearest);
+      });
+    }
   }
 
   // ===== Bottom sheet لتفاصيل الفاسيليتي =====
@@ -354,8 +682,10 @@ class _mapPageState extends State<mapPage> {
                     ),
                   ),
                   Chip(
-                    label: Text(isActive ? 'نشطة' : 'متوقفة',
-                        style: const TextStyle(color: Colors.white)),
+                    label: Text(
+                      isActive ? 'نشطة' : 'متوقفة',
+                      style: const TextStyle(color: Colors.white),
+                    ),
                     backgroundColor: isActive ? Colors.teal : Colors.redAccent,
                   ), // 👈 شارة الحالة
                 ],
@@ -419,7 +749,9 @@ class _mapPageState extends State<mapPage> {
                   Expanded(
                     child: FilledButton.icon(
                       icon: const Icon(Icons.directions_outlined),
-                      style: FilledButton.styleFrom(backgroundColor: Colors.blue),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                      ),
                       onPressed: () {
                         Navigator.pop(context); // نغلق الورقة قبل الانتقال
                         _openInMaps(f);
@@ -431,7 +763,9 @@ class _mapPageState extends State<mapPage> {
                   Expanded(
                     child: FilledButton.icon(
                       icon: const Icon(Icons.report_gmailerrorred_outlined),
-                      style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                      ),
                       onPressed: () {
                         Navigator.pop(context);
                         _openReportDialog(f);
@@ -649,7 +983,10 @@ class _mapPageState extends State<mapPage> {
                 left: 12,
                 bottom: isKeyboardOpen ? 12 : 28,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -664,9 +1001,15 @@ class _mapPageState extends State<mapPage> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _LegendIcon(path: 'assets/img/clothes.png', label: 'ملابس'),
+                      _LegendIcon(
+                        path: 'assets/img/clothes.png',
+                        label: 'ملابس',
+                      ),
                       const SizedBox(width: 10),
-                      _LegendIcon(path: 'assets/img/papers.png', label: 'أوراق'),
+                      _LegendIcon(
+                        path: 'assets/img/papers.png',
+                        label: 'أوراق',
+                      ),
                       const SizedBox(width: 10),
                       _LegendIcon(path: 'assets/img/rvm.png', label: 'RVM'),
                       const SizedBox(width: 10),
@@ -779,7 +1122,8 @@ class _mapPageState extends State<mapPage> {
                         if (fClothes) allowed.add('حاوية إعادة تدوير الملابس');
                         if (fPapers) allowed.add('حاوية إعادة تدوير الأوراق');
                         if (fRvm) allowed.add('آلة استرجاع (RVM)');
-                        if (fFood) allowed.add('حاوية إعادة تدوير بقايا الطعام');
+                        if (fFood)
+                          allowed.add('حاوية إعادة تدوير بقايا الطعام');
 
                         setState(() {
                           _markers
@@ -1150,7 +1494,9 @@ class BottomNav extends StatelessWidget {
                         it.label,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w500,
                           color: color,
                         ),
                       ),
