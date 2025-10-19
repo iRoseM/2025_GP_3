@@ -169,11 +169,9 @@ class _mapPageState extends State<mapPage> {
     if (isRvm) return 'آلة استرجاع (RVM)';
     if (isPapers) return 'حاوية إعادة تدوير الأوراق';
     if (isFood) return 'حاوية إعادة تدوير بقايا الطعام';
-<<<<<<< HEAD
 
     // أنواع أخرى شائعة
-=======
->>>>>>> 872b0d3858cb1905760691324c07d3eeedfacd56
+
     if (lower.contains('قوارير') ||
         lower.contains('بلاستيك') ||
         lower.contains('علب') ||
@@ -261,12 +259,9 @@ class _mapPageState extends State<mapPage> {
         final String provider = (m['provider'] ?? '').toString();
         final String city = (m['city'] ?? '').toString();
         final String address = (m['address'] ?? '').toString();
-<<<<<<< HEAD
+
         final String status = (m['status'] ?? 'نشط')
             .toString(); // 👈 قراءة الحالة
-=======
-        final String status = (m['status'] ?? 'نشط').toString();
->>>>>>> 872b0d3858cb1905760691324c07d3eeedfacd56
 
         final pos = LatLng(lat, lng);
         final markerId = MarkerId(d.id);
@@ -297,16 +292,11 @@ class _mapPageState extends State<mapPage> {
                       if (provider.isNotEmpty) provider,
                       if (city.isNotEmpty) city,
                     ].join(' • '),
-<<<<<<< HEAD
+
               onTap: () =>
                   _showFacilitySheet(facility), // 👈 فتح الورقة من البابل
             ),
             onTap: () => _showFacilitySheet(facility), // 👈 فتح الورقة من البن
-=======
-              onTap: () => _showFacilitySheet(facility),
-            ),
-            onTap: () => _showFacilitySheet(facility),
->>>>>>> 872b0d3858cb1905760691324c07d3eeedfacd56
           ),
         );
 
@@ -360,17 +350,12 @@ class _mapPageState extends State<mapPage> {
 
   // ===== فتح الاتجاهات في Google Maps =====
   Future<void> _openInMaps(Facility f) async {
-<<<<<<< HEAD
     // نحاول أولًا مخطط comgooglemaps:// (يفتح التطبيق مباشرة على iOS/Android إن كان مثبت)
     final googleMapsUri = Uri.parse(
       'comgooglemaps://?daddr=${f.lat},${f.lng}&directionsmode=driving',
     );
     // رابط ويب عام يفتح التطبيق إن كان مثبت أو المتصفح كخيار احتياطي
-=======
-    final googleMapsUri = Uri.parse(
-      'comgooglemaps://?daddr=${f.lat},${f.lng}&directionsmode=driving',
-    );
->>>>>>> 872b0d3858cb1905760691324c07d3eeedfacd56
+
     final webUri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}&travelmode=driving',
     );
@@ -1250,29 +1235,22 @@ class _mapPageState extends State<mapPage> {
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-<<<<<<< HEAD
+
                     children: [
-=======
-                    children: const [
->>>>>>> 872b0d3858cb1905760691324c07d3eeedfacd56
                       _LegendIcon(
                         path: 'assets/img/clothes.png',
                         label: 'ملابس',
                       ),
-<<<<<<< HEAD
+
                       const SizedBox(width: 10),
-=======
-                      SizedBox(width: 10),
->>>>>>> 872b0d3858cb1905760691324c07d3eeedfacd56
+
                       _LegendIcon(
                         path: 'assets/img/papers.png',
                         label: 'أوراق',
                       ),
-<<<<<<< HEAD
+
                       const SizedBox(width: 10),
-=======
-                      SizedBox(width: 10),
->>>>>>> 872b0d3858cb1905760691324c07d3eeedfacd56
+
                       _LegendIcon(path: 'assets/img/rvm.png', label: 'RVM'),
                       SizedBox(width: 10),
                       _LegendIcon(path: 'assets/img/food.png', label: 'أكل'),
