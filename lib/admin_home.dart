@@ -7,6 +7,10 @@ import 'admin_map.dart';
 import 'profile.dart';
 import 'background_container.dart'; // ✅ for AnimatedBackgroundContainer
 
+//  Firebase لجلب بيانات المستخدم
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class AppColors {
   static const primary = Color(0xFF4BAA98);
   static const dark = Color(0xFF3C3C3B);
@@ -63,17 +67,32 @@ class _AdminHomePageState extends State<AdminHomePage> {
       baseTheme.textTheme,
     );
 
+    // ✅ المستخدم الحالي
+    final user = FirebaseAuth.instance.currentUser;
+
+    // ✅ ستريم لقراءة users/{uid}
+    final Stream<DocumentSnapshot<Map<String, dynamic>>>? userStream =
+        (user == null)
+        ? null
+        : FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .snapshots();
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Theme(
         data: baseTheme.copyWith(
           textTheme: textTheme,
-          scaffoldBackgroundColor: Colors.transparent, // ✅ transparent to show bg
+          scaffoldBackgroundColor:
+              Colors.transparent, // ✅ transparent to show bg
         ),
         child: Scaffold(
-          extendBody: true, // ✅ allows background to extend behind the bottom nav bar
+          extendBody:
+              true, // ✅ allows background to extend behind the bottom nav bar
           backgroundColor: AppColors.background, // ✅ instead of transparent
-          body: AnimatedBackgroundContainer( // ✅ wrap entire body here
+          body: AnimatedBackgroundContainer(
+            // ✅ wrap entire body here
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(18),
               child: Column(
@@ -81,90 +100,134 @@ class _AdminHomePageState extends State<AdminHomePage> {
                 children: [
                   const SizedBox(height: 4),
 
-                  // 🌿 Profile Row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Profile icon (rightmost)
-                      Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [
-                              AppColors.primary.withOpacity(.2),
-                              AppColors.sea.withOpacity(.1),
-                            ],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withOpacity(.2),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.person_outline),
-                          color: AppColors.primary,
-                          iconSize: 26,
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const profilePage(),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 6),
+                  // 🌿 Profile Row — ✅ يقرأ الاسم والأفاتار من الداتابيس
+                  StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: userStream,
+                    builder: (context, snap) {
+                      final isLoading =
+                          snap.connectionState == ConnectionState.waiting;
+                      final data = snap.data?.data();
 
-                      // Text beside the icon
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      // الاسم المعروض: username أو displayName أو البريد
+                      final String displayName = isLoading
+                          ? '...'
+                          : (data?['username']?.toString().trim().isNotEmpty ==
+                                    true
+                                ? data!['username'].toString()
+                                : (user?.displayName?.trim().isNotEmpty == true
+                                      ? user!.displayName!
+                                      : (user?.email ?? 'مستخدم')));
+
+                      // ✅ الأفاتار من pfpIndex (0..7) -> assets/pfp/pfp{index+1}.png
+                      int? pfpIndex;
+                      if (data?['pfpIndex'] is int) {
+                        pfpIndex = data!['pfpIndex'] as int;
+                      } else if (data?['pfpIndex'] != null) {
+                        pfpIndex = int.tryParse(data!['pfpIndex'].toString());
+                      }
+                      String? avatarPath;
+                      if (pfpIndex != null && pfpIndex >= 0 && pfpIndex < 8) {
+                        avatarPath = 'assets/pfp/pfp${pfpIndex + 1}.png';
+                      }
+
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          RichText(
-                            text: TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: "مرحباً، ",
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.dark,
-                                  ),
+                          // Profile icon / avatar (rightmost)
+                          Container(
+                            width: 46,
+                            height: 46,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  AppColors.primary.withOpacity(.2),
+                                  AppColors.sea.withOpacity(.1),
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withOpacity(.2),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
                                 ),
-                                TextSpan(
-                                  text: "Nameer",
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.dark,
-                                  ),
-                                ),
-                                const TextSpan(text: " 👋"),
                               ],
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "لنجعل اليوم مميزاً!",
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.sea,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(999),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const profilePage(),
+                                  ),
+                                );
+                              },
+                              child: CircleAvatar(
+                                backgroundColor: Colors.transparent,
+                                radius: 23,
+                                backgroundImage:
+                                    (avatarPath != null && !isLoading)
+                                    ? AssetImage(avatarPath)
+                                    : null,
+                                child: (avatarPath == null || isLoading)
+                                    ? const Icon(
+                                        Icons.person_outline,
+                                        color: AppColors.primary,
+                                        size: 26,
+                                      )
+                                    : null,
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 6),
+
+                          // Text beside the icon
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              RichText(
+                                text: TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: "مرحباً، ",
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.dark,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: displayName,
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.dark,
+                                      ),
+                                    ),
+                                    const TextSpan(text: " 👋"),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "لنجعل اليوم مميزاً!",
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.sea,
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
-                      ),
-                    ],
+                      );
+                    },
                   ),
 
                   const SizedBox(height: 26),
 
-                  // 📊 Dashboard Container
+                  // 📊 Dashboard Container (كما هو)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
