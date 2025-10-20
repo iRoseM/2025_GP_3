@@ -100,7 +100,7 @@ class _mapPageState extends State<mapPage> {
 
     // إن كانت صلاحية الموقع مفعّلة: تمركز + تصفية القريب
     if (mounted && _myLocationEnabled) {
-      await _centerOnUserAndFilterNearby();
+      await _centerOnUserOnly();
       _didAutoCenter = true;
     }
   }
@@ -342,7 +342,7 @@ class _mapPageState extends State<mapPage> {
 
       // إن كانت الصلاحية مفعلة ولم نتمركز تلقائياً بعد، نعمل تمركز + تصفية قريب
       if (mounted && _myLocationEnabled && !_didAutoCenter) {
-        await _centerOnUserAndFilterNearby();
+        await _centerOnUserOnly();
         _didAutoCenter = true;
       }
     }
@@ -417,6 +417,28 @@ class _mapPageState extends State<mapPage> {
     }
   }
 
+  Future<void> _centerOnUserOnly() async {
+  try {
+    final pos = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+    final userLatLng = LatLng(pos.latitude, pos.longitude);
+    final controller = await _mapCtrl.future;
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: userLatLng, zoom: 15.5),
+      ),
+    );
+  } catch (e) {
+    debugPrint('❌ center-only error: $e');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
+    );
+  }
+}
+
+
   void _filterMarkersByDistance(LatLng center, double kmRadius) {
     if (_allMarkers.isEmpty) return;
 
@@ -446,34 +468,32 @@ class _mapPageState extends State<mapPage> {
     }
   }
 
-  Future<void> _goToMyLocation() async {
-    setState(() => _isLoadingLocation = true);
-    try {
-      final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      final user = LatLng(pos.latitude, pos.longitude);
-      final controller = await _mapCtrl.future;
-      await controller.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(target: user, zoom: 15.5),
-        ),
-      );
+Future<void> _goToMyLocation() async {
+  setState(() => _isLoadingLocation = true);
+  try {
+    final pos = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+    final user = LatLng(pos.latitude, pos.longitude);
+    final controller = await _mapCtrl.future;
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: user, zoom: 15.5),
+      ),
+    );
 
-      // مع التركيز، نعيد تصفية النقاط القريبة
-      _filterMarkersByDistance(user, _nearbyKm);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS'),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoadingLocation = false);
+    // كان هنا: _filterMarkersByDistance(user, _nearbyKm);
+    // تم الحذف حتى تظل كل الفاسيلتي ظاهرة
+  } catch (_) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
+      );
     }
+  } finally {
+    if (mounted) setState(() => _isLoadingLocation = false);
   }
+}
 
   Future<void> _onSearchSubmitted(String query) async {
     query = query.trim();
