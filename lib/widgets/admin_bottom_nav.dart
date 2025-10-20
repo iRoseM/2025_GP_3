@@ -62,8 +62,9 @@ class AdminBottomNav extends StatelessWidget {
                 final it = items[i];
                 final selected = i == currentIndex;
                 final iconData = selected ? it.filled : it.outlined;
-                final color =
-                    selected ? const Color(0xFF009688) : Colors.black54;
+                final color = selected
+                    ? const Color(0xFF009688)
+                    : Colors.black54;
 
                 return Expanded(
                   child: InkWell(
@@ -77,8 +78,9 @@ class AdminBottomNav extends StatelessWidget {
                           it.label,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight:
-                                selected ? FontWeight.w800 : FontWeight.w500,
+                            fontWeight: selected
+                                ? FontWeight.w800
+                                : FontWeight.w500,
                             color: color,
                           ),
                         ),

@@ -5,8 +5,8 @@ import 'home.dart'; // homePage
 import 'task.dart'; // taskPage
 import 'map.dart'; // mapPage
 import 'community.dart'; // communityPage
-import 'background_container.dart';
-
+import 'widgets/background_container.dart';
+import 'widgets/bottom_nav.dart'; // ✅ شريط التنقل الموحد
 
 /// ملاحظة: أضف الحزمة في pubspec.yaml
 /// dependencies:
@@ -35,11 +35,50 @@ class _levelsPageState extends State<levelsPage> {
   // مثال: فتح أول 5 مراحل فقط
   final int unlockedUntil = 5;
 
+  final int _currentIndex = 2;
+
+  // ✅ دالة التنقّل الموحدة
+  void _onTap(int i) {
+    if (i == _currentIndex) return;
+    switch (i) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const homePage()),
+        );
+        break;
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const taskPage()),
+        );
+        break;
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const levelsPage()),
+        );
+        break;
+      case 3:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const mapPage()),
+        );
+        break;
+      case 4:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const communityPage()),
+        );
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
-    // === تطبيق خط IBM Plex Sans Arabic على الثيم لهذا الصفحة فقط ===
+    // === تطبيق خط IBM Plex Sans Arabic على الثيم لهذه الصفحة فقط ===
     final base = Theme.of(context);
     final arabicTextTheme = GoogleFonts.ibmPlexSansArabicTextTheme(
       base.textTheme,
@@ -73,7 +112,7 @@ class _levelsPageState extends State<levelsPage> {
         textDirection: TextDirection.rtl,
         child: Scaffold(
           extendBody: true, // ✅ let the background go behind the nav bar
-          backgroundColor: Colors.transparent, // ✅ removes flat green and black gap
+          backgroundColor: Colors.transparent,
           appBar: AppBar(
             titleSpacing: 0,
             leading: IconButton(
@@ -146,12 +185,13 @@ class _levelsPageState extends State<levelsPage> {
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                     child: GridView.builder(
                       itemCount: 12, // عدد المراحل
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: .88,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: .88,
+                          ),
                       itemBuilder: (context, index) {
                         final levelNumber = index + 1;
                         final isUnlocked = levelNumber <= unlockedUntil;
@@ -194,54 +234,10 @@ class _levelsPageState extends State<levelsPage> {
             ),
           ),
 
-
-          // === BottomNav (مطابق لـ map page) + ربط الصفحات ===
+          // === BottomNavPage ===
           bottomNavigationBar: isKeyboardOpen
               ? null
-              : BottomNav(
-                  currentIndex: 2, // تبويب "المراحل"
-                  onTap: (i) {
-                    if (i == 2) return; // أنت أصلاً على "المراحل"
-                    switch (i) {
-                      case 0: // الرئيسية
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const homePage()),
-                          (route) => false,
-                        );
-                        break;
-
-                      case 1: // مهامي
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const taskPage()),
-                        );
-                        break;
-
-                      case 3: // الخريطة
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const mapPage()),
-                          (route) => false,
-                        );
-                        break;
-
-                      case 4: // الأصدقاء / المجتمع
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(
-                            builder: (_) => const communityPage(),
-                          ),
-                        );
-                        break;
-
-                      default:
-                        break;
-                    }
-                  },
-                  onCenterTap: () {
-                    // زر "المراحل" (هنا نفتح نفس الصفحة أو تفاصيل آخر مرحلة)
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const levelsPage()),
-                    );
-                  },
-                ),
+              : BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),
         ),
       ),
     );
@@ -371,134 +367,6 @@ class _LevelCard extends StatelessWidget {
                   ),
                 ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/* ======================= BottomNav (مطابق لـ map page) ======================= */
-
-class NavItem {
-  final IconData outlined;
-  final IconData filled;
-  final String label;
-  final bool isCenter;
-  const NavItem({
-    required this.outlined,
-    required this.filled,
-    required this.label,
-    this.isCenter = false,
-  });
-}
-
-class BottomNav extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-  final VoidCallback onCenterTap;
-
-  const BottomNav({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-    required this.onCenterTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final items = const [
-      NavItem(
-        outlined: Icons.home_outlined,
-        filled: Icons.home,
-        label: 'الرئيسية',
-      ),
-      NavItem(
-        outlined: Icons.fact_check_outlined,
-        filled: Icons.fact_check,
-        label: 'مهامي',
-      ),
-      NavItem(
-        outlined: Icons.flag_outlined,
-        filled: Icons.flag,
-        label: 'المراحل',
-        isCenter: true,
-      ),
-      NavItem(
-        outlined: Icons.map_outlined,
-        filled: Icons.map,
-        label: 'الخريطة',
-      ),
-      NavItem(
-        outlined: Icons.group_outlined,
-        filled: Icons.group,
-        label: 'الأصدقاء',
-      ),
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
-        child: Container(
-          height: 70,
-          color: Colors.white,
-          child: Row(
-            children: List.generate(items.length, (i) {
-              final it = items[i];
-              final selected = i == currentIndex;
-
-              if (it.isCenter) {
-                // ✅ نفس زر المراحل الموجود في map page تمامًا
-                return Expanded(
-                  child: Center(
-                    child: InkResponse(
-                      onTap: onCenterTap,
-                      radius: 40,
-                      child: Container(
-                        width: 58,
-                        height: 58,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.flag_rounded,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              final iconData = selected ? it.filled : it.outlined;
-              final color = selected ? AppColors.primary : Colors.black54;
-
-              return Expanded(
-                child: InkWell(
-                  onTap: () => onTap(i),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(iconData, color: color, size: 26),
-                      const SizedBox(height: 2),
-                      Text(
-                        it.label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: selected
-                              ? FontWeight.w800
-                              : FontWeight.w500,
-                          color: color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
           ),
         ),
       ),

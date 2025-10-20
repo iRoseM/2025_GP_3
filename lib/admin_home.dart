@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'admin_bottom_nav.dart';
+import 'widgets/admin_bottom_nav.dart';
 import 'admin_task.dart';
 import 'admin_reward.dart' as reward;
 import 'admin_map.dart';
 import 'profile.dart';
-import 'background_container.dart'; // ✅ for AnimatedBackgroundContainer
+import 'widgets/background_container.dart';
 
 //  Firebase لجلب بيانات المستخدم
 import 'package:firebase_auth/firebase_auth.dart';
@@ -118,7 +118,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                       ? user!.displayName!
                                       : (user?.email ?? 'مستخدم')));
 
-                      // ✅ الأفاتار من pfpIndex (0..7) -> assets/pfp/pfp{index+1}.png
+                      // ✅ الأفاتارات
                       int? pfpIndex;
                       if (data?['pfpIndex'] is int) {
                         pfpIndex = data!['pfpIndex'] as int;

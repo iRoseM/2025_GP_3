@@ -17,6 +17,7 @@ import 'task.dart';
 import 'community.dart';
 import 'levels.dart';
 import 'profile.dart';
+import 'widgets/bottom_nav.dart';
 
 /// ================== ألوان الواجهة ==================
 class AppColors {
@@ -60,6 +61,43 @@ class mapPage extends StatefulWidget {
 class _mapPageState extends State<mapPage> {
   final Completer<GoogleMapController> _mapCtrl = Completer();
   final TextEditingController _searchCtrl = TextEditingController();
+  final int _currentIndex = 3;
+
+  void _onTap(int i) {
+    if (i == _currentIndex) return;
+    switch (i) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const homePage()),
+        );
+        break;
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const taskPage()),
+        );
+        break;
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const levelsPage()),
+        );
+        break;
+      case 3:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const mapPage()),
+        );
+        break;
+      case 4:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const communityPage()),
+        );
+        break;
+    }
+  }
 
   static const _riyadh = LatLng(24.7136, 46.6753);
   static const _initZoom = 12.5;
@@ -418,26 +456,25 @@ class _mapPageState extends State<mapPage> {
   }
 
   Future<void> _centerOnUserOnly() async {
-  try {
-    final pos = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-    final userLatLng = LatLng(pos.latitude, pos.longitude);
-    final controller = await _mapCtrl.future;
-    await controller.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: userLatLng, zoom: 15.5),
-      ),
-    );
-  } catch (e) {
-    debugPrint('❌ center-only error: $e');
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
-    );
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      final userLatLng = LatLng(pos.latitude, pos.longitude);
+      final controller = await _mapCtrl.future;
+      await controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: userLatLng, zoom: 15.5),
+        ),
+      );
+    } catch (e) {
+      debugPrint('❌ center-only error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
+      );
+    }
   }
-}
-
 
   void _filterMarkersByDistance(LatLng center, double kmRadius) {
     if (_allMarkers.isEmpty) return;
@@ -468,32 +505,34 @@ class _mapPageState extends State<mapPage> {
     }
   }
 
-Future<void> _goToMyLocation() async {
-  setState(() => _isLoadingLocation = true);
-  try {
-    final pos = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-    final user = LatLng(pos.latitude, pos.longitude);
-    final controller = await _mapCtrl.future;
-    await controller.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: user, zoom: 15.5),
-      ),
-    );
-
-    // كان هنا: _filterMarkersByDistance(user, _nearbyKm);
-    // تم الحذف حتى تظل كل الفاسيلتي ظاهرة
-  } catch (_) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
+  Future<void> _goToMyLocation() async {
+    setState(() => _isLoadingLocation = true);
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
       );
+      final user = LatLng(pos.latitude, pos.longitude);
+      final controller = await _mapCtrl.future;
+      await controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: user, zoom: 15.5),
+        ),
+      );
+
+      // كان هنا: _filterMarkersByDistance(user, _nearbyKm);
+      // تم الحذف حتى تظل كل الفاسيلتي ظاهرة
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingLocation = false);
     }
-  } finally {
-    if (mounted) setState(() => _isLoadingLocation = false);
   }
-}
 
   Future<void> _onSearchSubmitted(String query) async {
     query = query.trim();
@@ -1280,43 +1319,9 @@ Future<void> _goToMyLocation() async {
               ),
             ],
           ),
-
-          // === BottomNav ===
           bottomNavigationBar: isKeyboardOpen
               ? null
-              : BottomNav(
-                  currentIndex: 3,
-                  onTap: (i) {
-                    if (i == 3) return;
-                    switch (i) {
-                      case 0:
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const homePage()),
-                          (route) => false,
-                        );
-                        break;
-                      case 1:
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const taskPage()),
-                        );
-                        break;
-                      case 4:
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(
-                            builder: (_) => const communityPage(),
-                          ),
-                        );
-                        break;
-                      default:
-                        break;
-                    }
-                  },
-                  onCenterTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const levelsPage()),
-                    );
-                  },
-                ),
+              : BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),
         ),
       ),
     );
@@ -1540,133 +1545,6 @@ class _RoundBtn extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : Icon(icon, color: AppColors.dark),
-        ),
-      ),
-    );
-  }
-}
-
-/* ======================= BottomNav (نسخة مضمنة) ======================= */
-
-class NavItem {
-  final IconData outlined;
-  final IconData filled;
-  final String label;
-  final bool isCenter;
-  const NavItem({
-    required this.outlined,
-    required this.filled,
-    required this.label,
-    this.isCenter = false,
-  });
-}
-
-class BottomNav extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-  final VoidCallback onCenterTap;
-
-  const BottomNav({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-    required this.onCenterTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const items = [
-      NavItem(
-        outlined: Icons.home_outlined,
-        filled: Icons.home,
-        label: 'الرئيسية',
-      ),
-      NavItem(
-        outlined: Icons.fact_check_outlined,
-        filled: Icons.fact_check,
-        label: 'مهامي',
-      ),
-      NavItem(
-        outlined: Icons.flag_outlined,
-        filled: Icons.flag,
-        label: 'المراحل',
-        isCenter: true,
-      ),
-      NavItem(
-        outlined: Icons.map_outlined,
-        filled: Icons.map,
-        label: 'الخريطة',
-      ),
-      NavItem(
-        outlined: Icons.group_outlined,
-        filled: Icons.group,
-        label: 'الأصدقاء',
-      ),
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
-        child: Container(
-          height: 70,
-          color: Colors.white,
-          child: Row(
-            children: List.generate(items.length, (i) {
-              final it = items[i];
-              final selected = i == currentIndex;
-
-              if (it.isCenter) {
-                return Expanded(
-                  child: Center(
-                    child: InkResponse(
-                      onTap: onCenterTap,
-                      radius: 40,
-                      child: Container(
-                        width: 58,
-                        height: 58,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.flag_outlined,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              final iconData = selected ? it.filled : it.outlined;
-              final color = selected ? AppColors.primary : Colors.black54;
-
-              return Expanded(
-                child: InkWell(
-                  onTap: () => onTap(i),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(iconData, color: color, size: 26),
-                      const SizedBox(height: 2),
-                      Text(
-                        it.label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: selected
-                              ? FontWeight.w800
-                              : FontWeight.w500,
-                          color: color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
         ),
       ),
     );
