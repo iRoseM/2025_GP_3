@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'background_container.dart';
+import 'widgets/background_container.dart';
 import 'dart:math';
 
 // Navigation pages
@@ -11,6 +11,7 @@ import 'home.dart';
 import 'map.dart';
 import 'levels.dart';
 import 'community.dart';
+import 'widgets/bottom_nav.dart';
 
 // Shared colors
 class AppColors {
@@ -29,6 +30,44 @@ class taskPage extends StatefulWidget {
 }
 
 class _taskPageState extends State<taskPage> {
+  final int _currentIndex = 1;
+
+  void _onTap(int i) {
+    if (i == _currentIndex) return;
+    switch (i) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const homePage()),
+        );
+        break;
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const taskPage()),
+        );
+        break;
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const levelsPage()),
+        );
+        break;
+      case 3:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const mapPage()),
+        );
+        break;
+      case 4:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const communityPage()),
+        );
+        break;
+    }
+  }
+
   // -------------------- Core state --------------------
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -36,14 +75,17 @@ class _taskPageState extends State<taskPage> {
   // Firebase
   final _auth = FirebaseAuth.instance;
   String? _uid;
-  DateTime? _joinDate; // when user became part of Nameer (from users/{uid}.joinDate or Auth creationTime)
+  DateTime?
+  _joinDate; // when user became part of Nameer (from users/{uid}.joinDate or Auth creationTime)
 
   // Stream for the selected day's userTask document
   Stream<DocumentSnapshot>? _userTaskStream;
 
   // -------------------- Date helpers --------------------
   DateTime _dayStart(DateTime d) => DateTime(d.year, d.month, d.day);
-  DateTime _dayEnd(DateTime d) => _dayStart(d).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
+  DateTime _dayEnd(DateTime d) => _dayStart(
+    d,
+  ).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
@@ -72,7 +114,10 @@ class _taskPageState extends State<taskPage> {
     _joinDate = _dayStart(fallback);
 
     // Try reading users/{uid}.joinDate if present
-    final udoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final udoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
     if (udoc.exists && (udoc.data()?['joinDate'] != null)) {
       _joinDate = _dayStart((udoc.data()!['joinDate'] as Timestamp).toDate());
     }
@@ -111,7 +156,8 @@ class _taskPageState extends State<taskPage> {
     final tomorrow = _dayStart(today.add(const Duration(days: 1)));
 
     // Outside allowed window → don't assign
-    if (_joinDate != null && day.isBefore(_joinDate!)) return; // "weren’t a part of Nameer"
+    if (_joinDate != null && day.isBefore(_joinDate!))
+      return; // "weren’t a part of Nameer"
     if (day.isAfter(tomorrow)) return; // future beyond tomorrow
 
     final key = '${_uid!}_${_yyyyMMdd(day)}';
@@ -130,7 +176,10 @@ class _taskPageState extends State<taskPage> {
     String? yTaskId;
     final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
-    final ySnap = await FirebaseFirestore.instance.collection('userTasks').doc(yKey).get();
+    final ySnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(yKey)
+        .get();
     if (ySnap.exists) {
       yTaskId = ySnap.data()?['taskId'] as String?;
     }
@@ -138,7 +187,9 @@ class _taskPageState extends State<taskPage> {
     final candidates = tasksSnap.docs.where((d) => d.id != yTaskId).toList();
     final pool = candidates.isEmpty ? tasksSnap.docs : candidates;
 
-    final rnd = Random(DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch);
+    final rnd = Random(
+      DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch,
+    );
     final picked = pool[rnd.nextInt(pool.length)];
 
     final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
@@ -168,8 +219,10 @@ class _taskPageState extends State<taskPage> {
     if (_uid == null) return;
     final key = '${_uid!}_${_yyyyMMdd(day)}';
     setState(() {
-      _userTaskStream =
-          FirebaseFirestore.instance.collection('userTasks').doc(key).snapshots();
+      _userTaskStream = FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(key)
+          .snapshots();
     });
   }
 
@@ -202,7 +255,10 @@ class _taskPageState extends State<taskPage> {
         SnackBar(
           content: Text(
             'انتهت مدة المهمة لهذا اليوم.',
-            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white, fontWeight: FontWeight.w700),
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           backgroundColor: Colors.redAccent,
         ),
@@ -215,7 +271,10 @@ class _taskPageState extends State<taskPage> {
       SnackBar(
         content: Text(
           'بدأت المهمة ✅ بالتوفيق!',
-          style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w700, color: Colors.white),
+          style: GoogleFonts.ibmPlexSansArabic(
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
         ),
         backgroundColor: AppColors.primary,
       ),
@@ -237,7 +296,10 @@ class _taskPageState extends State<taskPage> {
         SnackBar(
           content: Text(
             'تم إكمال المهمة 🎉 أحسنتِ!',
-            style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w700, color: Colors.white),
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
           ),
           backgroundColor: AppColors.primary,
         ),
@@ -263,7 +325,9 @@ class _taskPageState extends State<taskPage> {
   Widget build(BuildContext context) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final baseTheme = Theme.of(context);
-    final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(baseTheme.textTheme);
+    final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(
+      baseTheme.textTheme,
+    );
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -316,14 +380,19 @@ class _taskPageState extends State<taskPage> {
                 Expanded(
                   child: _userTaskStream == null
                       ? const Center(
-                          child: CircularProgressIndicator(color: AppColors.primary),
+                          child: CircularProgressIndicator(
+                            color: AppColors.primary,
+                          ),
                         )
                       : StreamBuilder<DocumentSnapshot>(
                           stream: _userTaskStream!,
                           builder: (context, snap) {
-                            final sel = _selectedDay ?? _dayStart(DateTime.now());
+                            final sel =
+                                _selectedDay ?? _dayStart(DateTime.now());
                             final today = _dayStart(DateTime.now());
-                            final tomorrow = _dayStart(today.add(const Duration(days: 1)));
+                            final tomorrow = _dayStart(
+                              today.add(const Duration(days: 1)),
+                            );
 
                             // Before join date
                             if (_joinDate != null && sel.isBefore(_joinDate!)) {
@@ -337,13 +406,17 @@ class _taskPageState extends State<taskPage> {
                             if (sel.isAfter(tomorrow)) {
                               return _buildUnavailableCard(
                                 title: 'غير متاحة',
-                                subtitle: 'هذا اليوم لم يُفتح بعد. الرجاء العودة لاحقًا.',
+                                subtitle:
+                                    'هذا اليوم لم يُفتح بعد. الرجاء العودة لاحقًا.',
                               );
                             }
 
-                            if (snap.connectionState == ConnectionState.waiting) {
+                            if (snap.connectionState ==
+                                ConnectionState.waiting) {
                               return const Center(
-                                child: CircularProgressIndicator(color: AppColors.primary),
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
                               );
                             }
 
@@ -352,16 +425,20 @@ class _taskPageState extends State<taskPage> {
                               // Fire a best-effort ensure (in case user jumped quickly)
                               _ensureUserTaskForDate(sel);
                               return const Center(
-                                child: CircularProgressIndicator(color: AppColors.primary),
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
                               );
                             }
 
                             // If the selected day is in the past and still "pending", auto-mark uncompleted
                             _autoMarkExpiredIfNeeded(snap.data!);
 
-                            final ut = snap.data!.data() as Map<String, dynamic>;
+                            final ut =
+                                snap.data!.data() as Map<String, dynamic>;
                             final taskId = ut['taskId'] as String?;
-                            final status = (ut['status'] as String?) ?? 'pending';
+                            final status =
+                                (ut['status'] as String?) ?? 'pending';
                             final DateTime now = DateTime.now();
 
                             final isToday = sel.isAtSameMomentAs(today);
@@ -372,21 +449,30 @@ class _taskPageState extends State<taskPage> {
 
                             // Load referenced task
                             return FutureBuilder<DocumentSnapshot>(
-                              future: FirebaseFirestore.instance.collection('tasks').doc(taskId).get(),
+                              future: FirebaseFirestore.instance
+                                  .collection('tasks')
+                                  .doc(taskId)
+                                  .get(),
                               builder: (context, taskSnap) {
-                                if (taskSnap.connectionState == ConnectionState.waiting) {
+                                if (taskSnap.connectionState ==
+                                    ConnectionState.waiting) {
                                   return const Center(
-                                    child: CircularProgressIndicator(color: AppColors.primary),
+                                    child: CircularProgressIndicator(
+                                      color: AppColors.primary,
+                                    ),
                                   );
                                 }
-                                if (!taskSnap.hasData || !taskSnap.data!.exists) {
+                                if (!taskSnap.hasData ||
+                                    !taskSnap.data!.exists) {
                                   return _buildUnavailableCard(
                                     title: 'المهمة غير متاحة',
                                     subtitle: 'قد تكون حُذفت من النظام.',
                                   );
                                 }
 
-                                final data = taskSnap.data!.data() as Map<String, dynamic>;
+                                final data =
+                                    taskSnap.data!.data()
+                                        as Map<String, dynamic>;
                                 final bool canPerform = isToday && inWindow;
 
                                 return _buildUserTaskCard(
@@ -406,39 +492,9 @@ class _taskPageState extends State<taskPage> {
               ],
             ),
           ),
-
-          // =============== Bottom Navigation ===============
           bottomNavigationBar: isKeyboardOpen
               ? null
-              : BottomNav(
-                  currentIndex: 1,
-                  onTap: (i) {
-                    if (i == 1) return;
-                    switch (i) {
-                      case 0:
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const homePage()),
-                          (route) => false,
-                        );
-                        break;
-                      case 3:
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const mapPage()),
-                        );
-                        break;
-                      case 4:
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const communityPage()),
-                        );
-                        break;
-                    }
-                  },
-                  onCenterTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const levelsPage()),
-                    );
-                  },
-                ),
+              : BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),
         ),
       ),
     );
@@ -493,22 +549,26 @@ class _taskPageState extends State<taskPage> {
               fontWeight: FontWeight.w800,
               fontSize: 18,
             ),
-            leftChevronIcon:
-                const Icon(Icons.chevron_left, color: Colors.white),
-            rightChevronIcon:
-                const Icon(Icons.chevron_right, color: Colors.white),
+            leftChevronIcon: const Icon(
+              Icons.chevron_left,
+              color: Colors.white,
+            ),
+            rightChevronIcon: const Icon(
+              Icons.chevron_right,
+              color: Colors.white,
+            ),
           ),
           daysOfWeekStyle: DaysOfWeekStyle(
-            weekdayStyle:
-                GoogleFonts.ibmPlexSansArabic(color: Colors.white70),
-            weekendStyle:
-                GoogleFonts.ibmPlexSansArabic(color: Colors.white70),
+            weekdayStyle: GoogleFonts.ibmPlexSansArabic(color: Colors.white70),
+            weekendStyle: GoogleFonts.ibmPlexSansArabic(color: Colors.white70),
           ),
           calendarStyle: CalendarStyle(
-            defaultTextStyle:
-                GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-            weekendTextStyle:
-                GoogleFonts.ibmPlexSansArabic(color: Colors.white70),
+            defaultTextStyle: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+            ),
+            weekendTextStyle: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white70,
+            ),
             outsideDaysVisible: false,
             todayDecoration: BoxDecoration(
               color: AppColors.mint.withOpacity(0.8),
@@ -536,7 +596,9 @@ class _taskPageState extends State<taskPage> {
               _attachUserTaskStreamFor(sel); // will show unavailable card
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('هذا اليوم غير متاح بعد. الرجاء اختيار اليوم أو الغد.'),
+                  content: Text(
+                    'هذا اليوم غير متاح بعد. الرجاء اختيار اليوم أو الغد.',
+                  ),
                 ),
               );
               return;
@@ -578,20 +640,32 @@ class _taskPageState extends State<taskPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
-          BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 6))
+          BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.dark)),
+          Text(
+            title,
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.dark,
+            ),
+          ),
           if (subtitle != null) ...[
             const SizedBox(height: 8),
             Text(
               subtitle,
-              style: GoogleFonts.ibmPlexSansArabic(fontSize: 14, color: Colors.black87),
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 14,
+                color: Colors.black87,
+              ),
             ),
           ],
         ],
@@ -623,8 +697,8 @@ class _taskPageState extends State<taskPage> {
     final btnText = isTomorrow
         ? 'استعراض فقط'
         : isPast
-            ? (status == 'completed' ? 'مكتملة' : 'انتهى الوقت')
-            : (canPerform ? 'ابدأ المهمة' : 'غير متاحة الآن');
+        ? (status == 'completed' ? 'مكتملة' : 'انتهى الوقت')
+        : (canPerform ? 'ابدأ المهمة' : 'غير متاحة الآن');
 
     final btnEnabled = canPerform;
 
@@ -636,7 +710,11 @@ class _taskPageState extends State<taskPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
-          BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 6))
+          BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
         ],
       ),
       child: Column(
@@ -708,7 +786,10 @@ class _taskPageState extends State<taskPage> {
               onTap: btnEnabled ? () {} : null,
               borderRadius: BorderRadius.circular(14),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                  horizontal: 20,
+                ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   gradient: btnEnabled
@@ -744,135 +825,6 @@ class _taskPageState extends State<taskPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/* ======================= BottomNav (same structure) ======================= */
-class NavItem {
-  final IconData outlined;
-  final IconData filled;
-  final String label;
-  final bool isCenter;
-  const NavItem({
-    required this.outlined,
-    required this.filled,
-    required this.label,
-    this.isCenter = false,
-  });
-}
-
-class BottomNav extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-  final VoidCallback onCenterTap;
-
-  const BottomNav({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-    required this.onCenterTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final items = const [
-      NavItem(
-        outlined: Icons.home_outlined,
-        filled: Icons.home,
-        label: 'الرئيسية',
-      ),
-      NavItem(
-        outlined: Icons.fact_check_outlined,
-        filled: Icons.fact_check,
-        label: 'مهامي',
-      ),
-      NavItem(
-        outlined: Icons.flag_outlined,
-        filled: Icons.flag,
-        label: 'المراحل',
-        isCenter: true,
-      ),
-      NavItem(
-        outlined: Icons.map_outlined,
-        filled: Icons.map,
-        label: 'الخريطة',
-      ),
-      NavItem(
-        outlined: Icons.group_outlined,
-        filled: Icons.group,
-        label: 'الأصدقاء',
-      ),
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
-        child: Container(
-          height: 70,
-          color: Colors.white,
-          child: Row(
-            children: List.generate(items.length, (i) {
-              final it = items[i];
-              final selected = i == currentIndex;
-
-              if (it.isCenter) {
-                return Expanded(
-                  child: Center(
-                    child: InkResponse(
-                      onTap: onCenterTap,
-                      radius: 40,
-                      child: Container(
-                        width: 58,
-                        height: 58,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Color(0x22000000),
-                              blurRadius: 12,
-                              offset: Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(Icons.flag_outlined,
-                            color: Colors.white, size: 28),
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              final iconData = selected ? it.filled : it.outlined;
-              final color = selected ? AppColors.primary : Colors.black54;
-
-              return Expanded(
-                child: InkWell(
-                  onTap: () => onTap(i),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(iconData, color: color, size: 26),
-                      const SizedBox(height: 2),
-                      Text(
-                        it.label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight:
-                              selected ? FontWeight.w800 : FontWeight.w500,
-                          color: color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
       ),
     );
   }

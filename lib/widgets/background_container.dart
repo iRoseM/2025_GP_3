@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import 'home.dart'; // for AppColors and BgPainter
+import '../home.dart'; // for AppColors and BgPainter
 
 class AnimatedBackgroundContainer extends StatefulWidget {
   final Widget child;
   const AnimatedBackgroundContainer({super.key, required this.child});
 
   @override
-  State<AnimatedBackgroundContainer> createState() => _AnimatedBackgroundContainerState();
+  State<AnimatedBackgroundContainer> createState() =>
+      _AnimatedBackgroundContainerState();
 }
 
-class _AnimatedBackgroundContainerState extends State<AnimatedBackgroundContainer>
+class _AnimatedBackgroundContainerState
+    extends State<AnimatedBackgroundContainer>
     with SingleTickerProviderStateMixin {
   late final AnimationController _bgCtrl;
 
@@ -50,7 +52,6 @@ class _AnimatedBackgroundContainerState extends State<AnimatedBackgroundContaine
     );
   }
 }
-
 
 /* ======================= Background Painter ======================= */
 class _BgPainter extends CustomPainter {

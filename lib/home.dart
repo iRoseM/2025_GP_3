@@ -1,31 +1,28 @@
-// home_page.dart — نسخة محسّنة أكثر بهجة (تدرّج فاتح يمين + عنوان EcoLand داخل البلوك)
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'map.dart';
-import 'background_container.dart';
+import 'widgets/background_container.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// استيرادات الصفحات المرتبطة بالناف بار
-import 'task.dart'; // يحتوي على Widget: TaskPage
-import 'community.dart'; // يحتوي على Widget: CommunityPage
-import 'profile.dart'; // يحتوي على Widget: ProfilePage
-import 'levels.dart'; // يحتوي على Widget: levelsPage  ✅ جديد للزر الوسطي
+import 'task.dart';
+import 'community.dart';
+import 'profile.dart';
+import 'levels.dart';
+import 'widgets/bottom_nav.dart';
 
 // لوحة الألوان (هوية Nameer)
 class AppColors {
-  static const primary = Color(0xFF4BAA98); // تركوازي مشبّع
-  static const dark = Color(0xFF3C3C3B); // أسود الهوية
-  static const accent = Color(0xFFF4A340); // أصفر/برتقالي دافئ
-  static const sea = Color(0xFF1F7A8C); // لون مساعد ناعم
+  static const primary = Color(0xFF4BAA98);
+  static const dark = Color(0xFF3C3C3B);
+  static const accent = Color(0xFFF4A340);
+  static const sea = Color(0xFF1F7A8C);
   static const primary60 = Color(0x994BAA98);
   static const primary33 = Color(0x544BAA98);
   static const light = Color(0xFF79D0BE);
   static const background = Color(0xFFF3FAF7);
-
-  // ألوان الهوية الجديدة المضافة
-  static const mint = Color(0xFFB6E9C1); // #b6e9c1
-  static const tealSoft = Color(0xFF75BCAF); // #75bcaf
+  static const mint = Color(0xFFB6E9C1);
+  static const tealSoft = Color(0xFF75BCAF);
 }
 
 class homePage extends StatefulWidget {
@@ -35,7 +32,44 @@ class homePage extends StatefulWidget {
 }
 
 class _homePageState extends State<homePage> with TickerProviderStateMixin {
-  int _currentIndex = 0;
+  final int _currentIndex = 0;
+
+  void _onTap(int i) {
+    if (i == _currentIndex) return;
+    switch (i) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const homePage()),
+        );
+        break;
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const taskPage()),
+        );
+        break;
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const levelsPage()),
+        );
+        break;
+      case 3:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const mapPage()),
+        );
+        break;
+      case 4:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const communityPage()),
+        );
+        break;
+    }
+  }
+
   late final AnimationController _bgCtrl;
   late final AnimationController _floatingCtrl;
 
@@ -61,11 +95,12 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        extendBody: true, // ✅ allows the background to extend under the nav bar
-        backgroundColor: Colors.transparent, // ✅ removes the solid/black layer
+        extendBody: true,
+        backgroundColor: Colors.transparent,
         body: AnimatedBackgroundContainer(
           // ✅ unified animated background
           child: SafeArea(
@@ -541,17 +576,9 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
             ),
           ),
         ),
-
-        // ======== شريط التنقل ========
-        bottomNavigationBar: BottomNav(
-          currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
-          onCenterTap: () {
-            Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const levelsPage()));
-          },
-        ),
+        bottomNavigationBar: isKeyboardOpen
+            ? null
+            : BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),
       ),
     );
   }
@@ -1271,218 +1298,7 @@ class _FriendCard extends StatelessWidget {
   }
 }
 
-/* ======================= Bottom Navigation (زر الوسط = المراحل) ======================= */
-class BottomNav extends StatelessWidget {
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-  final VoidCallback onCenterTap;
-  const BottomNav({
-    required this.currentIndex,
-    required this.onTap,
-    required this.onCenterTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // ✅ الترتيب: الرئيسية، مهامي، (الزر الوسطي = المراحل)، الخريطة، الأصدقاء
-    final items = [
-      NavItem(
-        outlined: Icons.home_outlined,
-        filled: Icons.home,
-        label: 'الرئيسية',
-      ),
-      NavItem(
-        outlined: Icons.fact_check_outlined,
-        filled: Icons.fact_check,
-        label: 'مهامي',
-      ),
-      NavItem(
-        outlined: Icons.flag_outlined,
-        filled: Icons.flag,
-        label: 'المراحل',
-        isCenter: true,
-      ), // الوسط للمراحل
-      NavItem(
-        outlined: Icons.map_outlined,
-        filled: Icons.map,
-        label: 'الخريطة',
-      ),
-      NavItem(
-        outlined: Icons.group_outlined,
-        filled: Icons.group,
-        label: 'الأصدقاء',
-      ),
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
-        child: Container(
-          height: 70,
-          color: Colors.white,
-          child: Row(
-            children: List.generate(items.length, (i) {
-              final it = items[i];
-              final selected = i == currentIndex;
-
-              if (it.isCenter) {
-                // زر دائري للمراحل
-                return Expanded(
-                  child: Center(
-                    child: InkResponse(
-                      onTap: onCenterTap, // يفتح levelsPage
-                      radius: 40,
-                      child: Container(
-                        width: 58,
-                        height: 58,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.flag_outlined,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              // ✅ المبدأ: غير المحدد = مفرّغ، المحدد = معبّأ وباللون الأخضر
-              final iconData = selected ? it.filled : it.outlined;
-              final color = selected ? AppColors.primary : Colors.black54;
-
-              return Expanded(
-                child: InkWell(
-                  onTap: () {
-                    // لا تتنقّل لو الزر الحالي
-                    if (i == currentIndex) return;
-
-                    switch (i) {
-                      case 0: // الرئيسية
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const homePage()),
-                        );
-                        break;
-
-                      case 1: // مهامي
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const taskPage()),
-                        );
-                        break;
-
-                      case 3: // الخريطة
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const mapPage()),
-                        ); // ✅ MapPage بحرف M كبير
-                        break;
-
-                      case 4: // الأصدقاء
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(
-                            builder: (_) => const communityPage(),
-                          ),
-                        );
-                        break;
-
-                      default:
-                        onTap(i);
-                    }
-                  },
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(iconData, color: color, size: 26),
-                      const SizedBox(height: 2),
-                      Text(
-                        it.label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: selected
-                              ? FontWeight.w800
-                              : FontWeight.w500,
-                          color: color,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class NavItem {
-  final IconData outlined;
-  final IconData filled;
-  final String label;
-  final bool isCenter;
-  NavItem({
-    required this.outlined,
-    required this.filled,
-    required this.label,
-    this.isCenter = false,
-  });
-}
-
-/* ======================= Background Painter ======================= */
-// class _BgPainter extendss CustomPainter {
-//   final double t;
-//   _BgPainter(this.t);
-
-//   @override
-//   void paint(Canvas canvas, Size size) {
-//     // خلفية مبسّطة واحترافية
-//     final base = const LinearGradient(
-//       begin: Alignment.topRight,
-//       end: Alignment.bottomLeft,
-//       colors: [AppColors.background, Color(0xFFF6FBF9), Color(0xFFFFFFFF)],
-//       stops: [0.0, 0.6, 1.0],
-//     ).createShader(Offset.zero & size);
-//     canvas.drawRect(Offset.zero & size, Paint()..shader = base);
-
-//     // تأثير خفيف جداً: بقعتان ناعمتان شبه شفافتين تتحركان ببطء
-//     final blob1 = Paint()..color = AppColors.primary.withOpacity(0.06);
-//     final blob2 = Paint()..color = AppColors.accent.withOpacity(0.04);
-
-//     final cx1 = size.width * (0.18 + 0.02 * math.sin(t * 2 * math.pi));
-//     final cy1 = size.height * (0.22 + 0.02 * math.cos(t * 2 * math.pi));
-//     canvas.drawCircle(Offset(cx1, cy1), 90, blob1);
-
-//     final cx2 = size.width * (0.82 + 0.015 * math.cos(t * 2 * math.pi));
-//     final cy2 = size.height * (0.78 + 0.018 * math.sin(t * 2 * math.pi));
-//     canvas.drawCircle(Offset(cx2, cy2), 110, blob2);
-
-//     // طبقة "فوج" خفيفة جداً أعلى الشاشة
-//     final topFog = const LinearGradient(
-//       begin: Alignment.topCenter,
-//       end: Alignment.center,
-//       colors: [Color(0x22FFFFFF), Color(0x00FFFFFF)],
-//     ).createShader(Offset.zero & size);
-//     canvas.drawRect(Offset.zero & size, Paint()..shader = topFog);
-
-//     // فينييت رقيق في الزاوية
-//     final vignette = const RadialGradient(
-//       center: Alignment(-0.85, -0.9),
-//       radius: 0.8,
-//       colors: [Color(0x0A003659), Colors.transparent],
-//       stops: [0.0, 1.0],
-//     ).createShader(Offset.zero & size);
-//     canvas.drawRect(Offset.zero & size, Paint()..shader = vignette);
-//   }
-
-//   @override
-//   bool shouldRepaint(covariant _BgPainter oldDelegate) => oldDelegate.t != t;
-// }
-
-/* ======================= IsoLand 2.5D Platform (جديدة) ======================= */
+/* ======================= IsoLand 2.5D Platform ======================= */
 
 class IsoItem {
   final int row;

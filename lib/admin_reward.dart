@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'admin_bottom_nav.dart';
+import 'widgets/admin_bottom_nav.dart';
 import 'admin_home.dart';
 import 'admin_task.dart';
 import 'admin_map.dart';
-import 'background_container.dart'; // ✅ add this import
+import 'widgets/background_container.dart';
 
 class AdminRewardsPage extends StatefulWidget {
   const AdminRewardsPage({super.key});

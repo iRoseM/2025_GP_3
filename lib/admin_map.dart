@@ -8,13 +8,15 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:open_location_code/open_location_code.dart' as olc;
+import 'package:firebase_auth/firebase_auth.dart';
 
-// استيراد صفحات الأدمن
+// استيراد صفحات
 import 'admin_home.dart' as home;
 import 'admin_task.dart';
 import 'admin_reward.dart' as reward;
-import 'admin_bottom_nav.dart';
+import 'widgets/admin_bottom_nav.dart';
 import 'admin_report.dart' as report;
+import 'profile.dart';
 
 class AdminMapPage extends StatefulWidget {
   const AdminMapPage({super.key});
@@ -499,6 +501,13 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // ⬅️ هذا هو الهيدر اللي يجيب الاسم/الصورة من Firestore
+                      HeaderUserLive(
+                        // onTap: () => Navigator.push(context,
+                        //   MaterialPageRoute(builder: (_) => const profilePage())),
+                      ),
+                      const SizedBox(height: 10),
+
                       _SearchBar(
                         controller: _searchCtrl,
                         onSubmitted: _onSearchSubmitted,
@@ -1573,6 +1582,24 @@ class _SearchBar extends StatelessWidget {
   }
 }
 
+class _LegendIcon extends StatelessWidget {
+  final String path;
+  final String label;
+
+  const _LegendIcon({required this.path, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Image.asset(path, width: 18, height: 18),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+      ],
+    );
+  }
+}
+
 class _RoundBtn extends StatelessWidget {
   final IconData icon;
   final String tooltip;
@@ -1619,20 +1646,209 @@ class _RoundBtn extends StatelessWidget {
   }
 }
 
-class _LegendIcon extends StatelessWidget {
-  final String path;
-  final String label;
+// ================== الهيدر الجديد ببيانات المستخدم ===================
+// ✅ يبني ImageProvider من الداتابيس (avatarUrl أو pfpIndex) + كليك يفتح البروفايل
+class _HeaderUser extends StatelessWidget {
+  final String name;
+  final ImageProvider<Object>? avatarImage; // بدل avatarUrl نصيًا
+  final VoidCallback? onTap;
 
-  const _LegendIcon({required this.path, required this.label});
+  const _HeaderUser({required this.name, this.avatarImage, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Image.asset(path, width: 18, height: 18),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-      ],
+    final card = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // أفاتار
+          Material(
+            color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    home.AppColors.primary.withOpacity(.2),
+                    home.AppColors.primary.withOpacity(.08),
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: home.AppColors.primary.withOpacity(.18),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.transparent,
+                backgroundImage: avatarImage,
+                child: (avatarImage == null)
+                    ? const Icon(
+                        Icons.person_outline,
+                        color: home.AppColors.primary,
+                        size: 22,
+                      )
+                    : null,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // الترحيب بالاسم
+          Expanded(
+            child: Text(
+              'مرحبًا، $name',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // 👇 البطاقة قابلة للنقر دائمًا -> تفتح صفحة البروفايل
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap:
+          onTap ??
+          () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const profilePage()),
+            );
+          },
+      child: card,
+    );
+  }
+}
+
+/// ===== نسخة "لايف" تقرأ من Firestore وتبني ImageProvider تلقائيًا =====
+class HeaderUserLive extends StatelessWidget {
+  final VoidCallback? onTap;
+
+  const HeaderUserLive({super.key, this.onTap});
+
+  String _extractName(Map<String, dynamic> data, User? user) {
+    return (data['displayName'] ??
+            data['fullName'] ??
+            data['name'] ??
+            data['username'] ??
+            user?.displayName ??
+            user?.email ??
+            'مسؤول')
+        .toString();
+  }
+
+  ImageProvider<Object>? _buildAvatarProvider(
+    Map<String, dynamic> data,
+    User? user,
+  ) {
+    // 1) جرّب روابط الشبكة (حقول محتملة)
+    final candidates =
+        <String?>[
+              data['avatarUrl']?.toString(),
+              data['photoURL']?.toString(),
+              data['photoUrl']?.toString(),
+              data['imageUrl']?.toString(),
+              data['profileImage']?.toString(),
+              data['picture']?.toString(),
+              user?.photoURL,
+            ]
+            .where((s) => s != null && s!.trim().isNotEmpty)
+            .map((s) => s!.trim())
+            .toList();
+
+    for (final url in candidates) {
+      // NetworkImage يدعم http/https فقط
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        return NetworkImage(url);
+      }
+    }
+
+    // 2) Fallback إلى pfpIndex -> assets/pfp/pfp{index+1}.png (0..7)
+    final raw = data['pfpIndex'];
+    int? idx;
+    if (raw is int) {
+      idx = raw;
+    } else if (raw != null) {
+      idx = int.tryParse(raw.toString());
+    }
+    if (idx != null && idx >= 0 && idx < 8) {
+      return AssetImage('assets/pfp/pfp${idx + 1}.png');
+    }
+
+    // 3) لا شي — نرجّع null عشان تظهر الأيقونة الافتراضية
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return _HeaderUser(
+        name: 'مسؤول',
+        avatarImage: null,
+        onTap:
+            onTap ??
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const profilePage()),
+              );
+            },
+      );
+    }
+
+    final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: docRef.snapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return _HeaderUser(
+            name: '...',
+            avatarImage: null,
+            onTap:
+                onTap ??
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const profilePage()),
+                  );
+                },
+          );
+        }
+        final data = snap.data?.data() ?? {};
+        final name = _extractName(data, user);
+        final avatarImage = _buildAvatarProvider(data, user);
+
+        return _HeaderUser(
+          name: name,
+          avatarImage: avatarImage,
+          onTap:
+              onTap ??
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const profilePage()),
+                );
+              },
+        );
+      },
     );
   }
 }
