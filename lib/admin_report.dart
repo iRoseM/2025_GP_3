@@ -4,6 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../services/fcm_service.dart';
 
 /// ألوان المشروع
 class RColors {
@@ -248,15 +251,85 @@ class _ReportCardState extends State<_ReportCard> {
   Future<void> _updateDecision(String decision, {String? reason}) async {
     setState(() => _busy = true);
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final currentAdmin = FirebaseAuth.instance.currentUser;
+
+      // تحديث حالة البلاغ في قاعدة البيانات
       final updates = {
         'decision': decision,
-        'managedBy': user?.uid ?? 'admin',
-        'managedByName': user?.displayName ?? user?.email ?? 'Admin',
+        'managedBy': currentAdmin?.uid ?? 'admin',
+        'managedByName':
+            currentAdmin?.displayName ?? currentAdmin?.email ?? 'Admin',
         'resolvedAt': FieldValue.serverTimestamp(),
         if (reason != null && reason.isNotEmpty) 'rejectionReason': reason,
       };
       await widget.doc.reference.update(updates);
+
+      // جلب بيانات البلاغ والحاوية
+      final reportData = widget.doc.data();
+      final reportedUserId = reportData['reportedBy'];
+      final facilityID = reportData['facilityID'];
+
+      String notifTitle = '';
+      String notifMsg = '';
+
+      if (facilityID != null) {
+        // جلب بيانات الحاوية من مجموعة facilities
+        final facilitySnap = await FirebaseFirestore.instance
+            .collection('facilities')
+            .doc(facilityID)
+            .get();
+        final facility = facilitySnap.data();
+        final type = facility?['type'] ?? 'حاوية';
+        final address = facility?['address'] ?? '';
+        String neighborhood = '';
+
+        // استخراج اسم الحي من العنوان إن وُجد
+        final match = RegExp(r'حي\s?([^،]*)').firstMatch(address);
+        if (match != null) neighborhood = match.group(1)!;
+
+        // صياغة الرسالة حسب القرار
+        if (decision == 'approved') {
+          notifTitle = 'تم معالجة البلاغ';
+          notifMsg =
+              'تم معالجة البلاغ المتعلّق بـ "$type"${neighborhood.isNotEmpty ? ' في حي $neighborhood' : ''}. شكرًا لتعاونك 🌱';
+        } else if (decision == 'rejected') {
+          notifTitle = 'البلاغ غير صحيح';
+          notifMsg =
+              'بعد التحقق من البلاغ المتعلّق بـ "$type"${neighborhood.isNotEmpty ? ' في حي $neighborhood' : ''}، تبيّن أنه غير صحيح ♻️';
+        }
+      }
+
+      // إنشاء الإشعار في قاعدة البيانات
+      if (reportedUserId != null && notifTitle.isNotEmpty) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'userId': reportedUserId,
+          'title': notifTitle,
+          'message': notifMsg,
+          'createdAt': FieldValue.serverTimestamp(),
+          'read': false,
+          'source': 'facilityReport',
+          'sourceId': widget.doc.id,
+          'decision': decision,
+        });
+        // 🔔 إرسال إشعار خارجي (Push Notification)
+        final userSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(reportedUserId)
+            .get();
+
+        final userData = userSnap.data();
+        final fcmToken =
+            userData?['fcmToken']; // لازم يكون المستخدم خزّن توكنه سابقًا
+
+        if (fcmToken != null && fcmToken.isNotEmpty) {
+          await FCMService.sendPushNotification(
+            token: fcmToken,
+            title: notifTitle,
+            body: notifMsg,
+          );
+        }
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
