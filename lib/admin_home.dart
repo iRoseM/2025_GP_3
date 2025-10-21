@@ -6,6 +6,8 @@ import 'admin_reward.dart' as reward;
 import 'admin_map.dart';
 import 'profile.dart';
 import 'widgets/background_container.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import '../services/fcm_service.dart';
 
 //  Firebase لجلب بيانات المستخدم
 import 'package:firebase_auth/firebase_auth.dart';
@@ -31,6 +33,13 @@ class AdminHomePage extends StatefulWidget {
 }
 
 class _AdminHomePageState extends State<AdminHomePage> {
+  @override
+  void initState() {
+    super.initState();
+    FCMService.requestPermissionAndSaveToken();
+    FCMService.listenToForegroundMessages();
+  }
+
   int _currentIndex = 3;
 
   void _onTap(int i) {
@@ -84,15 +93,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
       child: Theme(
         data: baseTheme.copyWith(
           textTheme: textTheme,
-          scaffoldBackgroundColor:
-              Colors.transparent, // ✅ transparent to show bg
+          scaffoldBackgroundColor: Colors.transparent,
         ),
         child: Scaffold(
-          extendBody:
-              true, // ✅ allows background to extend behind the bottom nav bar
-          backgroundColor: AppColors.background, // ✅ instead of transparent
+          extendBody: true,
+          backgroundColor: AppColors.background,
           body: AnimatedBackgroundContainer(
-            // ✅ wrap entire body here
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(18),
               child: Column(
@@ -130,93 +136,98 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         avatarPath = 'assets/pfp/pfp${pfpIndex + 1}.png';
                       }
 
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Profile icon / avatar (rightmost)
-                          Container(
-                            width: 46,
-                            height: 46,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [
-                                  AppColors.primary.withOpacity(.2),
-                                  AppColors.sea.withOpacity(.1),
-                                ],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withOpacity(.2),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(999),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const profilePage(),
-                                  ),
-                                );
-                              },
-                              child: CircleAvatar(
-                                backgroundColor: Colors.transparent,
-                                radius: 23,
-                                backgroundImage:
-                                    (avatarPath != null && !isLoading)
-                                    ? AssetImage(avatarPath)
-                                    : null,
-                                child: (avatarPath == null || isLoading)
-                                    ? const Icon(
-                                        Icons.person_outline,
-                                        color: AppColors.primary,
-                                        size: 26,
-                                      )
-                                    : null,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-
-                          // Text beside the icon
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              RichText(
-                                text: TextSpan(
-                                  children: [
-                                    TextSpan(
-                                      text: "مرحباً، ",
-                                      style: GoogleFonts.ibmPlexSansArabic(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.dark,
-                                      ),
+                              // Profile icon / avatar
+                              Container(
+                                width: 46,
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppColors.primary.withOpacity(.2),
+                                      AppColors.sea.withOpacity(.1),
+                                    ],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primary.withOpacity(.2),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
                                     ),
-                                    TextSpan(
-                                      text: displayName,
-                                      style: GoogleFonts.ibmPlexSansArabic(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.dark,
-                                      ),
-                                    ),
-                                    const TextSpan(text: " 👋"),
                                   ],
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "لنجعل اليوم مميزاً!",
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.sea,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(999),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const profilePage(),
+                                      ),
+                                    );
+                                  },
+                                  child: CircleAvatar(
+                                    backgroundColor: Colors.transparent,
+                                    radius: 23,
+                                    backgroundImage:
+                                        (avatarPath != null && !isLoading)
+                                        ? AssetImage(avatarPath)
+                                        : null,
+                                    child: (avatarPath == null || isLoading)
+                                        ? const Icon(
+                                            Icons.person_outline,
+                                            color: AppColors.primary,
+                                            size: 26,
+                                          )
+                                        : null,
+                                  ),
                                 ),
+                              ),
+                              const SizedBox(width: 6),
+
+                              // Text beside the icon
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  RichText(
+                                    text: TextSpan(
+                                      children: [
+                                        TextSpan(
+                                          text: "مرحباً، ",
+                                          style: GoogleFonts.ibmPlexSansArabic(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.dark,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: displayName,
+                                          style: GoogleFonts.ibmPlexSansArabic(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.dark,
+                                          ),
+                                        ),
+                                        const TextSpan(text: " 👋"),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    "لنجعل اليوم مميزاً!",
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.sea,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -273,7 +284,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
             ),
           ),
 
-          // Bottom Navigation
           bottomNavigationBar: isKeyboardOpen
               ? null
               : AdminBottomNav(currentIndex: _currentIndex, onTap: _onTap),

@@ -4,18 +4,102 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // 👈 Firestore
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'package:flutter/services.dart';
 import 'splash.dart';
 import 'home.dart';
 import 'admin_home.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/material.dart';
 
+// تهيئة الإشعارات المحلية
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+// دالة لتجهيز إعدادات الإشعار
+Future<void> setupFlutterNotifications() async {
+  const AndroidInitializationSettings initSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  const InitializationSettings initSettings = InitializationSettings(
+    android: initSettingsAndroid,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(initSettings);
+
+  // قناة عرض الإشعار
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'high_importance_channel', // id
+    'إشعارات Nameer', // الاسم
+    description: 'القناة المخصصة للإشعارات المهمة',
+    importance: Importance.high,
+  );
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(channel);
+
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    final notification = message.notification;
+    if (notification != null) {
+      flutterLocalNotificationsPlugin.show(
+        notification.hashCode,
+        notification.title,
+        notification.body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'high_importance_channel',
+            'إشعارات Nameer',
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          ),
+        ),
+      );
+    }
+  });
+}
+
+// 🔔 استقبال الإشعارات في الخلفية
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // 🔔 تهيئة استقبال الإشعارات
+  FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+  // طلب إذن المستخدم (مرة وحدة)
+  NotificationSettings settings = await messaging.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
+  print('🔔 حالة الإذن: ${settings.authorizationStatus}');
+
+  // انتظار استلام التوكن
+  try {
+    String? token = await messaging.getToken();
+    if (token != null) {
+      print('🔥 FCM Token (تم بنجاح): $token');
+    } else {
+      print('⚠️ لم يتم الحصول على التوكن بعد، أعد التشغيل.');
+    }
+  } catch (e) {
+    print('❌ خطأ أثناء جلب التوكن: $e');
+  }
+}
 /* ======================= تهيئة ======================= */
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await setupFlutterNotifications();
+  // 🔔 تفعيل استقبال الإشعارات بالخلفية
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(const MyApp());
 }

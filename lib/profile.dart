@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'main.dart';
 import 'widgets/background_container.dart';
 import 'widgets/bottom_nav.dart';
+import 'my_reports_page.dart';
 
 class AppColors {
   static const primary = Color(0xFF009688);
@@ -185,6 +186,96 @@ class profilePage extends StatelessWidget {
 
                             const SizedBox(height: 24),
 
+                            // ---------- خانات الإعدادات ----------
+                            _SettingsCard(
+                              children: [
+                                if (data?['role'] != 'admin')
+                                  // ✅ بلاغاتي مع عدّاد الإشعارات
+                                  StreamBuilder<
+                                    QuerySnapshot<Map<String, dynamic>>
+                                  >(
+                                    stream: FirebaseFirestore.instance
+                                        .collection('notifications')
+                                        .where(
+                                          'userId',
+                                          isEqualTo: FirebaseAuth
+                                              .instance
+                                              .currentUser
+                                              ?.uid,
+                                        )
+                                        .where('read', isEqualTo: false)
+                                        .snapshots(),
+                                    builder: (context, snapshot) {
+                                      final unreadCount =
+                                          snapshot.data?.docs.length ?? 0;
+
+                                      return _SettingTile(
+                                        title: 'بلاغاتي',
+                                        icon: Icons.report_outlined,
+                                        trailing: unreadCount > 0
+                                            ? Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.redAccent,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  '$unreadCount جديدة',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.chevron_left,
+                                                color: Colors.black54,
+                                                size: 22,
+                                              ),
+                                        onTap: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const MyReportsPage(),
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
+
+                                _SettingTile(
+                                  title: 'اللغة',
+                                  icon: Icons.language,
+                                  trailing: Text(
+                                    'العربية',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      color: AppColors.dark.withOpacity(.8),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  onTap: () {
+                                    _showSnack(context, 'تغيير اللغة قريباً ✨');
+                                  },
+                                ),
+                                _SettingTile(
+                                  title: 'الخصوصية والأمان',
+                                  icon: Icons.lock_outline,
+                                  onTap: () => _showPrivacySheet(context),
+                                ),
+                                _SettingTile(
+                                  title: 'المساعدة والدعم',
+                                  icon: Icons.help_outline,
+                                  onTap: () => _showSupportSheet(context),
+                                ),
+                              ],
+                            ),
                             // ---------- زر تعديل الحساب (الوحيد الذي يفتح صفحة التعديل) ----------
                             SizedBox(
                               width: double.infinity,
@@ -260,36 +351,6 @@ class profilePage extends StatelessWidget {
                     ),
 
                     const SizedBox(height: 16),
-
-                    // ---------- خانات الإعدادات ----------
-                    _SettingsCard(
-                      children: [
-                        _SettingTile(
-                          title: 'اللغة',
-                          icon: Icons.language,
-                          trailing: Text(
-                            'العربية',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              color: AppColors.dark.withOpacity(.8),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          onTap: () {
-                            _showSnack(context, 'تغيير اللغة قريباً ✨');
-                          },
-                        ),
-                        _SettingTile(
-                          title: 'الخصوصية والأمان',
-                          icon: Icons.lock_outline,
-                          onTap: () => _showPrivacySheet(context),
-                        ),
-                        _SettingTile(
-                          title: 'المساعدة والدعم',
-                          icon: Icons.help_outline,
-                          onTap: () => _showSupportSheet(context),
-                        ),
-                      ],
-                    ),
 
                     const SizedBox(height: 16),
 

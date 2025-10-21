@@ -59,8 +59,18 @@ class _AdminMapPageState extends State<AdminMapPage> {
   @override
   void initState() {
     super.initState();
-    _ensureLocationPermission();
-    _loadMarkerIcons().then((_) => _loadFacilitiesFromFirestore());
+    _initAdminMap();
+  }
+
+  Future<void> _initAdminMap() async {
+    await _ensureLocationPermission();
+    await _loadMarkerIcons();
+    await _loadFacilitiesFromFirestore();
+
+    // 👇 بعد الإذن، تمركز تلقائي على موقع الأدمن
+    if (mounted && _myLocationEnabled) {
+      await _goToMyLocation();
+    }
   }
 
   Future<void> _loadMarkerIcons() async {

@@ -4,6 +4,8 @@ import 'map.dart';
 import 'widgets/background_container.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import '../services/fcm_service.dart';
 
 import 'task.dart';
 import 'community.dart';
@@ -76,10 +78,17 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+
+    // 🔔 طلب الإذن + حفظ التوكن + الاستماع
+    FCMService.requestPermissionAndSaveToken();
+    FCMService.listenToForegroundMessages();
+    saveFcmToken();
+
     _bgCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 14),
     )..repeat();
+
     _floatingCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
@@ -91,6 +100,18 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
     _bgCtrl.dispose();
     _floatingCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> saveFcmToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {'fcmToken': token},
+      );
+    }
   }
 
   @override
