@@ -211,7 +211,7 @@ class profilePage extends StatelessWidget {
 
                                       return _SettingTile(
                                         title: 'بلاغاتي',
-                                        icon: Icons.report_outlined,
+                                        icon: Icons.notifications_outlined,
                                         trailing: unreadCount > 0
                                             ? Container(
                                                 padding:
@@ -276,7 +276,7 @@ class profilePage extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            // ---------- زر تعديل الحساب (الوحيد الذي يفتح صفحة التعديل) ----------
+                            // ---------- زر تعديل الحساب ----------
                             SizedBox(
                               width: double.infinity,
                               child: DecoratedBox(
@@ -362,17 +362,137 @@ class profilePage extends StatelessWidget {
                           iconColor: Colors.redAccent,
                           titleColor: Colors.redAccent,
                           onTap: () async {
-                            try {
-                              await FirebaseAuth.instance.signOut();
-                            } catch (_) {}
-                            if (context.mounted) {
-                              Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute(
-                                  builder: (_) => const RegisterPage(),
-                                ),
-                                (route) => false,
-                              );
-                            }
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (context) {
+                                return Dialog(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  insetPadding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(20),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // ✅ الصورة العلوية
+                                        Image.asset(
+                                          'assets/img/nameerThink.png',
+                                          height: 120,
+                                          fit: BoxFit.contain,
+                                        ),
+                                        const SizedBox(height: 16),
+
+                                        // ✅ النص
+                                        Text(
+                                          'هل أنت متأكد أنك تريد تسجيل الخروج؟',
+                                          textAlign: TextAlign.center,
+                                          style: GoogleFonts.ibmPlexSansArabic(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.dark,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 24),
+
+                                        // ✅ الأزرار
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: OutlinedButton(
+                                                style: OutlinedButton.styleFrom(
+                                                  side: const BorderSide(
+                                                    color: AppColors.primary,
+                                                  ),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          12,
+                                                        ),
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 12,
+                                                      ),
+                                                ),
+                                                onPressed: () {
+                                                  Navigator.of(
+                                                    context,
+                                                  ).pop(); // إغلاق النافذة فقط
+                                                },
+                                                child: Text(
+                                                  'إلغاء',
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        color:
+                                                            AppColors.primary,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 16,
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: ElevatedButton(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor:
+                                                      AppColors.primary,
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          12,
+                                                        ),
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 12,
+                                                      ),
+                                                ),
+                                                onPressed: () async {
+                                                  Navigator.of(
+                                                    context,
+                                                  ).pop(); // إغلاق الرسالة أولاً
+                                                  try {
+                                                    await FirebaseAuth.instance
+                                                        .signOut();
+                                                  } catch (_) {}
+                                                  if (context.mounted) {
+                                                    Navigator.of(
+                                                      context,
+                                                    ).pushAndRemoveUntil(
+                                                      MaterialPageRoute(
+                                                        builder: (_) =>
+                                                            const RegisterPage(),
+                                                      ),
+                                                      (route) => false,
+                                                    );
+                                                  }
+                                                },
+                                                child: Text(
+                                                  'تأكيد',
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 16,
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
                           },
                         ),
                       ],
