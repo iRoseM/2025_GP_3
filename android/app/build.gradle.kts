@@ -36,6 +36,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
+
     }
     kotlinOptions { jvmTarget = "17" }
 
@@ -54,6 +56,10 @@ dependencies {
 
     // Firebase Cloud Messaging
     implementation("com.google.firebase:firebase-messaging")
+
+    // ✅ تفعيل مكتبة desugaring المطلوبة
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+
 
   // Add the dependencies for any other desired Firebase products
   // https://firebase.google.com/docs/android/setup#available-libraries

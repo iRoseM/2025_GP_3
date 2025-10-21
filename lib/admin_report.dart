@@ -331,6 +331,7 @@ class _ReportCardState extends State<_ReportCard> {
       }
 
       if (mounted) {
+        setState(() {}); // ✅ تجبر الكارد يعيد بناء نفسه
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('تم تحديث الحالة إلى ${_statusLabel(decision)}'),
