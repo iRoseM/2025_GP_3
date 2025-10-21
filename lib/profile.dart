@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'home.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'home.dart';
 import 'main.dart';
-import 'widgets/background_container.dart';
-import 'widgets/bottom_nav.dart';
+import 'services/background_container.dart';
+import 'services/bottom_nav.dart';
 import 'my_reports_page.dart';
+import 'services/connection.dart';
 
 class AppColors {
   static const primary = Color(0xFF009688);
@@ -76,6 +78,23 @@ class profilePage extends StatelessWidget {
                                 .doc(user.uid)
                                 .snapshots(),
                       builder: (context, snap) {
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return const SizedBox(
+                            height: 120,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          );
+                        }
+                        if (snap.hasError) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (context.mounted) showNoInternetDialog(context);
+                          });
+                          // ما نرجّع رسالة ثانية؛ نخلي الواجهة فاضية أو Placeholder خفيف
+                          return const SizedBox.shrink();
+                        }
                         final isLoading =
                             snap.connectionState == ConnectionState.waiting;
                         final data = snap.data?.data();
@@ -102,7 +121,6 @@ class profilePage extends StatelessWidget {
 
                         return Column(
                           children: [
-                            // ✅ لم تعد قابلة للنقر – فقط عرض
                             Container(
                               width: double.infinity,
                               padding: const EdgeInsets.all(16),
@@ -179,11 +197,79 @@ class profilePage extends StatelessWidget {
                                       ],
                                     ),
                                   ),
-                                  // ✅ شلنا أيقونة التعديل
                                 ],
                               ),
                             ),
-
+                            const SizedBox(height: 16),
+                            // ---------- زر تعديل الحساب ----------
+                            SizedBox(
+                              width: double.infinity,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      AppColors.mint,
+                                      AppColors.primary,
+                                      AppColors.primary,
+                                    ],
+                                    stops: [0.0, 0.6, 1.0],
+                                    begin: Alignment.centerRight,
+                                    end: Alignment.centerLeft,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x33000000),
+                                      blurRadius: 8,
+                                      offset: Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                      horizontal: 20,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    color: Colors.white,
+                                  ),
+                                  label: Text(
+                                    'تعديل الحساب',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  onPressed: (user == null || isLoading)
+                                      ? null
+                                      : () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) => EditProfilePage(
+                                                initialUsername: username,
+                                                initialHandle: '$username',
+                                                initialEmail: email,
+                                                initialAge: age == 0 ? 18 : age,
+                                                initialGender:
+                                                    gender, // male/female
+                                                initialPfpIndex: pfpIndex,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                ),
+                              ),
+                            ),
                             const SizedBox(height: 24),
 
                             // ---------- خانات الإعدادات ----------
@@ -206,6 +292,23 @@ class profilePage extends StatelessWidget {
                                         .where('read', isEqualTo: false)
                                         .snapshots(),
                                     builder: (context, snapshot) {
+                                      if (snapshot.hasError) {
+                                        WidgetsBinding.instance
+                                            .addPostFrameCallback((_) {
+                                              if (context.mounted)
+                                                showNoInternetDialog(context);
+                                            });
+                                        return _SettingTile(
+                                          title: 'بلاغاتي',
+                                          icon: Icons.notifications_outlined,
+                                          trailing: const Icon(
+                                            Icons.chevron_left,
+                                            color: Colors.black54,
+                                            size: 22,
+                                          ),
+                                          onTap: () {}, // أو خليها null
+                                        );
+                                      }
                                       final unreadCount =
                                           snapshot.data?.docs.length ?? 0;
 
@@ -275,75 +378,6 @@ class profilePage extends StatelessWidget {
                                   onTap: () => _showSupportSheet(context),
                                 ),
                               ],
-                            ),
-                            // ---------- زر تعديل الحساب ----------
-                            SizedBox(
-                              width: double.infinity,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      AppColors.mint,
-                                      AppColors.primary,
-                                      AppColors.primary,
-                                    ],
-                                    stops: [0.0, 0.6, 1.0],
-                                    begin: Alignment.centerRight,
-                                    end: Alignment.centerLeft,
-                                  ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x33000000),
-                                      blurRadius: 8,
-                                      offset: Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    shadowColor: Colors.transparent,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16,
-                                      horizontal: 20,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    elevation: 0,
-                                  ),
-                                  icon: const Icon(
-                                    Icons.edit,
-                                    color: Colors.white,
-                                  ),
-                                  label: Text(
-                                    'تعديل الحساب',
-                                    style: GoogleFonts.ibmPlexSansArabic(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  onPressed: (user == null || isLoading)
-                                      ? null
-                                      : () {
-                                          Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                              builder: (_) => EditProfilePage(
-                                                initialUsername: username,
-                                                initialHandle: '$username',
-                                                initialEmail: email,
-                                                initialAge: age == 0 ? 18 : age,
-                                                initialGender:
-                                                    gender, // male/female
-                                                initialPfpIndex: pfpIndex,
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                ),
-                              ),
                             ),
                           ],
                         );
@@ -915,7 +949,22 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.dispose();
   }
 
+  // ✅ دالة لتطبيع اسم المستخدم والتحقق من صيغته
+  String _normalizeHandle(String input) {
+    final raw = (input.trim()).toLowerCase();
+    final withoutAt = raw.startsWith('@') ? raw.substring(1) : raw;
+    final re = RegExp(r'^[a-z0-9._-]{3,24}$');
+    if (!re.hasMatch(withoutAt)) {
+      throw Exception('الاسم يجب أن يكون 3-24 من [a-z0-9._-]');
+    }
+    return withoutAt;
+  }
+
   Future<void> _save() async {
+    if (!await hasInternetConnection()) {
+      if (context.mounted) showNoInternetDialog(context);
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final user = FirebaseAuth.instance.currentUser;
@@ -932,75 +981,121 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
 
     try {
-      // تجهيز البيانات
-      final usernameWithoutAt = _handleCtrl.text.trim().startsWith('@')
-          ? _handleCtrl.text.trim().substring(1)
-          : _handleCtrl.text.trim();
+      // 1) طبّع اليوزرنيم المطلوب
+      final desired = _normalizeHandle(_handleCtrl.text);
 
-      final update = <String, dynamic>{
-        'username': usernameWithoutAt.isEmpty
-            ? widget.initialUsername
-            : usernameWithoutAt,
-        'email': _emailCtrl.text.trim(),
-        'age': int.tryParse(_ageCtrl.text.trim()) ?? widget.initialAge,
-        'gender': _gender, // 'male' أو 'female'
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
+      // 2) بقية الحقول
+      final newEmail = _emailCtrl.text.trim();
+      final newAge = int.tryParse(_ageCtrl.text.trim()) ?? widget.initialAge;
+      final newGender = _gender;
+      final newPfp = _pfpIndex;
 
-      // ✅ حفظ فهرس صورة البروفايل pfpIndex
-      if (_pfpIndex != null) {
-        update['pfpIndex'] = _pfpIndex;
-      }
+      final fs = FirebaseFirestore.instance;
+      final userRef = fs.collection('users').doc(user.uid);
+      final newUsernameRef = fs.collection('usernames').doc(desired);
 
-      // 1) تحديث Firestore (دمج)
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .set(update, SetOptions(merge: true));
+      await fs.runTransaction((txn) async {
+        // snapshot الحالي للمستخدم لمعرفة الاسم القديم
+        final userSnap = await txn.get(userRef);
+        final currentUsername = (userSnap.data()?['username'] ?? '')
+            .toString()
+            .toLowerCase();
 
-      // 2) تغيير كلمة المرور (إذا تم تفعيل وضع التغيير)
-      if (_changePassword) {
-        final email = user.email ?? _emailCtrl.text.trim();
-        if (email.isEmpty) {
-          throw 'لا يمكن إعادة المصادقة: البريد غير متوفر.';
+        // نفس الاسم؟ حدّث الحقول فقط
+        if (currentUsername == desired) {
+          final patch = <String, dynamic>{
+            'email': newEmail,
+            'age': newAge,
+            'gender': newGender,
+            'updatedAt': FieldValue.serverTimestamp(),
+          };
+          if (newPfp != null) patch['pfpIndex'] = newPfp;
+          txn.set(userRef, patch, SetOptions(merge: true));
+          return;
         }
 
-        final current = _currentPassCtrl.text;
-        final newPass = _newPassCtrl.text;
+        // تحقق من توفر الاسم الجديد
+        final newSnap = await txn.get(newUsernameRef);
+        if (newSnap.exists) {
+          final ownerUid = (newSnap.data()?['uid'] ?? '').toString();
+          if (ownerUid != user.uid) {
+            throw Exception('USERNAME_TAKEN');
+          }
+          // إن كان يخصني مسبقًا، نكمل
+        } else {
+          // احجز الاسم الجديد
+          txn.set(newUsernameRef, {
+            'uid': user.uid,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
 
-        // إعادة المصادقة
+        // احذف الحجز القديم إن كان لي
+        if (currentUsername.isNotEmpty) {
+          final oldRef = fs.collection('usernames').doc(currentUsername);
+          final oldSnap = await txn.get(oldRef);
+          if (oldSnap.exists && (oldSnap.data()?['uid'] == user.uid)) {
+            txn.delete(oldRef);
+          }
+        }
+
+        // حدّث وثيقة المستخدم
+        final patch = <String, dynamic>{
+          'username': desired,
+          'email': newEmail,
+          'age': newAge,
+          'gender': newGender,
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+        if (newPfp != null) patch['pfpIndex'] = newPfp;
+        txn.set(userRef, patch, SetOptions(merge: true));
+      });
+
+      // 3) تغيير كلمة المرور (خارج الترانزاكشن)
+      if (_changePassword) {
+        final emailForAuth = user.email ?? newEmail;
+        if (emailForAuth.isEmpty) {
+          throw Exception('لا يمكن إعادة المصادقة: البريد غير متوفر.');
+        }
         final cred = EmailAuthProvider.credential(
-          email: email,
-          password: current,
+          email: emailForAuth,
+          password: _currentPassCtrl.text,
         );
         await user.reauthenticateWithCredential(cred);
-
-        // تحديث كلمة المرور
-        await user.updatePassword(newPass);
+        await user.updatePassword(_newPassCtrl.text);
       }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'تم حفظ التغييرات بنجاح ✅',
+            'تم حفظ التغييرات ✅',
             style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w700),
           ),
           behavior: SnackBarBehavior.floating,
         ),
       );
+      if (!await hasInternetConnection()) {
+        if (context.mounted) showNoInternetDialog(context);
+        return;
+      }
       Navigator.of(context).pop();
+    } on Exception catch (e) {
+      String msg = 'حدث خطأ أثناء الحفظ';
+      if (e.toString().contains('USERNAME_TAKEN')) {
+        msg = 'اسم المستخدم محجوز بالفعل، جرّب اسمًا آخر.';
+      } else if (e.toString().contains('الاسم يجب أن يكون')) {
+        msg = e.toString().replaceAll('Exception: ', '');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ $msg')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'حدث خطأ أثناء الحفظ: $e',
-            style: GoogleFonts.ibmPlexSansArabic(),
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ خطأ غير متوقع: $e')));
     }
   }
 
@@ -1123,6 +1218,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             onPressed: () async {
                               final newEmail = _newEmailCtrl.text.trim();
                               final pass = _currentPassForEmailCtrl.text;
+
                               if (newEmail.isEmpty || pass.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -1133,6 +1229,25 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 );
                                 return;
                               }
+                              if (!await hasInternetConnection()) {
+                                if (context.mounted)
+                                  showNoInternetDialog(context);
+                                return;
+                              }
+                              // ✅ إذا هو نفس البريد الحالي (مقارنة بدون حساسية حالة الأحرف)
+                              if (newEmail.toLowerCase() ==
+                                  _emailCtrl.text.trim().toLowerCase()) {
+                                Navigator.pop(ctx); // إغلاق الشيت
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'هذا بريدك الحالي — لا حاجة للتغيير',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+
                               Navigator.pop(ctx);
                               await _changeEmailSecure(
                                 currentPassword: pass,
@@ -1171,11 +1286,25 @@ class _EditProfilePageState extends State<EditProfilePage> {
     required String currentPassword,
     required String newEmail,
   }) async {
+    if (!await hasInternetConnection()) {
+      if (context.mounted) showNoInternetDialog(context);
+      return;
+    }
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('لا يوجد مستخدم مسجّل')));
+      return;
+    }
+    // ✅ إذا البريد نفسه الحالي، لا تعمل أي شيء
+    if ((user.email ?? '').toLowerCase() == newEmail.toLowerCase()) {
+      // عكسه محليًا فقط لو تحب تتأكد إن الحقل محدث
+      setState(() => _emailCtrl.text = user.email ?? _emailCtrl.text);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('هذا بريدك الحالي — لا حاجة للتغيير')),
+      );
       return;
     }
 
@@ -1622,7 +1751,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         if (v == null || v.isEmpty) {
                           return 'أدخل كلمة المرور الجديدة';
                         }
-                        if (v.length < 6) return '6 أحرف على الأقل';
+                        if (v.length < 8) {
+                          return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+                        } else if (!RegExp(r'[A-Z]').hasMatch(v) ||
+                            !RegExp(r'[a-z]').hasMatch(v)) {
+                          return 'يجب أن تحتوي كلمة المرور على حرف كبير وحرف صغير على الأقل.';
+                        }
                       }
                       return null;
                     },

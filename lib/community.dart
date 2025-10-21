@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'widgets/background_container.dart';
-import 'widgets/bottom_nav.dart'; // ✅ شريط التنقل الموحد
 
-// ⬇️ استيراد الصفحات
+//  استيراد الصفحات
 import 'home.dart' show homePage;
 import 'map.dart' show mapPage;
 import 'task.dart' show taskPage;
 import 'levels.dart' show levelsPage;
+import 'services/background_container.dart';
+import 'services/bottom_nav.dart';
+import 'services/connection.dart';
 
 void main() {
   runApp(const MyApp());
@@ -39,6 +40,18 @@ class communityPage extends StatefulWidget {
 }
 
 class _communityPageState extends State<communityPage> {
+  @override
+  void initState() {
+    super.initState();
+    _checkConnection();
+  }
+
+  Future<void> _checkConnection() async {
+    if (!await hasInternetConnection()) {
+      if (mounted) showNoInternetDialog(context);
+    }
+  }
+
   // ✅ تبويب الأصدقاء = index رقم 4
   final int _currentIndex = 4;
 

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'widgets/admin_bottom_nav.dart';
+
+import 'services/admin_bottom_nav.dart';
 import 'admin_home.dart';
 import 'admin_task.dart';
 import 'admin_map.dart';
-import 'widgets/background_container.dart';
+import 'services/background_container.dart';
+import 'services/connection.dart';
 
 class AdminRewardsPage extends StatefulWidget {
   const AdminRewardsPage({super.key});
@@ -14,6 +16,18 @@ class AdminRewardsPage extends StatefulWidget {
 }
 
 class _AdminRewardsPageState extends State<AdminRewardsPage> {
+  @override
+  void initState() {
+    super.initState();
+    _checkConnection();
+  }
+
+  Future<void> _checkConnection() async {
+    if (!await hasInternetConnection()) {
+      if (mounted) showNoInternetDialog(context);
+    }
+  }
+
   int _currentIndex = 0;
 
   void _onTap(int i) {

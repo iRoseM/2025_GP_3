@@ -6,7 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../services/fcm_service.dart';
+
+import 'services/fcm_service.dart';
+import 'services/connection.dart';
 
 /// ألوان المشروع
 class RColors {
@@ -23,6 +25,18 @@ class AdminReportPage extends StatefulWidget {
 }
 
 class _AdminReportPageState extends State<AdminReportPage> {
+  @override
+  void initState() {
+    super.initState();
+    _checkNetOnce();
+  }
+
+  Future<void> _checkNetOnce() async {
+    if (!await hasInternetConnection()) {
+      if (mounted) showNoInternetDialog(context);
+    }
+  }
+
   final TextEditingController _searchCtrl = TextEditingController();
   String selectedStatus = 'الكل';
 
@@ -193,7 +207,12 @@ class _ReportList extends StatelessWidget {
         }
 
         return RefreshIndicator(
-          onRefresh: () async {},
+          onRefresh: () async {
+            if (!await hasInternetConnection()) {
+              if (context.mounted) showNoInternetDialog(context);
+              return;
+            }
+          },
           child: ListView.separated(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
@@ -249,6 +268,10 @@ class _ReportCardState extends State<_ReportCard> {
   }
 
   Future<void> _updateDecision(String decision, {String? reason}) async {
+    if (!await hasInternetConnection()) {
+      if (mounted) showNoInternetDialog(context);
+      return;
+    }
     setState(() => _busy = true);
     try {
       final currentAdmin = FirebaseAuth.instance.currentUser;
@@ -404,6 +427,10 @@ class _ReportCardState extends State<_ReportCard> {
   }
 
   Future<Map<String, dynamic>?> _fetchFacility(String id) async {
+    if (!await hasInternetConnection()) {
+      if (mounted) showNoInternetDialog(context);
+      return null;
+    }
     try {
       final snap = await FirebaseFirestore.instance
           .collection('facilities')

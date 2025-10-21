@@ -1,17 +1,18 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'map.dart';
-import 'widgets/background_container.dart';
+import 'services/background_container.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import '../services/fcm_service.dart';
 
 import 'task.dart';
 import 'community.dart';
 import 'profile.dart';
 import 'levels.dart';
-import 'widgets/bottom_nav.dart';
+import 'map.dart';
+import 'services/fcm_service.dart';
+import 'services/bottom_nav.dart';
+import 'services/connection.dart';
 
 // لوحة الألوان (هوية Nameer)
 class AppColors {
@@ -78,6 +79,15 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _initHome();
+  }
+
+  Future<void> _initHome() async {
+    if (!await hasInternetConnection()) {
+      if (mounted) showNoInternetDialog(context);
+      // تقدر ترجع هنا بدون ما تطلب أذونات FCM، أو تخلي محاولة لاحقة بزر/حدث
+      return;
+    }
 
     // 🔔 طلب الإذن + حفظ التوكن + الاستماع
     FCMService.requestPermissionAndSaveToken();
@@ -105,6 +115,10 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   Future<void> saveFcmToken() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+    if (!await hasInternetConnection()) {
+      if (context.mounted) showNoInternetDialog(context);
+      return;
+    }
 
     final token = await FirebaseMessaging.instance.getToken();
     if (token != null) {
@@ -224,10 +238,79 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                             .doc(uid)
                             .snapshots(),
                         builder: (context, snap) {
-                          final data = snap.data?.data();
+                          // 🔸 لو صار خطأ (غالباً انقطاع نت أو صلاحيات)
+                          if (snap.hasError) {
+                            return Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                16,
+                                16,
+                                12,
+                              ),
+                              child: Row(
+                                children: const [
+                                  Icon(
+                                    Icons.person_outline,
+                                    color: AppColors.primary,
+                                    size: 48,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'مرحبًا 👋',
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.dark,
+                                          ),
+                                        ),
+                                        Text(
+                                          'تحقق من اتصالك بالإنترنت',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: AppColors.sea,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
 
-                          final String username =
-                              (data?['username'] ?? 'مستخدم').toString();
+                          // 🔸 لو البيانات ما وصلت بعد
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 16, 16, 12),
+                              child: Row(
+                                children: [
+                                  CircularProgressIndicator(
+                                    color: AppColors.primary,
+                                  ),
+                                  SizedBox(width: 16),
+                                  Text(
+                                    'جاري التحميل...',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.dark,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          // 🔸 لو البيانات جاهزة نعرضها
+                          final data = snap.data?.data();
+                          final username = (data?['username'] ?? 'مستخدم')
+                              .toString();
 
                           int wallet = 0;
                           final w = data?['wallet'];
@@ -238,7 +321,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                           } else if (w != null) {
                             wallet = int.tryParse('$w') ?? 0;
                           }
-
                           return Padding(
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                             child: Row(
@@ -551,7 +633,15 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                           ),
                         ),
                         TextButton.icon(
-                          onPressed: () {},
+                          onPressed: () {
+                            hasInternetConnection().then((online) {
+                              if (!online) {
+                                if (!context.mounted) return;
+                                showNoInternetDialog(context);
+                                return;
+                              }
+                            });
+                          },
                           icon: const Icon(Icons.arrow_back, size: 16),
                           label: const Text('عرض الكل'),
                           style: TextButton.styleFrom(

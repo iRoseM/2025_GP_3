@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'widgets/admin_bottom_nav.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'services/admin_bottom_nav.dart';
 import 'admin_home.dart';
 import 'admin_reward.dart';
 import 'admin_map.dart';
 import 'dart:ui';
-import 'widgets/background_container.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'services/background_container.dart';
+import 'services/connection.dart';
 
 class AdminTasksPage extends StatefulWidget {
   const AdminTasksPage({super.key});
@@ -39,6 +41,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   }
 
   Future<void> _loadTasks() async {
+    if (!await hasInternetConnection()) {
+      if (context.mounted) showNoInternetDialog(context);
+      return;
+    }
     try {
       final querySnapshot = await _taskCollection.get();
 
@@ -71,6 +77,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   }
 
   Future<void> _loadCategories() async {
+    if (!await hasInternetConnection()) {
+      if (context.mounted) showNoInternetDialog(context);
+      return;
+    }
     try {
       final qs = await FirebaseFirestore.instance
           .collection('categories')
@@ -208,6 +218,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                 icon: const Icon(Icons.refresh, color: Colors.white),
                 tooltip: 'تحديث المهام',
                 onPressed: () async {
+                  if (!await hasInternetConnection()) {
+                    if (context.mounted) showNoInternetDialog(context);
+                    return;
+                  }
                   setState(() => _isLoading = true);
                   await _loadTasks();
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -347,6 +361,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       child: RefreshIndicator(
         color: AppColors.primary,
         onRefresh: () async {
+          if (!await hasInternetConnection()) {
+            if (context.mounted) showNoInternetDialog(context);
+            return;
+          }
           await _loadTasks();
         },
         child: ListView.builder(
@@ -953,6 +971,11 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                             ),
                           ),
                           onPressed: () async {
+                            if (!await hasInternetConnection()) {
+                              if (context.mounted)
+                                showNoInternetDialog(context);
+                              return;
+                            }
                             // if (!(formKey.currentState?.validate() ?? false)) return;
                             final form = formKey.currentState!;
                             if (!form.validate()) {
@@ -1195,6 +1218,11 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                           onPressed: () async {
+                            if (!await hasInternetConnection()) {
+                              if (context.mounted)
+                                showNoInternetDialog(context);
+                              return;
+                            }
                             try {
                               await _taskCollection.doc(task['id']).delete();
                               Navigator.pop(context);
@@ -1636,6 +1664,11 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                             ),
                           ),
                           onPressed: () async {
+                            if (!await hasInternetConnection()) {
+                              if (context.mounted)
+                                showNoInternetDialog(context);
+                              return;
+                            }
                             // Validate the form
                             if (!(formKey.currentState?.validate() ?? false)) {
                               setState(

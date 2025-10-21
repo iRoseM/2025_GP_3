@@ -5,8 +5,8 @@ import 'home.dart'; // homePage
 import 'task.dart'; // taskPage
 import 'map.dart'; // mapPage
 import 'community.dart'; // communityPage
-import 'widgets/background_container.dart';
-import 'widgets/bottom_nav.dart'; // ✅ شريط التنقل الموحد
+import 'services/background_container.dart';
+import 'services/bottom_nav.dart'; // ✅ شريط التنقل الموحد
 
 /// ملاحظة: أضف الحزمة في pubspec.yaml
 /// dependencies:

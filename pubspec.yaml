@@ -1,4 +1,4 @@
-name: my_app
+name: Nameer
 description: "A new Flutter project."
 publish_to: 'none'
 
@@ -15,7 +15,6 @@ dependencies:
   animations: ^2.0.11
   cupertino_icons: ^1.0.8
   flutter_cube: ^0.1.1
-  shared_preferences: ^2.5.3
   provider: ^6.1.5+1
   google_maps_flutter: ^2.7.0
   geolocator: ^13.0.1
@@ -34,6 +33,7 @@ dependencies:
   firebase_messaging: ^15.1.3
   googleapis_auth: ^1.6.0
   flutter_local_notifications: ^17.2.2
+  shared_preferences: ^2.2.2
   
   
 
