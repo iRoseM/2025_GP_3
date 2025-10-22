@@ -83,12 +83,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   }
 
   Future<void> _initHome() async {
-    if (!await hasInternetConnection()) {
-      if (mounted) showNoInternetDialog(context);
-      // تقدر ترجع هنا بدون ما تطلب أذونات FCM، أو تخلي محاولة لاحقة بزر/حدث
-      return;
-    }
-
     // 🔔 طلب الإذن + حفظ التوكن + الاستماع
     FCMService.requestPermissionAndSaveToken();
     FCMService.listenToForegroundMessages();
