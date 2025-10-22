@@ -9,6 +9,20 @@ import 'admin_map.dart';
 import 'dart:ui';
 import 'services/background_container.dart';
 import 'services/connection.dart';
+import 'services/title_header.dart';
+
+class AppColors {
+  static const primary = Color(0xFF4BAA98);
+  static const dark = Color(0xFF3C3C3B);
+  static const accent = Color(0xFFF4A340);
+  static const sea = Color(0xFF1F7A8C);
+  static const primary60 = Color(0x994BAA98);
+  static const primary33 = Color(0x544BAA98);
+  static const light = Color(0xFF79D0BE);
+  static const background = Color(0xFFF3FAF7);
+  static const mint = Color(0xFFB6E9C1);
+  static const tealSoft = Color(0xFF75BCAF);
+}
 
 class AdminTasksPage extends StatefulWidget {
   const AdminTasksPage({super.key});
@@ -20,8 +34,8 @@ class AdminTasksPage extends StatefulWidget {
 class _AdminTasksPageState extends State<AdminTasksPage> {
   // ---------------------------------------------------------------------------
   // 🔹 Data Sources
-  final CollectionReference _taskCollection =
-      FirebaseFirestore.instance.collection('tasks');
+  final CollectionReference _taskCollection = FirebaseFirestore.instance
+      .collection('tasks');
 
   // ---------------------------------------------------------------------------
   // 🔹 State Variables
@@ -66,7 +80,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
         final isActive = data['isActive'] == true;
 
         // --- Auto Activate when schedule time arrives ---
-        if (hasSchedule && scheduleDate != null && scheduleDate.isBefore(now) && !isActive) {
+        if (hasSchedule &&
+            scheduleDate != null &&
+            scheduleDate.isBefore(now) &&
+            !isActive) {
           await _taskCollection.doc(doc.id).update({
             'isActive': true,
             'hasSchedule': false, // mark schedule complete
@@ -75,24 +92,25 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
         }
 
         // --- Auto Deactivate when expired ---
-        if (hasExpiry && expiryDate != null && expiryDate.isBefore(now) && isActive) {
-          await _taskCollection.doc(doc.id).update({
-            'isActive': false,
-          });
+        if (hasExpiry &&
+            expiryDate != null &&
+            expiryDate.isBefore(now) &&
+            isActive) {
+          await _taskCollection.doc(doc.id).update({'isActive': false});
           data['isActive'] = false;
         }
       }
 
       setState(() {
-        _tasks = querySnapshot.docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          data['id'] = doc.id;
-          return data;
-        }).toList()
-          ..sort((a, b) {
-            if (a['isActive'] == b['isActive']) return 0;
-            return a['isActive'] == true ? -1 : 1; // active first
-          });
+        _tasks =
+            querySnapshot.docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              data['id'] = doc.id;
+              return data;
+            }).toList()..sort((a, b) {
+              if (a['isActive'] == b['isActive']) return 0;
+              return a['isActive'] == true ? -1 : 1; // active first
+            });
         _isLoading = false;
       });
     } catch (e) {
@@ -101,17 +119,19 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
     }
   }
 
-
   /// Fetch all available categories from Firestore.
   Future<void> _fetchCategories() async {
     try {
-      final qs = await FirebaseFirestore.instance.collection('categories').get();
-      final names = qs.docs
-          .map((d) => (d.data()['name'] ?? '').toString().trim())
-          .where((n) => n.isNotEmpty)
-          .toSet()
-          .toList()
-        ..sort((a, b) => a.compareTo(b));
+      final qs = await FirebaseFirestore.instance
+          .collection('categories')
+          .get();
+      final names =
+          qs.docs
+              .map((d) => (d.data()['name'] ?? '').toString().trim())
+              .where((n) => n.isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort((a, b) => a.compareTo(b));
 
       setState(() {
         _categories = names;
@@ -122,8 +142,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       setState(() => _isCatsLoading = false);
     }
   }
-
-  
 
   // ---------------------------------------------------------------------------
   // 🔹 Navigation
@@ -151,7 +169,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
         break;
     }
   }
-  
+
   // ---------------------------------------------------------------------------
   // 🔹 Task Status Helper
   // ---------------------------------------------------------------------------
@@ -167,7 +185,9 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
     final expiryDate = (task['expiryDate'] as Timestamp?)?.toDate();
 
     if (!isActive) return 'غير مفعّلة';
-    if (hasExpiry && expiryDate != null && expiryDate.isBefore(DateTime.now())) {
+    if (hasExpiry &&
+        expiryDate != null &&
+        expiryDate.isBefore(DateTime.now())) {
       return 'منتهية';
     }
     return 'نشطة';
@@ -184,8 +204,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
     final query = searchQuery.trim().toLowerCase();
 
     // Filter and sort tasks (active first)
-    final filteredTasks = _tasks
-        .where((task) {
+    final filteredTasks =
+        _tasks.where((task) {
           final title = task['title']?.toString().toLowerCase() ?? '';
           final desc = task['description']?.toString().toLowerCase() ?? '';
           final cat = task['category']?.toString() ?? '';
@@ -194,12 +214,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           final matchesCategory =
               _selectedCategories.isEmpty || _selectedCategories.contains(cat);
           return matchesSearch && matchesCategory;
-        })
-        .toList()
-      ..sort((a, b) {
-        if (a['isActive'] == b['isActive']) return 0;
-        return a['isActive'] == true ? -1 : 1;
-      });
+        }).toList()..sort((a, b) {
+          if (a['isActive'] == b['isActive']) return 0;
+          return a['isActive'] == true ? -1 : 1;
+        });
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -208,62 +226,64 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
         child: Scaffold(
           extendBody: true,
           backgroundColor: Colors.transparent,
-          appBar: _buildAppBar(),
+          extendBodyBehindAppBar: true,
+
+          // 👇 هيدر عام بدون عنوان
+          appBar: const NameerAppBar(
+            showTitleInBar: false, // 👈 عشان ما يطلع عنوان داخل الهيدر
+          ),
+
           body: AnimatedBackgroundContainer(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : Column(
-                      children: [
-                        _buildSearchBar(),
-                        const SizedBox(height: 12),
-                        _buildTaskList(filteredTasks),
-                      ],
-                    ),
+            child: Builder(
+              builder: (context) {
+                final statusBar = MediaQuery.of(context).padding.top;
+
+                // ✅ اجعلها تساوي ارتفاع الهيدر (80) + شريط الحالة + فجوة بسيطة
+                const headerH = 20.0; // نفس preferredSize للهيدر
+                const gap = 12.0; // مسافة بسيطة بعد الهيدر
+                final topPadding = statusBar + headerH + gap;
+
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(16, topPadding, 16, 16),
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 👇 العنوان الآن تحت الهيدر
+                            Text(
+                              'قائمة المهام',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                            const SizedBox(height: 15),
+
+                            _buildSearchBar(),
+                            const SizedBox(height: 12),
+
+                            Expanded(child: _buildTaskList(filteredTasks)),
+                          ],
+                        ),
+                );
+              },
             ),
           ),
+
           floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
           floatingActionButton: _buildAddFab(),
           bottomNavigationBar: isKeyboardOpen
               ? null
-              : AdminBottomNav(currentIndex: _currentIndex, onTap: _onBottomNavTap),
+              : AdminBottomNav(
+                  currentIndex: _currentIndex,
+                  onTap: _onBottomNavTap,
+                ),
         ),
       ),
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // 🔹 AppBar
-  AppBar _buildAppBar() {
-    return AppBar(
-      automaticallyImplyLeading: false,
-      centerTitle: true,
-      title: Text(
-        'قائمة المهام',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-      ),
-      flexibleSpace: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppColors.primary,
-              AppColors.primary,
-              AppColors.mint,
-            ],
-            stops: [0.0, 0.5, 1.0],
-            begin: Alignment.bottomLeft,
-            end: Alignment.topRight,
-          ),
-        ),
-      ),
-    );
-  }
-
 
   // ---------------------------------------------------------------------------
   // 🔹 UI Components
@@ -285,7 +305,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                 hintText: 'ابحث عن مهمة...',
                 prefixIcon: Icon(Icons.search, color: AppColors.primary),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -335,7 +358,9 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
         color: AppColors.primary,
         onRefresh: _fetchTasks,
         child: ListView.builder(
-          padding: const EdgeInsets.only(bottom: 200), // increase from 120 → 200
+          padding: const EdgeInsets.only(
+            bottom: 200,
+          ), // increase from 120 → 200
           itemCount: tasks.length + 1, // add 1 for the extra space
           itemBuilder: (context, index) {
             if (index == tasks.length) {
@@ -351,7 +376,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       ),
     );
   }
-  
 
   // Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
   //   return AnimatedContainer(
@@ -433,145 +457,155 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   //   );
   // }
 
-  
-// ---------------------------------------------------------------------------
-// 🔹 Task Card Builder (Compact + Expandable with Status Label)
-// ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 🔹 Task Card Builder (Compact + Expandable with Status Label)
+  // ---------------------------------------------------------------------------
 
-/// Builds an animated task card with title, category, and expansion.
-/// The card also shows:
-/// - Status label (top-left): نشطة / منتهية / غير مفعّلة
-/// - Expansion toggle to reveal task description & action buttons
-Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
-  // --- Determine the status text and color ---
-  final statusText = _getTaskStatus(task);
-  Color statusColor;
-  switch (statusText) {
-    case 'نشطة':
-      statusColor = Colors.green;
-      break;
-    case 'منتهية':
-      statusColor = Colors.redAccent;
-      break;
-    default:
-      statusColor = Colors.grey;
-  }
+  /// Builds an animated task card with title, category, and expansion.
+  /// The card also shows:
+  /// - Status label (top-left): نشطة / منتهية / غير مفعّلة
+  /// - Expansion toggle to reveal task description & action buttons
+  Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
+    // --- Determine the status text and color ---
+    final statusText = _getTaskStatus(task);
+    Color statusColor;
+    switch (statusText) {
+      case 'نشطة':
+        statusColor = Colors.green;
+        break;
+      case 'منتهية':
+        statusColor = Colors.redAccent;
+        break;
+      default:
+        statusColor = Colors.grey;
+    }
 
-  return AnimatedContainer(
-    duration: const Duration(milliseconds: 200),
-    margin: const EdgeInsets.symmetric(vertical: 6),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.grey.shade200, width: 1.2),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.12),
-          blurRadius: 5,
-          spreadRadius: 2,
-          offset: const Offset(0, 1),
-        ),
-      ],
-    ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 5,
+            spreadRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
 
-    // --- Stack allows status label overlay (top-left) ---
-    child: Stack(
-      children: [
-        // --- Main Card Content ---
-        Column(
-          children: [
-            ListTile(
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              title: Text(
-                task['title'] ?? 'بدون عنوان',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF333333),
+      // --- Stack allows status label overlay (top-left) ---
+      child: Stack(
+        children: [
+          // --- Main Card Content ---
+          Column(
+            children: [
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
                 ),
-              ),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
+                title: Text(
+                  task['title'] ?? 'بدون عنوان',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF333333),
+                  ),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.category_outlined,
+                        size: 16,
+                        color: AppColors.dark,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        task['category'] ?? 'غير مصنف',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF666666),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.category_outlined,
-                        size: 16, color: AppColors.dark),
+                    Icon(
+                      isExpanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: AppColors.primary,
+                    ),
                     const SizedBox(width: 6),
-                    Text(
-                      task['category'] ?? 'غير مصنف',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF666666),
-                        fontWeight: FontWeight.w600,
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: (task['isActive'] == true)
+                            ? Colors.green
+                            : Colors.grey.shade400,
+                        shape: BoxShape.circle,
                       ),
                     ),
                   ],
                 ),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
+                onTap: () {
+                  setState(() {
                     isExpanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    color: AppColors.primary,
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: (task['isActive'] == true)
-                          ? Colors.green
-                          : Colors.grey.shade400,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
+                        ? _expandedIndexes.remove(index)
+                        : _expandedIndexes.add(index);
+                  });
+                },
               ),
-              onTap: () {
-                setState(() {
-                  isExpanded
-                      ? _expandedIndexes.remove(index)
-                      : _expandedIndexes.add(index);
-                });
-              },
-            ),
-            if (isExpanded) _buildExpandedTaskContent(task),
-          ],
-        ),
+              if (isExpanded) _buildExpandedTaskContent(task),
+            ],
+          ),
 
-        // --- Status Label (Top-Left Corner) ---
-        Positioned(
-          top: 8,  // move slightly down
-          left: 12, // move slightly inward
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), // reduced padding
-            constraints: const BoxConstraints(minWidth: 50, minHeight: 24), // keeps shape consistent
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.08),
-              border: Border.all(color: statusColor, width: 1),
-              borderRadius: BorderRadius.circular(8), // smaller radius
-            ),
-            child: Center(
-              child: Text(
-                statusText,
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11, // smaller text
-                  color: statusColor,
+          // --- Status Label (Top-Left Corner) ---
+          Positioned(
+            top: 8, // move slightly down
+            left: 12, // move slightly inward
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 2,
+              ), // reduced padding
+              constraints: const BoxConstraints(
+                minWidth: 50,
+                minHeight: 24,
+              ), // keeps shape consistent
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.08),
+                border: Border.all(color: statusColor, width: 1),
+                borderRadius: BorderRadius.circular(8), // smaller radius
+              ),
+              child: Center(
+                child: Text(
+                  statusText,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11, // smaller text
+                    color: statusColor,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
               ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
   Widget _buildExpandedTaskContent(Map<String, dynamic> task) {
     return Padding(
@@ -655,12 +689,19 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
               color: Colors.transparent,
               child: Container(
                 width: MediaQuery.of(context).size.width * 0.85,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 25,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: const [
-                    BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 4)),
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
                   ],
                 ),
                 child: Directionality(
@@ -668,7 +709,11 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 48),
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.redAccent,
+                        size: 48,
+                      ),
                       const SizedBox(height: 10),
                       Text(
                         'تأكيد الحذف',
@@ -682,11 +727,17 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
                       Text(
                         'هل أنت متأكد من حذف هذه المهمة؟',
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.ibmPlexSansArabic(fontSize: 15, color: Colors.black87),
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 15,
+                          color: Colors.black87,
+                        ),
                       ),
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
-                        icon: const Icon(Icons.delete_outline, color: Colors.white),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.white,
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -701,7 +752,9 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
                               SnackBar(
                                 content: Text(
                                   'تم حذف المهمة بنجاح 🗑️',
-                                  style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w700),
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                                 behavior: SnackBarBehavior.floating,
                               ),
@@ -712,7 +765,10 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
                         },
                         label: Text(
                           'تأكيد الحذف',
-                          style: GoogleFonts.ibmPlexSansArabic(color: Colors.white, fontWeight: FontWeight.w800),
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -725,11 +781,13 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
           ),
         );
       },
-      transitionBuilder: (_, anim1, __, child) =>
-          FadeTransition(opacity: anim1, child: ScaleTransition(
-            scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
-            child: child,
-          )),
+      transitionBuilder: (_, anim1, __, child) => FadeTransition(
+        opacity: anim1,
+        child: ScaleTransition(
+          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+          child: child,
+        ),
+      ),
     );
   }
 
@@ -751,8 +809,10 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('تصفية المهام حسب الفئة',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  const Text(
+                    'تصفية المهام حسب الفئة',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
@@ -762,16 +822,20 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
                       return FilterChip(
                         label: Text(cat),
                         selected: selected,
-                        onSelected: (v) => setSt(() =>
-                            v ? selectedLocal.add(cat) : selectedLocal.remove(cat)),
+                        onSelected: (v) => setSt(
+                          () => v
+                              ? selectedLocal.add(cat)
+                              : selectedLocal.remove(cat),
+                        ),
                       );
                     }).toList(),
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
                     style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        minimumSize: const Size(double.infinity, 48)),
+                      backgroundColor: AppColors.primary,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
                     onPressed: () {
                       Navigator.pop(context);
                       setState(() => _selectedCategories = selectedLocal);
@@ -811,18 +875,24 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             boxShadow: [
-              BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 4)),
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
             ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('إضافة عنصر جديد',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    color: AppColors.dark,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  )),
+              Text(
+                'إضافة عنصر جديد',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  color: AppColors.dark,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               const SizedBox(height: 20),
 
               // ✅ Go to AddTaskPage
@@ -868,70 +938,76 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
   // ==========================================================================
 
   Widget _fieldLabel(String text, {bool required = false}) => Align(
-        alignment: Alignment.centerRight,
-        child: RichText(
-          text: TextSpan(
-            text: text,
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w700,
-              color: AppColors.dark.withOpacity(.9),
-              fontSize: 14,
-            ),
-            children: required
-                ? const [
-                    TextSpan(
-                      text: ' *',
-                      style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900),
-                    ),
-                  ]
-                : [],
-          ),
+    alignment: Alignment.centerRight,
+    child: RichText(
+      text: TextSpan(
+        text: text,
+        style: GoogleFonts.ibmPlexSansArabic(
+          fontWeight: FontWeight.w700,
+          color: AppColors.dark.withOpacity(.9),
+          fontSize: 14,
         ),
-      );
+        children: required
+            ? const [
+                TextSpan(
+                  text: ' *',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ]
+            : [],
+      ),
+    ),
+  );
 
   Widget _buildCancelButton(BuildContext context) => OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: Colors.redAccent, width: 1.4),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          minimumSize: const Size(double.infinity, 48),
-        ),
-        onPressed: () => Navigator.pop(context),
-        child: Text('إلغاء',
-            style: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.redAccent,
-              fontWeight: FontWeight.w700,
-            )),
-      );
+    style: OutlinedButton.styleFrom(
+      side: const BorderSide(color: Colors.redAccent, width: 1.4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      minimumSize: const Size(double.infinity, 48),
+    ),
+    onPressed: () => Navigator.pop(context),
+    child: Text(
+      'إلغاء',
+      style: GoogleFonts.ibmPlexSansArabic(
+        color: Colors.redAccent,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
 
   Widget _gradientActionButton({
     required IconData icon,
     required String label,
     required List<Color> colors,
     required VoidCallback onTap,
-  }) =>
-      Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: colors),
-          borderRadius: BorderRadius.circular(14),
+  }) => Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(colors: colors),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.transparent,
+        shadowColor: Colors.transparent,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      icon: Icon(icon, color: Colors.white),
+      label: Text(
+        label,
+        style: GoogleFonts.ibmPlexSansArabic(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
         ),
-        child: ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-          icon: Icon(icon, color: Colors.white),
-          label: Text(label,
-              style: GoogleFonts.ibmPlexSansArabic(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              )),
-          onPressed: onTap,
-        ),
-      );
+      ),
+      onPressed: onTap,
+    ),
+  );
 
   // ---- Category dropdown (with validation) ----
   Widget _buildCategoryDropdown({
@@ -970,7 +1046,10 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
                       ? const Text('...يتم تحميل الفئات')
                       : const Text('اختر الفئة'),
                   items: _categories
-                      .map((name) => DropdownMenuItem(value: name, child: Text(name)))
+                      .map(
+                        (name) =>
+                            DropdownMenuItem(value: name, child: Text(name)),
+                      )
                       .toList(),
                   onChanged: (v) {
                     onChanged(v);
@@ -1265,7 +1344,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
   final _pointsCtrl = TextEditingController();
   String? _validationType;
 
-
   // ---- Expiry ----
   bool _hasExpiry = false;
   DateTime? _expiryDate;
@@ -1280,10 +1358,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   bool _isDirty = false;
 
-  final CollectionReference _tasks =
-      FirebaseFirestore.instance.collection('tasks');
-  final CollectionReference _categoriesCol =
-      FirebaseFirestore.instance.collection('categories');
+  final CollectionReference _tasks = FirebaseFirestore.instance.collection(
+    'tasks',
+  );
+  final CollectionReference _categoriesCol = FirebaseFirestore.instance
+      .collection('categories');
 
   List<String> _categories = [];
   bool _catsLoading = true;
@@ -1305,11 +1384,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
   Future<void> _loadCategories() async {
     final qs = await _categoriesCol.get();
     setState(() {
-      _categories = qs.docs
-          .map((d) => (d['name'] ?? '').toString().trim())
-          .where((n) => n.isNotEmpty)
-          .toList()
-        ..sort((a, b) => a.compareTo(b));
+      _categories =
+          qs.docs
+              .map((d) => (d['name'] ?? '').toString().trim())
+              .where((n) => n.isNotEmpty)
+              .toList()
+            ..sort((a, b) => a.compareTo(b));
       _catsLoading = false;
     });
   }
@@ -1353,12 +1433,19 @@ class _AddTaskPageState extends State<AddTaskPage> {
               color: Colors.transparent,
               child: Container(
                 width: MediaQuery.of(context).size.width * 0.85,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 25,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: const [
-                    BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 4)),
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
                   ],
                 ),
                 child: Directionality(
@@ -1366,20 +1453,35 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 48),
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.redAccent,
+                        size: 48,
+                      ),
                       const SizedBox(height: 10),
-                      Text('تأكيد الخروج',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 20,
-                              color: AppColors.dark)),
+                      Text(
+                        'تأكيد الخروج',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          color: AppColors.dark,
+                        ),
+                      ),
                       const SizedBox(height: 8),
-                      Text('هل أنت متأكد من العودة دون حفظ التغييرات؟',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.ibmPlexSansArabic(fontSize: 15, color: Colors.black87)),
+                      Text(
+                        'هل أنت متأكد من العودة دون حفظ التغييرات؟',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 15,
+                          color: Colors.black87,
+                        ),
+                      ),
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
-                        icon: const Icon(Icons.exit_to_app, color: Colors.white),
+                        icon: const Icon(
+                          Icons.exit_to_app,
+                          color: Colors.white,
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1400,8 +1502,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       const SizedBox(height: 10),
                       OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.redAccent, width: 1.4),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          side: const BorderSide(
+                            color: Colors.redAccent,
+                            width: 1.4,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           minimumSize: const Size(double.infinity, 48),
                         ),
@@ -1415,7 +1522,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      _buildRedCancelButton(onPressed: () => Navigator.pop(context)),
+                      _buildRedCancelButton(
+                        onPressed: () => Navigator.pop(context),
+                      ),
                     ],
                   ),
                 ),
@@ -1466,7 +1575,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
             flexibleSpace: Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [AppColors.primary, AppColors.primary, AppColors.mint],
+                  colors: [
+                    AppColors.primary,
+                    AppColors.primary,
+                    AppColors.mint,
+                  ],
                   begin: Alignment.bottomLeft,
                   end: Alignment.topRight,
                 ),
@@ -1520,7 +1633,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     ),
                     validator: (v) {
                       final n = int.tryParse(v ?? '');
-                      if (n == null || n <= 0) return 'أدخل عددًا صحيحًا موجبًا';
+                      if (n == null || n <= 0)
+                        return 'أدخل عددًا صحيحًا موجبًا';
                       return null;
                     },
                     onChanged: (_) => _isDirty = true,
@@ -1533,14 +1647,18 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     value: _selectedCategory,
                     isExpanded: true,
                     decoration: InputDecoration(
-                      hintText: _catsLoading ? '...يتم تحميل الفئات' : 'اختر الفئة',
+                      hintText: _catsLoading
+                          ? '...يتم تحميل الفئات'
+                          : 'اختر الفئة',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                     items: _categories
-                        .map((name) =>
-                            DropdownMenuItem(value: name, child: Text(name)))
+                        .map(
+                          (name) =>
+                              DropdownMenuItem(value: name, child: Text(name)),
+                        )
                         .toList(),
                     onChanged: (v) {
                       setState(() => _selectedCategory = v);
@@ -1550,7 +1668,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                         (v == null || v.isEmpty) ? 'اختر تصنيف المهمة' : null,
                   ),
                   const SizedBox(height: 20),
-                  
+
                   // Validation Method Dropdown
                   _fieldLabel('طريقة التحقق', required: true),
                   const SizedBox(height: 8),
@@ -1565,10 +1683,16 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       ),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'manual', child: Text('تحقق يدوي')),
+                      DropdownMenuItem(
+                        value: 'manual',
+                        child: Text('تحقق يدوي'),
+                      ),
                       DropdownMenuItem(value: 'photo', child: Text('صورة')),
                       DropdownMenuItem(value: 'qr', child: Text('رمز QR')),
-                      DropdownMenuItem(value: 'location', child: Text('الموقع')),
+                      DropdownMenuItem(
+                        value: 'location',
+                        child: Text('الموقع'),
+                      ),
                     ],
                     onChanged: (v) {
                       setState(() => _validationType = v);
@@ -1583,7 +1707,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.light.withOpacity(0.7)),
+                      border: Border.all(
+                        color: AppColors.light.withOpacity(0.7),
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
@@ -1622,8 +1748,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 initialDate: _startDate ?? DateTime.now(),
                                 firstDate: DateTime.now(),
                                 lastDate: DateTime(2030),
-                                builder: (context, child) =>
-                                    Directionality(
+                                builder: (context, child) => Directionality(
                                   textDirection: TextDirection.rtl,
                                   child: Theme(
                                     data: Theme.of(context).copyWith(
@@ -1644,12 +1769,17 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  vertical: 12, horizontal: 14),
+                                vertical: 12,
+                                horizontal: 14,
+                              ),
                               margin: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 4),
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 border: Border.all(
-                                    color: AppColors.light.withOpacity(.7)),
+                                  color: AppColors.light.withOpacity(.7),
+                                ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
@@ -1665,8 +1795,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  const Icon(Icons.calendar_today,
-                                      color: AppColors.primary, size: 20),
+                                  const Icon(
+                                    Icons.calendar_today,
+                                    color: AppColors.primary,
+                                    size: 20,
+                                  ),
                                 ],
                               ),
                             ),
@@ -1690,12 +1823,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             onTap: () async {
                               final picked = await showDatePicker(
                                 context: context,
-                                initialDate: _expiryDate ??
+                                initialDate:
+                                    _expiryDate ??
                                     DateTime.now().add(const Duration(days: 7)),
                                 firstDate: DateTime.now(),
                                 lastDate: DateTime(2030),
-                                builder: (context, child) =>
-                                    Directionality(
+                                builder: (context, child) => Directionality(
                                   textDirection: TextDirection.rtl,
                                   child: Theme(
                                     data: Theme.of(context).copyWith(
@@ -1716,12 +1849,17 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  vertical: 12, horizontal: 14),
+                                vertical: 12,
+                                horizontal: 14,
+                              ),
                               margin: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 4),
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 border: Border.all(
-                                    color: AppColors.light.withOpacity(.7)),
+                                  color: AppColors.light.withOpacity(.7),
+                                ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
@@ -1737,8 +1875,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  const Icon(Icons.calendar_today,
-                                      color: AppColors.primary, size: 20),
+                                  const Icon(
+                                    Icons.calendar_today,
+                                    color: AppColors.primary,
+                                    size: 20,
+                                  ),
                                 ],
                               ),
                             ),
@@ -1813,7 +1954,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   ? 'تمت إضافة المهمة بنجاح ✅'
                   : 'تم تحديث المهمة بنجاح ✅',
               style: GoogleFonts.ibmPlexSansArabic(
-                  color: Colors.white, fontWeight: FontWeight.w700),
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         );
@@ -1826,27 +1969,29 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   Widget _fieldLabel(String text, {bool required = false}) => Align(
-        alignment: Alignment.centerRight,
-        child: RichText(
-          text: TextSpan(
-            text: text,
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w700,
-              color: AppColors.dark.withOpacity(.9),
-              fontSize: 14,
-            ),
-            children: required
-                ? const [
-                    TextSpan(
-                      text: ' *',
-                      style:
-                          TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900),
-                    ),
-                  ]
-                : [],
-          ),
+    alignment: Alignment.centerRight,
+    child: RichText(
+      text: TextSpan(
+        text: text,
+        style: GoogleFonts.ibmPlexSansArabic(
+          fontWeight: FontWeight.w700,
+          color: AppColors.dark.withOpacity(.9),
+          fontSize: 14,
         ),
-      );
+        children: required
+            ? const [
+                TextSpan(
+                  text: ' *',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ]
+            : [],
+      ),
+    ),
+  );
 
   Widget _buildGradientSaveButton({
     required String text,
@@ -1867,7 +2012,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
         child: Text(
           text,
@@ -1918,8 +2065,8 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
 
   bool _isDirty = false;
 
-  final CollectionReference _categoriesCol =
-      FirebaseFirestore.instance.collection('categories');
+  final CollectionReference _categoriesCol = FirebaseFirestore.instance
+      .collection('categories');
 
   @override
   void initState() {
@@ -1943,128 +2090,133 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
     _isDirty = false;
   }
 
+  Future<bool> _confirmLeaveIfDirty() async {
+    if (!_isDirty) return true;
 
-Future<bool> _confirmLeaveIfDirty() async {
-  if (!_isDirty) return true;
+    bool shouldLeave = false;
 
-  bool shouldLeave = false;
-
-  await showGeneralDialog(
-    context: context,
-    barrierDismissible: false,
-    barrierColor: Colors.black26,
-    transitionDuration: const Duration(milliseconds: 200),
-    pageBuilder: (context, anim1, anim2) {
-      return BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-        child: Center(
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.85,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x33000000),
-                    blurRadius: 10,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Directionality(
-                textDirection: TextDirection.rtl,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.redAccent,
-                      size: 48,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'تأكيد الخروج',
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 20,
-                        color: AppColors.dark,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'هل أنت متأكد من العودة دون حفظ التغييرات؟',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 15,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.exit_to_app, color: Colors.white),
-                        label: Text(
-                          'تأكيد الخروج',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        onPressed: () {
-                          shouldLeave = true;
-                          Navigator.pop(context);
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.redAccent),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        minimumSize: const Size(double.infinity, 48),
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(
-                        'إلغاء',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          color: Colors.redAccent,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+    await showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black26,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, anim1, anim2) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.85,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 25,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
                     ),
                   ],
+                ),
+                child: Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.redAccent,
+                        size: 48,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'تأكيد الخروج',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'هل أنت متأكد من العودة دون حفظ التغييرات؟',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 15,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(
+                            Icons.exit_to_app,
+                            color: Colors.white,
+                          ),
+                          label: Text(
+                            'تأكيد الخروج',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          onPressed: () {
+                            shouldLeave = true;
+                            Navigator.pop(context);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.redAccent),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          'إلغاء',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
-    },
-    transitionBuilder: (context, anim1, anim2, child) {
-      return FadeTransition(
-        opacity: anim1,
-        child: ScaleTransition(
-          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
-          child: child,
-        ),
-      );
-    },
-  );
+        );
+      },
+      transitionBuilder: (context, anim1, anim2, child) {
+        return FadeTransition(
+          opacity: anim1,
+          child: ScaleTransition(
+            scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+            child: child,
+          ),
+        );
+      },
+    );
 
-  return shouldLeave;
-}
+    return shouldLeave;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2076,41 +2228,41 @@ Future<bool> _confirmLeaveIfDirty() async {
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          centerTitle: true,
-          title: Text(
-            titleText, // already defined above: isEdit ? 'إضافة فئة جديدة' : 'تعديل الفئة',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            centerTitle: true,
+            title: Text(
+              titleText, // already defined above: isEdit ? 'إضافة فئة جديدة' : 'تعديل الفئة',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppColors.dark),
-            onPressed: () async {
-              if (await _confirmLeaveIfDirty()) {
-                if (mounted) Navigator.pop(context, false);
-              }
-            },
-            tooltip: 'رجوع',
-          ),
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.primary,
-                  AppColors.primary,
-                  AppColors.mint,
-                ],
-                stops: [0.0, 0.5, 1.0],
-                begin: Alignment.bottomLeft,
-                end: Alignment.topRight,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: AppColors.dark),
+              onPressed: () async {
+                if (await _confirmLeaveIfDirty()) {
+                  if (mounted) Navigator.pop(context, false);
+                }
+              },
+              tooltip: 'رجوع',
+            ),
+            flexibleSpace: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primary,
+                    AppColors.primary,
+                    AppColors.mint,
+                  ],
+                  stops: [0.0, 0.5, 1.0],
+                  begin: Alignment.bottomLeft,
+                  end: Alignment.topRight,
+                ),
               ),
             ),
           ),
-        ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Form(
@@ -2145,8 +2297,14 @@ Future<bool> _confirmLeaveIfDirty() async {
                       ),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'سلوك مباشر', child: Text('سلوك مباشر')),
-                      DropdownMenuItem(value: 'سلوك غير مباشر', child: Text('سلوك غير مباشر')),
+                      DropdownMenuItem(
+                        value: 'سلوك مباشر',
+                        child: Text('سلوك مباشر'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'سلوك غير مباشر',
+                        child: Text('سلوك غير مباشر'),
+                      ),
                     ],
                     onChanged: (v) {
                       setState(() => _parent = v);
@@ -2180,7 +2338,9 @@ Future<bool> _confirmLeaveIfDirty() async {
                   const SizedBox(height: 10),
                   _buildRedCancelButton(
                     onPressed: () {
-                      Navigator.pop(context); // directly closes, no confirmation
+                      Navigator.pop(
+                        context,
+                      ); // directly closes, no confirmation
                     },
                   ),
                 ],
@@ -2198,8 +2358,10 @@ Future<bool> _confirmLeaveIfDirty() async {
       return;
     }
     try {
-      final normalized =
-          _nameCtrl.text.trim().replaceAll(RegExp(r'\\s+'), ' ').toLowerCase();
+      final normalized = _nameCtrl.text
+          .trim()
+          .replaceAll(RegExp(r'\\s+'), ' ')
+          .toLowerCase();
 
       if (widget.category == null) {
         // dup check
@@ -2344,6 +2506,3 @@ Future<bool> _confirmLeaveIfDirty() async {
     );
   }
 }
-
-
-

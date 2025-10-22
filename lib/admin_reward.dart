@@ -7,6 +7,20 @@ import 'admin_task.dart';
 import 'admin_map.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
+import 'services/title_header.dart';
+
+class AppColors {
+  static const primary = Color(0xFF4BAA98);
+  static const dark = Color(0xFF3C3C3B);
+  static const accent = Color(0xFFF4A340);
+  static const sea = Color(0xFF1F7A8C);
+  static const primary60 = Color(0x994BAA98);
+  static const primary33 = Color(0x544BAA98);
+  static const light = Color(0xFF79D0BE);
+  static const background = Color(0xFFF3FAF7);
+  static const mint = Color(0xFFB6E9C1);
+  static const tealSoft = Color(0xFF75BCAF);
+}
 
 class AdminRewardsPage extends StatefulWidget {
   const AdminRewardsPage({super.key});
@@ -70,53 +84,66 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
         data: baseTheme.copyWith(
           textTheme: textTheme,
           primaryTextTheme: textTheme,
-          appBarTheme: AppBarTheme(
-            elevation: 0,
+          appBarTheme: const AppBarTheme(
             backgroundColor: Colors.transparent,
-            titleTextStyle: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-            iconTheme: const IconThemeData(color: Colors.white),
+            elevation: 0,
+            iconTheme: IconThemeData(color: Colors.white),
           ),
         ),
-
-        // ✅ Scaffold changes below
         child: Scaffold(
-          extendBody: true, // ✅ allows background under bottom nav bar
-          backgroundColor: Colors.transparent, // ✅ no black background
+          extendBody: true,
+          extendBodyBehindAppBar: true,
+          backgroundColor: Colors.transparent,
 
-          appBar: AppBar(
-            centerTitle: true,
-            title: const Text("صفحة الجوائز"),
-            flexibleSpace: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.primary,
-                    AppColors.primary,
-                    AppColors.mint,
-                  ],
-                  stops: [0.0, 0.5, 1.0],
-                  begin: Alignment.bottomLeft,
-                  end: Alignment.topRight,
-                ),
-              ),
-            ),
+          // لو عندك NameerHeader، استخدميه بدون عنوان داخل الهيدر:
+          // appBar: const NameerHeader(title: '', centerTitle: true),
+          appBar: const NameerAppBar(
+            showTitleInBar: false, // 👈 عشان ما يطلع عنوان داخل الهيدر
           ),
 
-          // ✅ Wrap your body in the background container
           body: AnimatedBackgroundContainer(
-            child: const Center(
-              child: Text(
-                "هنا صفحة الجوائز 🏆",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF3C3C3B),
-                ),
-              ),
+            child: Builder(
+              builder: (context) {
+                // نفس حساب البادينغ المستخدم في صفحة المهام
+                final statusBar = MediaQuery.of(context).padding.top;
+                const headerH = 20; // ارتفاع التولبار الحقيقي
+                const fadeH = 0.0; // ما عندنا PreferredSize إضافي هنا
+                const gap = 12.0; // مسافة بسيطة بعد الهيدر
+                final topPadding = statusBar + headerH + fadeH + gap;
+
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(16, topPadding, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ✅ العنوان هنا تحت الهيدر مباشرة (نفس H1 في صفحة المهام)
+                      Text(
+                        'صفحة الجوائز',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+
+                      // محتوى الصفحة
+                      const Expanded(
+                        child: Center(
+                          child: Text(
+                            "هنا صفحة الجوائز 🏆",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
 

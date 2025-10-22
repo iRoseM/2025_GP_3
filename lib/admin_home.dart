@@ -12,6 +12,7 @@ import 'admin_reward.dart' as reward;
 import 'admin_map.dart';
 import 'profile.dart';
 import 'services/background_container.dart';
+import 'services/title_header.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -110,6 +111,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
         child: Scaffold(
           extendBody: true,
           backgroundColor: AppColors.background,
+          // appBar: const NameerAppBar(
+          //   showTitleInBar: false, // 👈 عشان ما يطلع عنوان داخل الهيدر
+          // ),
           body: AnimatedBackgroundContainer(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(18),
