@@ -9,6 +9,20 @@ import 'levels.dart' show levelsPage;
 import 'services/background_container.dart';
 import 'services/bottom_nav.dart';
 import 'services/connection.dart';
+import 'services/title_header.dart';
+
+class AppColors {
+  static const primary = Color(0xFF4BAA98);
+  static const dark = Color(0xFF3C3C3B);
+  static const accent = Color(0xFFF4A340);
+  static const sea = Color(0xFF1F7A8C);
+  static const primary60 = Color(0x994BAA98);
+  static const primary33 = Color(0x544BAA98);
+  static const light = Color(0xFF79D0BE);
+  static const background = Color(0xFFF3FAF7);
+  static const mint = Color(0xFFB6E9C1);
+  static const tealSoft = Color(0xFF75BCAF);
+}
 
 void main() {
   runApp(const MyApp());
@@ -90,59 +104,68 @@ class _communityPageState extends State<communityPage> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ إخفاء الناف بار عند ظهور الكيبورد
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         extendBody: true,
+        extendBodyBehindAppBar: true,
         backgroundColor: Colors.transparent,
 
-        appBar: AppBar(
-          centerTitle: true,
-          title: Text(
-            "الأصدقاء",
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w700,
-              fontSize: 20,
-              color: Colors.white,
-            ),
-          ),
-          // ✅ تدرج الألوان من الهوية
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Color(0xFF009688),
-                  Color(0xFF009688),
-                  Color(0xFFB6E9C1),
-                ],
-                stops: [0.0, 0.5, 1.0],
-                begin: Alignment.bottomLeft,
-                end: Alignment.topRight,
-              ),
-            ),
-          ),
-          elevation: 0,
-          backgroundColor: Colors.transparent,
+        // هيدر نمير العام (بدون عنوان داخله)
+        appBar: const NameerAppBar(
+          showTitleInBar: false,
+          showBack: false, // كونها صفحة تبويب رئيسية
+          height: 80,
         ),
 
-        // ✅ الخلفية المتحركة الموحدة
+        // الخلفية المتحركة الموحدة
         body: AnimatedBackgroundContainer(
-          child: Center(
-            child: Text(
-              "هنا صفحة الأصدقاء 👥",
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF3C3C3B),
-              ),
-            ),
+          child: Builder(
+            builder: (context) {
+              final statusBar = MediaQuery.of(context).padding.top;
+              const headerH = 20.0; // ارتفاع شريط الأدوات الفعلي
+              const gap = 12.0; // مسافة بسيطة بعد الهيدر
+              final topPadding = statusBar + headerH + gap;
+
+              return Padding(
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // العنوان تحت الهيدر مباشرة
+                    Text(
+                      'الأصدقاء',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+
+                    // محتوى الصفحة الحالي
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          'هنا صفحة الأصدقاء 👥',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.dark,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         ),
 
-        // ✅ شريط التنقل السفلي
+        // شريط التنقل السفلي
         bottomNavigationBar: isKeyboardOpen
             ? null
             : BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),

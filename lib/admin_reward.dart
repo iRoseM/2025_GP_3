@@ -97,9 +97,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
 
           // لو عندك NameerHeader، استخدميه بدون عنوان داخل الهيدر:
           // appBar: const NameerHeader(title: '', centerTitle: true),
-          appBar: const NameerAppBar(
-            showTitleInBar: false, // 👈 عشان ما يطلع عنوان داخل الهيدر
-          ),
+          appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
 
           body: AnimatedBackgroundContainer(
             child: Builder(
@@ -118,7 +116,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                     children: [
                       // ✅ العنوان هنا تحت الهيدر مباشرة (نفس H1 في صفحة المهام)
                       Text(
-                        'صفحة الجوائز',
+                        'الجوائز والمكافآت',
                         style: GoogleFonts.ibmPlexSansArabic(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,

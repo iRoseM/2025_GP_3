@@ -9,6 +9,8 @@ import 'dart:convert';
 
 import 'services/fcm_service.dart';
 import 'services/connection.dart';
+import 'services/title_header.dart';
+import 'services/background_container.dart';
 
 /// ألوان المشروع
 class RColors {
@@ -49,97 +51,124 @@ class _AdminReportPageState extends State<AdminReportPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context).copyWith(
-      textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
-        Theme.of(context).textTheme,
-      ),
+    final baseTheme = Theme.of(context);
+    final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(
+      baseTheme.textTheme,
     );
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Theme(
-        data: theme,
+        data: baseTheme.copyWith(textTheme: textTheme),
         child: Scaffold(
-          appBar: AppBar(
-            title: const Text('بلاغات الحاويات'),
-            centerTitle: true,
-            backgroundColor: RColors.primary,
-          ),
-          body: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-                child: Row(
-                  children: [
-                    // شريط البحث (ياخذ المساحة الباقية)
-                    Expanded(
-                      child: _SearchBar(
-                        controller: _searchCtrl,
-                        hint: 'ابحث بالوصف / النوع / معرف الحاوية…',
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
+          extendBody: true,
+          backgroundColor: Colors.transparent,
+          extendBodyBehindAppBar: true,
 
-                    // أيقونة الفلتر (يسار)
-                    SizedBox(
-                      height: 48,
-                      width: 48,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x14000000),
-                              blurRadius: 12,
-                              offset: Offset(0, 6),
+          // ✅ الهيدر العام (من title_header.dart)
+          appBar: const NameerAppBar(showTitleInBar: false, showBack: true),
+
+          body: AnimatedBackgroundContainer(
+            child: Builder(
+              builder: (context) {
+                final statusBar = MediaQuery.of(context).padding.top;
+                const headerH = 20.0; // ارتفاع الهيدر الحقيقي
+                const gap = 12.0;
+                final topPadding = statusBar + headerH + gap;
+
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(12, topPadding, 12, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ✅ العنوان أسفل الهيدر
+                      Text(
+                        'بلاغات الحاويات',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+
+                      // ✅ شريط البحث + الفلتر
+                      Row(
+                        children: [
+                          // شريط البحث
+                          Expanded(
+                            child: _SearchBar(
+                              controller: _searchCtrl,
+                              hint: 'ابحث بالوصف / النوع / معرف الحاوية…',
+                              onChanged: (_) => setState(() {}),
                             ),
-                          ],
-                        ),
-                        child: PopupMenuButton<String>(
-                          icon: const Icon(
-                            Icons.filter_list,
-                            color: RColors.primary,
-                            size: 24,
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          itemBuilder: (context) {
-                            return statusMap.keys.map((label) {
-                              return PopupMenuItem<String>(
-                                value: label,
-                                child: Text(
-                                  label,
-                                  textDirection: TextDirection.rtl,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    color: Colors.black,
-                                    fontWeight: FontWeight.w500,
+                          const SizedBox(width: 8),
+
+                          // زر الفلتر
+                          SizedBox(
+                            height: 48,
+                            width: 48,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x14000000),
+                                    blurRadius: 12,
+                                    offset: Offset(0, 6),
                                   ),
+                                ],
+                              ),
+                              child: PopupMenuButton<String>(
+                                icon: const Icon(
+                                  Icons.filter_list,
+                                  color: RColors.primary,
+                                  size: 24,
                                 ),
-                              );
-                            }).toList();
-                          },
-                          onSelected: (val) {
-                            setState(() => selectedStatus = val);
-                          },
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                itemBuilder: (context) {
+                                  return statusMap.keys.map((label) {
+                                    return PopupMenuItem<String>(
+                                      value: label,
+                                      child: Text(
+                                        label,
+                                        textDirection: TextDirection.rtl,
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          color: Colors.black,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList();
+                                },
+                                onSelected: (val) {
+                                  setState(() => selectedStatus = val);
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // ✅ قائمة البلاغات
+                      Expanded(
+                        child: _ReportList(
+                          statusFilter: statusMap[selectedStatus],
+                          searchText: _searchCtrl.text,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 4),
-              Expanded(
-                child: _ReportList(
-                  statusFilter: statusMap[selectedStatus],
-                  searchText: _searchCtrl.text,
-                ),
-              ),
-            ],
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ),

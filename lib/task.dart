@@ -13,14 +13,20 @@ import 'community.dart';
 import 'services/bottom_nav.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
+import 'services/title_header.dart';
 
 // Shared colors
 class AppColors {
-  static const primary = Color(0xFF009688);
-  static const dark = Color(0xFF00695C);
-  static const light = Color(0xFF4DB6AC);
-  static const background = Color(0xFFFAFCFB);
+  static const primary = Color(0xFF4BAA98);
+  static const dark = Color(0xFF3C3C3B);
+  static const accent = Color(0xFFF4A340);
+  static const sea = Color(0xFF1F7A8C);
+  static const primary60 = Color(0x994BAA98);
+  static const primary33 = Color(0x544BAA98);
+  static const light = Color(0xFF79D0BE);
+  static const background = Color(0xFFF3FAF7);
   static const mint = Color(0xFFB6E9C1);
+  static const tealSoft = Color(0xFF75BCAF);
 }
 
 class taskPage extends StatefulWidget {
@@ -77,8 +83,9 @@ class _taskPageState extends State<taskPage> {
   Stream<DocumentSnapshot>? _userTaskStream;
 
   DateTime _dayStart(DateTime d) => DateTime(d.year, d.month, d.day);
-  DateTime _dayEnd(DateTime d) =>
-      _dayStart(d).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
+  DateTime _dayEnd(DateTime d) => _dayStart(
+    d,
+  ).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
@@ -105,8 +112,10 @@ class _taskPageState extends State<taskPage> {
     DateTime fallback = user.metadata.creationTime?.toLocal() ?? DateTime.now();
     _joinDate = _dayStart(fallback);
 
-    final udoc =
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final udoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
     if (udoc.exists && (udoc.data()?['joinDate'] != null)) {
       _joinDate = _dayStart((udoc.data()!['joinDate'] as Timestamp).toDate());
     }
@@ -176,8 +185,9 @@ class _taskPageState extends State<taskPage> {
     final candidates = validTasks.where((d) => d.id != yTaskId).toList();
     final pool = candidates.isEmpty ? validTasks : candidates;
 
-    final rnd =
-        Random(DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch);
+    final rnd = Random(
+      DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch,
+    );
     final picked = pool[rnd.nextInt(pool.length)];
 
     final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
@@ -197,15 +207,17 @@ class _taskPageState extends State<taskPage> {
     });
   }
 
-    // ============================================================
+  // ============================================================
   // Attach stream for selected day
   // ============================================================
   void _attachUserTaskStreamFor(DateTime day) {
     if (_uid == null) return;
     final key = '${_uid!}_${_yyyyMMdd(day)}';
     setState(() {
-      _userTaskStream =
-          FirebaseFirestore.instance.collection('userTasks').doc(key).snapshots();
+      _userTaskStream = FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(key)
+          .snapshots();
     });
   }
 
@@ -229,27 +241,33 @@ class _taskPageState extends State<taskPage> {
 
     if (!(now.isAfter(ws.subtract(const Duration(seconds: 1))) &&
         now.isBefore(we.add(const Duration(seconds: 1))))) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-          'انتهت مدة المهمة لهذا اليوم.',
-          style: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.white, fontWeight: FontWeight.w700),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'انتهت مدة المهمة لهذا اليوم.',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          backgroundColor: Colors.redAccent,
         ),
-        backgroundColor: Colors.redAccent,
-      ));
+      );
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(
-        'بدأت المهمة ✅ بالتوفيق!',
-        style: GoogleFonts.ibmPlexSansArabic(
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'بدأت المهمة ✅ بالتوفيق!',
+          style: GoogleFonts.ibmPlexSansArabic(
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
         ),
+        backgroundColor: AppColors.primary,
       ),
-      backgroundColor: AppColors.primary,
-    ));
+    );
   }
 
   Future<void> _markTaskCompleted() async {
@@ -263,16 +281,18 @@ class _taskPageState extends State<taskPage> {
     });
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-          'تم إكمال المهمة 🎉 أحسنتِ!',
-          style: GoogleFonts.ibmPlexSansArabic(
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'تم إكمال المهمة 🎉 أحسنتِ!',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
           ),
+          backgroundColor: AppColors.primary,
         ),
-        backgroundColor: AppColors.primary,
-      ));
+      );
     }
   }
 
@@ -292,8 +312,9 @@ class _taskPageState extends State<taskPage> {
   Widget build(BuildContext context) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final baseTheme = Theme.of(context);
-    final textTheme =
-        GoogleFonts.ibmPlexSansArabicTextTheme(baseTheme.textTheme);
+    final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(
+      baseTheme.textTheme,
+    );
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -313,167 +334,224 @@ class _taskPageState extends State<taskPage> {
         child: Scaffold(
           extendBody: true,
           backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            centerTitle: true,
-            title: const Text("مهامي"),
-            flexibleSpace: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.primary,
-                    AppColors.primary,
-                    AppColors.mint,
-                  ],
-                  begin: Alignment.bottomLeft,
-                  end: Alignment.topRight,
-                ),
-              ),
-            ),
+          extendBodyBehindAppBar: true,
+
+          // ✅ الهيدر العام (بدون عنوان داخله)
+          appBar: const NameerAppBar(
+            showTitleInBar: false,
+            showBack: false, // زر الرجوع موجود
           ),
+
           body: AnimatedBackgroundContainer(
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                _buildCalendar(),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: _userTaskStream == null
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primary,
-                          ),
-                        )
-                      : StreamBuilder<DocumentSnapshot>(
-                          stream: _userTaskStream!,
-                          builder: (context, snap) {
-                            if (snap.connectionState ==
-                                ConnectionState.waiting) {
-                              return const Center(
+            child: Builder(
+              builder: (context) {
+                // المسافة تحت الهيدر
+                final statusBar = MediaQuery.of(context).padding.top;
+                const headerH = 20.0;
+                const gap = 12.0;
+                final topPadding = statusBar + headerH + gap;
+
+                // حشوة سفلية ديناميكية (ناف بار / كيبورد)
+                final viewInsets = MediaQuery.of(context).viewInsets.bottom;
+                final isKeyboardOpen = viewInsets > 0;
+                final bottomPad = isKeyboardOpen
+                    ? viewInsets +
+                          16 // لو الكيبورد مفتوح
+                    : kBottomNavigationBarHeight +
+                          24; // لو مقفول: مساحة للناف بار
+
+                return SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPad),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // العنوان تحت الهيدر مباشرة
+                      Text(
+                        'مهامي',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+
+                      // التقويم
+                      _buildCalendar(),
+                      const SizedBox(height: 8),
+
+                      // المحتوى (ستريم) — غير قابل للسكرول منفصل
+                      _userTaskStream == null
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 40),
                                 child: CircularProgressIndicator(
                                   color: AppColors.primary,
                                 ),
-                              );
-                            }
-
-                            if (snap.hasError) {
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                if (context.mounted)
-                                  showNoInternetDialog(context);
-                              });
-                              return const SizedBox.shrink();
-                            }
-
-                            if (!snap.hasData || !snap.data!.exists) {
-                              _ensureUserTaskForDate(
-                                  _selectedDay ?? DateTime.now());
-                              return const Center(
-                                child: CircularProgressIndicator(
-                                  color: AppColors.primary,
-                                ),
-                              );
-                            }
-
-                            _autoMarkExpiredIfNeeded(snap.data!);
-                            final sel = _selectedDay ?? _dayStart(DateTime.now());
-                            final today = _dayStart(DateTime.now());
-                            final tomorrow =
-                                _dayStart(today.add(const Duration(days: 1)));
-
-                            if (_joinDate != null && sel.isBefore(_joinDate!)) {
-                              return _buildUnavailableCard(
-                                title: 'غير متاحة',
-                                subtitle: 'لم تكن ضمن نمير في هذا التاريخ.',
-                              );
-                            }
-
-                            if (sel.isAfter(tomorrow)) {
-                              return _buildUnavailableCard(
-                                title: 'غير متاحة',
-                                subtitle: 'هذا اليوم لم يُفتح بعد. الرجاء العودة لاحقًا.',
-                              );
-                            }
-
-                            final ut = snap.data!.data() as Map<String, dynamic>;
-                            final taskId = ut['taskId'] as String?;
-                            final status = (ut['status'] as String?) ?? 'pending';
-                            final DateTime now = DateTime.now();
-
-                            final isToday = sel.isAtSameMomentAs(today);
-                            final isTomorrow = sel.isAtSameMomentAs(tomorrow);
-                            final isPast = sel.isBefore(today);
-                            final inWindow = _isWithinDayWindow(sel, now);
-
-                            // Load referenced task
-                            return FutureBuilder<DocumentSnapshot>(
-                              future: FirebaseFirestore.instance
-                                  .collection('tasks')
-                                  .doc(taskId)
-                                  .get(),
-                              builder: (context, taskSnap) {
-                                if (taskSnap.connectionState ==
+                              ),
+                            )
+                          : StreamBuilder<DocumentSnapshot>(
+                              stream: _userTaskStream!,
+                              builder: (context, snap) {
+                                if (snap.connectionState ==
                                     ConnectionState.waiting) {
                                   return const Center(
-                                    child: CircularProgressIndicator(
-                                      color: AppColors.primary,
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 40,
+                                      ),
+                                      child: CircularProgressIndicator(
+                                        color: AppColors.primary,
+                                      ),
                                     ),
                                   );
                                 }
-                                if (!taskSnap.hasData ||
-                                    !taskSnap.data!.exists) {
-                                  return _buildUnavailableCard(
-                                    title: 'المهمة غير متاحة',
-                                    subtitle: 'قد تكون حُذفت من النظام.',
+
+                                if (snap.hasError) {
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (context.mounted)
+                                      showNoInternetDialog(context);
+                                  });
+                                  return const SizedBox.shrink();
+                                }
+
+                                if (!snap.hasData || !snap.data!.exists) {
+                                  _ensureUserTaskForDate(
+                                    _selectedDay ?? DateTime.now(),
+                                  );
+                                  return const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 40,
+                                      ),
+                                      child: CircularProgressIndicator(
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
                                   );
                                 }
 
-                                final data = taskSnap.data!.data()
-                                    as Map<String, dynamic>;
+                                _autoMarkExpiredIfNeeded(snap.data!);
+                                final sel =
+                                    _selectedDay ?? _dayStart(DateTime.now());
+                                final today = _dayStart(DateTime.now());
+                                final tomorrow = _dayStart(
+                                  today.add(const Duration(days: 1)),
+                                );
 
-                                // 🔹 UPDATED LOGIC FOR VALID TASKS
-                                final isActive = data['isActive'] == true;
-                                final hasSchedule = data['hasSchedule'] == true;
-                                final scheduleDate =
-                                    (data['scheduleDate'] as Timestamp?)
-                                        ?.toDate();
-                                final hasExpiry = data['hasExpiry'] == true;
-                                final expiryDate =
-                                    (data['expiryDate'] as Timestamp?)
-                                        ?.toDate();
-
-                                // If not active, scheduled in future, or expired → unavailable
-                                if (!isActive ||
-                                    (hasSchedule &&
-                                        scheduleDate != null &&
-                                        scheduleDate.isAfter(now)) ||
-                                    (hasExpiry &&
-                                        expiryDate != null &&
-                                        expiryDate.isBefore(now))) {
+                                if (_joinDate != null &&
+                                    sel.isBefore(_joinDate!)) {
                                   return _buildUnavailableCard(
-                                    title: 'المهمة غير متاحة',
+                                    title: 'غير متاحة',
+                                    subtitle: 'لم تكن ضمن نمير في هذا التاريخ.',
+                                  );
+                                }
+
+                                if (sel.isAfter(tomorrow)) {
+                                  return _buildUnavailableCard(
+                                    title: 'غير متاحة',
                                     subtitle:
-                                        'قد تم إيقافها أو لم تبدأ بعد أو انتهت صلاحيتها.',
+                                        'هذا اليوم لم يُفتح بعد. الرجاء العودة لاحقًا.',
                                   );
                                 }
 
-                                final bool canPerform = isToday && inWindow;
+                                final ut =
+                                    snap.data!.data() as Map<String, dynamic>;
+                                final taskId = ut['taskId'] as String?;
+                                final status =
+                                    (ut['status'] as String?) ?? 'pending';
+                                final DateTime now = DateTime.now();
 
-                                return _buildUserTaskCard(
-                                  taskDocId: taskSnap.data!.id,
-                                  taskData: data,
-                                  status: status,
-                                  isToday: isToday,
-                                  isTomorrow: isTomorrow,
-                                  isPast: isPast,
-                                  canPerform: canPerform,
+                                final isToday = sel.isAtSameMomentAs(today);
+                                final isTomorrow = sel.isAtSameMomentAs(
+                                  tomorrow,
+                                );
+                                final isPast = sel.isBefore(today);
+                                final inWindow = _isWithinDayWindow(sel, now);
+
+                                return FutureBuilder<DocumentSnapshot>(
+                                  future: FirebaseFirestore.instance
+                                      .collection('tasks')
+                                      .doc(taskId)
+                                      .get(),
+                                  builder: (context, taskSnap) {
+                                    if (taskSnap.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 40,
+                                          ),
+                                          child: CircularProgressIndicator(
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    if (!taskSnap.hasData ||
+                                        !taskSnap.data!.exists) {
+                                      return _buildUnavailableCard(
+                                        title: 'المهمة غير متاحة',
+                                        subtitle: 'قد تكون حُذفت من النظام.',
+                                      );
+                                    }
+
+                                    final data =
+                                        taskSnap.data!.data()
+                                            as Map<String, dynamic>;
+
+                                    final isActive = data['isActive'] == true;
+                                    final hasSchedule =
+                                        data['hasSchedule'] == true;
+                                    final scheduleDate =
+                                        (data['scheduleDate'] as Timestamp?)
+                                            ?.toDate();
+                                    final hasExpiry = data['hasExpiry'] == true;
+                                    final expiryDate =
+                                        (data['expiryDate'] as Timestamp?)
+                                            ?.toDate();
+
+                                    if (!isActive ||
+                                        (hasSchedule &&
+                                            scheduleDate != null &&
+                                            scheduleDate.isAfter(now)) ||
+                                        (hasExpiry &&
+                                            expiryDate != null &&
+                                            expiryDate.isBefore(now))) {
+                                      return _buildUnavailableCard(
+                                        title: 'المهمة غير متاحة',
+                                        subtitle:
+                                            'قد تم إيقافها أو لم تبدأ بعد أو انتهت صلاحيتها.',
+                                      );
+                                    }
+
+                                    final bool canPerform = isToday && inWindow;
+
+                                    // كارد واحد يتمرر مع الصفحة
+                                    return _buildUserTaskCard(
+                                      taskDocId: taskSnap.data!.id,
+                                      taskData: data,
+                                      status: status,
+                                      isToday: isToday,
+                                      isTomorrow: isTomorrow,
+                                      isPast: isPast,
+                                      canPerform: canPerform,
+                                    );
+                                  },
                                 );
                               },
-                            );
-                          },
-                        ),
-                ),
-              ],
+                            ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
+
           bottomNavigationBar: isKeyboardOpen
               ? null
               : BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),
@@ -488,11 +566,7 @@ class _taskPageState extends State<taskPage> {
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [
-            Color(0xFF4BAA98),
-            Color(0xFF6BBAA2),
-            Color(0xFFAFDBB8),
-          ],
+          colors: [Color(0xFF4BAA98), Color(0xFF6BBAA2), Color(0xFFAFDBB8)],
           begin: Alignment.bottomLeft,
           end: Alignment.topRight,
           stops: [0.0, 0.63, 1.0],
@@ -521,16 +595,26 @@ class _taskPageState extends State<taskPage> {
               fontWeight: FontWeight.w800,
               fontSize: 18,
             ),
-            leftChevronIcon: const Icon(Icons.chevron_left, color: Colors.white),
-            rightChevronIcon: const Icon(Icons.chevron_right, color: Colors.white),
+            leftChevronIcon: const Icon(
+              Icons.chevron_left,
+              color: Colors.white,
+            ),
+            rightChevronIcon: const Icon(
+              Icons.chevron_right,
+              color: Colors.white,
+            ),
           ),
           daysOfWeekStyle: DaysOfWeekStyle(
             weekdayStyle: GoogleFonts.ibmPlexSansArabic(color: Colors.white70),
             weekendStyle: GoogleFonts.ibmPlexSansArabic(color: Colors.white70),
           ),
           calendarStyle: CalendarStyle(
-            defaultTextStyle: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-            weekendTextStyle: GoogleFonts.ibmPlexSansArabic(color: Colors.white70),
+            defaultTextStyle: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+            ),
+            weekendTextStyle: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white70,
+            ),
             outsideDaysVisible: false,
             todayDecoration: BoxDecoration(
               color: AppColors.mint.withOpacity(0.8),
@@ -656,8 +740,8 @@ class _taskPageState extends State<taskPage> {
     final btnText = isTomorrow
         ? 'استعراض فقط'
         : isPast
-            ? (status == 'completed' ? 'مكتملة' : 'انتهى الوقت')
-            : (canPerform ? 'ابدأ المهمة' : 'غير متاحة الآن');
+        ? (status == 'completed' ? 'مكتملة' : 'انتهى الوقت')
+        : (canPerform ? 'ابدأ المهمة' : 'غير متاحة الآن');
 
     final btnEnabled = canPerform;
 
@@ -745,7 +829,10 @@ class _taskPageState extends State<taskPage> {
               onTap: btnEnabled ? () {} : null,
               borderRadius: BorderRadius.circular(14),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                  horizontal: 20,
+                ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   gradient: btnEnabled
@@ -784,6 +871,4 @@ class _taskPageState extends State<taskPage> {
       ),
     );
   }
-
 }
-

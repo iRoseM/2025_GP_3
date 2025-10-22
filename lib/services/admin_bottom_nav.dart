@@ -1,3 +1,4 @@
+import 'package:Nameer/admin_home.dart';
 import 'package:flutter/material.dart';
 
 class NavItem {
@@ -62,9 +63,7 @@ class AdminBottomNav extends StatelessWidget {
                 final it = items[i];
                 final selected = i == currentIndex;
                 final iconData = selected ? it.filled : it.outlined;
-                final color = selected
-                    ? const Color(0xFF009688)
-                    : Colors.black54;
+                final color = selected ? AppColors.primary : Colors.black54;
 
                 return Expanded(
                   child: InkWell(

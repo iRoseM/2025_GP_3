@@ -232,9 +232,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           extendBodyBehindAppBar: true,
 
           // 👇 هيدر عام بدون عنوان
-          appBar: const NameerAppBar(
-            showTitleInBar: false, // 👈 عشان ما يطلع عنوان داخل الهيدر
-          ),
+          appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
 
           body: AnimatedBackgroundContainer(
             child: Builder(

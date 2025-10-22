@@ -23,6 +23,7 @@ class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final PreferredSizeWidget? bottom;
   final bool frosted;
   final bool showTitleInBar;
+  final bool showBack; // ✅ زر الرجوع
 
   const NameerAppBar({
     super.key,
@@ -33,6 +34,7 @@ class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.bottom,
     this.frosted = false,
     this.showTitleInBar = false,
+    this.showBack = false, // 🔹 افتراضيًا غير ظاهر
   });
 
   @override
@@ -41,6 +43,19 @@ class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ زر الرجوع (يظهر فقط لو مفعّل)
+    final leading = showBack
+        ? IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+            onPressed: () => Navigator.maybePop(context),
+            tooltip: 'رجوع',
+          )
+        : null;
+
     // العنوان داخل الهيدر (اختياري)
     final titleWidget = Text(
       title,
@@ -85,7 +100,8 @@ class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
-      automaticallyImplyLeading: false, // 👈 لا يوجد زر رجوع
+      automaticallyImplyLeading: false, // نتحكم يدويًا بزر الرجوع
+      leading: leading, // ✅ زر الرجوع هنا
       centerTitle: centerTitle,
       toolbarHeight: height,
       actions: actions,

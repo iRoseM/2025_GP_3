@@ -10,14 +10,19 @@ import 'services/background_container.dart';
 import 'services/bottom_nav.dart';
 import 'my_reports_page.dart';
 import 'services/connection.dart';
+import 'services/title_header.dart';
 
 class AppColors {
-  static const primary = Color(0xFF009688);
-  static const dark = Color(0xFF00695C);
-  static const light = Color(0xFF4DB6AC);
-  static const background = Color(0xFFFAFCFB);
-  static const orange = Color(0xFFFFB74D);
+  static const primary = Color(0xFF4BAA98);
+  static const dark = Color(0xFF3C3C3B);
+  static const accent = Color(0xFFF4A340);
+  static const sea = Color(0xFF1F7A8C);
+  static const primary60 = Color(0x994BAA98);
+  static const primary33 = Color(0x544BAA98);
+  static const light = Color(0xFF79D0BE);
+  static const background = Color(0xFFF3FAF7);
   static const mint = Color(0xFFB6E9C1);
+  static const tealSoft = Color(0xFF75BCAF);
 }
 
 class profilePage extends StatelessWidget {
@@ -29,13 +34,9 @@ class profilePage extends StatelessWidget {
       Theme.of(context).textTheme,
     );
 
-    // ❌ شلنا: final user = FirebaseAuth.instance.currentUser;
-
-    // ✅ نلف الواجهة بحالة الأوث
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, authSnap) {
-        // شاشة انتظار أثناء تحميل حالة الأوث
         if (authSnap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(
@@ -45,18 +46,7 @@ class profilePage extends StatelessWidget {
         }
 
         final user = authSnap.data;
-
-        // المستخدم غير مسجّل → رجّع واجهة فاضية أو وجّه لشاشة التسجيل
         if (user == null) {
-          // تقدر توجه مباشرةً بدلاً من SizedBox
-          // WidgetsBinding.instance.addPostFrameCallback((_) {
-          //   if (context.mounted) {
-          //     Navigator.of(context).pushAndRemoveUntil(
-          //       MaterialPageRoute(builder: (_) => const RegisterPage()),
-          //       (route) => false,
-          //     );
-          //   }
-          // });
           return const SizedBox.shrink();
         }
 
@@ -66,557 +56,571 @@ class profilePage extends StatelessWidget {
             data: Theme.of(context).copyWith(textTheme: textTheme),
             child: Scaffold(
               extendBody: true,
+              extendBodyBehindAppBar: true,
               backgroundColor: Colors.transparent,
-              appBar: AppBar(
-                title: Text(
-                  'الحساب',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-                flexibleSpace: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary,
-                        AppColors.primary,
-                        AppColors.mint,
-                      ],
-                      stops: [0.0, 0.5, 1.0],
-                      begin: Alignment.bottomLeft,
-                      end: Alignment.topRight,
-                    ),
-                  ),
-                ),
-                centerTitle: true,
-                elevation: 0,
-                backgroundColor: Colors.transparent,
-              ),
+
+              // ✅ الهيدر الموحّد بدون عنوان داخله + زر رجوع
+              appBar: const NameerAppBar(showTitleInBar: false, showBack: true),
+
               body: AnimatedBackgroundContainer(
-                child: SafeArea(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        // ---------- بطاقة معلومات المستخدم ----------
-                        StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                          stream: FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(user.uid)
-                              .snapshots(),
-                          builder: (context, snap) {
-                            if (snap.connectionState ==
-                                ConnectionState.waiting) {
-                              return const SizedBox(
-                                height: 120,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              );
-                            }
+                child: Builder(
+                  builder: (context) {
+                    // مسافة تحت الهيدر
+                    final statusBar = MediaQuery.of(context).padding.top;
+                    const headerH = 20.0; // ارتفاع NameerAppBar الافتراضي
+                    const gap = 12.0;
+                    final topPadding = statusBar + headerH + gap;
 
-                            // ✅ معالجة ذكية للأخطاء (نميّز شبكة/صلاحية)
-                            if (snap.hasError) {
-                              final err = snap.error;
-                              if (err is FirebaseException) {
-                                final isNetwork =
-                                    err.code == 'unavailable' ||
-                                    err.code == 'network-request-failed';
-                                final isAuth =
-                                    err.code == 'permission-denied' ||
-                                    err.code == 'unauthenticated';
+                    return SafeArea(
+                      top: false,
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(16, topPadding, 16, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // ✅ العنوان تحت الهيدر مباشرة
+                            Text(
+                              'حسابي الشخصي',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
 
-                                if (isNetwork) {
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (context.mounted)
-                                      showNoInternetDialog(context);
-                                  });
+                            // ---------- بطاقة معلومات المستخدم ----------
+                            StreamBuilder<
+                              DocumentSnapshot<Map<String, dynamic>>
+                            >(
+                              stream: FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(user.uid)
+                                  .snapshots(),
+                              builder: (context, snap) {
+                                if (snap.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const SizedBox(
+                                    height: 120,
+                                    child: Center(
+                                      child: CircularProgressIndicator(
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  );
                                 }
 
-                                if (isAuth) {
-                                  // المستخدم فقد الصلاحية (مثلاً بعد signOut) → لا نظهر حوار الإنترنت
+                                if (snap.hasError) {
+                                  final err = snap.error;
+                                  if (err is FirebaseException) {
+                                    final isNetwork =
+                                        err.code == 'unavailable' ||
+                                        err.code == 'network-request-failed';
+                                    final isAuth =
+                                        err.code == 'permission-denied' ||
+                                        err.code == 'unauthenticated';
+                                    if (isNetwork) {
+                                      WidgetsBinding.instance
+                                          .addPostFrameCallback((_) {
+                                            if (context.mounted)
+                                              showNoInternetDialog(context);
+                                          });
+                                    }
+                                    if (isAuth) return const SizedBox.shrink();
+                                  }
                                   return const SizedBox.shrink();
                                 }
-                              }
-                              // أي خطأ آخر: لا نظهر حوار الإنترنت
-                              return const SizedBox.shrink();
-                            }
 
-                            final isLoading =
-                                snap.connectionState == ConnectionState.waiting;
-                            final data = snap.data?.data();
+                                final isLoading =
+                                    snap.connectionState ==
+                                    ConnectionState.waiting;
+                                final data = snap.data?.data();
 
-                            final username = (data?['username'] ?? 'مستخدم')
-                                .toString();
-                            final email = (data?['email'] ?? user.email ?? '')
-                                .toString();
-                            final age = (data?['age'] is int)
-                                ? (data?['age'] as int)
-                                : int.tryParse('${data?['age'] ?? ''}') ?? 0;
-                            final gender = (data?['gender'] ?? 'male')
-                                .toString();
+                                final username = (data?['username'] ?? 'مستخدم')
+                                    .toString();
+                                final email =
+                                    (data?['email'] ?? user.email ?? '')
+                                        .toString();
+                                final age = (data?['age'] is int)
+                                    ? (data?['age'] as int)
+                                    : int.tryParse('${data?['age'] ?? ''}') ??
+                                          0;
+                                final gender = (data?['gender'] ?? 'male')
+                                    .toString();
 
-                            // ✅ نقرأ pfpIndex من الداتابيس
-                            final int? pfpIndex = (data?['pfpIndex'] is int)
-                                ? (data?['pfpIndex'] as int)
-                                : int.tryParse('${data?['pfpIndex'] ?? ''}');
+                                final int? pfpIndex = (data?['pfpIndex'] is int)
+                                    ? (data?['pfpIndex'] as int)
+                                    : int.tryParse(
+                                        '${data?['pfpIndex'] ?? ''}',
+                                      );
+                                String? avatarPath;
+                                if (pfpIndex != null &&
+                                    pfpIndex >= 0 &&
+                                    pfpIndex < 8) {
+                                  avatarPath =
+                                      'assets/pfp/pfp${pfpIndex + 1}.png';
+                                }
 
-                            // مسار الأفاتار لو متوفر (0..7) -> pfp1..pfp8
-                            String? avatarPath;
-                            if (pfpIndex != null &&
-                                pfpIndex >= 0 &&
-                                pfpIndex < 8) {
-                              avatarPath = 'assets/pfp/pfp${pfpIndex + 1}.png';
-                            }
-
-                            return Column(
-                              children: [
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(16),
-                                  margin: const EdgeInsets.only(top: 16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: const Color(0xFFE8F1EE),
-                                      width: 1.2,
-                                    ),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        blurRadius: 10,
-                                        offset: Offset(0, 6),
-                                        color: Color(0x14000000),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      // صورة بروفايل داخل خلفية خضراء (أفاتار إن وُجد)
-                                      Container(
-                                        decoration: const BoxDecoration(
-                                          color: AppColors.light,
-                                          shape: BoxShape.circle,
+                                return Column(
+                                  children: [
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(16),
+                                      margin: const EdgeInsets.only(top: 16),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: const Color(0xFFE8F1EE),
+                                          width: 1.2,
                                         ),
-                                        child: CircleAvatar(
-                                          radius: 28,
-                                          backgroundColor: Colors.transparent,
-                                          backgroundImage:
-                                              (avatarPath != null && !isLoading)
-                                              ? AssetImage(avatarPath)
-                                              : null,
-                                          child:
-                                              (avatarPath == null || isLoading)
-                                              ? const Icon(
-                                                  Icons.person_outline,
-                                                  color: Colors.white,
-                                                  size: 30,
-                                                )
-                                              : null,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            // اسم العرض
-                                            Text(
-                                              isLoading
-                                                  ? 'جارٍ التحميل…'
-                                                  : username,
-                                              overflow: TextOverflow.ellipsis,
-                                              style:
-                                                  GoogleFonts.ibmPlexSansArabic(
-                                                    fontSize: 18,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: AppColors.dark,
-                                                  ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            // ✅ السطر الثاني = البريد الإلكتروني
-                                            Text(
-                                              isLoading ? '...' : email,
-                                              overflow: TextOverflow.ellipsis,
-                                              style:
-                                                  GoogleFonts.ibmPlexSansArabic(
-                                                    fontSize: 14,
-                                                    color: AppColors.dark
-                                                        .withOpacity(.7),
-                                                  ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                // ---------- زر تعديل الحساب ----------
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(14),
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          AppColors.mint,
-                                          AppColors.primary,
-                                          AppColors.primary,
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            blurRadius: 10,
+                                            offset: Offset(0, 6),
+                                            color: Color(0x14000000),
+                                          ),
                                         ],
-                                        stops: [0.0, 0.6, 1.0],
-                                        begin: Alignment.centerRight,
-                                        end: Alignment.centerLeft,
                                       ),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: Color(0x33000000),
-                                          blurRadius: 8,
-                                          offset: Offset(0, 4),
-                                        ),
-                                      ],
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            decoration: const BoxDecoration(
+                                              color: AppColors.light,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: CircleAvatar(
+                                              radius: 28,
+                                              backgroundColor:
+                                                  Colors.transparent,
+                                              backgroundImage:
+                                                  (avatarPath != null &&
+                                                      !isLoading)
+                                                  ? AssetImage(avatarPath)
+                                                  : null,
+                                              child:
+                                                  (avatarPath == null ||
+                                                      isLoading)
+                                                  ? const Icon(
+                                                      Icons.person_outline,
+                                                      color: Colors.white,
+                                                      size: 30,
+                                                    )
+                                                  : null,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  isLoading
+                                                      ? 'جارٍ التحميل…'
+                                                      : username,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        fontSize: 18,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: AppColors.dark,
+                                                      ),
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  isLoading ? '...' : email,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        fontSize: 14,
+                                                        color: AppColors.dark
+                                                            .withOpacity(.7),
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    child: ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.transparent,
-                                        shadowColor: Colors.transparent,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 16,
-                                          horizontal: 20,
-                                        ),
-                                        shape: RoundedRectangleBorder(
+                                    const SizedBox(height: 16),
+
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(
                                             14,
                                           ),
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              AppColors.mint,
+                                              AppColors.primary,
+                                              AppColors.primary,
+                                            ],
+                                            stops: [0.0, 0.6, 1.0],
+                                            begin: Alignment.centerRight,
+                                            end: Alignment.centerLeft,
+                                          ),
+                                          boxShadow: const [
+                                            BoxShadow(
+                                              color: Color(0x33000000),
+                                              blurRadius: 8,
+                                              offset: Offset(0, 4),
+                                            ),
+                                          ],
                                         ),
-                                        elevation: 0,
-                                      ),
-                                      icon: const Icon(
-                                        Icons.edit,
-                                        color: Colors.white,
-                                      ),
-                                      label: Text(
-                                        'تعديل الحساب',
-                                        style: GoogleFonts.ibmPlexSansArabic(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      onPressed: (isLoading)
-                                          ? null
-                                          : () {
-                                              Navigator.of(context).push(
-                                                MaterialPageRoute(
-                                                  builder: (_) => EditProfilePage(
-                                                    initialUsername: username,
-                                                    initialHandle: '$username',
-                                                    initialEmail: email,
-                                                    initialAge: age == 0
-                                                        ? 18
-                                                        : age,
-                                                    initialGender:
-                                                        gender, // male/female
-                                                    initialPfpIndex: pfpIndex,
-                                                  ),
+                                        child: ElevatedButton.icon(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            shadowColor: Colors.transparent,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 16,
+                                              horizontal: 20,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
+                                            elevation: 0,
+                                          ),
+                                          icon: const Icon(
+                                            Icons.edit,
+                                            color: Colors.white,
+                                          ),
+                                          label: Text(
+                                            'تعديل الحساب',
+                                            style:
+                                                GoogleFonts.ibmPlexSansArabic(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Colors.white,
                                                 ),
-                                              );
-                                            },
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-
-                                // ---------- خانات الإعدادات ----------
-                                _SettingsCard(
-                                  children: [
-                                    if (data?['role'] != 'admin')
-                                      // ✅ بلاغاتي مع عدّاد الإشعارات
-                                      StreamBuilder<
-                                        QuerySnapshot<Map<String, dynamic>>
-                                      >(
-                                        stream: FirebaseFirestore.instance
-                                            .collection('notifications')
-                                            .where(
-                                              'userId',
-                                              isEqualTo: FirebaseAuth
-                                                  .instance
-                                                  .currentUser
-                                                  ?.uid,
-                                            )
-                                            .where('read', isEqualTo: false)
-                                            .snapshots(),
-                                        builder: (context, snapshot) {
-                                          if (snapshot.hasError) {
-                                            final err = snapshot.error;
-                                            if (err is FirebaseException) {
-                                              final isNetwork =
-                                                  err.code == 'unavailable' ||
-                                                  err.code ==
-                                                      'network-request-failed';
-                                              if (isNetwork) {
-                                                WidgetsBinding.instance
-                                                    .addPostFrameCallback((_) {
-                                                      if (context.mounted) {
-                                                        showNoInternetDialog(
-                                                          context,
-                                                        );
-                                                      }
-                                                    });
-                                              }
-                                            }
-                                            return _SettingTile(
-                                              title: 'بلاغاتي',
-                                              icon:
-                                                  Icons.notifications_outlined,
-                                              trailing: const Icon(
-                                                Icons.chevron_left,
-                                                color: Colors.black54,
-                                                size: 22,
-                                              ),
-                                              onTap: () {},
-                                            );
-                                          }
-                                          final unreadCount =
-                                              snapshot.data?.docs.length ?? 0;
-
-                                          return _SettingTile(
-                                            title: 'بلاغاتي',
-                                            icon: Icons.notifications_outlined,
-                                            trailing: unreadCount > 0
-                                                ? Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 4,
-                                                        ),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.redAccent,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            12,
+                                          ),
+                                          onPressed: (isLoading)
+                                              ? null
+                                              : () {
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          EditProfilePage(
+                                                            initialUsername:
+                                                                username,
+                                                            initialHandle:
+                                                                '$username',
+                                                            initialEmail: email,
+                                                            initialAge: age == 0
+                                                                ? 18
+                                                                : age,
+                                                            initialGender:
+                                                                gender,
+                                                            initialPfpIndex:
+                                                                pfpIndex,
                                                           ),
                                                     ),
-                                                    child: Text(
-                                                      '$unreadCount جديدة',
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 12,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  )
-                                                : const Icon(
+                                                  );
+                                                },
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+
+                                    _SettingsCard(
+                                      children: [
+                                        if (data?['role'] != 'admin')
+                                          StreamBuilder<
+                                            QuerySnapshot<Map<String, dynamic>>
+                                          >(
+                                            stream: FirebaseFirestore.instance
+                                                .collection('notifications')
+                                                .where(
+                                                  'userId',
+                                                  isEqualTo: FirebaseAuth
+                                                      .instance
+                                                      .currentUser
+                                                      ?.uid,
+                                                )
+                                                .where('read', isEqualTo: false)
+                                                .snapshots(),
+                                            builder: (context, snapshot) {
+                                              if (snapshot.hasError) {
+                                                final err = snapshot.error;
+                                                if (err is FirebaseException) {
+                                                  final isNetwork =
+                                                      err.code ==
+                                                          'unavailable' ||
+                                                      err.code ==
+                                                          'network-request-failed';
+                                                  if (isNetwork) {
+                                                    WidgetsBinding.instance
+                                                        .addPostFrameCallback((
+                                                          _,
+                                                        ) {
+                                                          if (context.mounted)
+                                                            showNoInternetDialog(
+                                                              context,
+                                                            );
+                                                        });
+                                                  }
+                                                }
+                                                return _SettingTile(
+                                                  title: 'بلاغاتي',
+                                                  icon: Icons
+                                                      .notifications_outlined,
+                                                  trailing: const Icon(
                                                     Icons.chevron_left,
                                                     color: Colors.black54,
                                                     size: 22,
                                                   ),
-                                            onTap: () {
-                                              Navigator.of(context).push(
-                                                MaterialPageRoute(
-                                                  builder: (_) =>
-                                                      const MyReportsPage(),
-                                                ),
+                                                  onTap: () {},
+                                                );
+                                              }
+                                              final unreadCount =
+                                                  snapshot.data?.docs.length ??
+                                                  0;
+
+                                              return _SettingTile(
+                                                title: 'بلاغاتي',
+                                                icon: Icons
+                                                    .notifications_outlined,
+                                                trailing: unreadCount > 0
+                                                    ? Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 4,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color:
+                                                              Colors.redAccent,
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                12,
+                                                              ),
+                                                        ),
+                                                        child: const Text(
+                                                          'جديدة',
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 12,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      )
+                                                    : const Icon(
+                                                        Icons.chevron_left,
+                                                        color: Colors.black54,
+                                                        size: 22,
+                                                      ),
+                                                onTap: () {
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          const MyReportsPage(),
+                                                    ),
+                                                  );
+                                                },
                                               );
                                             },
-                                          );
-                                        },
-                                      ),
+                                          ),
 
-                                    _SettingTile(
-                                      title: 'اللغة',
-                                      icon: Icons.language,
-                                      trailing: Text(
-                                        'العربية',
-                                        style: GoogleFonts.ibmPlexSansArabic(
-                                          color: AppColors.dark.withOpacity(.8),
-                                          fontWeight: FontWeight.w600,
+                                        _SettingTile(
+                                          title: 'اللغة',
+                                          icon: Icons.language,
+                                          trailing: Text(
+                                            'العربية',
+                                            style:
+                                                GoogleFonts.ibmPlexSansArabic(
+                                                  color: AppColors.dark
+                                                      .withOpacity(.8),
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                          ),
+                                          onTap: () => _showSnack(
+                                            context,
+                                            'تغيير اللغة قريباً ✨',
+                                          ),
                                         ),
-                                      ),
-                                      onTap: () {
-                                        _showSnack(
-                                          context,
-                                          'تغيير اللغة قريباً ✨',
-                                        );
-                                      },
-                                    ),
-                                    _SettingTile(
-                                      title: 'الخصوصية والأمان',
-                                      icon: Icons.lock_outline,
-                                      onTap: () => _showPrivacySheet(context),
-                                    ),
-                                    _SettingTile(
-                                      title: 'المساعدة والدعم',
-                                      icon: Icons.help_outline,
-                                      onTap: () => _showSupportSheet(context),
+                                        _SettingTile(
+                                          title: 'الخصوصية والأمان',
+                                          icon: Icons.lock_outline,
+                                          onTap: () =>
+                                              _showPrivacySheet(context),
+                                        ),
+                                        _SettingTile(
+                                          title: 'المساعدة والدعم',
+                                          icon: Icons.help_outline,
+                                          onTap: () =>
+                                              _showSupportSheet(context),
+                                        ),
+                                      ],
                                     ),
                                   ],
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        const SizedBox(height: 16),
-
-                        _SettingsCard(
-                          children: [
-                            _SettingTile(
-                              title: 'تسجيل الخروج',
-                              icon: Icons.logout,
-                              iconColor: Colors.redAccent,
-                              titleColor: Colors.redAccent,
-                              onTap: () async {
-                                showDialog(
-                                  context: context,
-                                  barrierDismissible: false,
-                                  builder: (context) {
-                                    return Dialog(
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      insetPadding: const EdgeInsets.symmetric(
-                                        horizontal: 24,
-                                      ),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(20),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            // ✅ الصورة العلوية
-                                            Image.asset(
-                                              'assets/img/nameerThink.png',
-                                              height: 120,
-                                              fit: BoxFit.contain,
-                                            ),
-                                            const SizedBox(height: 16),
-
-                                            // ✅ النص
-                                            Text(
-                                              'هل أنت متأكد أنك تريد تسجيل الخروج؟',
-                                              textAlign: TextAlign.center,
-                                              style:
-                                                  GoogleFonts.ibmPlexSansArabic(
-                                                    fontSize: 18,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: AppColors.dark,
-                                                  ),
-                                            ),
-                                            const SizedBox(height: 24),
-
-                                            // ✅ الأزرار
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: OutlinedButton(
-                                                    style: OutlinedButton.styleFrom(
-                                                      side: const BorderSide(
-                                                        color:
-                                                            AppColors.primary,
-                                                      ),
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              12,
-                                                            ),
-                                                      ),
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            vertical: 12,
-                                                          ),
-                                                    ),
-                                                    onPressed: () {
-                                                      Navigator.of(
-                                                        context,
-                                                      ).pop(); // إغلاق النافذة فقط
-                                                    },
-                                                    child: Text(
-                                                      'إلغاء',
-                                                      style:
-                                                          GoogleFonts.ibmPlexSansArabic(
-                                                            color: AppColors
-                                                                .primary,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            fontSize: 16,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 12),
-                                                Expanded(
-                                                  child: ElevatedButton(
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor:
-                                                          AppColors.primary,
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              12,
-                                                            ),
-                                                      ),
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            vertical: 12,
-                                                          ),
-                                                    ),
-                                                    onPressed: () async {
-                                                      Navigator.of(
-                                                        context,
-                                                      ).pop(); // إغلاق الرسالة أولاً
-                                                      try {
-                                                        await FirebaseAuth
-                                                            .instance
-                                                            .signOut();
-                                                      } catch (_) {}
-                                                      if (context.mounted) {
-                                                        Navigator.of(
-                                                          context,
-                                                        ).pushAndRemoveUntil(
-                                                          MaterialPageRoute(
-                                                            builder: (_) =>
-                                                                const RegisterPage(),
-                                                          ),
-                                                          (route) => false,
-                                                        );
-                                                      }
-                                                    },
-                                                    child: Text(
-                                                      'تأكيد',
-                                                      style:
-                                                          GoogleFonts.ibmPlexSansArabic(
-                                                            color: Colors.white,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            fontSize: 16,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
                                 );
                               },
                             ),
+
+                            const SizedBox(height: 16),
+                            const SizedBox(height: 16),
+
+                            _SettingsCard(
+                              children: [
+                                _SettingTile(
+                                  title: 'تسجيل الخروج',
+                                  icon: Icons.logout,
+                                  iconColor: Colors.redAccent,
+                                  titleColor: Colors.redAccent,
+                                  onTap: () async {
+                                    showDialog(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (context) {
+                                        return Dialog(
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                          ),
+                                          insetPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 24,
+                                              ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(20),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Image.asset(
+                                                  'assets/img/nameerThink.png',
+                                                  height: 120,
+                                                  fit: BoxFit.contain,
+                                                ),
+                                                const SizedBox(height: 16),
+                                                Text(
+                                                  'هل أنت متأكد أنك تريد تسجيل الخروج؟',
+                                                  textAlign: TextAlign.center,
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        fontSize: 18,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: AppColors.dark,
+                                                      ),
+                                                ),
+                                                const SizedBox(height: 24),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: OutlinedButton(
+                                                        style: OutlinedButton.styleFrom(
+                                                          side:
+                                                              const BorderSide(
+                                                                color: AppColors
+                                                                    .primary,
+                                                              ),
+                                                          shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  12,
+                                                                ),
+                                                          ),
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                vertical: 12,
+                                                              ),
+                                                        ),
+                                                        onPressed: () =>
+                                                            Navigator.of(
+                                                              context,
+                                                            ).pop(),
+                                                        child: Text(
+                                                          'إلغاء',
+                                                          style:
+                                                              GoogleFonts.ibmPlexSansArabic(
+                                                                color: AppColors
+                                                                    .primary,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                fontSize: 16,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    Expanded(
+                                                      child: ElevatedButton(
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              AppColors.primary,
+                                                          shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  12,
+                                                                ),
+                                                          ),
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                vertical: 12,
+                                                              ),
+                                                        ),
+                                                        onPressed: () async {
+                                                          Navigator.of(
+                                                            context,
+                                                          ).pop();
+                                                          try {
+                                                            await FirebaseAuth
+                                                                .instance
+                                                                .signOut();
+                                                          } catch (_) {}
+                                                          if (context.mounted) {
+                                                            Navigator.of(
+                                                              context,
+                                                            ).pushAndRemoveUntil(
+                                                              MaterialPageRoute(
+                                                                builder: (_) =>
+                                                                    const RegisterPage(),
+                                                              ),
+                                                              (route) => false,
+                                                            );
+                                                          }
+                                                        },
+                                                        child: Text(
+                                                          'تأكيد',
+                                                          style:
+                                                              GoogleFonts.ibmPlexSansArabic(
+                                                                color: Colors
+                                                                    .white,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                fontSize: 16,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -1601,10 +1605,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
               borderRadius: BorderRadius.circular(999),
               child: Container(
                 padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: AppColors.primary,
                   shape: BoxShape.circle,
-                  boxShadow: const [
+                  boxShadow: [
                     BoxShadow(
                       color: Color(0x33000000),
                       blurRadius: 8,
@@ -1623,329 +1627,339 @@ class _EditProfilePageState extends State<EditProfilePage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        // نخلي الجسم شفاف ووراه هيدر متدرّج
         backgroundColor: AppColors.background,
-        appBar: AppBar(
-          title: Text(
-            'تعديل الحساب',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.primary, AppColors.primary, AppColors.mint],
-                stops: [0.0, 0.5, 1.0],
-                begin: Alignment.bottomLeft,
-                end: Alignment.topRight,
-              ),
-            ),
-          ),
-          centerTitle: true,
-          elevation: 0,
-          backgroundColor: Colors.transparent,
+        extendBodyBehindAppBar: true,
+
+        // هيدر نمير العام (بدون عنوان داخله + زر رجوع)
+        appBar: const NameerAppBar(
+          showTitleInBar: false,
+          showBack: true,
+          height: 80,
         ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                // صورة رمزية + قلم تعديل
-                Row(children: [avatarWidget, const SizedBox(width: 10)]),
 
-                const SizedBox(height: 14),
+        body: Builder(
+          builder: (context) {
+            final statusBar = MediaQuery.of(context).padding.top;
+            const headerH = 20.0; // ارتفاع التولبار الفعلي
+            const gap = 12.0; // مسافة بعد الهيدر
+            final topPadding = statusBar + headerH + gap;
 
-                // اليوزر (الهاندل)
-                _fieldLabel('اسم المستخدم'),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _handleCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'username',
-                    prefixIcon: Icon(Icons.alternate_email),
-                  ),
-                  validator: (v) {
-                    final val = v?.trim() ?? '';
-                    if (val.isEmpty) {
-                      return 'أدخل اسم المستخدم';
-                    }
-                    if (val.length < 3) {
-                      return 'اسم المستخدم قصير جداً';
-                    }
-                    final re = RegExp(r'^[a-zA-Z0-9._-]+$');
-                    if (!re.hasMatch(val)) {
-                      return 'استخدم حروف/أرقام و . _ - فقط';
-                    }
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: 14),
-
-                // الإيميل (readOnly + زر تغيير)
-                _fieldLabel('البريد الإلكتروني'),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _emailCtrl,
-                  readOnly: true,
-                  enableInteractiveSelection: false,
-                  decoration: InputDecoration(
-                    hintText: 'name@example.com',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    suffixIcon: TextButton(
-                      onPressed: _showChangeEmailSheet,
-                      child: const Text('تغيير'),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-
-                // العمر + الجنس
-                Row(
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(16, topPadding, 16, 16),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _fieldLabel('العمر'),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _ageCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              hintText: 'مثال: 22',
-                              prefixIcon: Icon(Icons.cake_outlined),
-                            ),
-                            validator: (v) {
-                              final n = int.tryParse(v ?? '');
-                              if (n == null || n < 7 || n > 120) {
-                                return 'أدخل عمرًا منطقيًا';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
+                    // العنوان تحت الهيدر مباشرة
+                    Text(
+                      'تعديل الحساب',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _fieldLabel('الجنس'),
-                          const SizedBox(height: 8),
-                          Row(
+                    const SizedBox(height: 15),
+
+                    // صورة رمزية + قلم تعديل
+                    Row(children: [avatarWidget, const SizedBox(width: 10)]),
+
+                    const SizedBox(height: 14),
+
+                    // اليوزر (الهاندل)
+                    _fieldLabel('اسم المستخدم'),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _handleCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'username',
+                        prefixIcon: Icon(Icons.alternate_email),
+                      ),
+                      validator: (v) {
+                        final val = v?.trim() ?? '';
+                        if (val.isEmpty) return 'أدخل اسم المستخدم';
+                        if (val.length < 3) return 'اسم المستخدم قصير جداً';
+                        final re = RegExp(r'^[a-zA-Z0-9._-]+$');
+                        if (!re.hasMatch(val)) {
+                          return 'استخدم حروف/أرقام و . _ - فقط';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // الإيميل (readOnly + زر تغيير)
+                    _fieldLabel('البريد الإلكتروني'),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _emailCtrl,
+                      readOnly: true,
+                      enableInteractiveSelection: false,
+                      decoration: InputDecoration(
+                        hintText: 'name@example.com',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        suffixIcon: TextButton(
+                          onPressed: _showChangeEmailSheet,
+                          child: const Text('تغيير'),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // العمر + الجنس
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Expanded(
-                                child: _GenderChipEdit(
-                                  selected: _gender == 'male',
-                                  icon: Icons.male,
-                                  label: 'ذكر',
-                                  onTap: () => setState(() {
-                                    _gender = 'male';
-                                  }),
+                              _fieldLabel('العمر'),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: _ageCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  hintText: 'مثال: 22',
+                                  prefixIcon: Icon(Icons.cake_outlined),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _GenderChipEdit(
-                                  selected: _gender == 'female',
-                                  icon: Icons.female,
-                                  label: 'أنثى',
-                                  onTap: () => setState(() {
-                                    _gender = 'female';
-                                  }),
-                                ),
+                                validator: (v) {
+                                  final n = int.tryParse(v ?? '');
+                                  if (n == null || n < 7 || n > 120) {
+                                    return 'أدخل عمرًا منطقيًا';
+                                  }
+                                  return null;
+                                },
                               ),
                             ],
                           ),
-                        ],
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _fieldLabel('الجنس'),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _GenderChipEdit(
+                                      selected: _gender == 'male',
+                                      icon: Icons.male,
+                                      label: 'ذكر',
+                                      onTap: () => setState(() {
+                                        _gender = 'male';
+                                      }),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _GenderChipEdit(
+                                      selected: _gender == 'female',
+                                      icon: Icons.female,
+                                      label: 'أنثى',
+                                      onTap: () => setState(() {
+                                        _gender = 'female';
+                                      }),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // كلمة المرور
+                    _fieldLabel('كلمة المرور'),
+                    const SizedBox(height: 8),
+
+                    if (!_changePassword) ...[
+                      TextFormField(
+                        enabled: false,
+                        initialValue: '••••••••',
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.lock_outline),
+                          hintText: '••••••••',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () =>
+                              setState(() => _changePassword = true),
+                          icon: const Icon(Icons.edit),
+                          label: const Text('تغيير كلمة المرور'),
+                        ),
+                      ),
+                    ] else ...[
+                      TextFormField(
+                        controller: _currentPassCtrl,
+                        obscureText: _obscureCurrent,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          hintText: 'كلمة المرور الحالية',
+                          suffixIcon: IconButton(
+                            onPressed: () => setState(
+                              () => _obscureCurrent = !_obscureCurrent,
+                            ),
+                            icon: Icon(
+                              _obscureCurrent
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                          ),
+                        ),
+                        validator: (v) {
+                          if (_changePassword && (v == null || v.isEmpty)) {
+                            return 'أدخل كلمة المرور الحالية';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _newPassCtrl,
+                        obscureText: _obscureNew,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.lock_reset),
+                          hintText: 'كلمة المرور الجديدة',
+                          suffixIcon: IconButton(
+                            onPressed: () =>
+                                setState(() => _obscureNew = !_obscureNew),
+                            icon: Icon(
+                              _obscureNew
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                          ),
+                        ),
+                        validator: (v) {
+                          if (_changePassword) {
+                            if (v == null || v.isEmpty) {
+                              return 'أدخل كلمة المرور الجديدة';
+                            }
+                            if (v.length < 8) {
+                              return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+                            } else if (!RegExp(r'[A-Z]').hasMatch(v) ||
+                                !RegExp(r'[a-z]').hasMatch(v)) {
+                              return 'يجب أن تحتوي كلمة المرور على حرف كبير وحرف صغير على الأقل.';
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _confirmPassCtrl,
+                        obscureText: _obscureConfirm,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.check_circle_outline),
+                          hintText: 'تأكيد كلمة المرور الجديدة',
+                          suffixIcon: IconButton(
+                            onPressed: () => setState(
+                              () => _obscureConfirm = !_obscureConfirm,
+                            ),
+                            icon: Icon(
+                              _obscureConfirm
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                            ),
+                          ),
+                        ),
+                        validator: (v) {
+                          if (_changePassword) {
+                            if (v == null || v.isEmpty) {
+                              return 'أعد إدخال كلمة المرور';
+                            }
+                            if (v != _newPassCtrl.text) {
+                              return 'كلمتا المرور غير متطابقتين';
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _changePassword = false;
+                              _currentPassCtrl.clear();
+                              _newPassCtrl.clear();
+                              _confirmPassCtrl.clear();
+                            });
+                          },
+                          child: const Text('إلغاء التغيير'),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 22),
+
+                    // زر حفظ (نفسه كما هو)
+                    SizedBox(
+                      width: double.infinity,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          gradient: const LinearGradient(
+                            colors: [
+                              AppColors.mint,
+                              AppColors.primary,
+                              AppColors.primary,
+                            ],
+                            begin: Alignment.centerRight,
+                            end: Alignment.centerLeft,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x33000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                              horizontal: 18,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
+                          onPressed: _save,
+                          icon: const Icon(Icons.save, color: Colors.white),
+                          label: Text(
+                            'حفظ التغييرات',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 14),
-
-                // ===== كلمة المرور =====
-                _fieldLabel('كلمة المرور'),
-                const SizedBox(height: 8),
-
-                if (!_changePassword) ...[
-                  TextFormField(
-                    enabled: false,
-                    initialValue: '••••••••',
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.lock_outline),
-                      hintText: '••••••••',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () => setState(() => _changePassword = true),
-                      icon: const Icon(Icons.edit),
-                      label: const Text('تغيير كلمة المرور'),
-                    ),
-                  ),
-                ] else ...[
-                  TextFormField(
-                    controller: _currentPassCtrl,
-                    obscureText: _obscureCurrent,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      hintText: 'كلمة المرور الحالية',
-                      suffixIcon: IconButton(
-                        onPressed: () =>
-                            setState(() => _obscureCurrent = !_obscureCurrent),
-                        icon: Icon(
-                          _obscureCurrent
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                        ),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (_changePassword && (v == null || v.isEmpty)) {
-                        return 'أدخل كلمة المرور الحالية';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _newPassCtrl,
-                    obscureText: _obscureNew,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.lock_reset),
-                      hintText: 'كلمة المرور الجديدة',
-                      suffixIcon: IconButton(
-                        onPressed: () =>
-                            setState(() => _obscureNew = !_obscureNew),
-                        icon: Icon(
-                          _obscureNew ? Icons.visibility : Icons.visibility_off,
-                        ),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (_changePassword) {
-                        if (v == null || v.isEmpty) {
-                          return 'أدخل كلمة المرور الجديدة';
-                        }
-                        if (v.length < 8) {
-                          return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
-                        } else if (!RegExp(r'[A-Z]').hasMatch(v) ||
-                            !RegExp(r'[a-z]').hasMatch(v)) {
-                          return 'يجب أن تحتوي كلمة المرور على حرف كبير وحرف صغير على الأقل.';
-                        }
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _confirmPassCtrl,
-                    obscureText: _obscureConfirm,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.check_circle_outline),
-                      hintText: 'تأكيد كلمة المرور الجديدة',
-                      suffixIcon: IconButton(
-                        onPressed: () =>
-                            setState(() => _obscureConfirm = !_obscureConfirm),
-                        icon: Icon(
-                          _obscureConfirm
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                        ),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (_changePassword) {
-                        if (v == null || v.isEmpty) {
-                          return 'أعد إدخال كلمة المرور';
-                        }
-                        if (v != _newPassCtrl.text) {
-                          return 'كلمتا المرور غير متطابقتين';
-                        }
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _changePassword = false;
-                          _currentPassCtrl.clear();
-                          _newPassCtrl.clear();
-                          _confirmPassCtrl.clear();
-                        });
-                      },
-                      child: const Text('إلغاء التغيير'),
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 22),
-
-                // زر حفظ (تدرّج)
-                SizedBox(
-                  width: double.infinity,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      gradient: const LinearGradient(
-                        colors: [
-                          AppColors.mint,
-                          AppColors.primary,
-                          AppColors.primary,
-                        ],
-                        begin: Alignment.centerRight,
-                        end: Alignment.centerLeft,
-                      ),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x33000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 14,
-                          horizontal: 18,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        elevation: 0,
-                      ),
-                      onPressed: _save,
-                      icon: const Icon(Icons.save, color: Colors.white),
-                      label: Text(
-                        'حفظ التغييرات',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );

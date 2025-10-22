@@ -4,6 +4,7 @@ import 'services/background_container.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/animation.dart';
 
 import 'task.dart';
 import 'community.dart';
@@ -13,6 +14,7 @@ import 'map.dart';
 import 'services/fcm_service.dart';
 import 'services/bottom_nav.dart';
 import 'services/connection.dart';
+import 'services/title_header.dart';
 
 // لوحة الألوان (هوية Nameer)
 class AppColors {
@@ -74,7 +76,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   }
 
   late final AnimationController _bgCtrl;
-  late final AnimationController _floatingCtrl;
+  AnimationController? _floatingCtrl;
 
   @override
   void initState() {
@@ -82,11 +84,10 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
     _initHome();
 
     // Added to solve an error
-      _floatingCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 300),
+    _floatingCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
     );
-
   }
 
   Future<void> _initHome() async {
@@ -109,7 +110,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   @override
   void dispose() {
     _bgCtrl.dispose();
-    _floatingCtrl.dispose();
+    _floatingCtrl?.dispose();
     super.dispose();
   }
 
@@ -137,6 +138,10 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
       child: Scaffold(
         extendBody: true,
         backgroundColor: Colors.transparent,
+        // appBar: const NameerAppBar(
+        //     showTitleInBar: false,
+        //     showBack: false, // زر الرجوع موجود
+        //   ),
         body: AnimatedBackgroundContainer(
           // ✅ unified animated background
           child: SafeArea(
@@ -581,11 +586,11 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: AnimatedBuilder(
-                      animation: _floatingCtrl,
+                      animation: _floatingCtrl ?? AlwaysStoppedAnimation(0.0),
                       builder: (context, child) {
-                        // نحسب الإزاحة العمودية ونضمن أنها ليست NaN/Infinite
-                        double dy =
-                            -4 * math.sin(_floatingCtrl.value * math.pi);
+                        final value = _floatingCtrl?.value ?? 0.0;
+                        double dy = -4 * math.sin(value * math.pi);
+
                         if (dy.isNaN || dy.isInfinite) dy = 0;
 
                         return Transform.translate(
