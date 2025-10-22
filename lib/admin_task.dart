@@ -8,7 +8,7 @@ import 'admin_reward.dart';
 import 'admin_map.dart';
 import 'dart:ui';
 import 'services/background_container.dart';
-import 'services/connection.dart';
+// import 'services/connection.dart';
 
 class AdminTasksPage extends StatefulWidget {
   const AdminTasksPage({super.key});
@@ -33,8 +33,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   bool _isLoading = true;
   bool _isCatsLoading = true;
   String searchQuery = '';
-  bool _hasSchedule = false;
-  DateTime? _scheduleDate;
+  // bool _hasSchedule = false;
+  // DateTime? _scheduleDate;
 
   int _currentIndex = 2;
 
@@ -186,7 +186,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
     // Filter and sort tasks (active first)
     final filteredTasks = _tasks
         .where((task) {
-          final title = task['title']?.toString().toLowerCase() ?? '';
+          final title = task['title_normalized']?.toString() ?? 
+               task['title']?.toString().toLowerCase() ?? '';
           final desc = task['description']?.toString().toLowerCase() ?? '';
           final cat = task['category']?.toString() ?? '';
           final matchesSearch =
@@ -351,87 +352,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       ),
     );
   }
-  
 
-  // Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
-  //   return AnimatedContainer(
-  //     duration: const Duration(milliseconds: 200),
-  //     margin: const EdgeInsets.symmetric(vertical: 6),
-  //     decoration: BoxDecoration(
-  //       color: Colors.white,
-  //       borderRadius: BorderRadius.circular(16),
-  //       border: Border.all(color: Colors.grey.shade200, width: 1.2),
-  //       boxShadow: [
-  //         BoxShadow(
-  //           color: Colors.black.withOpacity(0.12),
-  //           blurRadius: 5,
-  //           spreadRadius: 2,
-  //           offset: const Offset(0, 1),
-  //         ),
-  //       ],
-  //     ),
-  //     child: Column(
-  //       children: [
-  //         ListTile(
-  //           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-  //           title: Text(
-  //             task['title'] ?? 'بدون عنوان',
-  //             style: const TextStyle(
-  //               fontSize: 16,
-  //               fontWeight: FontWeight.w600,
-  //               color: Color(0xFF333333),
-  //             ),
-  //           ),
-  //           subtitle: Padding(
-  //             padding: const EdgeInsets.only(top: 4),
-  //             child: Row(
-  //               children: [
-  //                 const Icon(Icons.category_outlined, size: 16, color: AppColors.dark),
-  //                 const SizedBox(width: 6),
-  //                 Text(
-  //                   task['category'] ?? 'غير مصنف',
-  //                   style: const TextStyle(
-  //                     fontSize: 13,
-  //                     color: Color(0xFF666666),
-  //                     fontWeight: FontWeight.w600,
-  //                   ),
-  //                 ),
-  //               ],
-  //             ),
-  //           ),
-  //           trailing: Row(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: [
-  //               Icon(
-  //                 isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-  //                 color: AppColors.primary,
-  //               ),
-  //               const SizedBox(width: 6),
-  //               Container(
-  //                 width: 10,
-  //                 height: 10,
-  //                 decoration: BoxDecoration(
-  //                   color: (task['isActive'] == true)
-  //                       ? Colors.green
-  //                       : Colors.grey.shade400,
-  //                   shape: BoxShape.circle,
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //           onTap: () {
-  //             setState(() {
-  //               isExpanded
-  //                   ? _expandedIndexes.remove(index)
-  //                   : _expandedIndexes.add(index);
-  //             });
-  //           },
-  //         ),
-  //         if (isExpanded) _buildExpandedTaskContent(task),
-  //       ],
-  //     ),
-  //   );
-  // }
 
   
 // ---------------------------------------------------------------------------
@@ -965,6 +886,7 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: selectedValue,
+                  alignment: Alignment.centerRight, //======================================== 
                   isExpanded: true,
                   hint: _isCatsLoading
                       ? const Text('...يتم تحميل الفئات')
@@ -996,142 +918,6 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
       },
     );
   }
-
-  // ---- Expiry selector (radio + optional date picker) ----
-  // Widget _buildExpirySelector({
-  //   required bool hasExpiry,
-  //   required DateTime? expiryDate,
-  //   required ValueChanged<bool> onToggle,
-  //   required ValueChanged<DateTime?> onPickDate,
-  // }) {
-  //   return FormField<bool>(
-  //     validator: (_) {
-  //       if (hasExpiry && expiryDate == null) {
-  //         return 'يرجى اختيار تاريخ انتهاء المهمة';
-  //       }
-  //       return null;
-  //     },
-  //     builder: (state) {
-  //       return Column(
-  //         crossAxisAlignment: CrossAxisAlignment.start,
-  //         children: [
-  //           _fieldLabel('صلاحية المهمة', required: true),
-  //           const SizedBox(height: 8),
-  //           Container(
-  //             decoration: BoxDecoration(
-  //               color: Colors.transparent,
-  //               border: Border.all(
-  //                 color: state.hasError
-  //                     ? Colors.redAccent
-  //                     : AppColors.light.withOpacity(0.7),
-  //                 width: 1.4,
-  //               ),
-  //               borderRadius: BorderRadius.circular(12),
-  //             ),
-  //             child: Column(
-  //               children: [
-  //                 RadioListTile<bool>(
-  //                   value: false,
-  //                   groupValue: hasExpiry,
-  //                   activeColor: AppColors.primary,
-  //                   title: const Text('بدون تاريخ انتهاء'),
-  //                   onChanged: (v) {
-  //                     onToggle(v ?? false);
-  //                     onPickDate(null);
-  //                     state.didChange(v);
-  //                   },
-  //                 ),
-  //                 const Divider(height: 0),
-  //                 RadioListTile<bool>(
-  //                   value: true,
-  //                   groupValue: hasExpiry,
-  //                   activeColor: AppColors.primary,
-  //                   title: const Text('تاريخ انتهاء محدد'),
-  //                   onChanged: (v) {
-  //                     onToggle(v ?? true);
-  //                     if (expiryDate == null) {
-  //                       onPickDate(DateTime.now().add(const Duration(days: 7)));
-  //                     }
-  //                     state.didChange(v);
-  //                   },
-  //                 ),
-  //               ],
-  //             ),
-  //           ),
-  //           const SizedBox(height: 12),
-  //           if (hasExpiry)
-  //             InkWell(
-  //               onTap: () async {
-  //                 final picked = await showDatePicker(
-  //                   context: context,
-  //                   initialDate: expiryDate ?? DateTime.now().add(const Duration(days: 7)),
-  //                   firstDate: DateTime.now(),
-  //                   lastDate: DateTime(2030),
-  //                   builder: (context, child) => Directionality(
-  //                     textDirection: TextDirection.rtl,
-  //                     child: Theme(
-  //                       data: Theme.of(context).copyWith(
-  //                         colorScheme: const ColorScheme.light(
-  //                           primary: AppColors.primary,
-  //                           onPrimary: Colors.white,
-  //                           onSurface: AppColors.dark,
-  //                         ),
-  //                       ),
-  //                       child: child!,
-  //                     ),
-  //                   ),
-  //                 );
-  //                 if (picked != null) {
-  //                   onPickDate(picked);
-  //                   state.validate();
-  //                 }
-  //               },
-  //               borderRadius: BorderRadius.circular(12),
-  //               child: Container(
-  //                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-  //                 decoration: BoxDecoration(
-  //                   border: Border.all(
-  //                     color: state.hasError
-  //                         ? Colors.redAccent
-  //                         : AppColors.light.withOpacity(0.7),
-  //                     width: 1.4,
-  //                   ),
-  //                   borderRadius: BorderRadius.circular(12),
-  //                 ),
-  //                 child: Row(
-  //                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  //                   children: [
-  //                     Text(
-  //                       expiryDate == null
-  //                           ? 'اختر تاريخ الانتهاء'
-  //                           : 'تاريخ الانتهاء: ${expiryDate!.day}-${expiryDate!.month}-${expiryDate!.year}',
-  //                       style: GoogleFonts.ibmPlexSansArabic(
-  //                         color: AppColors.dark,
-  //                         fontWeight: FontWeight.w700,
-  //                       ),
-  //                     ),
-  //                     const Icon(Icons.calendar_today, color: AppColors.primary, size: 20),
-  //                   ],
-  //                 ),
-  //               ),
-  //             ),
-  //           if (state.hasError)
-  //             Padding(
-  //               padding: const EdgeInsets.only(top: 6, right: 4),
-  //               child: Text(
-  //                 state.errorText!,
-  //                 style: const TextStyle(
-  //                   color: Colors.redAccent,
-  //                   fontSize: 12,
-  //                   fontWeight: FontWeight.w600,
-  //                 ),
-  //               ),
-  //             ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
 
   // ---- Save button builder (creates/updates task in Firestore) ----
   Widget _buildSaveButton({
@@ -1246,8 +1032,7 @@ Widget _buildTaskCard(Map<String, dynamic> task, int index, bool isExpanded) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// 🟩 Add / Edit Task Page
+
 // ---------------------------------------------------------------------------
 // 🟩 Add / Edit Task Page (Fixed & Complete)
 class AddTaskPage extends StatefulWidget {
@@ -1322,7 +1107,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
     _descCtrl.text = t['description'] ?? '';
     _pointsCtrl.text = t['points']?.toString() ?? '';
     _selectedCategory = t['category'];
-
+    _validationType = t['validationStrategy'];
+    
     // Scheduling
     final hasSchedule = t['hasSchedule'] ?? false;
     _startMode = hasSchedule ? 'scheduled' : 'now';
@@ -1414,8 +1200,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      _buildRedCancelButton(onPressed: () => Navigator.pop(context)),
+                      // const SizedBox(height: 10),
+                      // _buildRedCancelButton(onPressed: () => Navigator.pop(context)),
                     ],
                   ),
                 ),
@@ -1526,21 +1312,33 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     onChanged: (_) => _isDirty = true,
                   ),
                   const SizedBox(height: 14),
-
                   _fieldLabel('تصنيف المهمة', required: true),
+
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     value: _selectedCategory,
+                    alignment: Alignment.centerRight,
                     isExpanded: true,
                     decoration: InputDecoration(
                       hintText: _catsLoading ? '...يتم تحميل الفئات' : 'اختر الفئة',
+                      prefixIcon: const Icon(
+                        Icons.category_outlined,
+                        color: AppColors.primary,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                     items: _categories
-                        .map((name) =>
-                            DropdownMenuItem(value: name, child: Text(name)))
+                        .map(
+                          (name) => DropdownMenuItem(
+                            value: name,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(name),
+                            ),
+                          ),
+                        )
                         .toList(),
                     onChanged: (v) {
                       setState(() => _selectedCategory = v);
@@ -1556,6 +1354,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     value: _validationType,
+                    alignment: Alignment.centerRight, // =========================================
                     isExpanded: true,
                     decoration: const InputDecoration(
                       hintText: 'اختر طريقة التحقق',
@@ -1565,10 +1364,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       ),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'manual', child: Text('تحقق يدوي')),
-                      DropdownMenuItem(value: 'photo', child: Text('صورة')),
-                      DropdownMenuItem(value: 'qr', child: Text('رمز QR')),
-                      DropdownMenuItem(value: 'location', child: Text('الموقع')),
+                      DropdownMenuItem(
+                        value: 'التحقق عبر معالجة الصور',
+                        child: Text('التحقق عبر معالجة الصور'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'التحقق عبر تتبع القراءة',
+                        child: Text('التحقق عبر تتبع القراءة'),
+                      ),
                     ],
                     onChanged: (v) {
                       setState(() => _validationType = v);
@@ -1581,6 +1384,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
                   _fieldLabel('تفعيل وجدولة المهمة', required: true),
                   const SizedBox(height: 8),
+
                   Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: AppColors.light.withOpacity(0.7)),
@@ -1588,6 +1392,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     ),
                     child: Column(
                       children: [
+                        // -------- Activate now --------
                         RadioListTile<String>(
                           value: 'now',
                           groupValue: _startMode,
@@ -1597,11 +1402,15 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             setState(() {
                               _startMode = v!;
                               _startDate = null;
+                              _hasExpiry = false;
+                              _expiryDate = null;
                               _isDirty = true;
                             });
                           },
                         ),
                         const Divider(height: 0),
+
+                        // -------- Schedule start date --------
                         RadioListTile<String>(
                           value: 'scheduled',
                           groupValue: _startMode,
@@ -1622,8 +1431,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 initialDate: _startDate ?? DateTime.now(),
                                 firstDate: DateTime.now(),
                                 lastDate: DateTime(2030),
-                                builder: (context, child) =>
-                                    Directionality(
+                                builder: (context, child) => Directionality(
                                   textDirection: TextDirection.rtl,
                                   child: Theme(
                                     data: Theme.of(context).copyWith(
@@ -1643,18 +1451,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
                               }
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 12, horizontal: 14),
-                              margin: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 4),
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                               decoration: BoxDecoration(
-                                border: Border.all(
-                                    color: AppColors.light.withOpacity(.7)),
+                                border: Border.all(color: AppColors.light.withOpacity(.7)),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     _startDate == null
@@ -1671,19 +1475,24 @@ class _AddTaskPageState extends State<AddTaskPage> {
                               ),
                             ),
                           ),
+
                         const Divider(height: 0),
+
+                        // -------- Expiry date --------
                         CheckboxListTile(
                           title: const Text('تحديد تاريخ انتهاء'),
                           value: _hasExpiry,
                           controlAffinity: ListTileControlAffinity.leading,
                           activeColor: AppColors.primary,
-                          onChanged: (v) {
-                            setState(() {
-                              _hasExpiry = v ?? false;
-                              if (!_hasExpiry) _expiryDate = null;
-                              _isDirty = true;
-                            });
-                          },
+                          onChanged: _startMode == 'inactive'
+                              ? null
+                              : (v) {
+                                  setState(() {
+                                    _hasExpiry = v ?? false;
+                                    if (!_hasExpiry) _expiryDate = null;
+                                    _isDirty = true;
+                                  });
+                                },
                         ),
                         if (_hasExpiry)
                           InkWell(
@@ -1694,8 +1503,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                     DateTime.now().add(const Duration(days: 7)),
                                 firstDate: DateTime.now(),
                                 lastDate: DateTime(2030),
-                                builder: (context, child) =>
-                                    Directionality(
+                                builder: (context, child) => Directionality(
                                   textDirection: TextDirection.rtl,
                                   child: Theme(
                                     data: Theme.of(context).copyWith(
@@ -1715,18 +1523,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
                               }
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 12, horizontal: 14),
-                              margin: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 4),
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                               decoration: BoxDecoration(
-                                border: Border.all(
-                                    color: AppColors.light.withOpacity(.7)),
+                                border: Border.all(color: AppColors.light.withOpacity(.7)),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     _expiryDate == null
@@ -1743,8 +1547,31 @@ class _AddTaskPageState extends State<AddTaskPage> {
                               ),
                             ),
                           ),
-                        const SizedBox(height: 10),
                       ],
+                    ),
+                  ),
+
+                  // -------- Separate deactivation option --------
+                  const SizedBox(height: 16),
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.light.withOpacity(0.7)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: RadioListTile<String>(
+                      value: 'inactive',
+                      groupValue: _startMode,
+                      activeColor: AppColors.primary,
+                      title: const Text('إيقاف المهمة مؤقتًا'),
+                      onChanged: (v) {
+                        setState(() {
+                          _startMode = v!;
+                          _startDate = null;
+                          _hasExpiry = false;
+                          _expiryDate = null;
+                          _isDirty = true;
+                        });
+                      },
                     ),
                   ),
 
@@ -1773,14 +1600,47 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
 
     try {
+      // --- Normalize the title for duplicate checking ---
+      final newTitleNormalized = _titleCtrl.text
+          .trim()
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .toLowerCase();
+
+      // --- Check if this title already exists in Firestore ---
+      final existing = await _tasks
+          .where('title_normalized', isEqualTo: newTitleNormalized)
+          .limit(1)
+          .get();
+
+      if (existing.docs.isNotEmpty &&
+          (widget.task == null || existing.docs.first.id != widget.task!['id'])) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            content: Text(
+              'اسم المهمة "${_titleCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        );
+        return;
+      }
+
+      // --- Prepare task data ---
       final data = {
         'title': _titleCtrl.text.trim(),
+        'title_normalized': newTitleNormalized,
         'description': _descCtrl.text.trim(),
         'points': int.parse(_pointsCtrl.text),
         'category': _selectedCategory,
+        'validationStrategy': _validationType,
         'managedBy': 'nameer admin',
 
-        // Scheduling fields
+        // Scheduling
         'hasSchedule': _startMode == 'scheduled',
         'scheduleDate': _startMode == 'scheduled' && _startDate != null
             ? Timestamp.fromDate(_startDate!)
@@ -1792,28 +1652,38 @@ class _AddTaskPageState extends State<AddTaskPage> {
             ? Timestamp.fromDate(_expiryDate!)
             : null,
 
-        // Active now?
-        'isActive': _startMode == 'now',
-        'validationStrategy': _validationType,
+        // Activation
+'isActive': _startMode == 'now'
+    ? true
+    : _startMode == 'inactive'
+        ? false
+        : false, // scheduled starts inactive until date arrives
+
+
         'createdAt': FieldValue.serverTimestamp(),
       };
 
+      // --- Add or Update task ---
       if (widget.task == null) {
         await _tasks.add(data);
       } else {
         await _tasks.doc(widget.task!['id']).update(data);
       }
 
+      // --- Notify and close ---
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
             content: Text(
               widget.task == null
                   ? 'تمت إضافة المهمة بنجاح ✅'
                   : 'تم تحديث المهمة بنجاح ✅',
               style: GoogleFonts.ibmPlexSansArabic(
-                  color: Colors.white, fontWeight: FontWeight.w700),
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         );
@@ -1943,128 +1813,116 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
     _isDirty = false;
   }
 
+  Future<bool> _confirmLeaveIfDirty() async {
+    if (!_isDirty) return true;
+    bool shouldLeave = false;
 
-Future<bool> _confirmLeaveIfDirty() async {
-  if (!_isDirty) return true;
-
-  bool shouldLeave = false;
-
-  await showGeneralDialog(
-    context: context,
-    barrierDismissible: false,
-    barrierColor: Colors.black26,
-    transitionDuration: const Duration(milliseconds: 200),
-    pageBuilder: (context, anim1, anim2) {
-      return BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-        child: Center(
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.85,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x33000000),
-                    blurRadius: 10,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Directionality(
-                textDirection: TextDirection.rtl,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.redAccent,
-                      size: 48,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'تأكيد الخروج',
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 20,
-                        color: AppColors.dark,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'هل أنت متأكد من العودة دون حفظ التغييرات؟',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 15,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.exit_to_app, color: Colors.white),
-                        label: Text(
-                          'تأكيد الخروج',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        onPressed: () {
-                          shouldLeave = true;
-                          Navigator.pop(context);
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.redAccent),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        minimumSize: const Size(double.infinity, 48),
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(
-                        'إلغاء',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          color: Colors.redAccent,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+    await showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black26,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, anim1, anim2) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.85,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
                     ),
                   ],
+                ),
+                child: Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          color: Colors.redAccent, size: 48),
+                      const SizedBox(height: 10),
+                      Text('تأكيد الخروج',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 20,
+                              color: AppColors.dark)),
+                      const SizedBox(height: 8),
+                      Text('هل أنت متأكد من العودة دون حفظ التغييرات؟',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 15, color: Colors.black87)),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.exit_to_app,
+                              color: Colors.white),
+                          label: Text('تأكيد الخروج',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          onPressed: () {
+                            shouldLeave = true;
+                            Navigator.pop(context);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.redAccent),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 14),
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: Text('إلغاء',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.w700,
+                            )),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
-    },
-    transitionBuilder: (context, anim1, anim2, child) {
-      return FadeTransition(
-        opacity: anim1,
-        child: ScaleTransition(
-          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
-          child: child,
-        ),
-      );
-    },
-  );
+        );
+      },
+      transitionBuilder: (context, anim1, anim2, child) {
+        return FadeTransition(
+          opacity: anim1,
+          child: ScaleTransition(
+            scale:
+                CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+            child: child,
+          ),
+        );
+      },
+    );
 
-  return shouldLeave;
-}
+    return shouldLeave;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2076,41 +1934,41 @@ Future<bool> _confirmLeaveIfDirty() async {
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          centerTitle: true,
-          title: Text(
-            titleText, // already defined above: isEdit ? 'إضافة فئة جديدة' : 'تعديل الفئة',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            centerTitle: true,
+            title: Text(
+              titleText,
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppColors.dark),
-            onPressed: () async {
-              if (await _confirmLeaveIfDirty()) {
-                if (mounted) Navigator.pop(context, false);
-              }
-            },
-            tooltip: 'رجوع',
-          ),
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.primary,
-                  AppColors.primary,
-                  AppColors.mint,
-                ],
-                stops: [0.0, 0.5, 1.0],
-                begin: Alignment.bottomLeft,
-                end: Alignment.topRight,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: AppColors.dark),
+              onPressed: () async {
+                if (await _confirmLeaveIfDirty()) {
+                  if (mounted) Navigator.pop(context, false);
+                }
+              },
+              tooltip: 'رجوع',
+            ),
+            flexibleSpace: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.primary,
+                    AppColors.primary,
+                    AppColors.mint,
+                  ],
+                  stops: [0.0, 0.5, 1.0],
+                  begin: Alignment.bottomLeft,
+                  end: Alignment.topRight,
+                ),
               ),
             ),
           ),
-        ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Form(
@@ -2131,11 +1989,11 @@ Future<bool> _confirmLeaveIfDirty() async {
                         (v == null || v.isEmpty) ? 'أدخل اسم الفئة' : null,
                   ),
                   const SizedBox(height: 14),
-
                   _fieldLabel('الفئة الرئيسية', required: true),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     value: _parent,
+                    alignment: Alignment.centerRight,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       hintText: 'اختر الفئة الرئيسية',
@@ -2145,18 +2003,21 @@ Future<bool> _confirmLeaveIfDirty() async {
                       ),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'سلوك مباشر', child: Text('سلوك مباشر')),
-                      DropdownMenuItem(value: 'سلوك غير مباشر', child: Text('سلوك غير مباشر')),
+                      DropdownMenuItem(
+                          value: 'سلوك مباشر', child: Text('سلوك مباشر')),
+                      DropdownMenuItem(
+                          value: 'سلوك غير مباشر',
+                          child: Text('سلوك غير مباشر')),
                     ],
                     onChanged: (v) {
                       setState(() => _parent = v);
                       _isDirty = true;
                     },
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'اختر الفئة الرئيسية' : null,
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? 'اختر الفئة الرئيسية'
+                        : null,
                   ),
                   const SizedBox(height: 14),
-
                   _fieldLabel('وصف الفئة', required: true),
                   const SizedBox(height: 8),
                   TextFormField(
@@ -2170,18 +2031,14 @@ Future<bool> _confirmLeaveIfDirty() async {
                     validator: (v) =>
                         (v == null || v.isEmpty) ? 'أدخل وصف الفئة' : null,
                   ),
-
                   const SizedBox(height: 24),
-
                   _buildGradientSaveButton(
                     text: isEdit ? 'تحديث الفئة' : 'حفظ الفئة',
                     onPressed: _saveCategory,
                   ),
                   const SizedBox(height: 10),
                   _buildRedCancelButton(
-                    onPressed: () {
-                      Navigator.pop(context); // directly closes, no confirmation
-                    },
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
@@ -2194,36 +2051,52 @@ Future<bool> _confirmLeaveIfDirty() async {
 
   Future<void> _saveCategory() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
-      setState(() {}); // show errors
+      setState(() {});
       return;
     }
+
     try {
+      // 🔹 Correct regex and normalization
       final normalized =
-          _nameCtrl.text.trim().replaceAll(RegExp(r'\\s+'), ' ').toLowerCase();
+          _nameCtrl.text.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
 
       if (widget.category == null) {
-        // dup check
+        // 🔹 Duplicate check
         final dup = await _categoriesCol
             .where('name_normalized', isEqualTo: normalized)
             .limit(1)
             .get();
+
         if (dup.docs.isNotEmpty) {
+          // Close any open keyboard before showing the message
+          FocusScope.of(context).unfocus();
+
+          await Future.delayed(const Duration(milliseconds: 100));
+
+          ScaffoldMessenger.of(context).clearSnackBars();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               backgroundColor: Colors.redAccent,
               behavior: SnackBarBehavior.floating,
-              content: Text(
-                'اسم الفئة "${_nameCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
+              margin: const EdgeInsets.all(12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              content: Directionality(
+                textDirection: TextDirection.rtl,
+                child: Text(
+                  '⚠️ اسم الفئة "${_nameCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
               ),
+              duration: const Duration(seconds: 3),
             ),
           );
           return;
         }
-
         await _categoriesCol.add({
           'name': _nameCtrl.text.trim(),
           'name_normalized': normalized,
@@ -2264,7 +2137,7 @@ Future<bool> _confirmLeaveIfDirty() async {
     }
   }
 
-  // Local helpers (same visuals)
+  // 🔹 Local helpers — unchanged visuals
   Widget _fieldLabel(String text, {bool required = false}) {
     return Align(
       alignment: Alignment.centerRight,
@@ -2281,9 +2154,7 @@ Future<bool> _confirmLeaveIfDirty() async {
                   TextSpan(
                     text: ' *',
                     style: TextStyle(
-                      color: Colors.redAccent,
-                      fontWeight: FontWeight.w900,
-                    ),
+                        color: Colors.redAccent, fontWeight: FontWeight.w900),
                   ),
                 ]
               : [],
@@ -2311,16 +2182,13 @@ Future<bool> _confirmLeaveIfDirty() async {
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
           padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
         child: Text(
           text,
           style: GoogleFonts.ibmPlexSansArabic(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-          ),
+              color: Colors.white, fontWeight: FontWeight.w800),
         ),
       ),
     );
@@ -2332,18 +2200,14 @@ Future<bool> _confirmLeaveIfDirty() async {
       style: OutlinedButton.styleFrom(
         side: const BorderSide(color: Colors.redAccent, width: 1.4),
         padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       child: Text(
         'إلغاء',
         style: GoogleFonts.ibmPlexSansArabic(
-          color: Colors.redAccent,
-          fontWeight: FontWeight.w700,
-        ),
+            color: Colors.redAccent, fontWeight: FontWeight.w700),
       ),
     );
   }
 }
-
-
-
