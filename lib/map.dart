@@ -17,7 +17,8 @@ import 'task.dart';
 import 'community.dart';
 import 'levels.dart';
 import 'profile.dart';
-import 'widgets/bottom_nav.dart';
+import 'services/bottom_nav.dart';
+import 'services/connection.dart';
 
 /// ================== ألوان الواجهة ==================
 class AppColors {
@@ -272,6 +273,10 @@ class _mapPageState extends State<mapPage> {
 
   // ===== Load facilities from Firestore =====
   Future<void> _loadFacilitiesFromFirestore() async {
+    if (!await hasInternetConnection()) {
+      if (context.mounted) showNoInternetDialog(context);
+      return;
+    }
     setState(() => _isLoadingFacilities = true);
     try {
       final qs = await FirebaseFirestore.instance
@@ -535,6 +540,10 @@ class _mapPageState extends State<mapPage> {
   }
 
   Future<void> _onSearchSubmitted(String query) async {
+    if (!await hasInternetConnection()) {
+      if (context.mounted) showNoInternetDialog(context);
+      return;
+    }
     query = query.trim();
     if (query.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1023,6 +1032,10 @@ class _mapPageState extends State<mapPage> {
     required String type,
     required String description,
   }) async {
+    if (!await hasInternetConnection()) {
+      if (context.mounted) showNoInternetDialog(context);
+      return;
+    }
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
       await FirebaseFirestore.instance.collection('facilityReports').add({

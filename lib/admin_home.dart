@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'widgets/admin_bottom_nav.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'services/connection.dart';
+import 'services/fcm_service.dart';
+import 'services/admin_bottom_nav.dart';
 import 'admin_task.dart';
 import 'admin_reward.dart' as reward;
 import 'admin_map.dart';
 import 'profile.dart';
-import 'widgets/background_container.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import '../services/fcm_service.dart';
-
-//  Firebase لجلب بيانات المستخدم
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'services/background_container.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -36,8 +36,20 @@ class _AdminHomePageState extends State<AdminHomePage> {
   @override
   void initState() {
     super.initState();
-    FCMService.requestPermissionAndSaveToken();
-    FCMService.listenToForegroundMessages();
+
+    // ✅ تحقق أولاً من وجود اتصال بالإنترنت
+    Future.microtask(() async {
+      if (!await hasInternetConnection()) {
+        if (mounted) {
+          showNoInternetDialog(context);
+          return;
+        }
+      } else {
+        // ✅ فقط إذا في إنترنت: فعّل إشعارات FCM
+        FCMService.requestPermissionAndSaveToken();
+        FCMService.listenToForegroundMessages();
+      }
+    });
   }
 
   int _currentIndex = 3;

@@ -5,16 +5,20 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'firebase_options.dart';
 import 'package:flutter/services.dart';
-import 'splash.dart';
-import 'home.dart';
-import 'admin_home.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:Nameer/services/connection.dart';
+
+import 'services/launch_decider.dart';
+import 'services/firebase_options.dart';
+import 'services/splash.dart';
+import 'home.dart';
+import 'admin_home.dart';
 
 // تهيئة الإشعارات المحلية
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -174,7 +178,7 @@ class MyApp extends StatelessWidget {
           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
-      home: const SplashScreen(),
+      home: const LaunchDecider(),
     );
   }
 }
@@ -272,6 +276,10 @@ class _RegisterPageState extends State<RegisterPage>
 
   // دالة "نسيت كلمة المرور"
   Future<void> _resetPassword() async {
+    if (!await hasInternetConnection()) {
+      showNoInternetDialog(context);
+      return;
+    }
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
       ScaffoldMessenger.of(
@@ -289,21 +297,28 @@ class _RegisterPageState extends State<RegisterPage>
         ),
       );
     } on FirebaseAuthException catch (e) {
-      String msg = 'تعذّر الإرسال (${e.code})';
+      String msg;
+
       switch (e.code) {
         case 'invalid-email':
-          msg = 'بريد إلكتروني غير صالح';
+          msg =
+              'البريد الإلكتروني الذي أدخلته غير صالح. تأكد من كتابته بشكل صحيح.';
           break;
         case 'user-not-found':
-          msg = 'لا يوجد حساب بهذا البريد';
+          msg = 'لا يوجد حساب مسجّل بهذا البريد الإلكتروني.';
           break;
         case 'network-request-failed':
-          msg = 'تحقق من اتصال الإنترنت';
+          msg =
+              'تعذّر الاتصال بالإنترنت، يرجى التحقق من الشبكة والمحاولة لاحقًا.';
           break;
         case 'too-many-requests':
-          msg = 'محاولات كثيرة — جرّب لاحقًا';
+          msg =
+              'تم إجراء محاولات كثيرة خلال فترة قصيرة، الرجاء الانتظار قليلًا ثم المحاولة مجددًا.';
           break;
+        default:
+          msg = 'حدث خطأ غير متوقع أثناء إرسال الرابط. حاول مرة أخرى لاحقًا.';
       }
+
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -318,6 +333,10 @@ class _RegisterPageState extends State<RegisterPage>
 
   // ✅ تسجيل دخول + توجيه حسب الدور
   Future<void> _submit() async {
+    if (!await hasInternetConnection()) {
+      showNoInternetDialog(context);
+      return;
+    }
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) {
       _shakeCtrl
@@ -341,7 +360,7 @@ class _RegisterPageState extends State<RegisterPage>
       if (user == null) throw FirebaseAuthException(code: 'user-not-found');
 
       if (user.emailVerified) {
-        // جب الدور ووجّه
+        // ✅ المستخدم مفعّل، وجّهه حسب الدور
         final role = await _fetchUserRole(user.uid);
         if (!mounted) return;
         if (role == 'admin') {
@@ -356,10 +375,43 @@ class _RegisterPageState extends State<RegisterPage>
           );
         }
       } else {
-        // لو ما هو متحقق، روح لصفحة التحقق
+        // ⚠️ المستخدم لم يتحقق من بريده الإلكتروني
         await FirebaseAuth.instance.setLanguageCode('ar');
-        await user.sendEmailVerification();
-        if (!mounted) return;
+
+        try {
+          await user.sendEmailVerification();
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'تم إرسال رسالة التحقق إلى بريدك، يرجى التحقق قبل تسجيل الدخول.',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } on FirebaseAuthException catch (e) {
+          String msg;
+          switch (e.code) {
+            case 'too-many-requests':
+              msg =
+                  'تم إجراء محاولات كثيرة خلال فترة قصيرة، الرجاء الانتظار قليلًا ثم المحاولة مجددًا.';
+              break;
+            case 'network-request-failed':
+              msg =
+                  'تعذّر الاتصال بالإنترنت، يرجى التحقق من الشبكة والمحاولة لاحقًا.';
+              break;
+            default:
+              msg = 'حدث خطأ غير متوقع أثناء إرسال رسالة التحقق.';
+          }
+
+          if (!mounted) return;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('❌ $msg')));
+        }
+
+        // ⏩ التوجيه لصفحة التحقق بعد الإشعار
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => VerifyEmailPage(email: email)),
         );
@@ -590,6 +642,11 @@ class _RegisterPageState extends State<RegisterPage>
                                         }
                                         if (v.length < 8) {
                                           return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+                                        } else if (!RegExp(
+                                              r'[A-Z]',
+                                            ).hasMatch(v) ||
+                                            !RegExp(r'[a-z]').hasMatch(v)) {
+                                          return 'يجب أن تحتوي كلمة المرور على حرف كبير وحرف صغير على الأقل.';
                                         }
                                         return null;
                                       },
@@ -943,6 +1000,10 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
   }
 
   Future<void> _submit() async {
+    if (!await hasInternetConnection()) {
+      showNoInternetDialog(context);
+      return;
+    }
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
@@ -1477,6 +1538,10 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
   bool _checking = false;
 
   Future<void> _resend() async {
+    if (!await hasInternetConnection()) {
+      showNoInternetDialog(context);
+      return;
+    }
     try {
       setState(() => _sending = true);
       await FirebaseAuth.instance.setLanguageCode('ar');
@@ -1517,6 +1582,10 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
 
   /// ✅ تحقق محلي: أعد تحميل المستخدم، إذا Verified حدّث users/{uid}.isVerified=true
   Future<void> _markVerified() async {
+    if (!await hasInternetConnection()) {
+      showNoInternetDialog(context);
+      return;
+    }
     try {
       setState(() => _checking = true);
 

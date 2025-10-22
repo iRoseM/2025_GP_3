@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // نستخدم الألوان والبنتر من main.dart
 import 'main.dart'; // AppColors, GradientBackgroundPainter, RegisterPage
@@ -52,9 +53,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     super.dispose();
   }
 
-  void _next() {
-    // ✅ إذا كنا في آخر صفحة ننتقل مباشرة لصفحة تسجيل الدخول
+  Future<void> _next() async {
+    // ✅ إذا كنا في آخر صفحة خزّن فلاج المشاهدة وانتقل لتسجيل الدخول
     if (_index >= _pages.length - 1) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('seen_onboarding', true); // ما ترجع تظهر
+
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const RegisterPage()),
       );

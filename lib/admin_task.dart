@@ -1,20 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'widgets/admin_bottom_nav.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'services/admin_bottom_nav.dart';
 import 'admin_home.dart';
 import 'admin_reward.dart';
 import 'admin_map.dart';
-import 'widgets/background_container.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:ui';
+import 'services/background_container.dart';
+import 'services/connection.dart';
 
-/// ---------------------------------------------------------------------------
-///  Admin Tasks Management Page
-///  Handles viewing, adding, editing, deleting, and filtering sustainability
-///  tasks and categories within the Nameer admin dashboard.
-///  NOTE: This refactor preserves logic and data flow; changes are cosmetic
-///  (naming, structure, documentation, and UI code style) for maintainability. 
-/// ---------------------------------------------------------------------------
 class AdminTasksPage extends StatefulWidget {
   const AdminTasksPage({super.key});
 

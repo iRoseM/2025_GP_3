@@ -14,9 +14,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'admin_home.dart' as home;
 import 'admin_task.dart';
 import 'admin_reward.dart' as reward;
-import 'widgets/admin_bottom_nav.dart';
+import 'services/admin_bottom_nav.dart';
 import 'admin_report.dart' as report;
 import 'profile.dart';
+import 'services/connection.dart';
 
 class AdminMapPage extends StatefulWidget {
   const AdminMapPage({super.key});
@@ -63,6 +64,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
   }
 
   Future<void> _initAdminMap() async {
+    if (!await hasInternetConnection()) {
+      if (mounted) showNoInternetDialog(context);
+      return;
+    }
     await _ensureLocationPermission();
     await _loadMarkerIcons();
     await _loadFacilitiesFromFirestore();
@@ -196,6 +201,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
 
   /// ✅ تحميل كل الفاسيلتيز من Firestore (بدون فلترة حالة)
   Future<void> _loadFacilitiesFromFirestore() async {
+    if (!await hasInternetConnection()) {
+      if (mounted) showNoInternetDialog(context);
+      return;
+    }
     try {
       final qs = await FirebaseFirestore.instance
           .collection('facilities')
@@ -897,6 +906,11 @@ class _AdminMapPageState extends State<AdminMapPage> {
                                 backgroundColor: Colors.teal,
                               ),
                               onPressed: () async {
+                                if (!await hasInternetConnection()) {
+                                  if (context.mounted)
+                                    showNoInternetDialog(context);
+                                  return;
+                                }
                                 if (nameCtrl.text.trim().isEmpty ||
                                     providerCtrl.text.trim().isEmpty) {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -977,6 +991,11 @@ class _AdminMapPageState extends State<AdminMapPage> {
                             backgroundColor: Colors.orange,
                           ),
                           onPressed: () async {
+                            if (!await hasInternetConnection()) {
+                              if (context.mounted)
+                                showNoInternetDialog(context);
+                              return;
+                            }
                             if (nameCtrl.text.trim().isEmpty ||
                                 providerCtrl.text.trim().isEmpty ||
                                 latCtrl.text.trim().isEmpty ||
@@ -1361,6 +1380,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
                         backgroundColor: Colors.teal,
                       ),
                       onPressed: () async {
+                        if (!await hasInternetConnection()) {
+                          if (context.mounted) showNoInternetDialog(context);
+                          return;
+                        }
                         if (nameCtrl.text.trim().isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -1450,6 +1473,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
           ),
           TextButton(
             onPressed: () async {
+              if (!await hasInternetConnection()) {
+                if (context.mounted) showNoInternetDialog(context);
+                return;
+              }
               try {
                 await FirebaseFirestore.instance
                     .collection('facilities')

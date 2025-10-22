@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:ui';
-import 'main.dart'; // for AppColors and _GradientBackgroundPainter
-import 'onboarding.dart'; 
+import '../main.dart'; // for AppColors and _GradientBackgroundPainter
+import '../onboarding.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -12,47 +12,46 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
   late final AnimationController _bgCtrl;
   late final AnimationController _fadeCtrl;
-  late final Animation<double> _fadeAnim; 
-
-@override
-void initState() {
-  super.initState();
-
-  _bgCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 14),
-  )..repeat();
-
-  // fade-out controller
-  _fadeCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1200),
-    value: 1.0, // start fully visible
-  );
-
-  // run fade out before navigating
-  Future.delayed(const Duration(seconds: 3), () async {
-    await _fadeCtrl.reverse(); // fade to invisible
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-      );
-    }
-  });
-}
-
+  late final Animation<double> _fadeAnim;
 
   @override
-@override
-void dispose() {
-  _bgCtrl.dispose();
-  _fadeCtrl.dispose();
-  super.dispose();
-}
+  void initState() {
+    super.initState();
 
+    _bgCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
+
+    // fade-out controller
+    _fadeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+      value: 1.0, // start fully visible
+    );
+
+    // run fade out before navigating
+    Future.delayed(const Duration(seconds: 3), () async {
+      await _fadeCtrl.reverse(); // fade to invisible
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+        );
+      }
+    });
+  }
+
+  @override
+  @override
+  void dispose() {
+    _bgCtrl.dispose();
+    _fadeCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

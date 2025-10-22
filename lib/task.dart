@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'widgets/background_container.dart';
 import 'dart:math';
 
 // Navigation pages
@@ -11,7 +10,9 @@ import 'home.dart';
 import 'map.dart';
 import 'levels.dart';
 import 'community.dart';
-import 'widgets/bottom_nav.dart';
+import 'services/bottom_nav.dart';
+import 'services/background_container.dart';
+import 'services/connection.dart';
 
 // Shared colors
 class AppColors {
@@ -95,6 +96,12 @@ class _taskPageState extends State<taskPage> {
   @override
   void initState() {
     super.initState();
+    Future.microtask(() async {
+      if (!await hasInternetConnection()) {
+        if (mounted) showNoInternetDialog(context);
+        return;
+      }
+    });
     final user = _auth.currentUser;
     _uid = user?.uid;
 
@@ -387,6 +394,39 @@ class _taskPageState extends State<taskPage> {
                       : StreamBuilder<DocumentSnapshot>(
                           stream: _userTaskStream!,
                           builder: (context, snap) {
+                            if (snap.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
+                              );
+                            }
+
+                            // 🔹 في حال وجود خطأ (غالبًا بسبب انقطاع الإنترنت)
+                            if (snap.hasError) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (context.mounted)
+                                  showNoInternetDialog(context);
+                              });
+                              // ما نكتب رسالة جديدة هنا
+                              return const SizedBox.shrink();
+                            }
+
+                            // 🔹 إذا ما فيه بيانات
+                            if (!snap.hasData || !snap.data!.exists) {
+                              _ensureUserTaskForDate(
+                                _selectedDay ?? DateTime.now(),
+                              );
+                              return const Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
+                              );
+                            }
+
+                            // 🔹 إذا الاتصال ناجح — نكمل طبيعي
+                            _autoMarkExpiredIfNeeded(snap.data!);
                             final sel =
                                 _selectedDay ?? _dayStart(DateTime.now());
                             final today = _dayStart(DateTime.now());
@@ -583,6 +623,11 @@ class _taskPageState extends State<taskPage> {
           selectedDayPredicate: (day) =>
               isSameDay(_selectedDay ?? DateTime.now(), day),
           onDaySelected: (selected, focused) async {
+            if (!await hasInternetConnection()) {
+              if (context.mounted) showNoInternetDialog(context);
+              return;
+            }
+
             final sel = _dayStart(selected);
             final today = _dayStart(DateTime.now());
             final tomorrow = _dayStart(today.add(const Duration(days: 1)));
