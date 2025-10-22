@@ -80,6 +80,13 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _initHome();
+
+    // Added to solve an error
+      _floatingCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 300),
+    );
+
   }
 
   Future<void> _initHome() async {
