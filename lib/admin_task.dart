@@ -1263,6 +1263,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _pointsCtrl = TextEditingController();
+  String? _validationType;
+
 
   // ---- Expiry ----
   bool _hasExpiry = false;
@@ -1379,16 +1381,38 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       ElevatedButton.icon(
                         icon: const Icon(Icons.exit_to_app, color: Colors.white),
                         style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            minimumSize: const Size(double.infinity, 48)),
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
                         onPressed: () {
                           shouldLeave = true;
                           Navigator.pop(context);
                         },
-                        label: Text('تأكيد الخروج',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                                color: Colors.white, fontWeight: FontWeight.w800)),
+                        label: Text(
+                          'تأكيد الخروج',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.redAccent, width: 1.4),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          'إلغاء',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 10),
                       _buildRedCancelButton(onPressed: () => Navigator.pop(context)),
@@ -1524,6 +1548,34 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     },
                     validator: (v) =>
                         (v == null || v.isEmpty) ? 'اختر تصنيف المهمة' : null,
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  // Validation Method Dropdown
+                  _fieldLabel('طريقة التحقق', required: true),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _validationType,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      hintText: 'اختر طريقة التحقق',
+                      prefixIcon: Icon(Icons.verified_outlined),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(12)),
+                      ),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'manual', child: Text('تحقق يدوي')),
+                      DropdownMenuItem(value: 'photo', child: Text('صورة')),
+                      DropdownMenuItem(value: 'qr', child: Text('رمز QR')),
+                      DropdownMenuItem(value: 'location', child: Text('الموقع')),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _validationType = v);
+                      _isDirty = true;
+                    },
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'اختر طريقة التحقق' : null,
                   ),
                   const SizedBox(height: 20),
 
@@ -1742,7 +1794,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
         // Active now?
         'isActive': _startMode == 'now',
-
+        'validationStrategy': _validationType,
         'createdAt': FieldValue.serverTimestamp(),
       };
 
