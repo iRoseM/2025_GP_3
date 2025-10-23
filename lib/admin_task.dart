@@ -340,16 +340,27 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 
   Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
     if (tasks.isEmpty) {
-      return const Expanded(
-        child: Center(
-          child: Text(
-            'لا توجد مهام متاحة',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey,
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset(
+              'assets/img/nameerSleep.png', // تأكد من المسار والاسم
+              width: 200,
+              height: 200,
+              fit: BoxFit.contain,
             ),
-          ),
+            const SizedBox(height: 16),
+            Text(
+              'لا توجد مهام مضافة حاليًا 📅',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppColors.dark,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       );
     }

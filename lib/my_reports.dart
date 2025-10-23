@@ -114,13 +114,26 @@ class _MyReportsPageState extends State<MyReportsPage> {
 
                         if (docs.isEmpty) {
                           return Center(
-                            child: Text(
-                              'لا توجد بلاغات حالياً 🌿',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.dark,
-                              ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Image.asset(
+                                  'assets/img/nameerSleep.png',
+                                  width: 200,
+                                  height: 200,
+                                  fit: BoxFit.contain,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'لا توجد بلاغات مسجّلة لك حالياً 🌿',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.dark,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                             ),
                           );
                         }

@@ -8,7 +8,7 @@ import 'home.dart';
 import 'main.dart';
 import 'services/background_container.dart';
 import 'services/bottom_nav.dart';
-import 'my_reports_page.dart';
+import 'my_reports.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
 

@@ -232,7 +232,29 @@ class _ReportList extends StatelessWidget {
               }).toList();
 
         if (filtered.isEmpty) {
-          return const Center(child: Text('لا توجد تقارير مطابقة.'));
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/img/nameerSleep.png',
+                  width: 200,
+                  height: 200,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'لا توجد بلاغات مسجّلة حالياً 🌿',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: RColors.dark, // الأفضل تستخدم ألوان الصفحة نفسها
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
         }
 
         return RefreshIndicator(

@@ -148,13 +148,26 @@ class _communityPageState extends State<communityPage> {
                     // محتوى الصفحة الحالي
                     Expanded(
                       child: Center(
-                        child: Text(
-                          'هنا صفحة الأصدقاء 👥',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.dark,
-                          ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.asset(
+                              'assets/img/nameerSleep.png',
+                              width: 200,
+                              height: 200,
+                              fit: BoxFit.contain,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'هنا صفحة الأصدقاء 👥',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.dark,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
                       ),
                     ),
