@@ -560,118 +560,275 @@ class _taskPageState extends State<taskPage> {
     );
   }
 
-  // 🔹 Calendar Widget — unchanged
+  // 🔹 Calendar Widget
+  // 🔹 Calendar Widget (خلايا مربّعة ومتناسقة)
   Widget _buildCalendar() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF4BAA98), Color(0xFF6BBAA2), Color(0xFFAFDBB8)],
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-          stops: [0.0, 0.63, 1.0],
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.primary, width: 2),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x22000000),
-            blurRadius: 10,
-            offset: Offset(0, 4),
+            color: Color(0x11000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: TableCalendar(
-          focusedDay: _focusedDay,
-          firstDay: DateTime.utc(2020),
-          lastDay: DateTime.utc(2030),
-          calendarFormat: CalendarFormat.month,
-          headerStyle: HeaderStyle(
-            formatButtonVisible: false,
-            titleCentered: true,
-            titleTextStyle: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 18,
-            ),
-            leftChevronIcon: const Icon(
-              Icons.chevron_left,
-              color: Colors.white,
-            ),
-            rightChevronIcon: const Icon(
-              Icons.chevron_right,
-              color: Colors.white,
-            ),
-          ),
-          daysOfWeekStyle: DaysOfWeekStyle(
-            weekdayStyle: GoogleFonts.ibmPlexSansArabic(color: Colors.white70),
-            weekendStyle: GoogleFonts.ibmPlexSansArabic(color: Colors.white70),
-          ),
-          calendarStyle: CalendarStyle(
-            defaultTextStyle: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.white,
-            ),
-            weekendTextStyle: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.white70,
-            ),
-            outsideDaysVisible: false,
-            todayDecoration: BoxDecoration(
-              color: AppColors.mint.withOpacity(0.8),
-              shape: BoxShape.circle,
-            ),
-            selectedDecoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            selectedTextStyle: const TextStyle(color: AppColors.primary),
-          ),
-          selectedDayPredicate: (day) =>
-              isSameDay(_selectedDay ?? DateTime.now(), day),
-          onDaySelected: (selected, focused) async {
-            if (!await hasInternetConnection()) {
-              if (context.mounted) showNoInternetDialog(context);
-              return;
-            }
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // نحسب عرض الخلية = (العرض المتاح - padding الأفقي) / 7
+          const horizPad = 4.0;
+          const vertPad = 2.0;
+          final availableW = constraints.maxWidth - (horizPad * 2);
+          final cellSize = (availableW / 7)
+              .floorToDouble(); // نخليه عدد صحيح عشان لا يصير blur
+          final dotSize = cellSize * 0.72; // قطر دائرة اليوم (مريح بصريًا)
+          final dayFont = cellSize * 0.36; // مقاس خط رقم اليوم
+          final dowFont = cellSize * 0.28; // مقاس خط حروف الأيام
 
-            final sel = _dayStart(selected);
-            final today = _dayStart(DateTime.now());
-            final tomorrow = _dayStart(today.add(const Duration(days: 1)));
+          return Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: horizPad,
+              vertical: vertPad,
+            ),
+            child: TableCalendar(
+              focusedDay: _focusedDay,
+              firstDay: DateTime.utc(2020),
+              lastDay: DateTime.utc(2030),
+              calendarFormat: CalendarFormat.month,
 
-            if (sel.isAfter(tomorrow)) {
-              setState(() {
-                _selectedDay = sel;
-                _focusedDay = focused;
-              });
-              _attachUserTaskStreamFor(sel);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'هذا اليوم غير متاح بعد. الرجاء اختيار اليوم أو الغد.',
+              // ✅ نخلي ارتفاع الصف مساوي لعرض الخلية → مربّع
+              rowHeight: cellSize,
+              // صف عناوين الأيام أصغر شوي
+              daysOfWeekHeight: (cellSize * 0.6).clamp(20, 28),
+
+              headerStyle: HeaderStyle(
+                formatButtonVisible: false,
+                titleCentered: true,
+                titleTextStyle: GoogleFonts.ibmPlexSansArabic(
+                  color: AppColors.dark,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
+                leftChevronIcon: const Icon(
+                  Icons.chevron_left,
+                  color: AppColors.primary,
+                ),
+                rightChevronIcon: const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.primary,
+                ),
+              ),
+
+              daysOfWeekStyle: DaysOfWeekStyle(
+                weekdayStyle: GoogleFonts.ibmPlexSansArabic(
+                  color: AppColors.dark,
+                  fontWeight: FontWeight.w700,
+                  fontSize: dowFont,
+                  height: 1.1,
+                ),
+                weekendStyle: GoogleFonts.ibmPlexSansArabic(
+                  color: AppColors.dark.withOpacity(0.7),
+                  fontWeight: FontWeight.w700,
+                  fontSize: dowFont,
+                  height: 1.1,
+                ),
+              ),
+
+              calendarStyle: CalendarStyle(
+                outsideDaysVisible: false,
+                defaultTextStyle: GoogleFonts.ibmPlexSansArabic(
+                  color: AppColors.dark,
+                  fontWeight: FontWeight.w600,
+                  fontSize: dayFont,
+                ),
+                weekendTextStyle: GoogleFonts.ibmPlexSansArabic(
+                  color: AppColors.dark.withOpacity(0.7),
+                  fontWeight: FontWeight.w600,
+                  fontSize: dayFont,
+                ),
+                todayDecoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.mint.withOpacity(0.35),
+                ),
+                selectedDecoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [AppColors.mint, AppColors.primary],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
                 ),
-              );
-              return;
-            }
+                selectedTextStyle: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+                todayTextStyle: GoogleFonts.ibmPlexSansArabic(
+                  color: AppColors.dark,
+                  fontWeight: FontWeight.w700,
+                  fontSize: dayFont,
+                ),
+              ),
 
-            if (_joinDate != null && sel.isBefore(_joinDate!)) {
-              setState(() {
-                _selectedDay = sel;
-                _focusedDay = focused;
-              });
-              _attachUserTaskStreamFor(sel);
-              return;
-            }
+              calendarBuilders: CalendarBuilders(
+                defaultBuilder: (context, day, focusedDay) {
+                  return _gridCell(
+                    child: Text(
+                      '${day.day}',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        color: AppColors.dark,
+                        fontWeight: FontWeight.w600,
+                        fontSize: dayFont,
+                      ),
+                    ),
+                  );
+                },
+                outsideBuilder: (context, day, focusedDay) {
+                  return _gridCell(
+                    borderOpacity: 0.06,
+                    child: Text(
+                      '${day.day}',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        color: AppColors.dark.withOpacity(0.35),
+                        fontWeight: FontWeight.w600,
+                        fontSize: dayFont,
+                      ),
+                    ),
+                  );
+                },
+                todayBuilder: (context, day, focusedDay) {
+                  return _gridCell(
+                    child: Container(
+                      width: dotSize,
+                      height: dotSize,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.mint.withOpacity(0.35),
+                        border: Border.all(
+                          color: AppColors.primary.withOpacity(0.10),
+                          width: 1.5,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${day.day}',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: AppColors.dark,
+                          fontWeight: FontWeight.w700,
+                          fontSize: dayFont,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                selectedBuilder: (context, day, focusedDay) {
+                  return _gridCell(
+                    child: Container(
+                      width: dotSize,
+                      height: dotSize,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [AppColors.mint, AppColors.primary],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${day.day}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: dayFont,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                dowBuilder: (context, day) {
+                  final labels = ['ح', 'ن', 'ث', 'ر', 'خ', 'ج', 'س'];
+                  return _gridCell(
+                    child: Text(
+                      labels[day.weekday % 7],
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        color: AppColors.dark.withOpacity(0.7),
+                        fontWeight: FontWeight.w700,
+                        fontSize: dowFont,
+                        height: 1.1,
+                      ),
+                    ),
+                  );
+                },
+              ),
 
-            await _ensureUserTaskForDate(sel);
-            setState(() {
-              _selectedDay = sel;
-              _focusedDay = focused;
-            });
-            _attachUserTaskStreamFor(sel);
-          },
+              selectedDayPredicate: (day) =>
+                  isSameDay(_selectedDay ?? DateTime.now(), day),
+              onDaySelected: (selected, focused) async {
+                if (!await hasInternetConnection()) {
+                  if (context.mounted) showNoInternetDialog(context);
+                  return;
+                }
+                final sel = _dayStart(selected);
+                final today = _dayStart(DateTime.now());
+                final tomorrow = _dayStart(today.add(const Duration(days: 1)));
+                if (sel.isAfter(tomorrow)) {
+                  setState(() {
+                    _selectedDay = sel;
+                    _focusedDay = focused;
+                  });
+                  _attachUserTaskStreamFor(sel);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'هذا اليوم غير متاح بعد. الرجاء اختيار اليوم أو الغد.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
+                if (_joinDate != null && sel.isBefore(_joinDate!)) {
+                  setState(() {
+                    _selectedDay = sel;
+                    _focusedDay = focused;
+                  });
+                  _attachUserTaskStreamFor(sel);
+                  return;
+                }
+                await _ensureUserTaskForDate(sel);
+                setState(() {
+                  _selectedDay = sel;
+                  _focusedDay = focused;
+                });
+                _attachUserTaskStreamFor(sel);
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// مربع خلية مع شبكة خضراء خفيفة
+  Widget _gridCell({required Widget child, double borderOpacity = 0.08}) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          right: BorderSide(
+            color: AppColors.primary.withOpacity(borderOpacity),
+            width: 1,
+          ),
+          bottom: BorderSide(
+            color: AppColors.primary.withOpacity(borderOpacity),
+            width: 1,
+          ),
         ),
       ),
+      alignment: Alignment.center,
+      child: child,
     );
   }
 

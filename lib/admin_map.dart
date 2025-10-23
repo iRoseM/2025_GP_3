@@ -15,7 +15,7 @@ import 'admin_home.dart' as home;
 import 'admin_task.dart';
 import 'admin_reward.dart' as reward;
 import 'services/admin_bottom_nav.dart';
-import 'admin_report.dart' as report;
+import 'admin_reports.dart' as report;
 import 'profile.dart';
 import 'services/connection.dart';
 
@@ -216,9 +216,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
       if (mounted) showNoInternetDialog(context);
       return;
     }
-    
+
     setState(() => _isLoadingFacilities = true);
-    
+
     try {
       final qs = await FirebaseFirestore.instance
           .collection('facilities')
@@ -463,8 +463,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
               break;
             }
           }
-        }
-        else if (normalizedData.contains(part)) {
+        } else if (normalizedData.contains(part)) {
           matchedMarkers.add(m);
           break;
         }
@@ -766,7 +765,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                           allowed.add('حاوية إعادة تدوير بقايا الطعام');
                         setState(() => _allowedTypes = allowed);
                         _applyCurrentFilters();
-                        
+
                         // بعد تطبيق الفلاتر: لو ما فيه نتائج، أظهري الرسالة مؤقتًا
                         if (_didInitialLoad &&
                             !_isLoadingFacilities &&
@@ -808,69 +807,71 @@ class _AdminMapPageState extends State<AdminMapPage> {
     });
   }
 
-void _onAddNewLocation() {
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      return Dialog(
-        insetPadding: const EdgeInsets.fromLTRB(24, 60, 24, 100),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        child: _FacilityFormCard(
-          title: 'إضافة موقع استدامة جديد',
-          initialName: '',
-          initialType: 'حاوية إعادة تدوير القوارير',
-          initialProvider: '',
-          initialActive: true,
-          onSubmit: ({
-            required String name,
-            required String type,
-            required bool isActive,
-            required String provider,
-            double? lat,
-            double? lng,
-          }) async {
-            await _addMarkerToMapAndSave(
-              LatLng(lat!, lng!),
-              name,
-              type,
-              provider: (provider.trim().isEmpty ? 'غير محدد' : provider.trim()),
-              statusStr: isActive ? 'نشط' : 'متوقف',
-            );
-          },
-        ),
-      );
-    },
-  );
-}
+  void _onAddNewLocation() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.fromLTRB(24, 60, 24, 100),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: _FacilityFormCard(
+            title: 'إضافة موقع استدامة جديد',
+            initialName: '',
+            initialType: 'حاوية إعادة تدوير القوارير',
+            initialProvider: '',
+            initialActive: true,
+            onSubmit:
+                ({
+                  required String name,
+                  required String type,
+                  required bool isActive,
+                  required String provider,
+                  double? lat,
+                  double? lng,
+                }) async {
+                  await _addMarkerToMapAndSave(
+                    LatLng(lat!, lng!),
+                    name,
+                    type,
+                    provider: (provider.trim().isEmpty
+                        ? 'غير محدد'
+                        : provider.trim()),
+                    statusStr: isActive ? 'نشط' : 'متوقف',
+                  );
+                },
+          ),
+        );
+      },
+    );
+  }
 
   // ✅ تصميم الحقول الموحدة
-  InputDecoration _inputDeco(
-  String hint, {
-  Widget? prefixIcon,
-}) {
-  return InputDecoration(
-    hintText: hint,
-    filled: true,
-    fillColor: Colors.white,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    prefixIcon: prefixIcon,
-    errorMaxLines: 2,
-    errorStyle: const TextStyle(fontSize: 12, height: 1.2),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: home.AppColors.primary),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: home.AppColors.primary),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: home.AppColors.dark, width: 1.2),
-    ),
-  );
-}
+  InputDecoration _inputDeco(String hint, {Widget? prefixIcon}) {
+    return InputDecoration(
+      hintText: hint,
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      prefixIcon: prefixIcon,
+      errorMaxLines: 2,
+      errorStyle: const TextStyle(fontSize: 12, height: 1.2),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: home.AppColors.primary),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: home.AppColors.primary),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: home.AppColors.dark, width: 1.2),
+      ),
+    );
+  }
 
   // ✅ تأكيد الموقع بعد الاختيار على الخريطة
   Widget _buildConfirmButton() {
@@ -927,162 +928,165 @@ void _onAddNewLocation() {
   }
 
   /// ✅ ورقة تفاصيل + أزرار تعديل/حذف
-void _showMarkerSheet(MarkerId markerId, LatLng position) {
-  showModalBottomSheet(
-    context: context,
-    showDragHandle: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
-    builder: (context) {
-      return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        future: FirebaseFirestore.instance
-            .collection('facilities')
-            .doc(markerId.value)
-            .get(),
-        builder: (context, snap) {
-          if (!snap.hasData) {
-            return const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
+  void _showMarkerSheet(MarkerId markerId, LatLng position) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          future: FirebaseFirestore.instance
+              .collection('facilities')
+              .doc(markerId.value)
+              .get(),
+          builder: (context, snap) {
+            if (!snap.hasData) {
+              return const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
 
-          final data = snap.data!.data() ?? {};
-          final name = (data['name'] ?? '').toString();
-          final type = _normalizeType((data['type'] ?? '').toString());
-          final provider = (data['provider'] ?? '').toString();
-          final city = (data['city'] ?? '').toString();
-          final address = (data['address'] ?? '').toString();
-          final statusStr =
-              (data['status'] ?? _statusById[markerId.value] ?? 'نشط')
-                  .toString();
-          final isActive = statusStr == 'نشط';
+            final data = snap.data!.data() ?? {};
+            final name = (data['name'] ?? '').toString();
+            final type = _normalizeType((data['type'] ?? '').toString());
+            final provider = (data['provider'] ?? '').toString();
+            final city = (data['city'] ?? '').toString();
+            final address = (data['address'] ?? '').toString();
+            final statusStr =
+                (data['status'] ?? _statusById[markerId.value] ?? 'نشط')
+                    .toString();
+            final isActive = statusStr == 'نشط';
 
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // العنوان والحالة في صف واحد
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // العنوان والحالة في صف واحد
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name.isNotEmpty ? name : type,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Chip(
+                        label: Text(
+                          isActive ? 'نشط' : 'متوقف',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        backgroundColor: isActive
+                            ? Colors.teal
+                            : Colors.redAccent,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // نوع الحاوية
+                  Text(
+                    type,
+                    style: const TextStyle(color: Colors.grey, fontSize: 14),
+                    textAlign: TextAlign.right,
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // المعلومات التفصيلية
+                  if (provider.isNotEmpty && provider != 'غير محدد')
+                    _kvRightAligned('المزود', provider),
+
+                  if (city.isNotEmpty) _kvRightAligned('المدينة', city),
+
+                  if (address.isNotEmpty) _kvRightAligned('العنوان', address),
+
+                  const Divider(height: 24),
+
+                  // أزرار التعديل والحذف
+                  ListTile(
+                    leading: const Icon(
+                      Icons.edit_outlined,
+                      color: Colors.grey,
+                    ),
+                    title: const Text(
+                      'تعديل الموقع',
+                      textAlign: TextAlign.right,
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _editMarker(
+                        markerId,
                         name.isNotEmpty ? name : type,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.right,
-                      ),
+                        type,
+                        position,
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.red,
                     ),
-                    const SizedBox(width: 12),
-                    Chip(
-                      label: Text(
-                        isActive ? 'نشط' : 'متوقف',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      backgroundColor: isActive
-                          ? Colors.teal
-                          : Colors.redAccent,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 8),
-                
-                // نوع الحاوية
-                Text(
-                  type, 
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 14,
+                    title: const Text('حذف الموقع', textAlign: TextAlign.right),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _confirmDelete(markerId, name.isNotEmpty ? name : type);
+                    },
                   ),
-                  textAlign: TextAlign.right,
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // المعلومات التفصيلية
-                if (provider.isNotEmpty && provider != 'غير محدد') 
-                  _kvRightAligned('المزود', provider),
-                
-                if (city.isNotEmpty) 
-                  _kvRightAligned('المدينة', city),
-                
-                if (address.isNotEmpty) 
-                  _kvRightAligned('العنوان', address),
-                
-                const Divider(height: 24),
-                
-                // أزرار التعديل والحذف
-                ListTile(
-                  leading: const Icon(Icons.edit_outlined, color: Colors.grey),
-                  title: const Text(
-                    'تعديل الموقع',
-                    textAlign: TextAlign.right,
-                  ),
-                  onTap: () { 
-                    Navigator.pop(context); 
-                    _editMarker(markerId, name.isNotEmpty ? name : type, type, position); 
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.delete_outline_rounded, color: Colors.red),
-                  title: const Text(
-                    'حذف الموقع',
-                    textAlign: TextAlign.right,
-                  ),
-                  onTap: () { 
-                    Navigator.pop(context); 
-                    _confirmDelete(markerId, name.isNotEmpty ? name : type); 
-                  },
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    },
-  );
-}
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
-// ✅ دالة مساعدة لعرض المفاتيح والقيم بمحاذاة لليمين
-Widget _kvRightAligned(String k, String v) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Text(
-          v,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
+  // ✅ دالة مساعدة لعرض المفاتيح والقيم بمحاذاة لليمين
+  Widget _kvRightAligned(String k, String v) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Text(
+            v,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            textAlign: TextAlign.right,
           ),
-          textAlign: TextAlign.right,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          k,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey,
+          const SizedBox(width: 8),
+          Text(
+            k,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey,
+            ),
+            textAlign: TextAlign.right,
           ),
-          textAlign: TextAlign.right,
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
   void _editMarker(
     MarkerId markerId,
@@ -1112,143 +1116,170 @@ Widget _kvRightAligned(String k, String v) {
 
             final data = snap.data!.data() ?? {};
 
-return Padding(
-  padding: EdgeInsets.only(
-    left: 0, right: 0,
-    bottom: MediaQuery.of(context).viewInsets.bottom,
-  ),
-  child: _FacilityFormCard(
-    title: 'تعديل بيانات الموقع',
-    initialName: (data['name'] ?? '').toString(),
-    initialType: _normalizeType((data['type'] ?? oldType).toString()),
-    initialProvider: (data['provider'] ?? '').toString(),
-    initialActive: ((data['status'] ?? 'نشط') == 'نشط'),
-    fixedPosition: position,
-    onSubmit: ({
-      required String name,
-      required String type,
-      required bool isActive,
-      required String provider,
-      double? lat,
-      double? lng,
-    }) async {
-      final statusStr = isActive ? 'نشط' : 'متوقف';
-      await FirebaseFirestore.instance
-          .collection('facilities')
-          .doc(markerId.value)
-          .set({
-        'name': name.isEmpty ? _normalizeType(type) : name,
-        'type': _normalizeType(type),
-        'lat': lat,
-        'lng': lng,
-        'provider': provider.trim().isEmpty ? 'غير محدد' : provider.trim(),
-        'status': statusStr,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 0,
+                right: 0,
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: _FacilityFormCard(
+                title: 'تعديل بيانات الموقع',
+                initialName: (data['name'] ?? '').toString(),
+                initialType: _normalizeType(
+                  (data['type'] ?? oldType).toString(),
+                ),
+                initialProvider: (data['provider'] ?? '').toString(),
+                initialActive: ((data['status'] ?? 'نشط') == 'نشط'),
+                fixedPosition: position,
+                onSubmit:
+                    ({
+                      required String name,
+                      required String type,
+                      required bool isActive,
+                      required String provider,
+                      double? lat,
+                      double? lng,
+                    }) async {
+                      final statusStr = isActive ? 'نشط' : 'متوقف';
+                      await FirebaseFirestore.instance
+                          .collection('facilities')
+                          .doc(markerId.value)
+                          .set({
+                            'name': name.isEmpty ? _normalizeType(type) : name,
+                            'type': _normalizeType(type),
+                            'lat': lat,
+                            'lng': lng,
+                            'provider': provider.trim().isEmpty
+                                ? 'غير محدد'
+                                : provider.trim(),
+                            'status': statusStr,
+                            'updatedAt': FieldValue.serverTimestamp(),
+                          }, SetOptions(merge: true));
 
-      // حدّث الماركر محليًا
-      setState(() {
-        _statusById[markerId.value] = statusStr;
-        _markers.removeWhere((m) => m.markerId == markerId);
-        final normalized = _normalizeType(type);
-        final marker = Marker(
-          markerId: markerId,
-          position: LatLng(lat!, lng!),
-          infoWindow: InfoWindow(
-            title: name.trim().isNotEmpty ? name.trim() : normalized,
-            snippet: '$normalized${provider.trim().isNotEmpty ? ' • ${provider.trim()}' : ''}',
-            onTap: () => _showMarkerSheet(markerId, LatLng(lat, lng)),
-          ),
-          icon: _iconForType(normalized),
-          consumeTapEvents: true,
-          onTap: () => _showMarkerSheet(markerId, LatLng(lat, lng)),
-        );
-        _allMarkers.removeWhere((m) => m.markerId == markerId);
-        _allMarkers.add(marker);
-      });
-      _applyCurrentFilters();
-    },
-  ),
-);
-
+                      // حدّث الماركر محليًا
+                      setState(() {
+                        _statusById[markerId.value] = statusStr;
+                        _markers.removeWhere((m) => m.markerId == markerId);
+                        final normalized = _normalizeType(type);
+                        final marker = Marker(
+                          markerId: markerId,
+                          position: LatLng(lat!, lng!),
+                          infoWindow: InfoWindow(
+                            title: name.trim().isNotEmpty
+                                ? name.trim()
+                                : normalized,
+                            snippet:
+                                '$normalized${provider.trim().isNotEmpty ? ' • ${provider.trim()}' : ''}',
+                            onTap: () =>
+                                _showMarkerSheet(markerId, LatLng(lat, lng)),
+                          ),
+                          icon: _iconForType(normalized),
+                          consumeTapEvents: true,
+                          onTap: () =>
+                              _showMarkerSheet(markerId, LatLng(lat, lng)),
+                        );
+                        _allMarkers.removeWhere((m) => m.markerId == markerId);
+                        _allMarkers.add(marker);
+                      });
+                      _applyCurrentFilters();
+                    },
+              ),
+            );
           },
         );
       },
     );
   }
 
-void _confirmDelete(MarkerId markerId, String name) {
-  showDialog(
-    context: context,
-    barrierDismissible: true,
-    builder: (context) {
-      return Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.warning_amber_rounded, size: 48, color: Colors.redAccent),
-              const SizedBox(height: 8),
-              const Text('تأكيد الحذف', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              Text('هل أنت متأكد من حذف "$name"؟',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.black87)),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  label: const Text('تأكيد الحذف'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: home.AppColors.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  onPressed: () async {
-                    try {
-                      await FirebaseFirestore.instance
-                          .collection('facilities')
-                          .doc(markerId.value)
-                          .delete();
-                      setState(() {
-                        _statusById.remove(markerId.value);
-                        _markers.removeWhere((m) => m.markerId == markerId);
-                        _allMarkers.removeWhere((m) => m.markerId == markerId);
-                      });
-                      if (mounted) Navigator.pop(context);
-                    } catch (e) {
-                      if (mounted) Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('فشل حذف السحابة')),
-                      );
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.red,
-                    side: const BorderSide(color: Colors.red),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
-                ),
-              ),
-            ],
+  void _confirmDelete(MarkerId markerId, String name) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
           ),
-        ),
-      );
-    },
-  );
-}
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 48,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'تأكيد الحذف',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'هل أنت متأكد من حذف "$name"؟',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.black87),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('تأكيد الحذف'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: home.AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: () async {
+                      try {
+                        await FirebaseFirestore.instance
+                            .collection('facilities')
+                            .doc(markerId.value)
+                            .delete();
+                        setState(() {
+                          _statusById.remove(markerId.value);
+                          _markers.removeWhere((m) => m.markerId == markerId);
+                          _allMarkers.removeWhere(
+                            (m) => m.markerId == markerId,
+                          );
+                        });
+                        if (mounted) Navigator.pop(context);
+                      } catch (e) {
+                        if (mounted) Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('فشل حذف السحابة')),
+                        );
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('إلغاء'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   /// ✅ إضافة ماركر + حفظه في Firestore
   Future<void> _addMarkerToMapAndSave(
@@ -1318,7 +1349,8 @@ class _FacilityFormCard extends StatefulWidget {
     required String provider,
     double? lat,
     double? lng,
-  }) onSubmit;
+  })
+  onSubmit;
 
   const _FacilityFormCard({
     required this.title,
@@ -1384,9 +1416,13 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(widget.title,
-                          style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(
+                        widget.title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       IconButton(
                         icon: const Icon(Icons.close, color: Colors.grey),
                         onPressed: () => Navigator.pop(context),
@@ -1397,13 +1433,18 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                   const SizedBox(height: 10),
 
                   // اسم الموقع (إلزامي)
-                  const Text('اسم الموقع', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text(
+                    'اسم الموقع',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 6),
                   TextFormField(
                     controller: _nameCtrl,
                     textAlign: TextAlign.right,
-                    decoration: _inputDeco('مثال: حي النخيل',
-                      prefixIcon: const Icon(Icons.badge_outlined)),
+                    decoration: _inputDeco(
+                      'مثال: حي النخيل',
+                      prefixIcon: const Icon(Icons.badge_outlined),
+                    ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
                         return 'يرجى إدخال اسم الموقع';
@@ -1417,33 +1458,59 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                   const SizedBox(height: 14),
 
                   // نوع الحاوية (إلزامي)
-                  const Text('نوع الحاوية', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text(
+                    'نوع الحاوية',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: _type,
-                    decoration: _inputDeco('اختر النوع',
-                      prefixIcon: const Icon(Icons.category_outlined)),
+                    decoration: _inputDeco(
+                      'اختر النوع',
+                      prefixIcon: const Icon(Icons.category_outlined),
+                    ),
                     isExpanded: true,
                     items: const [
-                      DropdownMenuItem(value: 'حاوية إعادة تدوير القوارير', child: Text('حاوية إعادة تدوير القوارير')),
-                      DropdownMenuItem(value: 'حاوية إعادة تدوير الملابس', child: Text('حاوية إعادة تدوير الملابس')),
-                      DropdownMenuItem(value: 'حاوية إعادة تدوير بقايا الطعام', child: Text('حاوية إعادة تدوير بقايا الطعام')),
-                      DropdownMenuItem(value: 'حاوية إعادة تدوير الأوراق', child: Text('حاوية إعادة تدوير الأوراق')),
-                      DropdownMenuItem(value: 'آلة استرجاع (RVM)', child: Text('آلة استرجاع (RVM)')),
+                      DropdownMenuItem(
+                        value: 'حاوية إعادة تدوير القوارير',
+                        child: Text('حاوية إعادة تدوير القوارير'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'حاوية إعادة تدوير الملابس',
+                        child: Text('حاوية إعادة تدوير الملابس'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'حاوية إعادة تدوير بقايا الطعام',
+                        child: Text('حاوية إعادة تدوير بقايا الطعام'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'حاوية إعادة تدوير الأوراق',
+                        child: Text('حاوية إعادة تدوير الأوراق'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'آلة استرجاع (RVM)',
+                        child: Text('آلة استرجاع (RVM)'),
+                      ),
                     ],
                     onChanged: (val) => setState(() => _type = val ?? _type),
-                    validator: (v) => (v == null || v.isEmpty) ? 'اختر نوع الحاوية' : null,
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'اختر نوع الحاوية' : null,
                   ),
                   const SizedBox(height: 14),
 
                   // provider (اختياري)
-                  const Text('مقدم الخدمة (اختياري)', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Text(
+                    'مقدم الخدمة (اختياري)',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 6),
                   TextFormField(
                     controller: _providerCtrl,
                     textAlign: TextAlign.right,
-                    decoration: _inputDeco('مثال: Sparklo / البلدية / KSU',
-                      prefixIcon: const Icon(Icons.handshake_outlined)),
+                    decoration: _inputDeco(
+                      'مثال: Sparklo / البلدية / KSU',
+                      prefixIcon: const Icon(Icons.handshake_outlined),
+                    ),
                     validator: (_) => null,
                   ),
 
@@ -1456,54 +1523,70 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                   ),
 
                   const SizedBox(height: 10),
-                  const Text('طريقة تحديد الموقع:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    'طريقة تحديد الموقع:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
 
                   // أزرار اختيار تحديد الموقع
-                  if (widget.fixedPosition == null) Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          icon: const Icon(Icons.edit_location_alt_outlined),
-                          label: const Text('إدخال بالإحداثيات'),
-                          style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-                          onPressed: () => setState(() => _showCoords = true),
+                  if (widget.fixedPosition == null)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.icon(
+                            icon: const Icon(Icons.edit_location_alt_outlined),
+                            label: const Text('إدخال بالإحداثيات'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                            ),
+                            onPressed: () => setState(() => _showCoords = true),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton.icon(
-                          icon: const Icon(Icons.my_location),
-                          label: const Text('استخدام موقعي الحالي'),
-                          style: FilledButton.styleFrom(backgroundColor: Colors.teal),
-                          onPressed: () async {
-                            if (!_formKey.currentState!.validate()) return;
-                            try {
-                              final p = await Geolocator.getCurrentPosition(
-                                  desiredAccuracy: LocationAccuracy.high);
-                              await widget.onSubmit(
-                                name: _nameCtrl.text.trim(),
-                                type: _type,
-                                isActive: _isActive,
-                                provider: _providerCtrl.text.trim(),
-                                lat: p.latitude,
-                                lng: p.longitude,
-                              );
-                              if (mounted) Navigator.pop(context);
-                            } catch (_) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
-                              );
-                            }
-                          },
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            icon: const Icon(Icons.my_location),
+                            label: const Text('استخدام موقعي الحالي'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.teal,
+                            ),
+                            onPressed: () async {
+                              if (!_formKey.currentState!.validate()) return;
+                              try {
+                                final p = await Geolocator.getCurrentPosition(
+                                  desiredAccuracy: LocationAccuracy.high,
+                                );
+                                await widget.onSubmit(
+                                  name: _nameCtrl.text.trim(),
+                                  type: _type,
+                                  isActive: _isActive,
+                                  provider: _providerCtrl.text.trim(),
+                                  lat: p.latitude,
+                                  lng: p.longitude,
+                                );
+                                if (mounted) Navigator.pop(context);
+                              } catch (_) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
 
                   if (_showCoords && widget.fixedPosition == null) ...[
                     const SizedBox(height: 16),
-                    const Text('إحداثيات الموقع', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const Text(
+                      'إحداثيات الموقع',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -1512,11 +1595,16 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                             controller: _latCtrl,
                             textAlign: TextAlign.right,
                             keyboardType: TextInputType.number,
-                            decoration: _inputDeco('Latitude', prefixIcon: const Icon(Icons.straighten_outlined)),
+                            decoration: _inputDeco(
+                              'Latitude',
+                              prefixIcon: const Icon(Icons.straighten_outlined),
+                            ),
                             validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'إلزامي';
+                              if (v == null || v.trim().isEmpty)
+                                return 'إلزامي';
                               final d = double.tryParse(v);
-                              if (d == null || d < -90 || d > 90) return 'قيمة غير صحيحة';
+                              if (d == null || d < -90 || d > 90)
+                                return 'قيمة غير صحيحة';
                               return null;
                             },
                           ),
@@ -1527,11 +1615,16 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                             controller: _lngCtrl,
                             textAlign: TextAlign.right,
                             keyboardType: TextInputType.number,
-                            decoration: _inputDeco('Longitude', prefixIcon: const Icon(Icons.straighten)),
+                            decoration: _inputDeco(
+                              'Longitude',
+                              prefixIcon: const Icon(Icons.straighten),
+                            ),
                             validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'إلزامي';
+                              if (v == null || v.trim().isEmpty)
+                                return 'إلزامي';
                               final d = double.tryParse(v);
-                              if (d == null || d < -180 || d > 180) return 'قيمة غير صحيحة';
+                              if (d == null || d < -180 || d > 180)
+                                return 'قيمة غير صحيحة';
                               return null;
                             },
                           ),
@@ -1542,7 +1635,9 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                     FilledButton.icon(
                       icon: const Icon(Icons.check),
                       label: const Text('تأكيد الإحداثيات'),
-                      style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                      ),
                       onPressed: () async {
                         if (!_formKey.currentState!.validate()) return;
                         final lat = double.parse(_latCtrl.text.trim());
@@ -1565,7 +1660,9 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        style: FilledButton.styleFrom(backgroundColor: Colors.teal),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                        ),
                         onPressed: () async {
                           if (!_formKey.currentState!.validate()) return;
                           await widget.onSubmit(
