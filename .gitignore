@@ -33,6 +33,9 @@ migrate_working_dir/
 .pub/
 /build/
 
+# Sensitive keys (don't upload to GitHub)
+assets/keys/
+
 # Symbolication related
 app.*.symbols
 
