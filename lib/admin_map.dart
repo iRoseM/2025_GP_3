@@ -90,10 +90,13 @@ class _AdminMapPageState extends State<AdminMapPage> {
   }
 
   Future<void> _loadMarkerIcons() async {
-    _iconClothes = await _bitmapFromAsset('assets/img/clothes.png', width: 200);
-    _iconPapers = await _bitmapFromAsset('assets/img/papers.png', width: 200);
-    _iconRvm = await _bitmapFromAsset('assets/img/rvm.png', width: 200);
-    _iconFood = await _bitmapFromAsset('assets/img/food.png', width: 200);
+    _iconClothes = await _bitmapFromAsset(
+      'assets/img/clothPin.png',
+      width: 100,
+    );
+    _iconPapers = await _bitmapFromAsset('assets/img/paperPin.png', width: 100);
+    _iconRvm = await _bitmapFromAsset('assets/img/rvmPin.png', width: 100);
+    _iconFood = await _bitmapFromAsset('assets/img/foodPin.png', width: 100);
     _iconDefault = BitmapDescriptor.defaultMarkerWithHue(
       BitmapDescriptor.hueRed,
     );
@@ -665,18 +668,24 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: const [
                       _LegendIcon(
-                        path: 'assets/img/clothes.png',
+                        path: 'assets/img/clothPin.png',
                         label: 'ملابس',
                       ),
-                      SizedBox(width: 10),
+                      SizedBox(width: 8),
                       _LegendIcon(
-                        path: 'assets/img/papers.png',
+                        path: 'assets/img/paperPin.png',
                         label: 'أوراق',
                       ),
-                      SizedBox(width: 10),
-                      _LegendIcon(path: 'assets/img/rvm.png', label: 'RVM'),
-                      SizedBox(width: 10),
-                      _LegendIcon(path: 'assets/img/food.png', label: 'أكل'),
+                      SizedBox(width: 8),
+                      _LegendIcon(
+                        path: 'assets/img/rvmPin.png',
+                        label: 'آلات إعادة التدوير',
+                      ),
+                      SizedBox(width: 8),
+                      _LegendIcon(
+                        path: 'assets/img/foodPin.png',
+                        label: 'طعام',
+                      ),
                     ],
                   ),
                 ),
@@ -1786,7 +1795,10 @@ class _LegendIcon extends StatelessWidget {
       children: [
         Image.asset(path, width: 18, height: 18),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
       ],
     );
   }
