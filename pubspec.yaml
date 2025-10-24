@@ -53,10 +53,10 @@ flutter:
     - assets/img/onboarding2.png
     - assets/img/onboarding3.png
     - assets/img/welcome.png 
-    - assets/img/clothes.png
-    - assets/img/papers.png
-    - assets/img/rvm.png
-    - assets/img/food.png
+    - assets/img/clothPin.png
+    - assets/img/paperPin.png
+    - assets/img/rvmPin.png
+    - assets/img/foodPin.png
 
 flutter_native_splash:
   color: "#FAFCFB"

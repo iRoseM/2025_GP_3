@@ -152,10 +152,13 @@ class _mapPageState extends State<mapPage> {
 
   /// تحميل صور الأيقونات كـ BitmapDescriptor حادّ (يدعم كثافات الشاشة)
   Future<void> _loadMarkerIcons() async {
-    _iconClothes = await _bitmapFromAsset('assets/img/clothes.png', width: 200);
-    _iconPapers = await _bitmapFromAsset('assets/img/papers.png', width: 200);
-    _iconRvm = await _bitmapFromAsset('assets/img/rvm.png', width: 200);
-    _iconFood = await _bitmapFromAsset('assets/img/food.png', width: 200);
+    _iconClothes = await _bitmapFromAsset(
+      'assets/img/clothPin.png',
+      width: 100,
+    );
+    _iconPapers = await _bitmapFromAsset('assets/img/paperPin.png', width: 100);
+    _iconRvm = await _bitmapFromAsset('assets/img/rvmPin.png', width: 100);
+    _iconFood = await _bitmapFromAsset('assets/img/foodPin.png', width: 100);
     _iconDefault = BitmapDescriptor.defaultMarkerWithHue(
       BitmapDescriptor.hueRed,
     );
@@ -811,8 +814,7 @@ class _mapPageState extends State<mapPage> {
     String message;
     final categoryText = searchCategory ?? 'نقطة استدامة';
     if (isNearestSearch || (!isAreaSearch && searchCategory != null)) {
-      message =
-          'تم العثور على ${top.length} من $categoryText. أقربها يبعد ${nearestDist > 1000 ? (nearestDist / 1000).toStringAsFixed(1) + " كم" : nearestDist.toStringAsFixed(0) + " متر"}.';
+      message = 'تم العثور على ${top.length} من $categoryText.';
     } else if (isAreaSearch) {
       message = 'تم العثور على ${top.length} من $categoryText .';
     } else {
@@ -965,6 +967,9 @@ class _mapPageState extends State<mapPage> {
   void _openReportDialog(Facility f) {
     final descCtrl = TextEditingController();
     String? selectedType;
+    final _formKey = GlobalKey<FormState>();
+    bool showValidation = false; // 👈 متغير للتحكم في ظهور اللون الأحمر
+
     final types = <String>[
       'الموقع غير دقيق',
       'الحاوية ممتلئة',
@@ -976,52 +981,122 @@ class _mapPageState extends State<mapPage> {
     showDialog(
       context: context,
       builder: (_) {
-        return AlertDialog(
-          title: const Text('إرسال بلاغ عن الحاويات'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'نوع البلاغ'),
-                items: types
-                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                    .toList(),
-                onChanged: (v) => selectedType = v,
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text(
+                'إرسال بلاغ عن الحاويات',
+                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: descCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'وصف المشكلة (اختياري)',
-                  hintText: 'اكتب وصفًا مختصرًا للمشكلة',
+
+              content: Form(
+                key: _formKey,
+                autovalidateMode: showValidation
+                    ? AutovalidateMode
+                          .always // 👈 يفعل التحقق فقط بعد الضغط على إرسال
+                    : AutovalidateMode.disabled,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Directionality(
+                      textDirection:
+                          TextDirection.rtl, // يخلي السهم يسار والنص يمين
+                      child: DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(
+                          labelText: 'نوع البلاغ',
+                          alignLabelWithHint: true,
+                        ),
+                        isExpanded: true,
+                        alignment: Alignment.centerRight,
+                        icon: const Icon(
+                          Icons.arrow_drop_down,
+                        ), // السهم يروح يسار تلقائيًا
+                        items: types
+                            .map(
+                              (t) => DropdownMenuItem(
+                                value: t,
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Text(t),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) {
+                          setState(() => selectedType = v);
+                        },
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) {
+                            return 'اختر نوع البلاغ';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+                    Directionality(
+                      textDirection: TextDirection.rtl, // يخلي الحقل بالعربي
+                      child: TextFormField(
+                        controller: descCtrl,
+                        maxLines: 3,
+                        textAlign: TextAlign.right, // يخلي النص داخل الحقل يمين
+                        decoration: InputDecoration(
+                          alignLabelWithHint: true,
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('وصف المشكلة'),
+                              if (selectedType == 'أخرى')
+                                const Text(
+                                  ' *',
+                                  style: TextStyle(
+                                    color: Colors.redAccent,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          hintText: selectedType == 'أخرى'
+                              ? 'يجب كتابة وصف عند اختيار "أخرى"'
+                              : 'اكتب وصفًا مختصرًا للمشكلة',
+                        ),
+                        validator: (v) {
+                          if (selectedType == 'أخرى' &&
+                              (v == null || v.trim().isEmpty)) {
+                            return 'يرجى كتابة وصف للمشكلة';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('إلغاء'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (selectedType == null || selectedType!.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('اختر نوع البلاغ')),
-                  );
-                  return;
-                }
-                Navigator.pop(context);
-                await _submitFacilityReport(
-                  facility: f,
-                  type: selectedType!.trim(),
-                  description: descCtrl.text.trim(),
-                );
-              },
-              child: const Text('إرسال'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('إلغاء'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    // 👇 نفعل التحقق فقط عند الضغط على "إرسال"
+                    setState(() => showValidation = true);
+
+                    if (!_formKey.currentState!.validate()) return;
+
+                    Navigator.pop(context);
+                    await _submitFacilityReport(
+                      facility: f,
+                      type: selectedType!.trim(),
+                      description: descCtrl.text.trim(),
+                    );
+                  },
+                  child: const Text('إرسال'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1052,24 +1127,79 @@ class _mapPageState extends State<mapPage> {
 
       showDialog(
         context: context,
-        builder: (_) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          title: const Text('شكرًا لك 💚', textAlign: TextAlign.center),
-          content: const Text(
-            'تم استلام بلاغك بنجاح وسنقوم بمراجعته قريبًا\n\nنقدّر مساهمتك في تحسين نقاط الاستدامة',
-            textAlign: TextAlign.center,
-          ),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: [
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
-              onPressed: () => Navigator.pop(context),
-              child: const Text('تم'),
+        barrierDismissible: false,
+        builder: (context) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
-          ],
-        ),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            child: SizedBox(
+              width: 340, // 👈 عرض ثابت (ما يتغير حتى لو الزر صغير)
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'assets/img/nameerLove.png',
+                      height: 120,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'شكرًا لك',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'تم استلام بلاغك بنجاح\nسيتم مراجعته وسنقوم بإشعارك عند معالجته',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.dark,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // 👇 الزر صغير، لكن المربع ثابت
+                    Center(
+                      child: SizedBox(
+                        width: 140,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 10,
+                            ),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            'تم',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       );
     } catch (e) {
       debugPrint('❌ report error: $e');
@@ -1308,24 +1438,26 @@ class _mapPageState extends State<mapPage> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
 
-                    children: [
+                    children: const [
                       _LegendIcon(
-                        path: 'assets/img/clothes.png',
+                        path: 'assets/img/clothPin.png',
                         label: 'ملابس',
                       ),
-
-                      const SizedBox(width: 10),
-
+                      SizedBox(width: 8),
                       _LegendIcon(
-                        path: 'assets/img/papers.png',
+                        path: 'assets/img/paperPin.png',
                         label: 'أوراق',
                       ),
-
-                      const SizedBox(width: 10),
-
-                      _LegendIcon(path: 'assets/img/rvm.png', label: 'RVM'),
-                      SizedBox(width: 10),
-                      _LegendIcon(path: 'assets/img/food.png', label: 'أكل'),
+                      SizedBox(width: 8),
+                      _LegendIcon(
+                        path: 'assets/img/rvmPin.png',
+                        label: 'آلات إعادة التدوير',
+                      ),
+                      SizedBox(width: 8),
+                      _LegendIcon(
+                        path: 'assets/img/foodPin.png',
+                        label: 'طعام',
+                      ),
                     ],
                   ),
                 ),
@@ -1451,7 +1583,10 @@ class _LegendIcon extends StatelessWidget {
       children: [
         Image.asset(path, width: 18, height: 18),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
       ],
     );
   }

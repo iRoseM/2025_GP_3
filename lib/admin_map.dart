@@ -19,6 +19,19 @@ import 'admin_reports.dart' as report;
 import 'profile.dart';
 import 'services/connection.dart';
 
+class AppColors {
+  static const primary = Color(0xFF4BAA98);
+  static const dark = Color(0xFF3C3C3B);
+  static const accent = Color(0xFFF4A340);
+  static const sea = Color(0xFF1F7A8C);
+  static const primary60 = Color(0x994BAA98);
+  static const primary33 = Color(0x544BAA98);
+  static const light = Color(0xFF79D0BE);
+  static const background = Color(0xFFF3FAF7);
+  static const mint = Color(0xFFB6E9C1);
+  static const tealSoft = Color(0xFF75BCAF);
+}
+
 class AdminMapPage extends StatefulWidget {
   const AdminMapPage({super.key});
 
@@ -83,17 +96,16 @@ class _AdminMapPageState extends State<AdminMapPage> {
     await _ensureLocationPermission();
     await _loadMarkerIcons();
     await _loadFacilitiesFromFirestore();
-
-    if (mounted && _myLocationEnabled) {
-      await _goToMyLocation();
-    }
   }
 
   Future<void> _loadMarkerIcons() async {
-    _iconClothes = await _bitmapFromAsset('assets/img/clothes.png', width: 200);
-    _iconPapers = await _bitmapFromAsset('assets/img/papers.png', width: 200);
-    _iconRvm = await _bitmapFromAsset('assets/img/rvm.png', width: 200);
-    _iconFood = await _bitmapFromAsset('assets/img/food.png', width: 200);
+    _iconClothes = await _bitmapFromAsset(
+      'assets/img/clothPin.png',
+      width: 100,
+    );
+    _iconPapers = await _bitmapFromAsset('assets/img/paperPin.png', width: 100);
+    _iconRvm = await _bitmapFromAsset('assets/img/rvmPin.png', width: 100);
+    _iconFood = await _bitmapFromAsset('assets/img/foodPin.png', width: 100);
     _iconDefault = BitmapDescriptor.defaultMarkerWithHue(
       BitmapDescriptor.hueRed,
     );
@@ -665,18 +677,24 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: const [
                       _LegendIcon(
-                        path: 'assets/img/clothes.png',
+                        path: 'assets/img/clothPin.png',
                         label: 'ملابس',
                       ),
-                      SizedBox(width: 10),
+                      SizedBox(width: 8),
                       _LegendIcon(
-                        path: 'assets/img/papers.png',
+                        path: 'assets/img/paperPin.png',
                         label: 'أوراق',
                       ),
-                      SizedBox(width: 10),
-                      _LegendIcon(path: 'assets/img/rvm.png', label: 'RVM'),
-                      SizedBox(width: 10),
-                      _LegendIcon(path: 'assets/img/food.png', label: 'أكل'),
+                      SizedBox(width: 8),
+                      _LegendIcon(
+                        path: 'assets/img/rvmPin.png',
+                        label: 'آلات إعادة التدوير',
+                      ),
+                      SizedBox(width: 8),
+                      _LegendIcon(
+                        path: 'assets/img/foodPin.png',
+                        label: 'طعام',
+                      ),
                     ],
                   ),
                 ),
@@ -1000,17 +1018,6 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     ],
                   ),
 
-                  const SizedBox(height: 8),
-
-                  // نوع الحاوية
-                  Text(
-                    type,
-                    style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    textAlign: TextAlign.right,
-                  ),
-
-                  const SizedBox(height: 16),
-
                   // المعلومات التفصيلية
                   if (provider.isNotEmpty && provider != 'غير محدد')
                     _kvRightAligned('المزود', provider),
@@ -1066,12 +1073,19 @@ class _AdminMapPageState extends State<AdminMapPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start, // 👈 يخلي النصوص تطلع فوق بعض لو طويلة
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Text(
-            v,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            textAlign: TextAlign.right,
+          // 👇 Expanded عشان يسمح للنص الطويل يلف سطر
+          Expanded(
+            child: Text(
+              v,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              textAlign: TextAlign.right,
+              softWrap: true, // 👈 يسمح بتعدد الأسطر
+              overflow: TextOverflow.visible, // 👈 ما يقص النص الطويل
+            ),
           ),
           const SizedBox(width: 8),
           Text(
@@ -1124,7 +1138,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
               ),
               child: _FacilityFormCard(
                 title: 'تعديل بيانات الموقع',
-                initialName: (data['name'] ?? '').toString(),
+                initialName: (data['address'] ?? '').toString(),
                 initialType: _normalizeType(
                   (data['type'] ?? oldType).toString(),
                 ),
@@ -1433,10 +1447,22 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                   const SizedBox(height: 10),
 
                   // اسم الموقع (إلزامي)
-                  const Text(
-                    'اسم الموقع',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  Row(
+                    children: const [
+                      Text(
+                        'اسم الموقع',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        ' *',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
+
                   const SizedBox(height: 6),
                   TextFormField(
                     controller: _nameCtrl,
@@ -1458,10 +1484,22 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                   const SizedBox(height: 14),
 
                   // نوع الحاوية (إلزامي)
-                  const Text(
-                    'نوع الحاوية',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  Row(
+                    children: const [
+                      Text(
+                        'نوع الحاوية',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        ' *',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
+
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: _type,
@@ -1533,25 +1571,25 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                   if (widget.fixedPosition == null)
                     Row(
                       children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            icon: const Icon(Icons.edit_location_alt_outlined),
-                            label: const Text('إدخال بالإحداثيات'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                            ),
-                            onPressed: () => setState(() => _showCoords = true),
+                        Flexible(
+                          fit: FlexFit.tight,
+                          child: _LocationOptionButton(
+                            icon: Icons.edit_location_alt_outlined,
+                            label: 'إدخال بالإحداثيات',
+                            selected: _showCoords == true,
+                            onTap: () =>
+                                setState(() => _showCoords = !_showCoords),
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton.icon(
-                            icon: const Icon(Icons.my_location),
-                            label: const Text('استخدام موقعي الحالي'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: Colors.teal,
-                            ),
-                            onPressed: () async {
+                        Flexible(
+                          fit: FlexFit.tight,
+                          child: _LocationOptionButton(
+                            icon: Icons.my_location,
+                            label: ' موقعي الحالي',
+                            selected: _showCoords == false,
+                            onTap: () async {
+                              setState(() => _showCoords = false);
                               if (!_formKey.currentState!.validate()) return;
                               try {
                                 final p = await Geolocator.getCurrentPosition(
@@ -1583,10 +1621,22 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
 
                   if (_showCoords && widget.fixedPosition == null) ...[
                     const SizedBox(height: 16),
-                    const Text(
-                      'إحداثيات الموقع',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                    Row(
+                      children: const [
+                        Text(
+                          'إحداثيات الموقع',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          ' *',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
+
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -1632,26 +1682,65 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    FilledButton.icon(
-                      icon: const Icon(Icons.check),
-                      label: const Text('تأكيد الإحداثيات'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.orange,
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        gradient: const LinearGradient(
+                          colors: [
+                            AppColors.mint,
+                            AppColors.primary,
+                            AppColors.primary,
+                          ],
+                          begin: Alignment.centerRight,
+                          end: Alignment.centerLeft,
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x33000000),
+                            blurRadius: 8,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
                       ),
-                      onPressed: () async {
-                        if (!_formKey.currentState!.validate()) return;
-                        final lat = double.parse(_latCtrl.text.trim());
-                        final lng = double.parse(_lngCtrl.text.trim());
-                        await widget.onSubmit(
-                          name: _nameCtrl.text.trim(),
-                          type: _type,
-                          isActive: _isActive,
-                          provider: _providerCtrl.text.trim(),
-                          lat: lat,
-                          lng: lng,
-                        );
-                        if (mounted) Navigator.pop(context);
-                      },
+                      child: FilledButton.icon(
+                        icon: const Icon(Icons.check, color: Colors.white),
+                        label: const Text(
+                          'تأكيد الإحداثيات',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(
+                            vertical:
+                                8, // 👈 خففناها من 14 إلى 8 علشان الزر يصير أنحف
+                            horizontal: 18,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          minimumSize: const Size.fromHeight(
+                            42,
+                          ), // 👈 ارتفاع الزر
+                        ),
+                        onPressed: () async {
+                          if (!_formKey.currentState!.validate()) return;
+                          final lat = double.parse(_latCtrl.text.trim());
+                          final lng = double.parse(_lngCtrl.text.trim());
+                          await widget.onSubmit(
+                            name: _nameCtrl.text.trim(),
+                            type: _type,
+                            isActive: _isActive,
+                            provider: _providerCtrl.text.trim(),
+                            lat: lat,
+                            lng: lng,
+                          );
+                          if (mounted) Navigator.pop(context);
+                        },
+                      ),
                     ),
                   ],
 
@@ -1786,7 +1875,10 @@ class _LegendIcon extends StatelessWidget {
       children: [
         Image.asset(path, width: 18, height: 18),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
       ],
     );
   }
@@ -2035,6 +2127,57 @@ class HeaderUserLive extends StatelessWidget {
               },
         );
       },
+    );
+  }
+}
+
+class _LocationOptionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _LocationOptionButton({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = selected
+        ? AppColors.primary.withOpacity(0.12)
+        : Colors.transparent;
+    final border = selected ? AppColors.primary : AppColors.light;
+    final fg = selected ? AppColors.dark : Colors.black.withOpacity(.7);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: border, width: 1.2),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: fg,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
