@@ -429,7 +429,7 @@ Widget build(BuildContext context) {
             children: [
               // ✏️ تعديل المهمة
               IconButton(
-                icon: const Icon(Icons.edit, color: Colors.grey),
+                icon: const Icon(Icons.edit_outlined, color: Colors.grey),
                 onPressed: () async {
                   final updated = await Navigator.push(
                     context,
