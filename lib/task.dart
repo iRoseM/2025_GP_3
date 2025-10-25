@@ -470,145 +470,247 @@ Future<void> _bootstrapMonth() async {
     if (mounted) setState(() {});
   }
 
-@override
-Widget build(BuildContext context) {
-  final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-  return Directionality(
-    textDirection: TextDirection.rtl,
-    child: Scaffold(
-      extendBody: true,
-      backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
-      body: AnimatedBackgroundContainer(
-        child: Builder(
-          builder: (context) {
-            final statusBar = MediaQuery.of(context).padding.top;
-            final topPadding = statusBar + 20 + 12;
-            final viewInsets = MediaQuery.of(context).viewInsets.bottom;
-            final bottomPad =
-                viewInsets > 0 ? viewInsets + 16 : kBottomNavigationBarHeight + 24;
+  @override
+  Widget build(BuildContext context) {
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        extendBody: true,
+        backgroundColor: Colors.transparent,
+        extendBodyBehindAppBar: true,
+        appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
+        body: AnimatedBackgroundContainer(
+          child: Builder(
+            builder: (context) {
+              final statusBar = MediaQuery.of(context).padding.top;
+              final topPadding = statusBar + 20 + 12;
+              final viewInsets = MediaQuery.of(context).viewInsets.bottom;
+              final bottomPad =
+                  viewInsets > 0 ? viewInsets + 16 : kBottomNavigationBarHeight + 24;
 
-            return SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPad),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('مهامي',
-                      style: GoogleFonts.ibmPlexSansArabic(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.dark)),
-                  const SizedBox(height: 15),
-                  _buildCalendar(),
-                  const SizedBox(height: 8),
-                  _userTaskStream == null
-                      ? const Center(
-                          child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 40),
-                              child: CircularProgressIndicator(
-                                  color: AppColors.primary)))
-                      : StreamBuilder<DocumentSnapshot>(
-                          stream: _userTaskStream!,
-                          builder: (context, snap) {
-                            if (snap.connectionState ==
-                                ConnectionState.waiting) {
-                              return const Center(
-                                  child: Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(vertical: 40),
-                                      child: CircularProgressIndicator(
-                                          color: AppColors.primary)));
-                            }
-                            // ✅ نتحقق أولاً من اليوم المختار
-                            final sel = _selectedDay ?? _dayStart(DateTime.now());
-                            final today = _dayStart(DateTime.now());
+              return SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPad),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('مهامي',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.dark)),
+                    // const SizedBox(height: 15),
+                    const SizedBox(height: 15),
 
-                            // ✅ الشهر القادم فقط نعتبره "لم يُفتح بعد"
-                            final nextMonthStart = DateTime(today.year, today.month + 1, 1);
+                    // 🪴 مؤشر النمو (Growth Indicator)
+                    _buildGrowthIndicator(
+                      levelName: 'بذرة', // ← Level 1 (can later be dynamic)
+                      level: 1,
+                      tasksPerDay: 1,
+                      progressToNext: 0.45, // e.g. 45% toward next level
+                    ),
 
-                            // 🔴 أولاً: قبل الانضمام
-                            if (_joinDate != null && sel.isBefore(_joinDate!)) {
-                              return _buildUnavailableCard(
-                                title: 'غير متاحة',
-                                subtitle: 'لم تكن ضمن نمير في هذا التاريخ.',
-                              );
-                            }
-
-                            // 🟡 بعد التحقق من الانضمام، نتحقق من وجود المهمة
-                            if (!snap.hasData || !snap.data!.exists) {
-                              return _buildUnavailableCard(
-                                title: 'لا توجد مهام متاحة لهذا الشهر',
-                                subtitle: 'يبدو أنه لم تُحدّد مهام بعد، تفقّد لاحقًا.',
-                              );
-                            }
-
-                            final ut = snap.data!.data() as Map<String, dynamic>;
-                            final taskId = ut['taskId'] as String?;
-
-                            // 🔴 بعد نهاية الشهر الحالي (الشهر القادم)
-                            if (sel.isAfter(nextMonthStart)) {
-                              return _buildUnavailableCard(
-                                title: 'غير متاحة',
-                                subtitle: 'هذا الشهر لم يُفتح بعد. الرجاء العودة لاحقًا.',
-                              );
-                            }
-                            // ✅ المهمة اليومية
-                            return FutureBuilder<DocumentSnapshot>(
-                              future: FirebaseFirestore.instance
-                                  .collection('tasks')
-                                  .doc(taskId)
-                                  .get(),
-                              builder: (context, taskSnap) {
-                                if (taskSnap.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return const Center(
+                    const SizedBox(height: 15),
+                    _buildCalendar(),
+                    const SizedBox(height: 8),
+                    _userTaskStream == null
+                        ? const Center(
+                            child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 40),
+                                child: CircularProgressIndicator(
+                                    color: AppColors.primary)))
+                        : StreamBuilder<DocumentSnapshot>(
+                            stream: _userTaskStream!,
+                            builder: (context, snap) {
+                              if (snap.connectionState ==
+                                  ConnectionState.waiting) {
+                                return const Center(
                                     child: Padding(
-                                      padding:
-                                          EdgeInsets.symmetric(vertical: 40),
-                                      child: CircularProgressIndicator(
-                                          color: AppColors.primary),
-                                    ),
-                                  );
-                                }
+                                        padding:
+                                            EdgeInsets.symmetric(vertical: 40),
+                                        child: CircularProgressIndicator(
+                                            color: AppColors.primary)));
+                              }
+                              // ✅ نتحقق أولاً من اليوم المختار
+                              final sel = _selectedDay ?? _dayStart(DateTime.now());
+                              final today = _dayStart(DateTime.now());
 
-                                if (!taskSnap.hasData ||
-                                    !taskSnap.data!.exists) {
-                                  return _buildUnavailableCard(
-                                    title: 'المهمة غير متاحة',
-                                    subtitle: 'قد تكون حُذفت من النظام.',
-                                  );
-                                }
+                              // ✅ الشهر القادم فقط نعتبره "لم يُفتح بعد"
+                              final nextMonthStart = DateTime(today.year, today.month + 1, 1);
 
-                                final data = taskSnap.data!.data()
-                                    as Map<String, dynamic>;
+                              // 🔴 أولاً: قبل الانضمام
+                              if (_joinDate != null && sel.isBefore(_joinDate!)) {
+                                return _buildUnavailableCard(
+                                  title: 'غير متاحة',
+                                  subtitle: 'لم تكن ضمن نمير في هذا التاريخ.',
+                                );
+                              }
 
-                                // 🟢 اليوم الحالي
-                                if (isSameDay(sel, today)) {
+                              // 🟡 بعد التحقق من الانضمام، نتحقق من وجود المهمة
+                              if (!snap.hasData || !snap.data!.exists) {
+                                return _buildUnavailableCard(
+                                  title: 'لا توجد مهام متاحة لهذا الشهر',
+                                  subtitle: 'يبدو أنه لم تُحدّد مهام بعد، تفقّد لاحقًا.',
+                                );
+                              }
+
+                              final ut = snap.data!.data() as Map<String, dynamic>;
+                              final taskId = ut['taskId'] as String?;
+
+                              // 🔴 بعد نهاية الشهر الحالي (الشهر القادم)
+                              if (sel.isAfter(nextMonthStart)) {
+                                return _buildUnavailableCard(
+                                  title: 'غير متاحة',
+                                  subtitle: 'هذا الشهر لم يُفتح بعد. الرجاء العودة لاحقًا.',
+                                );
+                              }
+                              // ✅ المهمة اليومية
+                              return FutureBuilder<DocumentSnapshot>(
+                                future: FirebaseFirestore.instance
+                                    .collection('tasks')
+                                    .doc(taskId)
+                                    .get(),
+                                builder: (context, taskSnap) {
+                                  if (taskSnap.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return const Center(
+                                      child: Padding(
+                                        padding:
+                                            EdgeInsets.symmetric(vertical: 40),
+                                        child: CircularProgressIndicator(
+                                            color: AppColors.primary),
+                                      ),
+                                    );
+                                  }
+
+                                  if (!taskSnap.hasData ||
+                                      !taskSnap.data!.exists) {
+                                    return _buildUnavailableCard(
+                                      title: 'المهمة غير متاحة',
+                                      subtitle: 'قد تكون حُذفت من النظام.',
+                                    );
+                                  }
+
+                                  final data = taskSnap.data!.data()
+                                      as Map<String, dynamic>;
+
+                                  // 🟢 اليوم الحالي
+                                  if (isSameDay(sel, today)) {
+                                    return _buildUserTaskCard(
+                                        taskData: data, canPerform: true);
+                                  }
+
+                                  // 🟡 أي يوم سابق من نفس الشهر أو الشهر الماضي
                                   return _buildUserTaskCard(
-                                      taskData: data, canPerform: true);
-                                }
-
-                                // 🟡 أي يوم سابق من نفس الشهر أو الشهر الماضي
-                                return _buildUserTaskCard(
-                                    taskData: data, canPerform: false);
-                              },
-                            );
-                          }),
-                ],
-              ),
-            );
-          },
+                                      taskData: data, canPerform: false);
+                                },
+                              );
+                            }),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
+        bottomNavigationBar: isKeyboardOpen
+            ? null
+            : BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),
       ),
-      bottomNavigationBar: isKeyboardOpen
-          ? null
-          : BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),
-    ),
-  );
-}
+    );
+  }
+  // -------------------------------------------------------------
+  // 🌱 Growth Progress Bar
+  // -------------------------------------------------------------
+  Widget _buildGrowthIndicator({
+    required String levelName,
+    required int level,
+    required int tasksPerDay,
+    required double progressToNext, // 0.0 - 1.0
+  }) {
+    // 🎨 Gradient colors
+    Color startColor = const Color(0xFFB6E9C1);
+    Color endColor = const Color(0xFF4BAA98);
 
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      color: Colors.transparent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 🌱 Level line
+          Row(
+            children: [
+              const Icon(Icons.energy_savings_leaf_outlined,
+                  size: 18, color: Color(0xFF4BAA98)),
+              const SizedBox(width: 5),
+              Text(
+                '$levelName – المستوى $level',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.dark,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$tasksPerDay مهمة يوميًا',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 12.5,
+                  color: const Color(0xFF4BAA98),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
 
+          const SizedBox(height: 4),
+
+          // 🌈 Animated progress bar (thin)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Stack(
+              children: [
+                Container(
+                  height: 4,
+                  color: Colors.grey.shade200.withOpacity(0.5),
+                ),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOutCubic,
+                  height: 4,
+                  width: MediaQuery.of(context).size.width *
+                      progressToNext.clamp(0.0, 1.0),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [startColor, endColor],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 2),
+
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              progressToNext >= 1
+                  ? '🎉 جاهز للترقية!'
+                  : '${(progressToNext * 100).toStringAsFixed(0)}٪ للمستوى التالي',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 11.2,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
   // -------------------------------------------------------------
   // 🟩 Calendar & Card Builders
   // -------------------------------------------------------------
