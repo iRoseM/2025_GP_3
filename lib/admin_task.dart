@@ -32,8 +32,8 @@ class AdminTasksPage extends StatefulWidget {
 
 class _AdminTasksPageState extends State<AdminTasksPage> {
   // 🔹 Firestore reference
-  final CollectionReference _taskCollection =
-      FirebaseFirestore.instance.collection('tasks');
+  final CollectionReference _taskCollection = FirebaseFirestore.instance
+      .collection('tasks');
 
   List<Map<String, dynamic>> _tasks = [];
   List<String> _categories = [];
@@ -61,16 +61,16 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
     try {
       final qs = await _taskCollection.get();
       setState(() {
-        _tasks = qs.docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          data['id'] = doc.id;
-          return data;
-        }).toList()
-          ..sort((a, b) {
-            final aStatus = a['status'] ?? '';
-            final bStatus = b['status'] ?? '';
-            return aStatus.compareTo(bStatus);
-          });
+        _tasks =
+            qs.docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              data['id'] = doc.id;
+              return data;
+            }).toList()..sort((a, b) {
+              final aStatus = a['status'] ?? '';
+              final bStatus = b['status'] ?? '';
+              return aStatus.compareTo(bStatus);
+            });
         _isLoading = false;
       });
     } catch (e) {
@@ -83,13 +83,15 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   // 🔹 Fetch Categories
   Future<void> _fetchCategories() async {
     try {
-      final qs =
-          await FirebaseFirestore.instance.collection('categories').get();
-      final names = qs.docs
-          .map((d) => (d['name'] ?? '').toString().trim())
-          .where((n) => n.isNotEmpty)
-          .toList()
-        ..sort((a, b) => a.compareTo(b));
+      final qs = await FirebaseFirestore.instance
+          .collection('categories')
+          .get();
+      final names =
+          qs.docs
+              .map((d) => (d['name'] ?? '').toString().trim())
+              .where((n) => n.isNotEmpty)
+              .toList()
+            ..sort((a, b) => a.compareTo(b));
       setState(() {
         _categories = names;
         _isCatsLoading = false;
@@ -140,100 +142,100 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
     }
   }
 
-// ---------------------------------------------------------------------------
-// 🔹 Main UI Build (fixed to match original Nameer style)
-// ---------------------------------------------------------------------------
-@override
-Widget build(BuildContext context) {
-  final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-  final theme = Theme.of(context);
-  final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(theme.textTheme);
+  // ---------------------------------------------------------------------------
+  // 🔹 Main UI Build (fixed to match original Nameer style)
+  // ---------------------------------------------------------------------------
+  @override
+  Widget build(BuildContext context) {
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    final theme = Theme.of(context);
+    final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(theme.textTheme);
 
-  final query = searchQuery.trim().toLowerCase();
+    final query = searchQuery.trim().toLowerCase();
 
-  // 🔹 Filter and sort tasks (active first)
-  final filteredTasks = _tasks.where((task) {
-    final title = task['title_normalized']?.toString() ??
-        task['title']?.toString().toLowerCase() ??
-        '';
-    final desc = task['description']?.toString().toLowerCase() ?? '';
-    final cat = task['category']?.toString() ?? '';
-    final matchesSearch =
-        query.isEmpty || title.contains(query) || desc.contains(query);
-    final matchesCategory =
-        _selectedCategories.isEmpty || _selectedCategories.contains(cat);
-    return matchesSearch && matchesCategory;
-  }).toList()
-    ..sort((a, b) {
-      if (a['status'] == b['status']) return 0;
-      return a['status'] == 'active' ? -1 : 1;
-    });
+    // 🔹 Filter and sort tasks (active first)
+    final filteredTasks =
+        _tasks.where((task) {
+          final title =
+              task['title_normalized']?.toString() ??
+              task['title']?.toString().toLowerCase() ??
+              '';
+          final desc = task['description']?.toString().toLowerCase() ?? '';
+          final cat = task['category']?.toString() ?? '';
+          final matchesSearch =
+              query.isEmpty || title.contains(query) || desc.contains(query);
+          final matchesCategory =
+              _selectedCategories.isEmpty || _selectedCategories.contains(cat);
+          return matchesSearch && matchesCategory;
+        }).toList()..sort((a, b) {
+          if (a['status'] == b['status']) return 0;
+          return a['status'] == 'active' ? -1 : 1;
+        });
 
-  return Directionality(
-    textDirection: TextDirection.rtl,
-    child: Theme(
-      data: theme.copyWith(textTheme: textTheme),
-      child: Scaffold(
-        extendBody: true,
-        extendBodyBehindAppBar: true,
-        backgroundColor: Colors.transparent,
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Theme(
+        data: theme.copyWith(textTheme: textTheme),
+        child: Scaffold(
+          extendBody: true,
+          extendBodyBehindAppBar: true,
+          backgroundColor: Colors.transparent,
 
-        // ✅ نفس الهيدر الأصلي (شفاف)
-        appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
+          // ✅ نفس الهيدر الأصلي (شفاف)
+          appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
 
-        // ✅ خلفية متحركة خضراء شفافة
-        body: AnimatedBackgroundContainer(
-          child: Builder(
-            builder: (context) {
-              final statusBar = MediaQuery.of(context).padding.top;
-              const headerH = 20.0;
-              const gap = 12.0;
-              final topPadding = statusBar + headerH + gap;
+          // ✅ خلفية متحركة خضراء شفافة
+          body: AnimatedBackgroundContainer(
+            child: Builder(
+              builder: (context) {
+                final statusBar = MediaQuery.of(context).padding.top;
+                const headerH = 20.0;
+                const gap = 12.0;
+                final topPadding = statusBar + headerH + gap;
 
-              return Padding(
-                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 16),
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 👇 العنوان نفس النسخة القديمة
-                          Text(
-                            'قائمة المهام',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.dark,
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(16, topPadding, 16, 16),
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 👇 العنوان نفس النسخة القديمة
+                            Text(
+                              'قائمة المهام',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.dark,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 15),
+                            const SizedBox(height: 15),
 
-                          _buildSearchBar(),
-                          const SizedBox(height: 12),
+                            _buildSearchBar(),
+                            const SizedBox(height: 12),
 
-                          Expanded(child: _buildTaskList(filteredTasks)),
-                        ],
-                      ),
-              );
-            },
+                            Expanded(child: _buildTaskList(filteredTasks)),
+                          ],
+                        ),
+                );
+              },
+            ),
           ),
+
+          // ✅ زر الإضافة (نفس الموقع والحجم واللون)
+          floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+          floatingActionButton: _buildAddFab(),
+
+          bottomNavigationBar: isKeyboardOpen
+              ? null
+              : AdminBottomNav(
+                  currentIndex: _currentIndex,
+                  onTap: _onBottomNavTap,
+                ),
         ),
-
-        // ✅ زر الإضافة (نفس الموقع والحجم واللون)
-        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-        floatingActionButton: _buildAddFab(),
-
-        bottomNavigationBar: isKeyboardOpen
-            ? null
-            : AdminBottomNav(
-                currentIndex: _currentIndex,
-                onTap: _onBottomNavTap,
-              ),
       ),
-    ),
-  );
-}
-
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // 🔹 Search Bar
@@ -253,8 +255,10 @@ Widget build(BuildContext context) {
                 hintText: 'ابحث عن مهمة...',
                 prefixIcon: Icon(Icons.search, color: AppColors.primary),
                 border: InputBorder.none,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -270,7 +274,10 @@ Widget build(BuildContext context) {
               borderRadius: BorderRadius.circular(14),
               boxShadow: const [
                 BoxShadow(
-                    color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6))
+                  color: Color(0x14000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 6),
+                ),
               ],
             ),
             child: const Icon(Icons.tune, color: AppColors.dark),
@@ -293,9 +300,10 @@ Widget build(BuildContext context) {
             Text(
               'لا توجد مهام حالياً 📅',
               style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.dark),
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppColors.dark,
+              ),
             ),
           ],
         ),
@@ -353,22 +361,29 @@ Widget build(BuildContext context) {
           Column(
             children: [
               ListTile(
-                title: Text(task['title'] ?? '',
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.dark)),
-                subtitle: Text(task['category'] ?? '',
-                    style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF666666),
-                        fontWeight: FontWeight.w600)),
+                title: Text(
+                  task['title'] ?? '',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.dark,
+                  ),
+                ),
+                subtitle: Text(
+                  task['category'] ?? '',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF666666),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 trailing: IconButton(
                   icon: Icon(
-                      isExpanded
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down,
-                      color: AppColors.primary),
+                    isExpanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: AppColors.primary,
+                  ),
                   onPressed: () {
                     setState(() {
                       isExpanded
@@ -385,18 +400,20 @@ Widget build(BuildContext context) {
             top: 8,
             left: 12,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: statusColor.withOpacity(0.1),
                 border: Border.all(color: statusColor),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(statusText,
-                  style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: statusColor)),
+              child: Text(
+                statusText,
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: statusColor,
+                ),
+              ),
             ),
           ),
         ],
@@ -433,9 +450,7 @@ Widget build(BuildContext context) {
                 onPressed: () async {
                   final updated = await Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => AddTaskPage(task: task),
-                    ),
+                    MaterialPageRoute(builder: (_) => AddTaskPage(task: task)),
                   );
                   if (updated == true) _fetchTasks();
                 },
@@ -452,7 +467,6 @@ Widget build(BuildContext context) {
       ),
     );
   }
-
 
   // ---------------------------------------------------------------------------
   // 🔹 إخفاء المهمة (بدل الحذف)
@@ -497,8 +511,8 @@ Widget build(BuildContext context) {
   //   );
   // }
   // ---------------------------------------------------------------------------
-// 🔹 منطق "إخفاء المهمة" المعدل وفق القاعدة الشهرية الجديدة
-// ---------------------------------------------------------------------------
+  // 🔹 منطق "إخفاء المهمة" المعدل وفق القاعدة الشهرية الجديدة
+  // ---------------------------------------------------------------------------
   void _hideTaskDialog(Map<String, dynamic> task) async {
     final now = DateTime.now();
     final nextMonthDate = DateTime(now.year, now.month + 1, 1);
@@ -519,16 +533,18 @@ Widget build(BuildContext context) {
           ),
           content: Text(
             'هل أنت متأكد من إخفاء هذه المهمة؟ سيتم تطبيق الإخفاء في الشهر القادم (${nextMonthKey})',
-            style: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.black87,
-            ),
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.black87),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('إلغاء',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                      color: Colors.redAccent, fontWeight: FontWeight.w700)),
+              child: Text(
+                'إلغاء',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -550,9 +566,9 @@ Widget build(BuildContext context) {
                       .collection('tasks')
                       .doc(task['id'])
                       .update({
-                    'status': 'hidden',
-                    'expiry_month': nextMonthKey,
-                  });
+                        'status': 'hidden',
+                        'expiry_month': nextMonthKey,
+                      });
 
                   if (mounted) {
                     // ✅ Pop-up to inform admin
@@ -561,12 +577,16 @@ Widget build(BuildContext context) {
                       builder: (context) => Directionality(
                         textDirection: TextDirection.rtl,
                         child: AlertDialog(
-                          shape:
-                              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                           title: Row(
                             children: const [
-                              Icon(Icons.schedule_rounded,
-                                  color: AppColors.primary, size: 28),
+                              Icon(
+                                Icons.schedule_rounded,
+                                color: AppColors.primary,
+                                size: 28,
+                              ),
                               SizedBox(width: 8),
                               Text('تم جدولة الإخفاء'),
                             ],
@@ -601,9 +621,13 @@ Widget build(BuildContext context) {
                   debugPrint('Error hiding task: $e');
                 }
               },
-              child: Text('تأكيد',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                      color: Colors.white, fontWeight: FontWeight.w700)),
+              child: Text(
+                'تأكيد',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
@@ -611,136 +635,135 @@ Widget build(BuildContext context) {
     );
   }
 
-
   // ---------------------------------------------------------------------------
   // 🔹 FAB
-// ---------------------------------------------------------------------------
-// 🔹 زر الإضافة (نفس التصميم القديم + Bottom Sheet بخيارين)
-// ---------------------------------------------------------------------------
-Widget _buildAddFab() {
-  return Padding(
-    padding: const EdgeInsets.only(right: 300, bottom: 10),
-    child: FloatingActionButton(
-      backgroundColor: AppColors.primary,
-      shape: const CircleBorder(),
-      onPressed: _showAddOptionsSheet,
-      child: const Icon(Icons.add, color: Colors.white, size: 28),
-    ),
-  );
-}
+  // ---------------------------------------------------------------------------
+  // 🔹 زر الإضافة (نفس التصميم القديم + Bottom Sheet بخيارين)
+  // ---------------------------------------------------------------------------
+  Widget _buildAddFab() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 300, bottom: 10),
+      child: FloatingActionButton(
+        backgroundColor: AppColors.primary,
+        shape: const CircleBorder(),
+        onPressed: _showAddOptionsSheet,
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
+      ),
+    );
+  }
 
-// ---------------------------------------------------------------------------
-// 🔹 Bottom Sheet عند الضغط على زر الإضافة
-// ---------------------------------------------------------------------------
-void _showAddOptionsSheet() {
-  showModalBottomSheet(
-    context: context,
-    backgroundColor: Colors.transparent,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (_) => Directionality(
-      textDirection: TextDirection.rtl,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x33000000),
-              blurRadius: 10,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'إضافة عنصر جديد',
-              style: GoogleFonts.ibmPlexSansArabic(
-                color: AppColors.dark,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
+  // ---------------------------------------------------------------------------
+  // 🔹 Bottom Sheet عند الضغط على زر الإضافة
+  // ---------------------------------------------------------------------------
+  void _showAddOptionsSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 10,
+                offset: Offset(0, 4),
               ),
-            ),
-            const SizedBox(height: 20),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'إضافة عنصر جديد',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  color: AppColors.dark,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 20),
 
-            // ✅ زر إضافة مهمة جديدة
-            _gradientActionButton(
-              icon: Icons.check_circle_outline,
-              label: 'إضافة مهمة جديدة',
-              colors: const [AppColors.primary, AppColors.mint],
-              onTap: () async {
-                Navigator.pop(context);
-                final updated = await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AddTaskPage()),
-                );
-                if (updated == true) _fetchTasks();
-              },
-            ),
+              // ✅ زر إضافة مهمة جديدة
+              _gradientActionButton(
+                icon: Icons.check_circle_outline,
+                label: 'إضافة مهمة جديدة',
+                colors: const [AppColors.primary, AppColors.mint],
+                onTap: () async {
+                  Navigator.pop(context);
+                  final updated = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AddTaskPage()),
+                  );
+                  if (updated == true) _fetchTasks();
+                },
+              ),
 
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
 
-            // ✅ زر إضافة فئة جديدة
-            _gradientActionButton(
-              icon: Icons.category_outlined,
-              label: 'إضافة فئة جديدة',
-              colors: const [AppColors.mint, AppColors.primary],
-              onTap: () async {
-                Navigator.pop(context);
-                final updated = await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AddCategoryPage()),
-                );
-                if (updated == true) _fetchCategories();
-              },
-            ),
-          ],
+              // ✅ زر إضافة فئة جديدة
+              _gradientActionButton(
+                icon: Icons.category_outlined,
+                label: 'إضافة فئة جديدة',
+                colors: const [AppColors.mint, AppColors.primary],
+                onTap: () async {
+                  Navigator.pop(context);
+                  final updated = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AddCategoryPage()),
+                  );
+                  if (updated == true) _fetchCategories();
+                },
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-// ---------------------------------------------------------------------------
-// 🔹 زر Gradient مع أيقونة (نفس شكل الأزرار القديمة)
-// ---------------------------------------------------------------------------
-Widget _gradientActionButton({
-  required IconData icon,
-  required String label,
-  required List<Color> colors,
-  required VoidCallback onTap,
-}) {
-  return Container(
-    width: double.infinity,
-    decoration: BoxDecoration(
-      gradient: LinearGradient(colors: colors),
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.transparent,
-        shadowColor: Colors.transparent,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+  // ---------------------------------------------------------------------------
+  // 🔹 زر Gradient مع أيقونة (نفس شكل الأزرار القديمة)
+  // ---------------------------------------------------------------------------
+  Widget _gradientActionButton({
+    required IconData icon,
+    required String label,
+    required List<Color> colors,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors),
+        borderRadius: BorderRadius.circular(14),
       ),
-      icon: Icon(icon, color: Colors.white),
-      label: Text(
-        label,
-        style: GoogleFonts.ibmPlexSansArabic(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
+        icon: Icon(icon, color: Colors.white),
+        label: Text(
+          label,
+          style: GoogleFonts.ibmPlexSansArabic(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        onPressed: onTap,
       ),
-      onPressed: onTap,
-    ),
-  );
-}
-
-
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // 🔹 فلترة حسب الفئة فقط (تبقى بسيطة)
@@ -749,7 +772,8 @@ Widget _gradientActionButton({
       context: context,
       showDragHandle: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
       builder: (_) {
         final selectedLocal = Set<String>.from(_selectedCategories);
         return StatefulBuilder(
@@ -759,9 +783,10 @@ Widget _gradientActionButton({
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('تصفية المهام حسب الفئة',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w800)),
+                  const Text(
+                    'تصفية المهام حسب الفئة',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
@@ -770,15 +795,19 @@ Widget _gradientActionButton({
                       return FilterChip(
                         label: Text(cat),
                         selected: selected,
-                        onSelected: (v) => setSt(() =>
-                            v ? selectedLocal.add(cat) : selectedLocal.remove(cat)),
+                        onSelected: (v) => setSt(
+                          () => v
+                              ? selectedLocal.add(cat)
+                              : selectedLocal.remove(cat),
+                        ),
                       );
                     }).toList(),
                   ),
                   const SizedBox(height: 16),
                   FilledButton(
                     style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary),
+                      backgroundColor: AppColors.primary,
+                    ),
                     onPressed: () {
                       Navigator.pop(context);
                       setState(() => _selectedCategories = selectedLocal);
@@ -861,11 +890,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
   Future<void> _loadCategories() async {
     final qs = await _categoriesCol.get();
     setState(() {
-      _categories = qs.docs
-          .map((d) => (d['name'] ?? '').toString().trim())
-          .where((n) => n.isNotEmpty)
-          .toList()
-        ..sort((a, b) => a.compareTo(b));
+      _categories =
+          qs.docs
+              .map((d) => (d['name'] ?? '').toString().trim())
+              .where((n) => n.isNotEmpty)
+              .toList()
+            ..sort((a, b) => a.compareTo(b));
       _catsLoading = false;
     });
   }
@@ -892,212 +922,231 @@ class _AddTaskPageState extends State<AddTaskPage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          centerTitle: true,
-          title: Text(
-            titleText,
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppColors.dark),
-            onPressed: () => Navigator.pop(context),
-          ),
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppColors.primary, AppColors.mint],
-                begin: Alignment.bottomLeft,
-                end: Alignment.topRight,
-              ),
-            ),
-          ),
+        extendBodyBehindAppBar: true,
+        backgroundColor: AppColors.background,
+
+        // ✅ هيدر نمير الموحد (زر رجوع من داخله)
+        appBar: const NameerAppBar(
+          showTitleInBar: false,
+          showBack: true,
+          height: 80,
         ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _fieldLabel('عنوان المهمة', required: true),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _titleCtrl,
-                  decoration: const InputDecoration(
-                    hintText: 'مثال: إعادة تدوير الورق',
-                    prefixIcon: Icon(Icons.task_alt_outlined),
-                  ),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'أدخل عنوان المهمة' : null,
-                ),
-                const SizedBox(height: 14),
 
-                _fieldLabel('وصف المهمة', required: true),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _descCtrl,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    hintText: 'مثال: التوعية بأهمية إعادة التدوير',
-                    prefixIcon: Icon(Icons.description_outlined),
-                  ),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'أدخل وصف المهمة' : null,
-                ),
-                const SizedBox(height: 14),
+        body: Builder(
+          builder: (context) {
+            final statusBar = MediaQuery.of(context).padding.top;
+            const headerH = 20.0; // ارتفاع التولبار الفعلي للهيدر
+            const gap = 12.0; // مسافة بسيطة بعد الهيدر
+            final topPadding = statusBar + headerH + gap;
 
-                _fieldLabel('عدد النقاط', required: true),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _pointsCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    hintText: 'مثال: 30',
-                    prefixIcon: Icon(Icons.stars_rounded),
-                  ),
-                  validator: (v) {
-                    final n = int.tryParse(v ?? '');
-                    if (n == null || n <= 0) return 'أدخل عددًا صحيحًا موجبًا';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-
-                _fieldLabel('تصنيف المهمة', required: true),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: _selectedCategory,
-                  alignment: Alignment.centerRight,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    hintText: _catsLoading
-                        ? '...يتم تحميل الفئات'
-                        : 'اختر الفئة',
-                    prefixIcon: const Icon(Icons.category_outlined,
-                        color: AppColors.primary),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(16, topPadding, 16, 16),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ✅ العنوان تحت الهيدر مباشرة
+                    Text(
+                      titleText,
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
+                      ),
                     ),
-                  ),
-                  items: _categories
-                      .map((name) => DropdownMenuItem(
-                            value: name,
-                            child: Align(
+                    const SizedBox(height: 16),
+
+                    // 🟢 باقي الحقول كما هي
+                    _fieldLabel('عنوان المهمة', required: true),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _titleCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'مثال: إعادة تدوير الورق',
+                        prefixIcon: Icon(Icons.task_alt_outlined),
+                      ),
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'أدخل عنوان المهمة' : null,
+                    ),
+                    const SizedBox(height: 14),
+
+                    _fieldLabel('وصف المهمة', required: true),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _descCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        hintText: 'مثال: التوعية بأهمية إعادة التدوير',
+                        prefixIcon: Icon(Icons.description_outlined),
+                      ),
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'أدخل وصف المهمة' : null,
+                    ),
+                    const SizedBox(height: 14),
+
+                    _fieldLabel('عدد النقاط', required: true),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _pointsCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        hintText: 'مثال: 30',
+                        prefixIcon: Icon(Icons.stars_rounded),
+                      ),
+                      validator: (v) {
+                        final n = int.tryParse(v ?? '');
+                        if (n == null || n <= 0)
+                          return 'أدخل عددًا صحيحًا موجبًا';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    _fieldLabel('تصنيف المهمة', required: true),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: _selectedCategory,
+                      alignment: Alignment.centerRight,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        hintText: _catsLoading
+                            ? '...يتم تحميل الفئات'
+                            : 'اختر الفئة',
+                        prefixIcon: const Icon(
+                          Icons.category_outlined,
+                          color: AppColors.primary,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: _categories
+                          .map(
+                            (name) => DropdownMenuItem(
+                              value: name,
+                              child: Align(
                                 alignment: Alignment.centerRight,
-                                child: Text(name)),
-                          ))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedCategory = v),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'اختر تصنيف المهمة' : null,
-                ),
-                const SizedBox(height: 20),
-
-                _fieldLabel('طريقة التحقق', required: true),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: _validationType,
-                  alignment: Alignment.centerRight,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    hintText: 'اختر طريقة التحقق',
-                    prefixIcon: Icon(Icons.verified_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
+                                child: Text(name),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _selectedCategory = v),
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'اختر تصنيف المهمة' : null,
                     ),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'manual', child: Text('تحقق يدوي')),
-                    DropdownMenuItem(value: 'photo', child: Text('صورة')),
-                    DropdownMenuItem(value: 'qr', child: Text('رمز QR')),
-                    DropdownMenuItem(
-                      value: 'التحقق عبر معالجة الصور',
-                      child: Text('التحقق عبر معالجة الصور'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'التحقق عبر تتبع القراءة',
-                      child: Text('التحقق عبر تتبع القراءة'),
-                    ),
-                  ],
-                  onChanged: (v) => setState(() => _validationType = v),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'اختر طريقة التحقق' : null,
-                ),
-                const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-                // 🟡 اختيار شهر الانتهاء (UI أنيق بدل Dropdown)
-                _fieldLabel('تاريخ انتهاء المهمة (شهر)', required: false),
-                const SizedBox(height: 8),
-                InkWell(
-                  onTap: () async {
-                    final picked = await _showExpiryMonthPicker(
-                      context: context,
-                      initialYear: now.year,
-                      initialMonth: now.month,
-                      selected: _expiryMonth,
-                    );
-                    if (picked != null) {
-                      setState(() => _expiryMonth = picked);
+                    _fieldLabel('طريقة التحقق', required: true),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: _validationType,
+                      alignment: Alignment.centerRight,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        hintText: 'اختر طريقة التحقق',
+                        prefixIcon: Icon(Icons.verified_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                        ),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'manual',
+                          child: Text('تحقق يدوي'),
+                        ),
+                        DropdownMenuItem(value: 'photo', child: Text('صورة')),
+                        DropdownMenuItem(value: 'qr', child: Text('رمز QR')),
+                        DropdownMenuItem(
+                          value: 'التحقق عبر معالجة الصور',
+                          child: Text('التحقق عبر معالجة الصور'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'التحقق عبر تتبع القراءة',
+                          child: Text('التحقق عبر تتبع القراءة'),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() => _validationType = v),
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'اختر طريقة التحقق' : null,
+                    ),
+                    const SizedBox(height: 20),
 
-                      // تنبيه لو كان الشهر المختار <= الشهر الحالي
-                      final currentKey = currentMonth; // "YYYY-MM"
-                      if (_expiryMonth!.compareTo(currentKey) <= 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor: Colors.redAccent,
-                            content: Text(
-                              '⚠️ الشهر المختار منتهي أو داخل الشهر الحالي — سيتم التعامل معه كإخفاء بدءًا من الشهر القادم',
+                    _fieldLabel('تاريخ انتهاء المهمة (شهر)', required: false),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await _showExpiryMonthPicker(
+                          context: context,
+                          initialYear: now.year,
+                          initialMonth: now.month,
+                          selected: _expiryMonth,
+                        );
+                        if (picked != null) {
+                          setState(() => _expiryMonth = picked);
+                          final currentKey = currentMonth;
+                          if (_expiryMonth!.compareTo(currentKey) <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: Colors.redAccent,
+                                content: Text(
+                                  '⚠️ الشهر المختار منتهي أو داخل الشهر الحالي — سيتم التعامل معه كإخفاء بدءًا من الشهر القادم',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      child: Container(
+                        height: 52,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: AppColors.light.withOpacity(.7),
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          color: Colors.white,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _expiryMonth == null
+                                  ? 'اختر شهر الانتهاء (اختياري)'
+                                  : _expiryMonth!,
                               style: GoogleFonts.ibmPlexSansArabic(
-                                color: Colors.white,
+                                color: AppColors.dark,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: Container(
-                    height: 52,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.light.withOpacity(.7)),
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.white,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _expiryMonth == null ? 'اختر شهر الانتهاء (اختياري)' : _expiryMonth!,
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            color: AppColors.dark,
-                            fontWeight: FontWeight.w700,
-                          ),
+                            const Icon(
+                              Icons.calendar_month,
+                              color: AppColors.primary,
+                            ),
+                          ],
                         ),
-                        const Icon(Icons.calendar_month, color: AppColors.primary),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 30),
+                    const SizedBox(height: 30),
 
-
-                _buildGradientSaveButton(
-                  text: isEdit ? 'تحديث المهمة' : 'حفظ المهمة',
-                  onPressed: _saveTask,
+                    _buildGradientSaveButton(
+                      text: isEdit ? 'تحديث المهمة' : 'حفظ المهمة',
+                      onPressed: _saveTask,
+                    ),
+                    const SizedBox(height: 10),
+                    _buildRedCancelButton(
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                _buildRedCancelButton(
-                    onPressed: () => Navigator.pop(context)),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -1120,14 +1169,18 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
     if (existing.docs.isNotEmpty &&
         (widget.task == null || existing.docs.first.id != widget.task!['id'])) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: Colors.redAccent,
-        content: Text(
-          'اسم المهمة "${_titleCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
-          style: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.white, fontWeight: FontWeight.w700),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            'اسم المهمة "${_titleCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
-      ));
+      );
       return;
     }
 
@@ -1159,16 +1212,18 @@ class _AddTaskPageState extends State<AddTaskPage> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: Colors.green,
-          content: Text(
-            'تم حفظ المهمة ✅ (ستظهر الشهر القادم)',
-            style: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.green,
+            content: Text(
+              'تم حفظ المهمة ✅ (ستظهر الشهر القادم)',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        ));
+        );
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -1176,7 +1231,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
   }
 
-    // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // 🗓 Bottom Sheet لاختيار (السنة + الشهر) بشكل جميل
   // يرجّع String مثل "2026-06" أو null لو أُغلِق بدون اختيار.
   // يمنع اختيار الأشهر الماضية.
@@ -1198,8 +1253,18 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
 
     final months = const [
-      'يناير','فبراير','مارس','أبريل','مايو','يونيو',
-      'يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر',
     ];
 
     await showModalBottomSheet(
@@ -1220,7 +1285,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                   boxShadow: [
-                    BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0,4))
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
                   ],
                 ),
                 child: Column(
@@ -1234,7 +1303,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
                         IconButton(
                           tooltip: 'السنة السابقة',
                           onPressed: () => setSt(() => year--),
-                          icon: const Icon(Icons.chevron_left, size: 28, color: AppColors.dark),
+                          icon: const Icon(
+                            Icons.chevron_left,
+                            size: 28,
+                            color: AppColors.dark,
+                          ),
                         ),
                         Text(
                           '$year',
@@ -1247,7 +1320,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
                         IconButton(
                           tooltip: 'السنة التالية',
                           onPressed: () => setSt(() => year++),
-                          icon: const Icon(Icons.chevron_right, size: 28, color: AppColors.dark),
+                          icon: const Icon(
+                            Icons.chevron_right,
+                            size: 28,
+                            color: AppColors.dark,
+                          ),
                         ),
                       ],
                     ),
@@ -1259,12 +1336,16 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       runSpacing: 10,
                       children: List.generate(12, (i) {
                         final m = i + 1;
-                        final key = "$year-${m.toString().padLeft(2,'0')}";
+                        final key = "$year-${m.toString().padLeft(2, '0')}";
                         final disabled = isPast(year, m);
                         final isSelected = selected == key;
 
                         return SizedBox(
-                          width: (MediaQuery.of(context).size.width - 20*2 - 20) / 3,
+                          width:
+                              (MediaQuery.of(context).size.width -
+                                  20 * 2 -
+                                  20) /
+                              3,
                           height: 44,
                           child: ElevatedButton(
                             onPressed: disabled
@@ -1273,37 +1354,49 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                     result = key;
                                     Navigator.pop(context);
                                   },
-                            style: ElevatedButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              elevation: 0,
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ).merge(
-                              ButtonStyle(
-                                // خلفية متدرجة مثل أزراركم إذا مختار، أو إطار خفيف إن لم يُختَر
-                                backgroundColor: WidgetStateProperty.resolveWith((states) {
-                                  if (disabled) return Colors.grey.shade200;
-                                  return Colors.transparent;
-                                }),
-                              ),
-                            ),
+                            style:
+                                ElevatedButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  elevation: 0,
+                                  backgroundColor: Colors.transparent,
+                                  shadowColor: Colors.transparent,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ).merge(
+                                  ButtonStyle(
+                                    // خلفية متدرجة مثل أزراركم إذا مختار، أو إطار خفيف إن لم يُختَر
+                                    backgroundColor:
+                                        WidgetStateProperty.resolveWith((
+                                          states,
+                                        ) {
+                                          if (disabled)
+                                            return Colors.grey.shade200;
+                                          return Colors.transparent;
+                                        }),
+                                  ),
+                                ),
                             child: Container(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12),
                                 gradient: disabled
                                     ? null
                                     : isSelected
-                                        ? const LinearGradient(
-                                            colors: [AppColors.primary, AppColors.mint],
-                                          )
-                                        : null,
+                                    ? const LinearGradient(
+                                        colors: [
+                                          AppColors.primary,
+                                          AppColors.mint,
+                                        ],
+                                      )
+                                    : null,
                                 border: isSelected || disabled
                                     ? null
-                                    : Border.all(color: AppColors.light.withOpacity(.7)),
-                                color: (disabled || isSelected) ? null : Colors.white,
+                                    : Border.all(
+                                        color: AppColors.light.withOpacity(.7),
+                                      ),
+                                color: (disabled || isSelected)
+                                    ? null
+                                    : Colors.white,
                               ),
                               alignment: Alignment.center,
                               child: Text(
@@ -1313,8 +1406,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   color: disabled
                                       ? Colors.grey
                                       : isSelected
-                                          ? Colors.white
-                                          : AppColors.dark,
+                                      ? Colors.white
+                                      : AppColors.dark,
                                 ),
                               ),
                             ),
@@ -1376,462 +1469,32 @@ class _AddTaskPageState extends State<AddTaskPage> {
     return result;
   }
 
-
   // ---------------------------------------------------------------------------
   // 🔹 Widgets مساعدة
   Widget _fieldLabel(String text, {bool required = false}) => Align(
-        alignment: Alignment.centerRight,
-        child: RichText(
-          text: TextSpan(
-            text: text,
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w700,
-              color: AppColors.dark.withOpacity(.9),
-              fontSize: 14,
-            ),
-            children: required
-                ? const [
-                    TextSpan(
-                        text: ' *',
-                        style: TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.w900)),
-                  ]
-                : [],
-          ),
+    alignment: Alignment.centerRight,
+    child: RichText(
+      text: TextSpan(
+        text: text,
+        style: GoogleFonts.ibmPlexSansArabic(
+          fontWeight: FontWeight.w700,
+          color: AppColors.dark.withOpacity(.9),
+          fontSize: 14,
         ),
-      );
-
-  Widget _buildGradientSaveButton({
-    required String text,
-    required VoidCallback onPressed,
-  }) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.primary, AppColors.mint],
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-        ),
-        borderRadius: BorderRadius.all(Radius.circular(14)),
-      ),
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        ),
-        child: Text(text,
-            style: GoogleFonts.ibmPlexSansArabic(
-                color: Colors.white, fontWeight: FontWeight.w800)),
-      ),
-    );
-  }
-
-  Widget _buildRedCancelButton({required VoidCallback onPressed}) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        side: const BorderSide(color: Colors.redAccent, width: 1.4),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-      child: Text('إلغاء',
-          style: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.redAccent, fontWeight: FontWeight.w700)),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 🟨 Add / Edit Category Page
-//  ملاحظة: لم يتم تعديل المنطق هنا لأنها لا تتأثر بتغييرات الجدولة أو الحالة.
-//  تظل كما هي فقط لإضافة وتعديل الفئات (categories).
-// ---------------------------------------------------------------------------
-
-class AddCategoryPage extends StatefulWidget {
-  final Map<String, dynamic>? category; // null => add, not null => edit
-  const AddCategoryPage({super.key, this.category});
-
-  @override
-  State<AddCategoryPage> createState() => _AddCategoryPageState();
-}
-
-class _AddCategoryPageState extends State<AddCategoryPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
-  final _descCtrl = TextEditingController();
-  String? _parent;
-
-  bool _isDirty = false;
-
-  final CollectionReference _categoriesCol =
-      FirebaseFirestore.instance.collection('categories');
-
-  @override
-  void initState() {
-    super.initState();
-    _wireDirty();
-    _prefillIfEditing();
-  }
-
-  void _wireDirty() {
-    for (final c in [_nameCtrl, _descCtrl]) {
-      c.addListener(() => _isDirty = true);
-    }
-  }
-
-  void _prefillIfEditing() {
-    final c = widget.category;
-    if (c == null) return;
-    _nameCtrl.text = c['name'] ?? '';
-    _descCtrl.text = c['description'] ?? '';
-    _parent = c['parent'];
-    _isDirty = false;
-  }
-
-  Future<bool> _confirmLeaveIfDirty() async {
-    if (!_isDirty) return true;
-    bool shouldLeave = false;
-
-    await showGeneralDialog(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black26,
-      transitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (context, anim1, anim2) {
-        return BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-          child: Center(
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.85,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 25),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x33000000),
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Directionality(
-                  textDirection: TextDirection.rtl,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.warning_amber_rounded,
-                          color: Colors.redAccent, size: 48),
-                      const SizedBox(height: 10),
-                      Text(
-                        'تأكيد الخروج',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 20,
-                          color: AppColors.dark,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'هل أنت متأكد من العودة دون حفظ التغييرات؟',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          fontSize: 15,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.exit_to_app,
-                            color: Colors.white),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          minimumSize: const Size(double.infinity, 48),
-                        ),
-                        onPressed: () {
-                          shouldLeave = true;
-                          Navigator.pop(context);
-                        },
-                        label: Text(
-                          'تأكيد الخروج',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.redAccent),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 14),
-                          minimumSize:
-                              const Size(double.infinity, 48),
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          'إلغاء',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
+        children: required
+            ? const [
+                TextSpan(
+                  text: ' *',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
-              ),
-            ),
-          ),
-        );
-      },
-      transitionBuilder: (context, anim1, anim2, child) {
-        return FadeTransition(
-          opacity: anim1,
-          child: ScaleTransition(
-            scale: CurvedAnimation(
-                parent: anim1, curve: Curves.easeOutBack),
-            child: child,
-          ),
-        );
-      },
-    );
-
-    return shouldLeave;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEdit = widget.category != null;
-    final titleText = isEdit ? 'تعديل الفئة' : 'إضافة فئة جديدة';
-
-    return PopScope(
-      canPop: false,
-      child: Directionality(
-        textDirection: TextDirection.rtl,
-        child: Scaffold(
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            centerTitle: true,
-            title: Text(
-              titleText,
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: AppColors.dark),
-              onPressed: () async {
-                if (await _confirmLeaveIfDirty()) {
-                  if (mounted) Navigator.pop(context, false);
-                }
-              },
-              tooltip: 'رجوع',
-            ),
-            flexibleSpace: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.primary, AppColors.mint],
-                  begin: Alignment.bottomLeft,
-                  end: Alignment.topRight,
-                ),
-              ),
-            ),
-          ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _fieldLabel('اسم الفئة', required: true),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'مثال: النقل المستدام',
-                      prefixIcon: Icon(Icons.category_outlined),
-                    ),
-                    onChanged: (_) => _isDirty = true,
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'أدخل اسم الفئة' : null,
-                  ),
-                  const SizedBox(height: 14),
-
-                  _fieldLabel('الفئة الرئيسية', required: true),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _parent,
-                    alignment: Alignment.centerRight,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      hintText: 'اختر الفئة الرئيسية',
-                      prefixIcon: Icon(Icons.hub_outlined),
-                      border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.all(Radius.circular(12))),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'سلوك مباشر', child: Text('سلوك مباشر')),
-                      DropdownMenuItem(
-                          value: 'سلوك غير مباشر',
-                          child: Text('سلوك غير مباشر')),
-                    ],
-                    onChanged: (v) {
-                      setState(() => _parent = v);
-                      _isDirty = true;
-                    },
-                    validator: (v) => (v == null || v.isEmpty)
-                        ? 'اختر الفئة الرئيسية'
-                        : null,
-                  ),
-                  const SizedBox(height: 14),
-
-                  _fieldLabel('وصف الفئة', required: true),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _descCtrl,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      hintText: 'اكتب وصفًا موجزًا للفئة...',
-                      prefixIcon: Icon(Icons.description_outlined),
-                    ),
-                    onChanged: (_) => _isDirty = true,
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'أدخل وصف الفئة' : null,
-                  ),
-                  const SizedBox(height: 24),
-
-                  _buildGradientSaveButton(
-                    text: isEdit ? 'تحديث الفئة' : 'حفظ الفئة',
-                    onPressed: _saveCategory,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildRedCancelButton(
-                      onPressed: () => Navigator.pop(context)),
-                ],
-              ),
-            ),
-          ),
-        ),
+              ]
+            : [],
       ),
-    );
-  }
-
-  Future<void> _saveCategory() async {
-    if (!(_formKey.currentState?.validate() ?? false)) {
-      setState(() {});
-      return;
-    }
-
-    try {
-      final normalized = _nameCtrl.text
-          .trim()
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .toLowerCase();
-
-      if (widget.category == null) {
-        // 🔹 Duplicate check
-        final dup = await _categoriesCol
-            .where('name_normalized', isEqualTo: normalized)
-            .limit(1)
-            .get();
-
-        if (dup.docs.isNotEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            backgroundColor: Colors.redAccent,
-            content: Text(
-              '⚠️ اسم الفئة "${_nameCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-          ));
-          return;
-        }
-
-        await _categoriesCol.add({
-          'name': _nameCtrl.text.trim(),
-          'name_normalized': normalized,
-          'parent': _parent,
-          'description': _descCtrl.text.trim(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      } else {
-        await _categoriesCol.doc(widget.category!['id']).update({
-          'name': _nameCtrl.text.trim(),
-          'name_normalized': normalized,
-          'parent': _parent,
-          'description': _descCtrl.text.trim(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          backgroundColor: Colors.green,
-          content: Text(
-            widget.category == null
-                ? 'تمت إضافة الفئة بنجاح ✅'
-                : 'تم تحديث الفئة بنجاح ✅',
-            style: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ));
-        _isDirty = false;
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      debugPrint('Error saving category: $e');
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // 🔹 Local UI Helpers
-  Widget _fieldLabel(String text, {bool required = false}) => Align(
-        alignment: Alignment.centerRight,
-        child: RichText(
-          text: TextSpan(
-            text: text,
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w700,
-              color: AppColors.dark.withOpacity(.9),
-              fontSize: 14,
-            ),
-            children: required
-                ? const [
-                    TextSpan(
-                      text: ' *',
-                      style: TextStyle(
-                          color: Colors.redAccent,
-                          fontWeight: FontWeight.w900),
-                    ),
-                  ]
-                : [],
-          ),
-        ),
-      );
+    ),
+  );
 
   Widget _buildGradientSaveButton({
     required String text,
@@ -1886,5 +1549,469 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 🟨 Add / Edit Category Page
+//  ملاحظة: لم يتم تعديل المنطق هنا لأنها لا تتأثر بتغييرات الجدولة أو الحالة.
+//  تظل كما هي فقط لإضافة وتعديل الفئات (categories).
+// ---------------------------------------------------------------------------
 
+class AddCategoryPage extends StatefulWidget {
+  final Map<String, dynamic>? category; // null => add, not null => edit
+  const AddCategoryPage({super.key, this.category});
 
+  @override
+  State<AddCategoryPage> createState() => _AddCategoryPageState();
+}
+
+class _AddCategoryPageState extends State<AddCategoryPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  String? _parent;
+
+  bool _isDirty = false;
+
+  final CollectionReference _categoriesCol = FirebaseFirestore.instance
+      .collection('categories');
+
+  @override
+  void initState() {
+    super.initState();
+    _wireDirty();
+    _prefillIfEditing();
+  }
+
+  void _wireDirty() {
+    for (final c in [_nameCtrl, _descCtrl]) {
+      c.addListener(() => _isDirty = true);
+    }
+  }
+
+  void _prefillIfEditing() {
+    final c = widget.category;
+    if (c == null) return;
+    _nameCtrl.text = c['name'] ?? '';
+    _descCtrl.text = c['description'] ?? '';
+    _parent = c['parent'];
+    _isDirty = false;
+  }
+
+  Future<bool> _confirmLeaveIfDirty() async {
+    if (!_isDirty) return true;
+    bool shouldLeave = false;
+
+    await showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black26,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, anim1, anim2) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.85,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 25,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.redAccent,
+                        size: 48,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'تأكيد الخروج',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'هل أنت متأكد من العودة دون حفظ التغييرات؟',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 15,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        icon: const Icon(
+                          Icons.exit_to_app,
+                          color: Colors.white,
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                        onPressed: () {
+                          shouldLeave = true;
+                          Navigator.pop(context);
+                        },
+                        label: Text(
+                          'تأكيد الخروج',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.redAccent),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          'إلغاء',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, anim1, anim2, child) {
+        return FadeTransition(
+          opacity: anim1,
+          child: ScaleTransition(
+            scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+            child: child,
+          ),
+        );
+      },
+    );
+
+    return shouldLeave;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.category != null;
+    final titleText = isEdit ? 'تعديل الفئة' : 'إضافة فئة جديدة';
+
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        // لو المحاولة تمت بالفعل، لا تسوي شيء
+        if (didPop) return;
+
+        // تأكيد قبل الخروج
+        if (await _confirmLeaveIfDirty()) {
+          if (mounted) Navigator.pop(context, false);
+        }
+      },
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          extendBodyBehindAppBar: true,
+          backgroundColor: AppColors.background,
+
+          // ✅ هيدر نمير الموحد (زر رجوع من داخله)
+          appBar: const NameerAppBar(
+            showTitleInBar: false,
+            showBack: true,
+            height: 80,
+          ),
+
+          body: Builder(
+            builder: (context) {
+              final statusBar = MediaQuery.of(context).padding.top;
+              const headerH = 20.0; // نفس ارتفاع التولبار الفعلي للهيدر
+              const gap = 12.0; // مسافة بسيطة بعد الهيدر
+              final topPadding = statusBar + headerH + gap;
+
+              return SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, 16),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ✅ العنوان تحت الهيدر
+                      Text(
+                        titleText,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      _fieldLabel('اسم الفئة', required: true),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _nameCtrl,
+                        decoration: const InputDecoration(
+                          hintText: 'مثال: النقل المستدام',
+                          prefixIcon: Icon(Icons.category_outlined),
+                        ),
+                        onChanged: (_) => _isDirty = true,
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? 'أدخل اسم الفئة' : null,
+                      ),
+                      const SizedBox(height: 14),
+
+                      _fieldLabel('الفئة الرئيسية', required: true),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: _parent,
+                        alignment: Alignment.centerRight,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          hintText: 'اختر الفئة الرئيسية',
+                          prefixIcon: Icon(Icons.hub_outlined),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                          ),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'سلوك مباشر',
+                            child: Text('سلوك مباشر'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'سلوك غير مباشر',
+                            child: Text('سلوك غير مباشر'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          setState(() => _parent = v);
+                          _isDirty = true;
+                        },
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'اختر الفئة الرئيسية'
+                            : null,
+                      ),
+                      const SizedBox(height: 14),
+
+                      _fieldLabel('وصف الفئة', required: true),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _descCtrl,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          hintText: 'اكتب وصفًا موجزًا للفئة...',
+                          prefixIcon: Icon(Icons.description_outlined),
+                        ),
+                        onChanged: (_) => _isDirty = true,
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? 'أدخل وصف الفئة' : null,
+                      ),
+                      const SizedBox(height: 24),
+
+                      _buildGradientSaveButton(
+                        text: isEdit ? 'تحديث الفئة' : 'حفظ الفئة',
+                        onPressed: _saveCategory,
+                      ),
+                      const SizedBox(height: 10),
+
+                      _buildRedCancelButton(
+                        onPressed: () async {
+                          if (await _confirmLeaveIfDirty()) {
+                            if (mounted) Navigator.pop(context);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveCategory() async {
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      setState(() {});
+      return;
+    }
+
+    try {
+      final normalized = _nameCtrl.text
+          .trim()
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .toLowerCase();
+
+      if (widget.category == null) {
+        // 🔹 Duplicate check
+        final dup = await _categoriesCol
+            .where('name_normalized', isEqualTo: normalized)
+            .limit(1)
+            .get();
+
+        if (dup.docs.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.redAccent,
+              content: Text(
+                '⚠️ اسم الفئة "${_nameCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          );
+          return;
+        }
+
+        await _categoriesCol.add({
+          'name': _nameCtrl.text.trim(),
+          'name_normalized': normalized,
+          'parent': _parent,
+          'description': _descCtrl.text.trim(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        await _categoriesCol.doc(widget.category!['id']).update({
+          'name': _nameCtrl.text.trim(),
+          'name_normalized': normalized,
+          'parent': _parent,
+          'description': _descCtrl.text.trim(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.green,
+            content: Text(
+              widget.category == null
+                  ? 'تمت إضافة الفئة بنجاح ✅'
+                  : 'تم تحديث الفئة بنجاح ✅',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        );
+        _isDirty = false;
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      debugPrint('Error saving category: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 🔹 Local UI Helpers
+  Widget _fieldLabel(String text, {bool required = false}) => Align(
+    alignment: Alignment.centerRight,
+    child: RichText(
+      text: TextSpan(
+        text: text,
+        style: GoogleFonts.ibmPlexSansArabic(
+          fontWeight: FontWeight.w700,
+          color: AppColors.dark.withOpacity(.9),
+          fontSize: 14,
+        ),
+        children: required
+            ? const [
+                TextSpan(
+                  text: ' *',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ]
+            : [],
+      ),
+    ),
+  );
+
+  Widget _buildGradientSaveButton({
+    required String text,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.primary, AppColors.mint],
+          begin: Alignment.bottomLeft,
+          end: Alignment.topRight,
+        ),
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+      ),
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: Text(
+          text,
+          style: GoogleFonts.ibmPlexSansArabic(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRedCancelButton({required VoidCallback onPressed}) {
+    return OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: Colors.redAccent, width: 1.4),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      child: Text(
+        'إلغاء',
+        style: GoogleFonts.ibmPlexSansArabic(
+          color: Colors.redAccent,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}

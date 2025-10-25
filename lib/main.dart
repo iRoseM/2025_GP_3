@@ -619,6 +619,7 @@ class _RegisterPageState extends State<RegisterPage>
                                           Icons.lock_outline,
                                         ),
                                         hintText: '••••••••',
+                                        errorMaxLines: 2,
                                         suffixIcon: AnimatedRotation(
                                           turns: _obscure ? 0 : .25,
                                           duration: const Duration(
@@ -640,8 +641,12 @@ class _RegisterPageState extends State<RegisterPage>
                                         if (v == null || v.isEmpty) {
                                           return 'أدخل كلمة المرور';
                                         }
-                                        if (v.length < 8) {
-                                          return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+                                        if (v.length < 8 ||
+                                            (!RegExp(r'[A-Z]').hasMatch(v) ||
+                                                !RegExp(
+                                                  r'[a-z]',
+                                                ).hasMatch(v))) {
+                                          return 'يجب أن تحتوي كلمة المرور على حرف كبير وحرف صغير على الأقل، وأن تكون مكونة من 8 أحرف على الأقل.';
                                         } else if (!RegExp(
                                               r'[A-Z]',
                                             ).hasMatch(v) ||
@@ -875,6 +880,9 @@ class _BouncyLinkState extends State<_BouncyLink>
 }
 
 /* ======================= صفحة إنشاء حساب جديد ======================= */
+enum _ActiveField { none, username, email, password }
+
+enum _FieldStatus { idle, checking, valid, invalid }
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -890,6 +898,24 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _ageCtrl = TextEditingController();
+
+  // Focus
+  final _fnUser = FocusNode();
+  final _fnEmail = FocusNode();
+  final _fnPass = FocusNode();
+
+  // نظهر الفيدباك فقط بعد أول فقدان تركيز (blur)
+  bool _touchedUser = false;
+  bool _touchedEmail = false;
+  bool _touchedPass = false;
+
+  // حالات الحقول (وتبقى بعد الـ blur)
+  _FieldStatus _usernameStatus = _FieldStatus.idle;
+  String? _usernameError;
+  _FieldStatus _emailStatus = _FieldStatus.idle;
+  String? _emailError;
+  _FieldStatus _passStatus = _FieldStatus.idle;
+  String? _passError;
 
   bool _obscure = true;
   String _gender = 'male'; // 'male' or 'female'
@@ -916,6 +942,26 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       upperBound: 0.06,
       duration: const Duration(milliseconds: 140),
     );
+
+    // مستمعي الـ blur
+    _fnUser.addListener(() {
+      if (!_fnUser.hasFocus) {
+        _touchedUser = true;
+        _validateUsername();
+      }
+    });
+    _fnEmail.addListener(() {
+      if (!_fnEmail.hasFocus) {
+        _touchedEmail = true;
+        _validateEmail(); // ← الآن تتحقق من الفورمات فقط
+      }
+    });
+    _fnPass.addListener(() {
+      if (!_fnPass.hasFocus) {
+        _touchedPass = true;
+        _validatePass();
+      }
+    });
   }
 
   @override
@@ -924,6 +970,11 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _ageCtrl.dispose();
+
+    _fnUser.dispose();
+    _fnEmail.dispose();
+    _fnPass.dispose();
+
     _bgCtrl.dispose();
     _introCtrl.dispose();
     _pressCtrl.dispose();
@@ -952,58 +1003,219 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     );
   }
 
-  // ====== ترانزاكشن: احجز اسم المستخدم + اكتب users/{uid} ======
-  Future<void> _reserveUsernameAndCreateUserDoc({
-    required String uid,
-    required String usernameRaw,
-    required String email,
-    required int? age,
-    required String gender,
-  }) async {
-    final db = FirebaseFirestore.instance;
-    final username = usernameRaw.trim().toLowerCase();
-    final re = RegExp(r'^[a-z0-9._-]{3,24}$');
-    if (!re.hasMatch(username)) {
-      throw 'INVALID_USERNAME';
+  // ====== عرض متدرج وحدود ======
+  OutlineInputBorder _borderFor(_FieldStatus s, {bool focused = false}) {
+    Color color;
+    double width = focused ? 1.6 : 1.2;
+    switch (s) {
+      case _FieldStatus.invalid:
+        color = Colors.red;
+        width = focused ? 1.8 : 1.4;
+        break;
+      case _FieldStatus.valid:
+        color = Colors.green;
+        width = focused ? 1.8 : 1.4;
+        break;
+      case _FieldStatus.checking:
+        color = AppColors.light;
+        break;
+      case _FieldStatus.idle:
+      default:
+        color = AppColors.light;
+    }
+    return OutlineInputBorder(
+      borderRadius: const BorderRadius.all(Radius.circular(14)),
+      borderSide: BorderSide(color: color, width: width),
+    );
+  }
+
+  Widget? _statusIcon(_FieldStatus s) {
+    switch (s) {
+      case _FieldStatus.checking:
+        return const Padding(
+          padding: EdgeInsetsDirectional.only(end: 6),
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        );
+      case _FieldStatus.valid:
+        return const Icon(Icons.check_circle, color: Colors.green, size: 22);
+      case _FieldStatus.invalid:
+        return const Icon(Icons.error_rounded, color: Colors.red, size: 22);
+      case _FieldStatus.idle:
+        return null;
+    }
+  }
+
+  // ====== Username check (على الـ blur) ======
+  Future<void> _validateUsername() async {
+    setState(() {
+      _usernameStatus = _FieldStatus.checking;
+      _usernameError = null;
+    });
+
+    final v = _usernameCtrl.text.trim();
+    if (v.isEmpty) {
+      setState(() {
+        _usernameStatus = _FieldStatus.invalid;
+        _usernameError = 'أدخل اسم المستخدم';
+      });
+      return;
+    }
+    if (v.length < 3) {
+      setState(() {
+        _usernameStatus = _FieldStatus.invalid;
+        _usernameError =
+            'اسم المستخدم يجب أن لا يقل عن 3 حروف ويجب أن يبدأ بحرف';
+      });
+      return;
+    }
+    if (v.length > 24) {
+      setState(() {
+        _usernameStatus = _FieldStatus.invalid;
+        _usernameError = 'اسم المستخدم طويل جدًا (الحد الأقصى 24 حرفًا)';
+      });
+      return;
+    }
+    final re = RegExp(r'^[A-Za-z][A-Za-z0-9._-]{2,23}$');
+    if (!re.hasMatch(v)) {
+      setState(() {
+        _usernameStatus = _FieldStatus.invalid;
+        _usernameError =
+            'اسم المستخدم يجب أن لا يقل عن 3 حروف ويجب أن يبدأ بحرف';
+      });
+      return;
     }
 
-    final usernameRef = db.collection('usernames').doc(username);
-    final userRef = db.collection('users').doc(uid);
-
-    await db.runTransaction((tx) async {
-      final snap = await tx.get(usernameRef);
-      if (snap.exists) {
-        final data = snap.data() as Map<String, dynamic>?;
-        final existingUid = data?['uid'];
-        if (existingUid != uid) {
-          throw 'USERNAME_TAKEN';
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('usernames')
+          .doc(v.toLowerCase())
+          .get();
+      final taken = doc.exists;
+      setState(() {
+        if (taken) {
+          _usernameStatus = _FieldStatus.invalid;
+          _usernameError = 'اسم المستخدم محجوز';
+        } else {
+          _usernameStatus = _FieldStatus.valid;
+          _usernameError = null;
         }
-        // لو محجوز لنفسه نكمل (idempotent)
-      } else {
-        tx.set(usernameRef, {
-          'uid': uid,
-          'reservedAt': FieldValue.serverTimestamp(),
-        });
-      }
+      });
+    } catch (_) {
+      setState(() {
+        _usernameStatus = _FieldStatus.invalid;
+        _usernameError = 'تعذّر التحقق الآن';
+      });
+    }
+  }
 
-      tx.set(userRef, {
-        'email': email.toLowerCase(),
-        'username': username,
-        'age': age,
-        'gender': gender,
-        'role': 'regular',
-        'isVerified': false,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+  // ====== Email: تحقّق ديناميكي للفورمات فقط عبر onChanged ======
+  void _onEmailFormatChanged(String v) {
+    _touchedEmail = true;
+    final raw = v.trim();
+    final emailReg = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+
+    setState(() {
+      if (raw.isEmpty) {
+        _emailStatus = _FieldStatus.invalid;
+        _emailError = 'أدخل البريد الإلكتروني';
+      } else if (!emailReg.hasMatch(raw)) {
+        _emailStatus = _FieldStatus.invalid;
+        _emailError = 'بريد إلكتروني غير صالح';
+      } else {
+        _emailStatus = _FieldStatus.valid;
+        _emailError = null;
+      }
     });
   }
 
+  // (على الـ blur) — نفس منطق الفورمات فقط
+  Future<void> _validateEmail() async {
+    final raw = _emailCtrl.text.trim();
+    final emailReg = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+
+    setState(() {
+      if (raw.isEmpty) {
+        _emailStatus = _FieldStatus.invalid;
+        _emailError = 'أدخل البريد الإلكتروني';
+      } else if (!emailReg.hasMatch(raw)) {
+        _emailStatus = _FieldStatus.invalid;
+        _emailError = 'بريد إلكتروني غير صالح';
+      } else {
+        _emailStatus = _FieldStatus.valid;
+        _emailError = null;
+      }
+    });
+  }
+
+  // ====== Password check (على الـ blur) ======
+  void _validatePass() {
+    setState(() {
+      _passStatus = _FieldStatus.checking;
+      _passError = null;
+    });
+
+    final v = _passCtrl.text;
+    if (v.isEmpty) {
+      setState(() {
+        _passStatus = _FieldStatus.invalid;
+        _passError = 'أدخل كلمة المرور';
+      });
+      return;
+    }
+    final hasUpper = RegExp(r'[A-Z]').hasMatch(v);
+    final hasLower = RegExp(r'[a-z]').hasMatch(v);
+    final longEnough = v.length >= 8;
+
+    if (hasUpper && hasLower && longEnough) {
+      setState(() {
+        _passStatus = _FieldStatus.valid;
+        _passError = null;
+      });
+    } else {
+      setState(() {
+        _passStatus = _FieldStatus.invalid;
+        _passError =
+            'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وصغير';
+      });
+    }
+  }
+
+  // نفحص الكل قبل الإرسال (نحاكي blur للجميع)
+  Future<void> _validateAllBeforeSubmit() async {
+    if (!_touchedUser) {
+      _touchedUser = true;
+      await _validateUsername();
+    }
+    if (!_touchedEmail) {
+      _touchedEmail = true;
+      await _validateEmail(); // فورمات فقط
+    }
+    if (!_touchedPass) {
+      _touchedPass = true;
+      _validatePass();
+    }
+  }
+
+  // ====== إنشاء الحساب + إظهار "محجوز" داخل خانة الإيميل إن وجد ======
   Future<void> _submit() async {
     if (!await hasInternetConnection()) {
       showNoInternetDialog(context);
       return;
     }
+
+    await _validateAllBeforeSubmit();
+
+    // لو أي حقل غير صالح نوقف
+    if (_usernameStatus == _FieldStatus.invalid ||
+        _emailStatus == _FieldStatus.invalid ||
+        _passStatus == _FieldStatus.invalid) {
+      return; // لا سنackbar؛ الأخطاء ظاهرة داخل الحقول
+    }
+
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
@@ -1015,7 +1227,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       final username = _usernameCtrl.text.trim();
       final age = int.tryParse(_ageCtrl.text.trim());
 
-      // 1) أنشئ مستخدم Auth
+      // 1) إنشاء مستخدم Auth — هنا يظهر "محجوز" لو موجود
       final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -1024,27 +1236,76 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
 
       try {
         // 2) احجز الاسم واكتب وثيقة المستخدم
-        await _reserveUsernameAndCreateUserDoc(
-          uid: uid,
-          usernameRaw: username,
-          email: email,
-          age: age,
-          gender: _gender,
-        );
+        Future<void> _reserveUsernameAndCreateUserDoc({
+          required String uid,
+          required String usernameRaw,
+          required String email,
+          required int? age,
+          required String gender,
+        }) async {
+          final db = FirebaseFirestore.instance;
+          final username = usernameRaw.trim().toLowerCase();
+          final emailLower = email.trim().toLowerCase();
+
+          // تحقق من تنسيق اسم المستخدم محليًا
+          final re = RegExp(r'^[a-z0-9._-]{3,24}$');
+          if (!re.hasMatch(username)) {
+            throw 'INVALID_USERNAME';
+          }
+
+          // مراجع الوثائق
+          final usernameRef = db.collection('usernames').doc(username);
+          final userRef = db.collection('users').doc(uid);
+
+          // 1) فحص الاسم محجوز؟
+          final usernameSnap = await usernameRef.get();
+          if (usernameSnap.exists) {
+            throw 'USERNAME_TAKEN';
+          }
+
+          // 2) فحص الإيميل موجود في users؟ (بدون Cloud Function)
+          final emailExistsQuery = await db
+              .collection('users')
+              .where('email', isEqualTo: emailLower)
+              .limit(1)
+              .get();
+          if (emailExistsQuery.docs.isNotEmpty) {
+            throw 'EMAIL_TAKEN';
+          }
+
+          // 3) احجز الاسم واكتب بيانات المستخدم داخل ترانزاكشن (اتساق مضمون)
+          await db.runTransaction((tx) async {
+            tx.set(usernameRef, {
+              'uid': uid,
+              'reservedAt': FieldValue.serverTimestamp(),
+            });
+
+            tx.set(userRef, {
+              'email': emailLower,
+              'username': username,
+              'age': age,
+              'gender': gender,
+              'role': 'regular',
+              'isVerified': false,
+              'createdAt': FieldValue.serverTimestamp(),
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          });
+        }
       } catch (e) {
-        // لو الاسم محجوز/غير صالح، نحذف مستخدم Auth اللي انعمل للتو
         if (e.toString().contains('USERNAME_TAKEN') ||
             e.toString().contains('INVALID_USERNAME')) {
           try {
             await cred.user?.delete();
           } catch (_) {}
-          final msg = e.toString().contains('USERNAME_TAKEN')
-              ? 'اسم المستخدم محجوز، جرّب اسمًا آخر'
-              : 'اسم المستخدم غير صالح';
-          if (!mounted) return;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(msg)));
+          setState(() {
+            _touchedUser = true;
+            _usernameStatus = _FieldStatus.invalid;
+            _usernameError = e.toString().contains('USERNAME_TAKEN')
+                ? 'اسم المستخدم محجوز، جرّب اسمًا آخر'
+                : 'اسم المستخدم غير صالح';
+          });
+          FocusScope.of(context).requestFocus(_fnUser);
           return;
         } else {
           rethrow;
@@ -1061,20 +1322,50 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         MaterialPageRoute(builder: (_) => VerifyEmailPage(email: email)),
       );
     } on FirebaseAuthException catch (e) {
-      String message = "حدث خطأ غير متوقع";
-      if (e.code == 'email-already-in-use') {
-        message = 'البريد مستخدم مسبقًا';
-      } else if (e.code == 'invalid-email') {
-        message = 'البريد الإلكتروني غير صالح';
-      } else if (e.code == 'weak-password') {
-        message = 'كلمة المرور ضعيفة — استخدم 8 أحرف فأكثر';
-      } else if (e.code == 'network-request-failed') {
-        message = 'تعذّر الاتصال — تأكد من الإنترنت';
-      }
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("❌ $message")));
+
+      if (e.code == 'email-already-in-use') {
+        // ✳️ أظهر الخطأ داخل خانة الإيميل وبوردر أحمر
+        setState(() {
+          _touchedEmail = true;
+          _emailStatus = _FieldStatus.invalid;
+          _emailError = 'البريد مستخدم مسبقًا';
+        });
+        FocusScope.of(context).requestFocus(_fnEmail);
+        return;
+      }
+
+      if (e.code == 'invalid-email') {
+        setState(() {
+          _touchedEmail = true;
+          _emailStatus = _FieldStatus.invalid;
+          _emailError = 'البريد الإلكتروني غير صالح';
+        });
+        FocusScope.of(context).requestFocus(_fnEmail);
+        return;
+      }
+
+      if (e.code == 'weak-password') {
+        setState(() {
+          _touchedPass = true;
+          _passStatus = _FieldStatus.invalid;
+          _passError =
+              'يجب أن تحتوي كلمة المرور على حرف كبير وحرف صغير على الأقل، وأن تكون مكونة من 8 أحرف على الأقل.';
+        });
+        FocusScope.of(context).requestFocus(_fnPass);
+        return;
+      }
+
+      if (e.code == 'network-request-failed') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذّر الاتصال — تأكد من الإنترنت')),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ حدث خطأ غير متوقع (${e.code})')),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1151,7 +1442,6 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const SizedBox(height: 8),
-
                                 _stagger(
                                   start: 0.0,
                                   child: Column(
@@ -1192,28 +1482,64 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                       _label('اسم المستخدم'),
                                       const SizedBox(height: 8),
                                       TextFormField(
+                                        focusNode: _fnUser,
                                         controller: _usernameCtrl,
                                         textInputAction: TextInputAction.next,
-                                        decoration: const InputDecoration(
-                                          prefixIcon: Icon(
+                                        onFieldSubmitted: (_) => FocusScope.of(
+                                          context,
+                                        ).requestFocus(_fnEmail),
+                                        decoration: InputDecoration(
+                                          prefixIcon: const Icon(
                                             Icons.person_outline,
                                           ),
                                           hintText: 'nameer_user',
+                                          suffixIcon: _touchedUser
+                                              ? _statusIcon(_usernameStatus)
+                                              : null,
+                                          errorText:
+                                              _touchedUser &&
+                                                  _usernameStatus ==
+                                                      _FieldStatus.invalid
+                                              ? _usernameError
+                                              : null,
+                                          enabledBorder: _borderFor(
+                                            _touchedUser
+                                                ? _usernameStatus
+                                                : _FieldStatus.idle,
+                                          ),
+                                          focusedBorder: _borderFor(
+                                            _touchedUser
+                                                ? _usernameStatus
+                                                : _FieldStatus.idle,
+                                            focused: true,
+                                          ),
+                                          errorBorder: _borderFor(
+                                            _FieldStatus.invalid,
+                                          ),
+                                          focusedErrorBorder: _borderFor(
+                                            _FieldStatus.invalid,
+                                            focused: true,
+                                          ),
                                         ),
                                         validator: (v) {
                                           final val = v?.trim() ?? '';
-                                          if (val.isEmpty) {
+                                          if (val.isEmpty)
                                             return 'أدخل اسم المستخدم';
-                                          }
-                                          if (val.length < 3) {
-                                            return 'اسم المستخدم قصير جداً';
-                                          }
+
+                                          // ✅ أول شيء نتحقق من الطول
+                                          if (val.length < 3)
+                                            return 'اسم المستخدم يجب أن لا يقل عن 3 حروف ويجب أن يبدأ بحرف';
+                                          if (val.length > 24)
+                                            return 'اسم المستخدم طويل جدًا (الحد الأقصى 24 حرفًا)';
+
+                                          // ✅ بعدين نتحقق من النمط (يبدأ بحرف فقط)
                                           final re = RegExp(
-                                            r'^[a-zA-Z0-9._-]+$',
+                                            r'^[A-Za-z][A-Za-z0-9._-]*$',
                                           );
-                                          if (!re.hasMatch(val)) {
-                                            return 'استخدم حروف/أرقام و . _ - فقط';
-                                          }
+                                          if (!re.hasMatch(val))
+                                            return 'اسم المستخدم يجب أن لا يقل عن 3 حروف ويجب أن يبدأ بحرف';
+
+                                          // ✅ إذا كل شيء تمام نرجع null (يعني صالح)
                                           return null;
                                         },
                                       ),
@@ -1233,26 +1559,57 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                       _label('البريد الإلكتروني'),
                                       const SizedBox(height: 8),
                                       TextFormField(
+                                        focusNode: _fnEmail,
                                         controller: _emailCtrl,
                                         keyboardType:
                                             TextInputType.emailAddress,
                                         textInputAction: TextInputAction.next,
-                                        decoration: const InputDecoration(
-                                          prefixIcon: Icon(
+                                        onChanged:
+                                            _onEmailFormatChanged, // ← ديناميكي (فورمات فقط)
+                                        onFieldSubmitted: (_) => FocusScope.of(
+                                          context,
+                                        ).requestFocus(_fnPass),
+                                        decoration: InputDecoration(
+                                          prefixIcon: const Icon(
                                             Icons.email_outlined,
                                           ),
                                           hintText: 'name@example.com',
+                                          suffixIcon: _touchedEmail
+                                              ? _statusIcon(_emailStatus)
+                                              : null,
+                                          errorText:
+                                              _touchedEmail &&
+                                                  _emailStatus ==
+                                                      _FieldStatus.invalid
+                                              ? _emailError
+                                              : null,
+                                          enabledBorder: _borderFor(
+                                            _touchedEmail
+                                                ? _emailStatus
+                                                : _FieldStatus.idle,
+                                          ),
+                                          focusedBorder: _borderFor(
+                                            _touchedEmail
+                                                ? _emailStatus
+                                                : _FieldStatus.idle,
+                                            focused: true,
+                                          ),
+                                          errorBorder: _borderFor(
+                                            _FieldStatus.invalid,
+                                          ),
+                                          focusedErrorBorder: _borderFor(
+                                            _FieldStatus.invalid,
+                                            focused: true,
+                                          ),
                                         ),
                                         validator: (v) {
-                                          if (v == null || v.trim().isEmpty) {
+                                          if (v == null || v.trim().isEmpty)
                                             return 'أدخل البريد الإلكتروني';
-                                          }
                                           final emailReg = RegExp(
                                             r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
                                           );
-                                          if (!emailReg.hasMatch(v.trim())) {
+                                          if (!emailReg.hasMatch(v.trim()))
                                             return 'بريد إلكتروني غير صالح';
-                                          }
                                           return null;
                                         },
                                       ),
@@ -1272,38 +1629,71 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                       _label('كلمة المرور'),
                                       const SizedBox(height: 8),
                                       TextFormField(
+                                        focusNode: _fnPass,
                                         controller: _passCtrl,
                                         obscureText: _obscure,
                                         textInputAction: TextInputAction.next,
+                                        onFieldSubmitted: (_) =>
+                                            FocusScope.of(context).unfocus(),
                                         decoration: InputDecoration(
                                           prefixIcon: const Icon(
                                             Icons.lock_outline,
                                           ),
                                           hintText: '••••••••',
-                                          suffixIcon: AnimatedRotation(
-                                            turns: _obscure ? 0 : .25,
-                                            duration: const Duration(
-                                              milliseconds: 220,
-                                            ),
-                                            child: IconButton(
-                                              onPressed: () => setState(
-                                                () => _obscure = !_obscure,
+                                          suffixIcon: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (_touchedPass)
+                                                _statusIcon(_passStatus) ??
+                                                    const SizedBox.shrink(),
+                                              AnimatedRotation(
+                                                turns: _obscure ? 0 : .25,
+                                                duration: const Duration(
+                                                  milliseconds: 220,
+                                                ),
+                                                child: IconButton(
+                                                  onPressed: () => setState(
+                                                    () => _obscure = !_obscure,
+                                                  ),
+                                                  icon: Icon(
+                                                    _obscure
+                                                        ? Icons.visibility
+                                                        : Icons.visibility_off,
+                                                  ),
+                                                ),
                                               ),
-                                              icon: Icon(
-                                                _obscure
-                                                    ? Icons.visibility
-                                                    : Icons.visibility_off,
-                                              ),
-                                            ),
+                                            ],
+                                          ),
+                                          errorText:
+                                              _touchedPass &&
+                                                  _passStatus ==
+                                                      _FieldStatus.invalid
+                                              ? _passError
+                                              : null,
+                                          enabledBorder: _borderFor(
+                                            _touchedPass
+                                                ? _passStatus
+                                                : _FieldStatus.idle,
+                                          ),
+                                          focusedBorder: _borderFor(
+                                            _touchedPass
+                                                ? _passStatus
+                                                : _FieldStatus.idle,
+                                            focused: true,
+                                          ),
+                                          errorBorder: _borderFor(
+                                            _FieldStatus.invalid,
+                                          ),
+                                          focusedErrorBorder: _borderFor(
+                                            _FieldStatus.invalid,
+                                            focused: true,
                                           ),
                                         ),
                                         validator: (v) {
-                                          if (v == null || v.isEmpty) {
+                                          if (v == null || v.isEmpty)
                                             return 'أدخل كلمة المرور';
-                                          }
-                                          if (v.length < 8) {
-                                            return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
-                                          }
+                                          if (v.length < 8)
+                                            return 'كلمة المرور غير صحيحة';
                                           return null;
                                         },
                                       ),
@@ -1344,18 +1734,15 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                               ),
                                               validator: (v) {
                                                 if (v == null ||
-                                                    v.trim().isEmpty) {
+                                                    v.trim().isEmpty)
                                                   return 'أدخل العمر';
-                                                }
                                                 final n = int.tryParse(
                                                   v.trim(),
                                                 );
-                                                if (n == null) {
+                                                if (n == null)
                                                   return 'أدخل رقمًا صحيحًا';
-                                                }
-                                                if (n < 7 || n > 120) {
+                                                if (n < 7 || n > 120)
                                                   return 'العمر غير منطقي';
-                                                }
                                                 return null;
                                               },
                                             ),

@@ -443,7 +443,7 @@ class profilePage extends StatelessWidget {
                                           ),
                                           onTap: () => _showSnack(
                                             context,
-                                            'تغيير اللغة قريباً ✨',
+                                            'التطبيق حالياً يدعم اللغة العربية فقط، وسيتم إضافة لغات أخرى قريباً بإذن الله✨',
                                           ),
                                         ),
                                         _SettingTile(

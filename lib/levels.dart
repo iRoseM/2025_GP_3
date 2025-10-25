@@ -81,7 +81,7 @@ class _levelsPageState extends State<levelsPage> {
         // ✅ الهيدر الموحد
         appBar: const NameerAppBar(
           showTitleInBar: false,
-          showBack: true,
+          showBack: false,
           height: 80,
         ),
 
