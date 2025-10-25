@@ -7,9 +7,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../home.dart'; // واجهة المستخدم العادي
 import '../admin_home.dart'; // واجهة الأدمن
 import '../onboarding.dart'; // شاشة Onboarding
-import '../main.dart'; // تحتوي RegisterPage
+import '../main.dart'; // تحتوي RegisterPage و VerifyEmailPage
 
-enum _Target { splash, onboarding, register, adminHome, userHome }
+enum _Target { onboarding, register, verifyEmail, adminHome, userHome }
 
 class LaunchDecider extends StatefulWidget {
   const LaunchDecider({super.key});
@@ -19,28 +19,31 @@ class LaunchDecider extends StatefulWidget {
 
 class _LaunchDeciderState extends State<LaunchDecider> {
   StreamSubscription<User?>? _authSub;
-  bool _navigated = false; // يمنع التوجيه المتكرر
+  _Target? _lastTarget; // ✅ بدل _navigated
 
   @override
   void initState() {
     super.initState();
-    // نبدأ بسبلاش، وبعدين نسمع التغيّرات ونقرّر
+
     _authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
-      // لو الصفحة اتقفلت
       if (!mounted) return;
 
       try {
         if (user == null) {
-          // مو مسجّل دخول → قرر بين Onboarding و Register
           final seen = await _seenOnboarding();
           _go(seen ? _Target.register : _Target.onboarding);
-        } else {
-          // مسجّل دخول → جيب الدور وقرر الصفحة
-          final role = await _getUserRole(user.uid);
-          _go(role == 'admin' ? _Target.adminHome : _Target.userHome);
+          return;
         }
-      } catch (e) {
-        // أي خطأ في القرار → رجّع لواجهة اليوزر (أأمن خيار) بدون شاشة خطأ
+
+        await user.reload();
+        if (!user.emailVerified) {
+          _go(_Target.verifyEmail);
+          return;
+        }
+
+        final role = await _getUserRole(user.uid);
+        _go(role == 'admin' ? _Target.adminHome : _Target.userHome);
+      } catch (_) {
         _go(_Target.userHome);
       }
     });
@@ -49,7 +52,6 @@ class _LaunchDeciderState extends State<LaunchDecider> {
   Future<bool> _seenOnboarding() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool('seen_onboarding') ?? false;
-    // ملاحظة: لو ودك تمنع الومضة أكثر، تقدّر تحفظ هذا في الذاكرة مبكرًا.
   }
 
   Future<String> _getUserRole(String uid) async {
@@ -58,34 +60,25 @@ class _LaunchDeciderState extends State<LaunchDecider> {
         .doc(uid)
         .get();
     final data = doc.data();
-    return (data?['role'] ?? 'regular')
-        .toString()
-        .toLowerCase(); // "admin" أو "regular"
+    return (data?['role'] ?? 'regular').toString().toLowerCase();
   }
 
   void _go(_Target t) {
-    if (!mounted || _navigated) return;
-    _navigated = true;
+    if (!mounted) return;
+    if (_lastTarget == t) return; // ✅ لا تكرّر نفس الوجهة
+    _lastTarget = t;
 
-    // نؤجّل التوجيه لما بعد هذا الفريم لمنع أي بناء متداخل/ومضات
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      Widget page;
-      switch (t) {
-        case _Target.onboarding:
-          page = const OnboardingScreen();
-          break;
-        case _Target.register:
-          page = const RegisterPage();
-          break;
-        case _Target.adminHome:
-          page = const AdminHomePage();
-          break;
-        case _Target.userHome:
-        default:
-          page = const homePage();
-          break;
-      }
+
+      final email = FirebaseAuth.instance.currentUser?.email ?? '';
+      final page = switch (t) {
+        _Target.onboarding => const OnboardingScreen(),
+        _Target.register => const RegisterPage(),
+        _Target.verifyEmail => VerifyEmailPage(email: email),
+        _Target.adminHome => const AdminHomePage(),
+        _Target.userHome => const homePage(),
+      };
 
       Navigator.of(
         context,
@@ -101,7 +94,6 @@ class _LaunchDeciderState extends State<LaunchDecider> {
 
   @override
   Widget build(BuildContext context) {
-    // دايمًا سبلاش إلى أن نقرّر ونتنقّل (بدون أي بناء لصفحات الهدف هنا)
     return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

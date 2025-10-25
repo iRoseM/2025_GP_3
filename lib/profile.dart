@@ -1049,9 +1049,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
   String _normalizeHandle(String input) {
     final raw = (input.trim()).toLowerCase();
     final withoutAt = raw.startsWith('@') ? raw.substring(1) : raw;
-    final re = RegExp(r'^[a-z0-9._-]{3,24}$');
+    // ⬅️ نفس Regex القواعد: يبدأ بحرف + طول 3..24
+    final re = RegExp(r'^[a-z][a-z0-9._-]{2,23}$');
     if (!re.hasMatch(withoutAt)) {
-      throw Exception('الاسم يجب أن يكون 3-24 من [a-z0-9._-]');
+      throw Exception(
+        'الاسم يجب أن يبدأ بحرف، وبطول 3–24، ويسمح بـ [a-z0-9._-]',
+      );
     }
     return withoutAt;
   }
@@ -1688,7 +1691,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         final val = v?.trim() ?? '';
                         if (val.isEmpty) return 'أدخل اسم المستخدم';
                         if (val.length < 3) return 'اسم المستخدم قصير جداً';
-                        final re = RegExp(r'^[a-zA-Z0-9._-]+$');
+                        final re = RegExp(r'^[a-z][a-z0-9._-]{2,23}$');
+
                         if (!re.hasMatch(val)) {
                           return 'استخدم حروف/أرقام و . _ - فقط';
                         }

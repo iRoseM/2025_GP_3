@@ -898,16 +898,19 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _ageCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController(); // ✅ جديد
 
   // Focus
   final _fnUser = FocusNode();
   final _fnEmail = FocusNode();
   final _fnPass = FocusNode();
+  final _fnConfirm = FocusNode(); // ✅ جديد
 
   // نظهر الفيدباك فقط بعد أول فقدان تركيز (blur)
   bool _touchedUser = false;
   bool _touchedEmail = false;
   bool _touchedPass = false;
+  bool _touchedConfirm = false; // ✅ جديد
 
   // حالات الحقول (وتبقى بعد الـ blur)
   _FieldStatus _usernameStatus = _FieldStatus.idle;
@@ -916,6 +919,9 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
   String? _emailError;
   _FieldStatus _passStatus = _FieldStatus.idle;
   String? _passError;
+
+  _FieldStatus _confirmStatus = _FieldStatus.idle; // ✅ جديد
+  String? _confirmError; // ✅ جديد
 
   bool _obscure = true;
   String _gender = 'male'; // 'male' or 'female'
@@ -962,6 +968,13 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         _validatePass();
       }
     });
+    _fnConfirm.addListener(() {
+      // ✅ جديد
+      if (!_fnConfirm.hasFocus) {
+        _touchedConfirm = true;
+        _validateConfirm();
+      }
+    });
   }
 
   @override
@@ -970,10 +983,12 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _ageCtrl.dispose();
+    _confirmCtrl.dispose(); // ✅ جديد
 
     _fnUser.dispose();
     _fnEmail.dispose();
     _fnPass.dispose();
+    _fnConfirm.dispose(); // ✅ جديد
 
     _bgCtrl.dispose();
     _introCtrl.dispose();
@@ -1182,6 +1197,40 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
             'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف كبير وصغير';
       });
     }
+
+    // كل ما تغيّرت كلمة المرور نعيد تقييم التأكيد (لو مستخدم لمس خانته)
+    if (_touchedConfirm) {
+      _validateConfirm();
+    }
+  }
+
+  // ====== Confirm password (على الـ blur / onChanged) ======  ✅ جديد
+  void _validateConfirm() {
+    setState(() {
+      _confirmStatus = _FieldStatus.checking;
+      _confirmError = null;
+    });
+
+    final v = _confirmCtrl.text;
+    if (v.isEmpty) {
+      setState(() {
+        _confirmStatus = _FieldStatus.invalid;
+        _confirmError = 'أدخل تأكيد كلمة المرور';
+      });
+      return;
+    }
+    if (v != _passCtrl.text) {
+      setState(() {
+        _confirmStatus = _FieldStatus.invalid;
+        _confirmError = 'كلمتا المرور غير متطابقتين';
+      });
+      return;
+    }
+
+    setState(() {
+      _confirmStatus = _FieldStatus.valid;
+      _confirmError = null;
+    });
   }
 
   // نفحص الكل قبل الإرسال (نحاكي blur للجميع)
@@ -1198,6 +1247,11 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       _touchedPass = true;
       _validatePass();
     }
+    if (!_touchedConfirm) {
+      // ✅ جديد
+      _touchedConfirm = true;
+      _validateConfirm();
+    }
   }
 
   // ====== إنشاء الحساب + إظهار "محجوز" داخل خانة الإيميل إن وجد ======
@@ -1212,7 +1266,9 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     // لو أي حقل غير صالح نوقف
     if (_usernameStatus == _FieldStatus.invalid ||
         _emailStatus == _FieldStatus.invalid ||
-        _passStatus == _FieldStatus.invalid) {
+        _passStatus == _FieldStatus.invalid ||
+        _confirmStatus == _FieldStatus.invalid) {
+      // ✅ جديد
       return; // لا سنackbar؛ الأخطاء ظاهرة داخل الحقول
     }
 
@@ -1277,7 +1333,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
           await db.runTransaction((tx) async {
             tx.set(usernameRef, {
               'uid': uid,
-              'reservedAt': FieldValue.serverTimestamp(),
+              'createdAt': FieldValue.serverTimestamp(),
             });
 
             tx.set(userRef, {
@@ -1634,7 +1690,9 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                         obscureText: _obscure,
                                         textInputAction: TextInputAction.next,
                                         onFieldSubmitted: (_) =>
-                                            FocusScope.of(context).unfocus(),
+                                            FocusScope.of(context).requestFocus(
+                                              _fnConfirm,
+                                            ), // ✅ إلى التأكيد
                                         decoration: InputDecoration(
                                           prefixIcon: const Icon(
                                             Icons.lock_outline,
@@ -1701,6 +1759,76 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                   ),
                                 ),
 
+                                const SizedBox(height: 12),
+
+                                // ✅ تأكيد كلمة المرور
+                                _stagger(
+                                  start: .35,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      _label('تأكيد كلمة المرور'),
+                                      const SizedBox(height: 8),
+                                      TextFormField(
+                                        focusNode: _fnConfirm,
+                                        controller: _confirmCtrl,
+                                        obscureText: true,
+                                        textInputAction: TextInputAction.done,
+                                        onChanged: (_) {
+                                          if (_touchedConfirm) {
+                                            _validateConfirm();
+                                          }
+                                        },
+                                        onFieldSubmitted: (_) =>
+                                            FocusScope.of(context).unfocus(),
+                                        decoration: InputDecoration(
+                                          prefixIcon: const Icon(
+                                            Icons.check_circle_outline,
+                                          ),
+                                          hintText: 'أعد إدخال كلمة المرور',
+                                          suffixIcon: _touchedConfirm
+                                              ? _statusIcon(_confirmStatus)
+                                              : null,
+                                          errorText:
+                                              _touchedConfirm &&
+                                                  _confirmStatus ==
+                                                      _FieldStatus.invalid
+                                              ? _confirmError
+                                              : null,
+                                          enabledBorder: _borderFor(
+                                            _touchedConfirm
+                                                ? _confirmStatus
+                                                : _FieldStatus.idle,
+                                          ),
+                                          focusedBorder: _borderFor(
+                                            _touchedConfirm
+                                                ? _confirmStatus
+                                                : _FieldStatus.idle,
+                                            focused: true,
+                                          ),
+                                          errorBorder: _borderFor(
+                                            _FieldStatus.invalid,
+                                          ),
+                                          focusedErrorBorder: _borderFor(
+                                            _FieldStatus.invalid,
+                                            focused: true,
+                                          ),
+                                        ),
+                                        validator: (v) {
+                                          if (v == null || v.isEmpty) {
+                                            return 'أدخل تأكيد كلمة المرور';
+                                          }
+                                          if (v != _passCtrl.text) {
+                                            return 'كلمتا المرور غير متطابقتين';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
                                 const SizedBox(height: 16),
 
                                 // العمر + الجنس
@@ -1734,15 +1862,18 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                               ),
                                               validator: (v) {
                                                 if (v == null ||
-                                                    v.trim().isEmpty)
+                                                    v.trim().isEmpty) {
                                                   return 'أدخل العمر';
+                                                }
                                                 final n = int.tryParse(
                                                   v.trim(),
                                                 );
-                                                if (n == null)
+                                                if (n == null) {
                                                   return 'أدخل رقمًا صحيحًا';
-                                                if (n < 7 || n > 120)
+                                                }
+                                                if (n < 7 || n > 120) {
                                                   return 'العمر غير منطقي';
+                                                }
                                                 return null;
                                               },
                                             ),
@@ -2050,8 +2181,17 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
           tooltip: 'إغلاق',
           icon: const Icon(Icons.close),
           color: AppColors.dark,
-          onPressed: () {
-            Navigator.of(context).pop();
+          onPressed: () async {
+            // 1) تسجيل خروج علشان ما يرجعك LaunchDecider لصفحة التحقق
+            await FirebaseAuth.instance.signOut();
+
+            if (!mounted) return;
+
+            // 2) انتقال مباشر لصفحة تسجيل الدخول وتصفير الستاك
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const RegisterPage()),
+              (route) => false,
+            );
           },
         ),
       ),
