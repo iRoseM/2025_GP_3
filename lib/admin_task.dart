@@ -1237,40 +1237,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   ),
                   const SizedBox(height: 20),
 
-                  // _fieldLabel('طريقة التحقق', required: true),
-                  // const SizedBox(height: 8),
-                  // DropdownButtonFormField<String>(
-                  //   value: _validationType,
-                  //   alignment: Alignment.centerRight,
-                  //   isExpanded: true,
-                  //   decoration: const InputDecoration(
-                  //     hintText: 'اختر طريقة التحقق',
-                  //     prefixIcon: Icon(Icons.verified_outlined),
-                  //     border: OutlineInputBorder(
-                  //       borderRadius: BorderRadius.all(Radius.circular(12)),
-                  //     ),
-                  //   ),
-                  //   items: const [
-                  //     DropdownMenuItem(value: 'manual', child: Text('تحقق يدوي')),
-                  //     DropdownMenuItem(value: 'photo', child: Text('صورة')),
-                  //     DropdownMenuItem(value: 'qr', child: Text('رمز QR')),
-                  //     DropdownMenuItem(
-                  //       value: 'التحقق عبر معالجة الصور',
-                  //       child: Text('التحقق عبر معالجة الصور'),
-                  //     ),
-                  //     DropdownMenuItem(
-                  //       value: 'التحقق عبر تتبع القراءة',
-                  //       child: Text('التحقق عبر تتبع القراءة'),
-                  //     ),
-                  //   ],
-                  //   onChanged: (v) {
-                  //     setState(() => _validationType = v);
-                  //     _isDirty = true;
-                  //   },
-                  //   validator: (v) =>
-                  //       (v == null || v.isEmpty) ? 'اختر طريقة التحقق' : null,
-                  // ),
-
                   // 🟩 طريقة التحقق مع التولتيب (ℹ️)
                   Row(
                     children: [
