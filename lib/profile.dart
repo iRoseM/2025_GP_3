@@ -347,6 +347,9 @@ class profilePage extends StatelessWidget {
                                                 .where('read', isEqualTo: false)
                                                 .snapshots(),
                                             builder: (context, snapshot) {
+                                              // نحضّر الـ trailing حسب الحالة
+                                              Widget trailing;
+
                                               if (snapshot.hasError) {
                                                 final err = snapshot.error;
                                                 if (err is FirebaseException) {
@@ -367,27 +370,20 @@ class profilePage extends StatelessWidget {
                                                         });
                                                   }
                                                 }
-                                                return _SettingTile(
-                                                  title: 'بلاغاتي',
-                                                  icon: Icons
-                                                      .notifications_outlined,
-                                                  trailing: const Icon(
-                                                    Icons.chevron_left,
-                                                    color: Colors.black54,
-                                                    size: 22,
-                                                  ),
-                                                  onTap: () {},
+                                                // في حالة الخطأ خليه سهم عادي
+                                                trailing = const Icon(
+                                                  Icons.chevron_left,
+                                                  color: Colors.black54,
+                                                  size: 22,
                                                 );
-                                              }
-                                              final unreadCount =
-                                                  snapshot.data?.docs.length ??
-                                                  0;
-
-                                              return _SettingTile(
-                                                title: 'بلاغاتي',
-                                                icon: Icons
-                                                    .notifications_outlined,
-                                                trailing: unreadCount > 0
+                                              } else {
+                                                final unreadCount =
+                                                    snapshot
+                                                        .data
+                                                        ?.docs
+                                                        .length ??
+                                                    0;
+                                                trailing = unreadCount > 0
                                                     ? Container(
                                                         padding:
                                                             const EdgeInsets.symmetric(
@@ -416,9 +412,20 @@ class profilePage extends StatelessWidget {
                                                         Icons.chevron_left,
                                                         color: Colors.black54,
                                                         size: 22,
-                                                      ),
+                                                      );
+                                              }
+
+                                              // تايل واحد دائمًا، والـ onTap شغّال بكل الحالات
+                                              return _SettingTile(
+                                                title: 'بلاغاتي',
+                                                icon: Icons
+                                                    .notifications_outlined,
+                                                trailing: trailing,
                                                 onTap: () {
-                                                  Navigator.of(context).push(
+                                                  Navigator.of(
+                                                    context,
+                                                    rootNavigator: true,
+                                                  ).push(
                                                     MaterialPageRoute(
                                                       builder: (_) =>
                                                           const MyReportsPage(),
