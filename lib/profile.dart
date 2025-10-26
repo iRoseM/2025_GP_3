@@ -953,7 +953,6 @@ class _SettingTile extends StatelessWidget {
 }
 
 /* ===================== صفحة تعديل الحساب ===================== */
-
 class EditProfilePage extends StatefulWidget {
   final String initialUsername;
   final String initialHandle;
@@ -979,12 +978,12 @@ class EditProfilePage extends StatefulWidget {
 class _EditProfilePageState extends State<EditProfilePage> {
   final _formKey = GlobalKey<FormState>();
 
-  late final TextEditingController _usernameCtrl;
-  late final TextEditingController _handleCtrl;
-  late final TextEditingController _emailCtrl;
+  late final TextEditingController _usernameCtrl; // عرض فقط
+  late final TextEditingController _handleCtrl; // عرض فقط
+  late final TextEditingController _emailCtrl; // عرض فقط
   late final TextEditingController _ageCtrl;
 
-  // إدارة تغيير كلمة المرور (عرض كنقاط ثم وضع التغيير)
+  // تغيير كلمة المرور (اختياري)
   bool _changePassword = false;
   late final TextEditingController _currentPassCtrl;
   late final TextEditingController _newPassCtrl;
@@ -993,13 +992,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
 
-  // تغيير الإيميل (BottomSheet)
-  final _currentPassForEmailCtrl = TextEditingController();
-  final _newEmailCtrl = TextEditingController();
-
   late String _gender;
 
-  // ✅ قائمة صور الأفاتار من مجلد assets/pfp
+  // صور الأفاتار
   final List<String> _avatars = const [
     'assets/pfp/pfp1.png',
     'assets/pfp/pfp2.png',
@@ -1010,7 +1005,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     'assets/pfp/pfp7.png',
     'assets/pfp/pfp8.png',
   ];
-  int? _pfpIndex; // null = أيقونة افتراضية
+  int? _pfpIndex;
 
   @override
   void initState() {
@@ -1025,7 +1020,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _confirmPassCtrl = TextEditingController();
 
     _gender = widget.initialGender;
-    _pfpIndex = widget.initialPfpIndex; // الافتراضي من الداتابيس
+    _pfpIndex = widget.initialPfpIndex; // من الداتابيس
   }
 
   @override
@@ -1039,24 +1034,76 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
 
-    _currentPassForEmailCtrl.dispose();
-    _newEmailCtrl.dispose();
-
     super.dispose();
   }
 
-  // ✅ دالة لتطبيع اسم المستخدم والتحقق من صيغته
-  String _normalizeHandle(String input) {
-    final raw = (input.trim()).toLowerCase();
-    final withoutAt = raw.startsWith('@') ? raw.substring(1) : raw;
-    // ⬅️ نفس Regex القواعد: يبدأ بحرف + طول 3..24
-    final re = RegExp(r'^[a-z][a-z0-9._-]{2,23}$');
-    if (!re.hasMatch(withoutAt)) {
-      throw Exception(
-        'الاسم يجب أن يبدأ بحرف، وبطول 3–24، ويسمح بـ [a-z0-9._-]',
-      );
-    }
-    return withoutAt;
+  // شارة “غير قابل للتعديل”
+  Widget _lockedTag() => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+    decoration: BoxDecoration(
+      color: AppColors.primary.withOpacity(.12),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: AppColors.primary.withOpacity(.3)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: const [
+        Icon(Icons.lock, size: 12, color: AppColors.primary),
+        SizedBox(width: 3),
+        Text(
+          'غير قابل للتعديل',
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            color: AppColors.primary,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  // ديكور الحقول المقفولة (تظليل + حد)
+  InputDecoration _lockedDecoration({
+    required String hint,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon),
+      filled: true,
+      fillColor: AppColors.primary.withOpacity(.10), // ✅ تظليل أخضر
+      suffixIcon: Padding(
+        padding: const EdgeInsetsDirectional.only(end: 8),
+        child: _lockedTag(),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
+        borderSide: BorderSide(
+          color: AppColors.primary.withOpacity(.65),
+          width: 1.4,
+        ),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+        borderSide: BorderSide(color: AppColors.primary, width: 1.6),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    );
+  }
+
+  // حقل مقفول باستخدام AbsorbPointer (بديل readOnly)
+  Widget _lockedTextField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+  }) {
+    return AbsorbPointer(
+      child: TextFormField(
+        controller: controller,
+        enableInteractiveSelection: false,
+        decoration: _lockedDecoration(hint: hint, icon: icon),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -1080,80 +1127,27 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
 
     try {
-      // 1) طبّع اليوزرنيم المطلوب
-      final desired = _normalizeHandle(_handleCtrl.text);
+      final fs = FirebaseFirestore.instance;
+      final userRef = fs.collection('users').doc(user.uid);
 
-      // 2) بقية الحقول
-      final newEmail = _emailCtrl.text.trim();
       final newAge = int.tryParse(_ageCtrl.text.trim()) ?? widget.initialAge;
       final newGender = _gender;
       final newPfp = _pfpIndex;
 
-      final fs = FirebaseFirestore.instance;
-      final userRef = fs.collection('users').doc(user.uid);
-      final newUsernameRef = fs.collection('usernames').doc(desired);
+      // 🚫 لا نعدّل username ولا email
+      final patch = <String, dynamic>{
+        'age': newAge,
+        'gender': newGender,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (newPfp != null) patch['pfpIndex'] = newPfp;
 
-      await fs.runTransaction((txn) async {
-        // snapshot الحالي للمستخدم لمعرفة الاسم القديم
-        final userSnap = await txn.get(userRef);
-        final currentUsername = (userSnap.data()?['username'] ?? '')
-            .toString()
-            .toLowerCase();
+      await userRef.set(patch, SetOptions(merge: true));
 
-        // نفس الاسم؟ حدّث الحقول فقط
-        if (currentUsername == desired) {
-          final patch = <String, dynamic>{
-            'email': newEmail,
-            'age': newAge,
-            'gender': newGender,
-            'updatedAt': FieldValue.serverTimestamp(),
-          };
-          if (newPfp != null) patch['pfpIndex'] = newPfp;
-          txn.set(userRef, patch, SetOptions(merge: true));
-          return;
-        }
-
-        // تحقق من توفر الاسم الجديد
-        final newSnap = await txn.get(newUsernameRef);
-        if (newSnap.exists) {
-          final ownerUid = (newSnap.data()?['uid'] ?? '').toString();
-          if (ownerUid != user.uid) {
-            throw Exception('USERNAME_TAKEN');
-          }
-          // إن كان يخصني مسبقًا، نكمل
-        } else {
-          // احجز الاسم الجديد
-          txn.set(newUsernameRef, {
-            'uid': user.uid,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
-
-        // احذف الحجز القديم إن كان لي
-        if (currentUsername.isNotEmpty) {
-          final oldRef = fs.collection('usernames').doc(currentUsername);
-          final oldSnap = await txn.get(oldRef);
-          if (oldSnap.exists && (oldSnap.data()?['uid'] == user.uid)) {
-            txn.delete(oldRef);
-          }
-        }
-
-        // حدّث وثيقة المستخدم
-        final patch = <String, dynamic>{
-          'username': desired,
-          'email': newEmail,
-          'age': newAge,
-          'gender': newGender,
-          'updatedAt': FieldValue.serverTimestamp(),
-        };
-        if (newPfp != null) patch['pfpIndex'] = newPfp;
-        txn.set(userRef, patch, SetOptions(merge: true));
-      });
-
-      // 3) تغيير كلمة المرور (خارج الترانزاكشن)
+      // تغيير كلمة المرور (اختياري)
       if (_changePassword) {
-        final emailForAuth = user.email ?? newEmail;
-        if (emailForAuth.isEmpty) {
+        final emailForAuth = user.email;
+        if (emailForAuth == null || emailForAuth.isEmpty) {
           throw Exception('لا يمكن إعادة المصادقة: البريد غير متوفر.');
         }
         final cred = EmailAuthProvider.credential(
@@ -1174,17 +1168,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-      if (!await hasInternetConnection()) {
-        if (context.mounted) showNoInternetDialog(context);
-        return;
-      }
       Navigator.of(context).pop();
-    } on Exception catch (e) {
-      String msg = 'حدث خطأ أثناء الحفظ';
-      if (e.toString().contains('USERNAME_TAKEN')) {
-        msg = 'اسم المستخدم محجوز بالفعل، جرّب اسمًا آخر.';
-      } else if (e.toString().contains('الاسم يجب أن يكون')) {
-        msg = e.toString().replaceAll('Exception: ', '');
+    } on FirebaseAuthException catch (e) {
+      var msg = 'تعذّر حفظ التغييرات (${e.code})';
+      if (e.code == 'requires-recent-login') {
+        msg = 'لأسباب أمان، سجّل دخولك مجددًا ثم حاول.';
+      } else if (e.code == 'wrong-password') {
+        msg = 'كلمة المرور الحالية غير صحيحة.';
+      } else if (e.code == 'network-request-failed') {
+        msg = 'تعذّر الاتصال — تأكد من الإنترنت.';
       }
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1195,283 +1187,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('❌ خطأ غير متوقع: $e')));
-    }
-  }
-
-  // ===== تغيير الإيميل بنفس منطق الأوث (reauth → updateEmail → verify → Firestore → VerifyEmailPage)
-  void _showChangeEmailSheet() {
-    _currentPassForEmailCtrl.clear();
-    _newEmailCtrl.text = _emailCtrl.text;
-
-    showModalBottomSheet(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (ctx) {
-        bool _obsc = true;
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: StatefulBuilder(
-            builder: (ctx, setSt) => Padding(
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 16,
-                bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 44,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: const Color(0x22000000),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                  Row(
-                    children: const [
-                      Icon(
-                        Icons.mark_email_read_outlined,
-                        color: AppColors.primary,
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'تغيير البريد الإلكتروني',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
-                          color: AppColors.dark,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _newEmailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      hintText: 'new@example.com',
-                      prefixIcon: Icon(Icons.email_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _currentPassForEmailCtrl,
-                    obscureText: _obsc,
-                    decoration: InputDecoration(
-                      hintText: 'كلمة المرور الحالية',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        onPressed: () => setSt(() => _obsc = !_obsc),
-                        icon: Icon(
-                          _obsc ? Icons.visibility : Icons.visibility_off,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            gradient: const LinearGradient(
-                              colors: [
-                                AppColors.mint,
-                                AppColors.primary,
-                                AppColors.primary,
-                              ],
-                              stops: [0.0, 0.5, 1.0],
-                              begin: Alignment.centerRight,
-                              end: Alignment.centerLeft,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x33000000),
-                                blurRadius: 8,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 14,
-                                horizontal: 18,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 0,
-                            ),
-                            onPressed: () async {
-                              final newEmail = _newEmailCtrl.text.trim();
-                              final pass = _currentPassForEmailCtrl.text;
-
-                              if (newEmail.isEmpty || pass.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'أدخل البريد الجديد وكلمة المرور الحالية',
-                                    ),
-                                  ),
-                                );
-                                return;
-                              }
-                              if (!await hasInternetConnection()) {
-                                if (context.mounted) {
-                                  showNoInternetDialog(context);
-                                }
-                                return;
-                              }
-                              // ✅ إذا هو نفس البريد الحالي (مقارنة بدون حساسية حالة الأحرف)
-                              if (newEmail.toLowerCase() ==
-                                  _emailCtrl.text.trim().toLowerCase()) {
-                                Navigator.pop(ctx); // إغلاق الشيت
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'هذا بريدك الحالي — لا حاجة للتغيير',
-                                    ),
-                                  ),
-                                );
-                                return;
-                              }
-
-                              Navigator.pop(ctx);
-                              await _changeEmailSecure(
-                                currentPassword: pass,
-                                newEmail: newEmail,
-                              );
-                            },
-                            icon: const Icon(Icons.check, color: Colors.white),
-                            label: const Text(
-                              'تأكيد التغيير',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('إلغاء'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _changeEmailSecure({
-    required String currentPassword,
-    required String newEmail,
-  }) async {
-    if (!await hasInternetConnection()) {
-      if (context.mounted) showNoInternetDialog(context);
-      return;
-    }
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('لا يوجد مستخدم مسجّل')));
-      return;
-    }
-    // ✅ إذا البريد نفسه الحالي، لا تعمل أي شيء
-    if ((user.email ?? '').toLowerCase() == newEmail.toLowerCase()) {
-      // عكسه محليًا فقط لو تحب تتأكد إن الحقل محدث
-      setState(() => _emailCtrl.text = user.email ?? _emailCtrl.text);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('هذا بريدك الحالي — لا حاجة للتغيير')),
-      );
-      return;
-    }
-
-    try {
-      // reauth
-      final cred = EmailAuthProvider.credential(
-        email: user.email!,
-        password: currentPassword,
-      );
-      await user.reauthenticateWithCredential(cred);
-
-      // update email
-      await user.updateEmail(newEmail);
-
-      // send verification
-      await FirebaseAuth.instance.setLanguageCode('ar');
-      await user.sendEmailVerification();
-
-      // update Firestore
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'email': newEmail.toLowerCase(),
-        'isVerified': false,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      // reflect locally
-      setState(() {
-        _emailCtrl.text = newEmail;
-      });
-
-      if (!mounted) return;
-      // go to VerifyEmailPage from main.dart
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => VerifyEmailPage(email: newEmail)),
-      );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم إرسال رسالة تحقق إلى بريدك الجديد')),
-      );
-    } on FirebaseAuthException catch (e) {
-      String msg = 'تعذّر تغيير البريد';
-      switch (e.code) {
-        case 'requires-recent-login':
-          msg = 'لأسباب أمان، سجّل دخولك مجددًا ثم حاول.';
-          break;
-        case 'wrong-password':
-          msg = 'كلمة المرور الحالية غير صحيحة.';
-          break;
-        case 'invalid-email':
-          msg = 'بريد إلكتروني غير صالح.';
-          break;
-        case 'email-already-in-use':
-          msg = 'هذا البريد مستخدم بالفعل.';
-          break;
-        case 'network-request-failed':
-          msg = 'تعذّر الاتصال — تأكد من الإنترنت.';
-          break;
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('❌ $msg')));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('❌ خطأ غير متوقع أثناء تغيير البريد')),
-      );
     }
   }
 
@@ -1583,7 +1298,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final avatarWidget = Stack(
       clipBehavior: Clip.none,
       children: [
-        // خلفية دائرية خضراء خفيفة + صورة/أيقونة
         Container(
           decoration: const BoxDecoration(
             color: AppColors.light,
@@ -1604,7 +1318,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 : null,
           ),
         ),
-        // زر القلم
         Positioned(
           bottom: -4,
           left: -4,
@@ -1637,22 +1350,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        // نخلي الجسم شفاف ووراه هيدر متدرّج
         backgroundColor: AppColors.background,
         extendBodyBehindAppBar: true,
-
-        // هيدر نمير العام (بدون عنوان داخله + زر رجوع)
         appBar: const NameerAppBar(
           showTitleInBar: false,
           showBack: true,
           height: 80,
         ),
-
         body: Builder(
           builder: (context) {
             final statusBar = MediaQuery.of(context).padding.top;
-            const headerH = 20.0; // ارتفاع التولبار الفعلي
-            const gap = 12.0; // مسافة بعد الهيدر
+            const headerH = 20.0;
+            const gap = 12.0;
             final topPadding = statusBar + headerH + gap;
 
             return SingleChildScrollView(
@@ -1662,7 +1371,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // العنوان تحت الهيدر مباشرة
                     Text(
                       'تعديل الحساب',
                       style: GoogleFonts.ibmPlexSansArabic(
@@ -1673,50 +1381,27 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // صورة رمزية + قلم تعديل
                     Row(children: [avatarWidget, const SizedBox(width: 10)]),
-
                     const SizedBox(height: 14),
 
-                    // اليوزر (الهاندل)
+                    // اسم المستخدم (مقفل)
                     _fieldLabel('اسم المستخدم'),
                     const SizedBox(height: 8),
-                    TextFormField(
+                    _lockedTextField(
                       controller: _handleCtrl,
-                      decoration: const InputDecoration(
-                        hintText: 'username',
-                        prefixIcon: Icon(Icons.alternate_email),
-                      ),
-                      validator: (v) {
-                        final val = v?.trim() ?? '';
-                        if (val.isEmpty) return 'أدخل اسم المستخدم';
-                        if (val.length < 3) return 'اسم المستخدم قصير جداً';
-                        final re = RegExp(r'^[a-z][a-z0-9._-]{2,23}$');
-
-                        if (!re.hasMatch(val)) {
-                          return 'استخدم حروف/أرقام و . _ - فقط';
-                        }
-                        return null;
-                      },
+                      hint: 'username',
+                      icon: Icons.alternate_email,
                     ),
 
                     const SizedBox(height: 14),
 
-                    // الإيميل (readOnly + زر تغيير)
+                    // البريد الإلكتروني (مقفل)
                     _fieldLabel('البريد الإلكتروني'),
                     const SizedBox(height: 8),
-                    TextFormField(
+                    _lockedTextField(
                       controller: _emailCtrl,
-                      readOnly: true,
-                      enableInteractiveSelection: false,
-                      decoration: InputDecoration(
-                        hintText: 'name@example.com',
-                        prefixIcon: const Icon(Icons.email_outlined),
-                        suffixIcon: TextButton(
-                          onPressed: _showChangeEmailSheet,
-                          child: const Text('تغيير'),
-                        ),
-                      ),
+                      hint: 'name@example.com',
+                      icon: Icons.email_outlined,
                     ),
 
                     const SizedBox(height: 14),
@@ -1788,7 +1473,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                     const SizedBox(height: 14),
 
-                    // كلمة المرور
+                    // كلمة المرور (اختياري)
                     _fieldLabel('كلمة المرور'),
                     const SizedBox(height: 8),
 
@@ -1918,7 +1603,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
                     const SizedBox(height: 22),
 
-                    // زر حفظ (نفسه كما هو)
+                    // زر حفظ
                     SizedBox(
                       width: double.infinity,
                       child: DecoratedBox(

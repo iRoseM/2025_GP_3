@@ -353,8 +353,9 @@ class _RegisterPageState extends State<RegisterPage>
         email: email,
         password: password,
       );
-
       await cred.user?.reload();
+      await cred.user?.getIdToken(true);
+
       final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) throw FirebaseAuthException(code: 'user-not-found');
@@ -1268,8 +1269,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         _emailStatus == _FieldStatus.invalid ||
         _passStatus == _FieldStatus.invalid ||
         _confirmStatus == _FieldStatus.invalid) {
-      // ✅ جديد
-      return; // لا سنackbar؛ الأخطاء ظاهرة داخل الحقول
+      return; // الأخطاء ظاهرة داخل الحقول
     }
 
     final ok = _formKey.currentState?.validate() ?? false;
@@ -1280,10 +1280,11 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     try {
       final email = _emailCtrl.text.trim();
       final password = _passCtrl.text.trim();
-      final username = _usernameCtrl.text.trim();
+      final usernameRaw = _usernameCtrl.text.trim();
       final age = int.tryParse(_ageCtrl.text.trim());
+      final gender = _gender;
 
-      // 1) إنشاء مستخدم Auth — هنا يظهر "محجوز" لو موجود
+      // 1) إنشاء مستخدم Auth — Firebase سيتأكد من تكرار الإيميل
       final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -1291,7 +1292,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       final uid = cred.user!.uid;
 
       try {
-        // 2) احجز الاسم واكتب وثيقة المستخدم
+        // 2) احجز الاسم واكتب وثيقة المستخدم داخل ترانزاكشن
         Future<void> _reserveUsernameAndCreateUserDoc({
           required String uid,
           required String usernameRaw,
@@ -1300,44 +1301,25 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
           required String gender,
         }) async {
           final db = FirebaseFirestore.instance;
+
+          // لازم يكون lowercase ويبدأ بحرف (مطابق للـ rules)
           final username = usernameRaw.trim().toLowerCase();
-          final emailLower = email.trim().toLowerCase();
+          final re = RegExp(r'^[a-z][a-z0-9._-]{2,23}$');
+          if (!re.hasMatch(username)) throw 'INVALID_USERNAME';
 
-          // تحقق من تنسيق اسم المستخدم محليًا
-          final re = RegExp(r'^[a-z0-9._-]{3,24}$');
-          if (!re.hasMatch(username)) {
-            throw 'INVALID_USERNAME';
-          }
-
-          // مراجع الوثائق
           final usernameRef = db.collection('usernames').doc(username);
           final userRef = db.collection('users').doc(uid);
 
-          // 1) فحص الاسم محجوز؟
-          final usernameSnap = await usernameRef.get();
-          if (usernameSnap.exists) {
-            throw 'USERNAME_TAKEN';
-          }
-
-          // 2) فحص الإيميل موجود في users؟ (بدون Cloud Function)
-          final emailExistsQuery = await db
-              .collection('users')
-              .where('email', isEqualTo: emailLower)
-              .limit(1)
-              .get();
-          if (emailExistsQuery.docs.isNotEmpty) {
-            throw 'EMAIL_TAKEN';
-          }
-
-          // 3) احجز الاسم واكتب بيانات المستخدم داخل ترانزاكشن (اتساق مضمون)
           await db.runTransaction((tx) async {
-            tx.set(usernameRef, {
-              'uid': uid,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
+            final snap = await tx.get(usernameRef);
+            if (snap.exists) throw 'USERNAME_TAKEN';
 
+            // 👈 مطابق للـ rules: فقط { uid } بدون أي حقول إضافية
+            tx.set(usernameRef, {'uid': uid});
+
+            // كتابة بيانات المستخدم
             tx.set(userRef, {
-              'email': emailLower,
+              'email': email.trim().toLowerCase(),
               'username': username,
               'age': age,
               'gender': gender,
@@ -1345,27 +1327,44 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
               'isVerified': false,
               'createdAt': FieldValue.serverTimestamp(),
               'updatedAt': FieldValue.serverTimestamp(),
-            });
+            }, SetOptions(merge: true));
           });
         }
+
+        // استدعاء الدالة
+        await _reserveUsernameAndCreateUserDoc(
+          uid: uid,
+          usernameRaw: usernameRaw,
+          email: email,
+          age: age,
+          gender: gender,
+        );
       } catch (e) {
-        if (e.toString().contains('USERNAME_TAKEN') ||
-            e.toString().contains('INVALID_USERNAME')) {
+        // لو الاسم محجوز/غير صالح نحذف مستخدم Auth الذي تم إنشاؤه للتو
+        final err = e.toString();
+        if (err.contains('USERNAME_TAKEN') ||
+            err.contains('INVALID_USERNAME')) {
           try {
             await cred.user?.delete();
           } catch (_) {}
           setState(() {
             _touchedUser = true;
             _usernameStatus = _FieldStatus.invalid;
-            _usernameError = e.toString().contains('USERNAME_TAKEN')
+            _usernameError = err.contains('USERNAME_TAKEN')
                 ? 'اسم المستخدم محجوز، جرّب اسمًا آخر'
                 : 'اسم المستخدم غير صالح';
           });
           FocusScope.of(context).requestFocus(_fnUser);
           return;
-        } else {
-          rethrow;
         }
+
+        // أي خطأ صلاحيات (permissions) — احذف حساب Auth حتى ما يظل الإيميل محجوز
+        if (err.contains('permission-denied')) {
+          try {
+            await cred.user?.delete();
+          } catch (_) {}
+        }
+        rethrow; // يروح للـ catch الخارجي ويطلع Snackbar عام
       }
 
       // 3) أرسل بريد التحقق
@@ -1381,7 +1380,6 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       if (!mounted) return;
 
       if (e.code == 'email-already-in-use') {
-        // ✳️ أظهر الخطأ داخل خانة الإيميل وبوردر أحمر
         setState(() {
           _touchedEmail = true;
           _emailStatus = _FieldStatus.invalid;
@@ -1390,7 +1388,6 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         FocusScope.of(context).requestFocus(_fnEmail);
         return;
       }
-
       if (e.code == 'invalid-email') {
         setState(() {
           _touchedEmail = true;
@@ -1400,7 +1397,6 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         FocusScope.of(context).requestFocus(_fnEmail);
         return;
       }
-
       if (e.code == 'weak-password') {
         setState(() {
           _touchedPass = true;
@@ -1411,7 +1407,6 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         FocusScope.of(context).requestFocus(_fnPass);
         return;
       }
-
       if (e.code == 'network-request-failed') {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تعذّر الاتصال — تأكد من الإنترنت')),
@@ -1419,13 +1414,14 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ حدث خطأ غير متوقع (${e.code})')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('❌ خطأ غير متوقع (${e.code})')));
     } catch (e) {
       if (!mounted) return;
+      // يشمل permission-denied من Firestore وغيره
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ تعذّر إنشاء الحساب (${e.toString()})")),
+        SnackBar(content: Text('❌ تعذّر إنشاء الحساب (${e.toString()})')),
       );
     } finally {
       if (mounted) setState(() => _reserving = false);
