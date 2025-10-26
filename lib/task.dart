@@ -549,8 +549,8 @@ Future<void> _bootstrapMonth() async {
                               // 🟡 بعد التحقق من الانضمام، نتحقق من وجود المهمة
                               if (!snap.hasData || !snap.data!.exists) {
                                 return _buildUnavailableCard(
-                                  title: 'لا توجد مهام متاحة لهذا الشهر',
-                                  subtitle: 'يبدو أنه لم تُحدّد مهام بعد، تفقّد لاحقًا.',
+                                  title: 'لا توجد مهام متاحة',
+                                  subtitle: 'خطأ في جلب المهمة لهذا اليوم.',
                                 );
                               }
 
