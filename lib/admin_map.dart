@@ -968,7 +968,6 @@ class _AdminMapPageState extends State<AdminMapPage> {
             }
 
             final data = snap.data!.data() ?? {};
-            final name = (data['name'] ?? '').toString();
             final type = _normalizeType((data['type'] ?? '').toString());
             final provider = (data['provider'] ?? '').toString();
             final city = (data['city'] ?? '').toString();
@@ -977,6 +976,8 @@ class _AdminMapPageState extends State<AdminMapPage> {
                 (data['status'] ?? _statusById[markerId.value] ?? 'نشط')
                     .toString();
             final isActive = statusStr == 'نشط';
+            final statusColor = isActive ? Colors.teal : Colors.redAccent;
+            final statusText = isActive ? 'نشط' : 'متوقفة';
 
             return Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -984,35 +985,40 @@ class _AdminMapPageState extends State<AdminMapPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // العنوان والحالة في صف واحد
+                  // ✅ صف العنوان والحالة بتصميمك
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // المربع الجديد للحالة (على اليسار)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.1),
+                          border: Border.all(color: statusColor),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          statusText,
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: statusColor,
+                          ),
+                        ),
+                      ),
+
+                      // النص على اليمين
                       Expanded(
                         child: Text(
-                          name.isNotEmpty ? name : type,
+                          type,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                           textAlign: TextAlign.right,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Chip(
-                        label: Text(
-                          isActive ? 'نشط' : 'متوقف',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        backgroundColor: isActive
-                            ? Colors.teal
-                            : Colors.redAccent,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
                         ),
                       ),
                     ],
@@ -1021,9 +1027,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   // المعلومات التفصيلية
                   if (provider.isNotEmpty && provider != 'غير محدد')
                     _kvRightAligned('المزود', provider),
-
                   if (city.isNotEmpty) _kvRightAligned('المدينة', city),
-
                   if (address.isNotEmpty) _kvRightAligned('العنوان', address),
 
                   const Divider(height: 24),
@@ -1040,12 +1044,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      _editMarker(
-                        markerId,
-                        name.isNotEmpty ? name : type,
-                        type,
-                        position,
-                      );
+                      _editMarker(markerId, type, type, position);
                     },
                   ),
                   ListTile(
@@ -1056,7 +1055,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     title: const Text('حذف الموقع', textAlign: TextAlign.right),
                     onTap: () {
                       Navigator.pop(context);
-                      _confirmDelete(markerId, name.isNotEmpty ? name : type);
+                      _confirmDelete(markerId, type);
                     },
                   ),
                 ],
@@ -1554,18 +1553,11 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
 
                   const SizedBox(height: 10),
                   SwitchListTile(
-                    title: Text('الحالة: ${_isActive ? 'نشطة' : 'متوقفة'}'),
+                    title: Text('الحالة: ${_isActive ? 'نشط' : 'متوقفة'}'),
                     value: _isActive,
                     onChanged: (v) => setState(() => _isActive = v),
                     contentPadding: EdgeInsets.zero,
                   ),
-
-                  const SizedBox(height: 10),
-                  const Text(
-                    'طريقة تحديد الموقع:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
 
                   // أزرار اختيار تحديد الموقع
                   if (widget.fixedPosition == null)
@@ -2157,7 +2149,7 @@ class _LocationOptionButton extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(12),
@@ -2166,11 +2158,12 @@ class _LocationOptionButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 20, color: AppColors.primary),
+            Icon(icon, size: 18, color: AppColors.primary),
             const SizedBox(width: 6),
             Text(
               label,
               style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: fg,
               ),

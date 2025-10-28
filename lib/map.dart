@@ -836,6 +836,8 @@ class _mapPageState extends State<mapPage> {
   // ===== Bottom sheet لتفاصيل الفاسيليتي =====
   void _showFacilitySheet(Facility f) {
     final bool isActive = (f.status == 'نشط');
+    final String statusText = isActive ? 'نشطة' : 'متوقفة';
+    final Color statusColor = isActive ? Colors.green : Colors.redAccent;
 
     showModalBottomSheet(
       context: context,
@@ -846,117 +848,140 @@ class _mapPageState extends State<mapPage> {
       builder: (_) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      f.type,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        f.type,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ),
-                  ),
-                  Chip(
-                    label: Text(
-                      isActive ? 'نشطة' : 'متوقفة',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    backgroundColor: isActive ? Colors.teal : Colors.redAccent,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
 
-              Row(
-                children: [
-                  const Icon(
-                    Icons.factory_outlined,
-                    size: 18,
-                    color: AppColors.dark,
-                  ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      f.provider.isEmpty ? 'مزود غير محدد' : f.provider,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    // 👇 نفس شكل المربع في كرت التاسك بدون أيقونة
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        border: Border.all(color: statusColor),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        statusText,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: statusColor,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
+                  ],
+                ),
+                const SizedBox(height: 6),
 
-              if (f.address.isNotEmpty || f.city.isNotEmpty)
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Icon(
-                      Icons.place_outlined,
+                      Icons.factory_outlined,
                       size: 18,
                       color: AppColors.dark,
                     ),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text(f.address.isNotEmpty ? f.address : f.city),
+                      child: Text(
+                        f.provider.isEmpty ? 'مزود غير محدد' : f.provider,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+
+                if (f.address.isNotEmpty || f.city.isNotEmpty)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.place_outlined,
+                        size: 18,
+                        color: AppColors.dark,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          f.address.isNotEmpty ? f.address : f.city,
+                          textAlign: TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                if (!isActive) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0x1FFF5252),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      'تنبيه: هذه الحاوية حالياً متوقفة عن العمل.',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        icon: const Icon(Icons.directions_outlined),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _openInMaps(f);
+                        },
+                        label: const Text('عرض الاتجاهات'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        icon: const Icon(Icons.report_gmailerrorred_outlined),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _openReportDialog(f);
+                        },
+                        label: const Text('الإبلاغ عن مشكلة'),
+                      ),
                     ),
                   ],
                 ),
 
-              if (!isActive) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0x1FFF5252),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    'تنبيه: هذه الحاوية حالياً متوقفة عن العمل.',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
+                const SizedBox(height: 8),
               ],
-
-              const SizedBox(height: 12),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      icon: const Icon(Icons.directions_outlined),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                      ),
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _openInMaps(f);
-                      },
-                      label: const Text('عرض الاتجاهات'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton.icon(
-                      icon: const Icon(Icons.report_gmailerrorred_outlined),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                      ),
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _openReportDialog(f);
-                      },
-                      label: const Text('الإبلاغ عن مشكلة'),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 8),
-            ],
+            ),
           ),
         );
       },
