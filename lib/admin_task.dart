@@ -1313,7 +1313,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     isExpanded: true,
                     decoration: const InputDecoration(
                       hintText: 'اختر طريقة التحقق',
-                      hintStyle: TextStyle(color: Colors.grey), // ✅ placeholder رمادي
                       prefixIcon: Icon(Icons.verified_outlined, color: AppColors.primary),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.all(Radius.circular(12)),
