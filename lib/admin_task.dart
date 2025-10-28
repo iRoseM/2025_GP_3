@@ -1117,279 +1117,311 @@ class _AddTaskPageState extends State<AddTaskPage> {
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            centerTitle: true,
-            title: Text(
-              titleText,
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: AppColors.dark),
-              onPressed: () async {
-                if (await _confirmLeaveIfDirty()) Navigator.pop(context);
-              },
-            ),
-            flexibleSpace: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.primary, AppColors.mint],
-                  begin: Alignment.bottomLeft,
-                  end: Alignment.topRight,
-                ),
-              ),
-            ),
+          // نمد الجسم خلف الهيدر لنعالج الـ padding يدويًا
+          extendBodyBehindAppBar: true,
+          backgroundColor: AppColors.background,
+
+          // هيدر نمير الموحّد
+          appBar: const NameerAppBar(
+            showTitleInBar: false, // العنوان خارج الهيدر (تحت)
+            showBack: true,
+            height: 80,
           ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _fieldLabel('عنوان المهمة', required: true),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _titleCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'مثال: إعادة تدوير الورق',
-                      prefixIcon: Icon(Icons.task_alt_outlined),
-                    ),
-                    onChanged: (_) => _isDirty = true,
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'أدخل عنوان المهمة' : null,
-                  ),
-                  const SizedBox(height: 14),
 
-                  _fieldLabel('وصف المهمة', required: true),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _descCtrl,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      hintText: 'مثال: التوعية بأهمية إعادة التدوير',
-                      prefixIcon: Icon(Icons.description_outlined),
-                    ),
-                    onChanged: (_) => _isDirty = true,
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'أدخل وصف المهمة' : null,
-                  ),
-                  const SizedBox(height: 14),
+          body: Builder(
+            builder: (context) {
+              // padding علوي = statusBar + ارتفاع الهيدر + مسافة بسيطة
+              final statusBar = MediaQuery.of(context).padding.top;
+              const headerH = 20.0;
+              const gap = 12.0;
+              final topPadding = statusBar + headerH + gap;
 
-                  _fieldLabel('عدد النقاط', required: true),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _pointsCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      hintText: 'مثال: 30',
-                      prefixIcon: Icon(Icons.stars_rounded),
-                    ),
-                    onChanged: (_) => _isDirty = true,
-                    validator: (v) {
-                      final n = int.tryParse(v ?? '');
-                      if (n == null || n <= 0)
-                        return 'أدخل عددًا صحيحًا موجبًا';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 14),
-
-                  _fieldLabel('تصنيف المهمة', required: true),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _selectedCategory,
-                    alignment: Alignment.centerRight,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      hintText: _catsLoading
-                          ? '...يتم تحميل الفئات'
-                          : 'اختر الفئة',
-                      prefixIcon: const Icon(
-                        Icons.category_outlined,
-                        color: AppColors.primary,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+              return Padding(
+                padding: EdgeInsets.fromLTRB(20, topPadding, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ✅ العنوان ثابت تحت الهيدر
+                    Text(
+                      titleText,
+                      textAlign: TextAlign.right,
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
                       ),
                     ),
-                    items: _categories
-                        .map(
-                          (name) => DropdownMenuItem(
-                            value: name,
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(name),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) {
-                      setState(() => _selectedCategory = v);
-                      _isDirty = true;
-                    },
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'اختر تصنيف المهمة' : null,
-                  ),
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
-                  // 🟩 طريقة التحقق مع التولتيب (ℹ️)
-                  Row(
-                    children: [
-                      _fieldLabel('طريقة التحقق', required: true),
-                      const SizedBox(width: 6),
-                      Tooltip(
-                        message:
-                            'حاليًا لا يمكن اختيار طرق التحقق الأخرى نظرًا لعدم توفر الموارد الكافية وعدم جاهزية النظام بعد لطرق التحقق بالصور أو إعادة التتبع.',
-                        textStyle: GoogleFonts.ibmPlexSansArabic(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.all(10),
-                        preferBelow: false,
-                        triggerMode:
-                            TooltipTriggerMode.tap, // 🔹 Mobile-friendly
-                        child: const Icon(
-                          Icons.info_outline,
-                          color: AppColors.primary,
-                          size: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+                    // ✅ السكرول يبدأ من تحت العنوان
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _fieldLabel('عنوان المهمة', required: true),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: _titleCtrl,
+                                decoration: const InputDecoration(
+                                  hintText: 'مثال: إعادة تدوير الورق',
+                                  prefixIcon: Icon(Icons.task_alt_outlined),
+                                ),
+                                onChanged: (_) => _isDirty = true,
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'أدخل عنوان المهمة'
+                                    : null,
+                              ),
+                              const SizedBox(height: 14),
 
-                  DropdownButtonFormField<String>(
-                    value:
-                        _validationType ??
-                        'التحقق اليدوي', // ✅ Default option for new tasks
-                    alignment: Alignment.centerRight,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      hintText: 'اختر طريقة التحقق',
-                      prefixIcon: Icon(Icons.verified_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(12)),
-                      ),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'التحقق عبر معالجة الصور',
-                        enabled: false, // 🔒 disabled
-                        child: Text(
-                          'التحقق عبر معالجة الصور',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'التحقق عبر تتبع القراءة',
-                        enabled: false, // 🔒 disabled
-                        child: Text(
-                          'التحقق عبر تتبع القراءة',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'التحقق اليدوي',
-                        child: Text('التحقق اليدوي'),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      // ✅ Only allow selecting manual validation
-                      if (v == 'التحقق اليدوي') {
-                        setState(() => _validationType = v);
-                        _isDirty = true;
-                      }
-                    },
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'اختر طريقة التحقق' : null,
-                  ),
-                  const SizedBox(height: 20),
+                              _fieldLabel('وصف المهمة', required: true),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: _descCtrl,
+                                maxLines: 2,
+                                decoration: const InputDecoration(
+                                  hintText:
+                                      'مثال: التوعية بأهمية إعادة التدوير',
+                                  prefixIcon: Icon(Icons.description_outlined),
+                                ),
+                                onChanged: (_) => _isDirty = true,
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'أدخل وصف المهمة'
+                                    : null,
+                              ),
+                              const SizedBox(height: 14),
 
-                  _fieldLabel('تاريخ انتهاء المهمة (شهر)', required: false),
-                  const SizedBox(height: 8),
-                  InkWell(
-                    onTap: () async {
-                      final picked = await _showExpiryMonthPicker(
-                        context: context,
-                        initialYear: now.year,
-                        initialMonth: now.month,
-                        selected: _expiryMonth,
-                      );
-                      if (picked != null) {
-                        setState(() => _expiryMonth = picked);
-                        _isDirty = true;
+                              _fieldLabel('عدد النقاط', required: true),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: _pointsCtrl,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  hintText: 'مثال: 30',
+                                  prefixIcon: Icon(Icons.stars_rounded),
+                                ),
+                                onChanged: (_) => _isDirty = true,
+                                validator: (v) {
+                                  final n = int.tryParse(v ?? '');
+                                  if (n == null || n <= 0) {
+                                    return 'أدخل عددًا صحيحًا موجبًا';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 14),
 
-                        final currentKey = currentMonth;
-                        if (_expiryMonth!.compareTo(currentKey) <= 0) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: Colors.redAccent,
-                              content: Text(
-                                '⚠️ الشهر المختار منتهي أو داخل الشهر الحالي — سيتم التعامل معه كإخفاء بدءًا من الشهر القادم',
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
+                              _fieldLabel('تصنيف المهمة', required: true),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                value: _selectedCategory,
+                                alignment: Alignment.centerRight,
+                                isExpanded: true,
+                                decoration: InputDecoration(
+                                  hintText: _catsLoading
+                                      ? '...يتم تحميل الفئات'
+                                      : 'اختر الفئة',
+                                  prefixIcon: const Icon(
+                                    Icons.category_outlined,
+                                    color: AppColors.primary,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                items: _categories
+                                    .map(
+                                      (name) => DropdownMenuItem(
+                                        value: name,
+                                        child: Align(
+                                          alignment: Alignment.centerRight,
+                                          child: Text(name),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (v) {
+                                  setState(() => _selectedCategory = v);
+                                  _isDirty = true;
+                                },
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'اختر تصنيف المهمة'
+                                    : null,
+                              ),
+                              const SizedBox(height: 20),
+
+                              // 🟩 طريقة التحقق + Tooltip
+                              Row(
+                                children: [
+                                  _fieldLabel('طريقة التحقق', required: true),
+                                  const SizedBox(width: 6),
+                                  Tooltip(
+                                    message:
+                                        'حاليًا لا يمكن اختيار طرق التحقق الأخرى نظرًا لعدم توفر الموارد الكافية وعدم جاهزية النظام بعد لطرق التحقق بالصور أو إعادة التتبع.',
+                                    textStyle: GoogleFonts.ibmPlexSansArabic(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black87,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: const EdgeInsets.all(10),
+                                    preferBelow: false,
+                                    triggerMode: TooltipTriggerMode.tap,
+                                    child: const Icon(
+                                      Icons.info_outline,
+                                      color: AppColors.primary,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+
+                              DropdownButtonFormField<String>(
+                                value: _validationType ?? 'التحقق اليدوي',
+                                alignment: Alignment.centerRight,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  hintText: 'اختر طريقة التحقق',
+                                  prefixIcon: Icon(Icons.verified_outlined),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.all(
+                                      Radius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'التحقق عبر معالجة الصور',
+                                    enabled: false,
+                                    child: Text(
+                                      'التحقق عبر معالجة الصور',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'التحقق عبر تتبع القراءة',
+                                    enabled: false,
+                                    child: Text(
+                                      'التحقق عبر تتبع القراءة',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'التحقق اليدوي',
+                                    child: Text('التحقق اليدوي'),
+                                  ),
+                                ],
+                                onChanged: (v) {
+                                  if (v == 'التحقق اليدوي') {
+                                    setState(() => _validationType = v);
+                                    _isDirty = true;
+                                  }
+                                },
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'اختر طريقة التحقق'
+                                    : null,
+                              ),
+                              const SizedBox(height: 20),
+
+                              _fieldLabel(
+                                'تاريخ انتهاء المهمة (شهر)',
+                                required: false,
+                              ),
+                              const SizedBox(height: 8),
+                              InkWell(
+                                onTap: () async {
+                                  final picked = await _showExpiryMonthPicker(
+                                    context: context,
+                                    initialYear: now.year,
+                                    initialMonth: now.month,
+                                    selected: _expiryMonth,
+                                  );
+                                  if (picked != null) {
+                                    setState(() => _expiryMonth = picked);
+                                    _isDirty = true;
+
+                                    final currentKey = currentMonth;
+                                    if (_expiryMonth!.compareTo(currentKey) <=
+                                        0) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          backgroundColor: Colors.redAccent,
+                                          content: Text(
+                                            '⚠️ الشهر المختار منتهي أو داخل الشهر الحالي — سيتم التعامل معه كإخفاء بدءًا من الشهر القادم',
+                                            style:
+                                                GoogleFonts.ibmPlexSansArabic(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                                child: Container(
+                                  height: 52,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: AppColors.light.withOpacity(.7),
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    color: Colors.white,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        _expiryMonth == null
+                                            ? 'اختر شهر الانتهاء (اختياري)'
+                                            : _expiryMonth!,
+                                        style: GoogleFonts.ibmPlexSansArabic(
+                                          color: AppColors.dark,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.calendar_month,
+                                        color: AppColors.primary,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    child: Container(
-                      height: 52,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: AppColors.light.withOpacity(.7),
+                              const SizedBox(height: 30),
+
+                              _buildGradientSaveButton(
+                                text: isEdit ? 'تحديث المهمة' : 'حفظ المهمة',
+                                onPressed: _saveTask,
+                              ),
+                              const SizedBox(height: 10),
+                              _buildRedCancelButton(
+                                onPressed: () async {
+                                  if (await _confirmLeaveIfDirty()) {
+                                    if (mounted) Navigator.pop(context);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
                         ),
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.white,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _expiryMonth == null
-                                ? 'اختر شهر الانتهاء (اختياري)'
-                                : _expiryMonth!,
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              color: AppColors.dark,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const Icon(
-                            Icons.calendar_month,
-                            color: AppColors.primary,
-                          ),
-                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 30),
-
-                  _buildGradientSaveButton(
-                    text: isEdit ? 'تحديث المهمة' : 'حفظ المهمة',
-                    onPressed: _saveTask,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildRedCancelButton(
-                    onPressed: () async {
-                      if (await _confirmLeaveIfDirty()) Navigator.pop(context);
-                    },
-                  ),
-                ],
-              ),
-            ),
+                  ],
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -2112,115 +2144,122 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            centerTitle: true,
-            title: Text(
-              titleText,
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: AppColors.dark),
-              onPressed: () async {
-                if (await _confirmLeaveIfDirty()) {
-                  if (mounted) Navigator.pop(context, false);
-                }
-              },
-              tooltip: 'رجوع',
-            ),
-            flexibleSpace: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.primary, AppColors.mint],
-                  begin: Alignment.bottomLeft,
-                  end: Alignment.topRight,
-                ),
-              ),
-            ),
-          ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _fieldLabel('اسم الفئة', required: true),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'مثال: النقل المستدام',
-                      prefixIcon: Icon(Icons.category_outlined),
-                    ),
-                    onChanged: (_) => _isDirty = true,
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'أدخل اسم الفئة' : null,
-                  ),
-                  const SizedBox(height: 14),
+          extendBodyBehindAppBar: true,
+          backgroundColor: AppColors.background,
 
-                  _fieldLabel('الفئة الرئيسية', required: true),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _parent,
-                    alignment: Alignment.centerRight,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      hintText: 'اختر الفئة الرئيسية',
-                      prefixIcon: Icon(Icons.hub_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(12)),
+          // ✅ هيدر نمير الموحّد
+          appBar: NameerAppBar(
+            showTitleInBar: false,
+            showBack: true,
+            height: 80,
+          ),
+
+          body: Builder(
+            builder: (context) {
+              final statusBar = MediaQuery.of(context).padding.top;
+              const headerH = 20.0; // نفس ارتفاع الهيدر
+              const gap = 12.0;
+              final topPadding = statusBar + headerH + gap;
+
+              return SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(20, topPadding, 20, 20),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ✅ العنوان أسفل الهيدر مباشرة
+                      Text(
+                        titleText,
+                        textAlign: TextAlign.right,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
                       ),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'سلوك مباشر',
-                        child: Text('سلوك مباشر'),
+                      const SizedBox(height: 20),
+
+                      _fieldLabel('اسم الفئة', required: true),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _nameCtrl,
+                        decoration: const InputDecoration(
+                          hintText: 'مثال: النقل المستدام',
+                          prefixIcon: Icon(Icons.category_outlined),
+                        ),
+                        onChanged: (_) => _isDirty = true,
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? 'أدخل اسم الفئة' : null,
                       ),
-                      DropdownMenuItem(
-                        value: 'سلوك غير مباشر',
-                        child: Text('سلوك غير مباشر'),
+                      const SizedBox(height: 14),
+
+                      _fieldLabel('الفئة الرئيسية', required: true),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: _parent,
+                        alignment: Alignment.centerRight,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          hintText: 'اختر الفئة الرئيسية',
+                          prefixIcon: Icon(Icons.hub_outlined),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                          ),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'سلوك مباشر',
+                            child: Text('سلوك مباشر'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'سلوك غير مباشر',
+                            child: Text('سلوك غير مباشر'),
+                          ),
+                        ],
+                        onChanged: (v) {
+                          setState(() => _parent = v);
+                          _isDirty = true;
+                        },
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'اختر الفئة الرئيسية'
+                            : null,
+                      ),
+                      const SizedBox(height: 14),
+
+                      _fieldLabel('وصف الفئة', required: true),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _descCtrl,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          hintText: 'اكتب وصفًا موجزًا للفئة...',
+                          prefixIcon: Icon(Icons.description_outlined),
+                        ),
+                        onChanged: (_) => _isDirty = true,
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? 'أدخل وصف الفئة' : null,
+                      ),
+                      const SizedBox(height: 24),
+
+                      _buildGradientSaveButton(
+                        text: isEdit ? 'تحديث الفئة' : 'حفظ الفئة',
+                        onPressed: _saveCategory,
+                      ),
+                      const SizedBox(height: 10),
+
+                      _buildRedCancelButton(
+                        onPressed: () async {
+                          if (await _confirmLeaveIfDirty()) {
+                            if (mounted) Navigator.pop(context, false);
+                          }
+                        },
                       ),
                     ],
-                    onChanged: (v) {
-                      setState(() => _parent = v);
-                      _isDirty = true;
-                    },
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'اختر الفئة الرئيسية' : null,
                   ),
-                  const SizedBox(height: 14),
-
-                  _fieldLabel('وصف الفئة', required: true),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _descCtrl,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      hintText: 'اكتب وصفًا موجزًا للفئة...',
-                      prefixIcon: Icon(Icons.description_outlined),
-                    ),
-                    onChanged: (_) => _isDirty = true,
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'أدخل وصف الفئة' : null,
-                  ),
-                  const SizedBox(height: 24),
-
-                  _buildGradientSaveButton(
-                    text: isEdit ? 'تحديث الفئة' : 'حفظ الفئة',
-                    onPressed: _saveCategory,
-                  ),
-                  const SizedBox(height: 10),
-                  _buildRedCancelButton(
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ),
       ),
