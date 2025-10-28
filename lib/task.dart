@@ -880,97 +880,100 @@ Future<void> _bootstrapMonth() async {
           const SizedBox(height: 20),
 
           // 🟢 زر تنفيذ المهمة (ظاهر دائماً)
-// 🟢 زر تنفيذ المهمة (ظاهر دائماً)
-SizedBox(
-  width: double.infinity,
-  child: ElevatedButton(
-    onPressed: canPerform
-        ? () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'تم إكمال المهمة 🎉 (واجهة فقط)',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: null, // ❌ ما يسوي أي شيء
+              style: ElevatedButton.styleFrom(
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                // 🟢 التدرج الأخضر (من نفس كود الألوان المستخدم)
+                backgroundColor: Colors.transparent,
+              ).copyWith(
+                backgroundColor: WidgetStateProperty.resolveWith((states) {
+                  return null; // لأننا بنضيف التدرج يدوياً داخل الـ Ink
+                }),
+              ),
+              child: Ink(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFFB6E9C1), // startColor (mint)
+                      Color(0xFF4BAA98), // endColor (primary)
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Text(
+                    'تمم المهمة',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
-            );
-          }
-        : null, // مقفول إن ما كانت لليوم الحالي
-    style: ElevatedButton.styleFrom(
-      elevation: 0,
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
-      backgroundColor:
-          canPerform ? AppColors.primary : Colors.grey.shade400,
-    ),
-    child: Text(
-      'تمم المهمة',
-      style: GoogleFonts.ibmPlexSansArabic(
-        fontWeight: FontWeight.w700,
-        fontSize: 16,
-        color: Colors.white,
-      ),
-    ),
-  ),
-),
-
-// 🔄 زر تحديث المهمة — يظهر فقط في حال canPerform == true
-if (canPerform) ...[
-  const SizedBox(height: 10),
-  SizedBox(
-    width: double.infinity,
-    child: OutlinedButton.icon(
-      icon: const Icon(Icons.refresh, color: AppColors.primary),
-      label: Text(
-        'تحديث المهمة',
-        style: GoogleFonts.ibmPlexSansArabic(
-          fontWeight: FontWeight.w700,
-          fontSize: 15,
-          color: AppColors.primary,
-        ),
-      ),
-      style: OutlinedButton.styleFrom(
-        side: const BorderSide(color: AppColors.primary, width: 2),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-      ),
-      onPressed: () async {
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('تأكيد التحديث'),
-            content: const Text('هل أنت متأكد من رغبتك في تغيير هذه المهمة؟'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('تأكيد'),
-              ),
-            ],
+            ),
           ),
-        );
+          // 🔄 زر تحديث المهمة — يظهر فقط في حال canPerform == true
+          if (canPerform) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.refresh, color: AppColors.primary),
+                label: Text(
+                  'تحديث المهمة',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: AppColors.primary,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.primary, width: 2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('تأكيد التحديث'),
+                      content: const Text('هل أنت متأكد من رغبتك في تغيير هذه المهمة؟'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('إلغاء'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('تأكيد'),
+                        ),
+                      ],
+                    ),
+                  );
 
-        if (confirm == true) {
-          await _refreshUserTask(taskData);
-        }
-      },
-    ),
-  ),
-],
-
+                  if (confirm == true) {
+                    await _refreshUserTask(taskData);
+                  }
+                },
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
-
 }
