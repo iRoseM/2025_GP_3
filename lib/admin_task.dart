@@ -1277,76 +1277,74 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                     : null,
                               ),
                               const SizedBox(height: 20),
-
-                  // 🟩 طريقة التحقق مع التولتيب (ℹ️)
-                  Row(
-                    children: [
-                      _fieldLabel('طريقة التحقق', required: true),
-                      const SizedBox(width: 6),
-                      Tooltip(
-                        message:
-                            'حاليًا لا يمكن اختيار طرق التحقق الأخرى نظرًا لعدم توفر الموارد الكافية وعدم جاهزية النظام بعد لطرق التحقق بالصور أو إعادة التتبع.',
-                        textStyle: GoogleFonts.ibmPlexSansArabic(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.all(10),
-                        preferBelow: false,
-                        triggerMode:
-                            TooltipTriggerMode.tap, // 🔹 Mobile-friendly
-                        child: const Icon(
-                          Icons.info_outline,
-                          color: AppColors.primary,
-                          size: 18,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _validationType,
-                    alignment: Alignment.centerRight,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      hintText: 'اختر طريقة التحقق',
-                      prefixIcon: Icon(Icons.verified_outlined, color: AppColors.primary),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(12)),
-                      ),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'التحقق اليدوي',
-                        child: Text('التحقق اليدوي'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'التحقق عبر معالجة الصور',
-                        enabled: false, // 🔒 مؤقتًا غير متاح
-                        child: Text('التحقق عبر معالجة الصور', style: TextStyle(color: Colors.grey)),
-                      ),
-                      DropdownMenuItem(
-                        value: 'التحقق عبر تتبع القراءة',
-                        enabled: false,
-                        child: Text('التحقق عبر تتبع القراءة', style: TextStyle(color: Colors.grey)),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      setState(() => _validationType = v);
-                      _isDirty = true;
-                    },
-                    validator: (v) {
-                      if (v == null || v.isEmpty) {
-                        return 'اختر طريقة التحقق';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 20),
-
+                              // 🟩 طريقة التحقق مع التولتيب (ℹ️)
+                              Row(
+                                children: [
+                                  _fieldLabel('طريقة التحقق', required: true),
+                                  const SizedBox(width: 6),
+                                  Tooltip(
+                                    message:
+                                        'حاليًا لا يمكن اختيار طرق التحقق الأخرى نظرًا لعدم توفر الموارد الكافية وعدم جاهزية النظام بعد لطرق التحقق بالصور أو إعادة التتبع.',
+                                    textStyle: GoogleFonts.ibmPlexSansArabic(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black87,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: const EdgeInsets.all(10),
+                                    preferBelow: false,
+                                    triggerMode:
+                                        TooltipTriggerMode.tap, // 🔹 Mobile-friendly
+                                    child: const Icon(
+                                      Icons.info_outline,
+                                      color: AppColors.primary,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                value: _validationType,
+                                alignment: Alignment.centerRight,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  hintText: 'اختر طريقة التحقق',
+                                  prefixIcon: Icon(Icons.verified_outlined, color: AppColors.primary),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                                  ),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'التحقق اليدوي',
+                                    child: Text('التحقق اليدوي'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'التحقق عبر معالجة الصور',
+                                    enabled: false, // 🔒 مؤقتًا غير متاح
+                                    child: Text('التحقق عبر معالجة الصور', style: TextStyle(color: Colors.grey)),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'التحقق عبر تتبع القراءة',
+                                    enabled: false,
+                                    child: Text('التحقق عبر تتبع القراءة', style: TextStyle(color: Colors.grey)),
+                                  ),
+                                ],
+                                onChanged: (v) {
+                                  setState(() => _validationType = v);
+                                  _isDirty = true;
+                                },
+                                validator: (v) {
+                                  if (v == null || v.isEmpty) {
+                                    return 'اختر طريقة التحقق';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 20),
                               _fieldLabel(
                                 'تاريخ انتهاء المهمة (شهر)',
                                 required: false,
