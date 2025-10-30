@@ -315,6 +315,8 @@ class _AdminMapPageState extends State<AdminMapPage> {
         setState(() {
           _isLoadingFacilities = false;
           if (!_didInitialLoad) _didInitialLoad = true;
+          _allowedTypes.clear();
+          _applyCurrentFilters();
           // عرض رسالة "لا توجد حاويات" إذا لم توجد نتائج
           if (_markers.isEmpty) _flashEmptyMsg();
         });
@@ -1297,7 +1299,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
   /// ✅ إضافة ماركر + حفظه في Firestore
   Future<void> _addMarkerToMapAndSave(
     LatLng pos,
-    String name,
+    String address,
     String type, {
     String provider = 'غير محدد',
     String statusStr = 'نشط',
@@ -1306,7 +1308,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
       final normalizedType = _normalizeType(type);
       final docRef = FirebaseFirestore.instance.collection('facilities').doc();
       await docRef.set({
-        'name': name.isEmpty ? 'موقع جديد' : name.trim(),
+        'address': address.isEmpty ? 'عنوان غير محدد' : address.trim(),
         'type': normalizedType,
         'lat': pos.latitude,
         'lng': pos.longitude,
@@ -1323,7 +1325,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
           markerId: markerId,
           position: pos,
           infoWindow: InfoWindow(
-            title: name.trim().isNotEmpty ? name.trim() : normalizedType,
+            title: address.trim().isNotEmpty ? address.trim() : normalizedType,
             snippet:
                 '$normalizedType${provider.trim().isNotEmpty ? ' • ${provider.trim()}' : ''}',
             onTap: () => _showMarkerSheet(markerId, pos),
