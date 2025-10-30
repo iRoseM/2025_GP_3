@@ -318,15 +318,16 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                           final username = (data?['username'] ?? 'مستخدم')
                               .toString();
 
-                          int wallet = 0;
-                          final w = data?['wallet'];
-                          if (w is int) {
-                            wallet = w;
-                          } else if (w is double) {
-                            wallet = w.toInt();
-                          } else if (w != null) {
-                            wallet = int.tryParse('$w') ?? 0;
+                          int _asInt(dynamic v) {
+                            if (v is int) return v;
+                            if (v is double) return v.toInt();
+                            if (v == null) return 0;
+                            return int.tryParse('$v') ?? 0;
                           }
+
+                          final int points = _asInt(
+                            data?['points'] ?? data?['wallet'],
+                          );
                           return Padding(
                             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                             child: Row(
@@ -462,7 +463,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                       snap.connectionState ==
                                           ConnectionState.waiting
                                       ? 0
-                                      : wallet,
+                                      : points,
                                   onTap: () {},
                                 ),
                               ],

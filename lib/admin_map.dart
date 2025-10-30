@@ -177,7 +177,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
         lower.contains('food') ||
         lower.contains('organic');
     if (isClothes) return 'حاوية إعادة تدوير الملابس';
-    if (isRvm) return 'آلة استرجاع (RVM)';
+    if (isRvm) return 'آلة إعادة التدوير (RVM)';
     if (isPapers) return 'حاوية إعادة تدوير الأوراق';
     if (isFood) return 'حاوية إعادة تدوير بقايا الطعام';
     if (lower.contains('قوارير') ||
@@ -185,6 +185,8 @@ class _AdminMapPageState extends State<AdminMapPage> {
         lower.contains('علب') ||
         lower.contains('bottle') ||
         lower.contains('plastic')) {
+      // أبقينا التطبيع كما هو لدعم البيانات القديمة،
+      // لكن الخيار أُزيل من الواجهات.
       return 'حاوية إعادة تدوير القوارير';
     }
     return t.isEmpty ? 'نقطة استدامة' : t;
@@ -198,7 +200,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
       case 'حاوية إعادة تدوير الأوراق':
         return _iconPapers ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
-      case 'آلة استرجاع (RVM)':
+      case 'آلة إعادة التدوير (RVM)':
         return _iconRvm ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
       case 'حاوية إعادة تدوير بقايا الطعام':
@@ -688,7 +690,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                       SizedBox(width: 8),
                       _LegendIcon(
                         path: 'assets/img/rvmPin.png',
-                        label: 'آلات إعادة التدوير',
+                        label: 'آلات إعادة التدوير (RVM)',
                       ),
                       SizedBox(width: 8),
                       _LegendIcon(
@@ -725,7 +727,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
             _allowedTypes.contains('حاوية إعادة تدوير الملابس');
         bool fRvm =
             _allowedTypes.isEmpty ||
-            _allowedTypes.contains('آلة استرجاع (RVM)');
+            _allowedTypes.contains('آلة إعادة التدوير (RVM)');
         bool fPapers =
             _allowedTypes.isEmpty ||
             _allowedTypes.contains('حاوية إعادة تدوير الأوراق');
@@ -759,7 +761,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   ),
                   const SizedBox(height: 6),
                   FilterChip(
-                    label: const Text('آلة استرجاع (RVM)'),
+                    label: const Text('آلة إعادة التدوير (RVM)'),
                     selected: fRvm,
                     onSelected: (v) => setSt(() => fRvm = v),
                   ),
@@ -778,7 +780,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                         final allowed = <String>{};
                         if (fClothes) allowed.add('حاوية إعادة تدوير الملابس');
                         if (fPapers) allowed.add('حاوية إعادة تدوير الأوراق');
-                        if (fRvm) allowed.add('آلة استرجاع (RVM)');
+                        if (fRvm) allowed.add('آلة إعادة التدوير (RVM)');
                         if (fFood)
                           allowed.add('حاوية إعادة تدوير بقايا الطعام');
                         setState(() => _allowedTypes = allowed);
@@ -838,7 +840,8 @@ class _AdminMapPageState extends State<AdminMapPage> {
           child: _FacilityFormCard(
             title: 'إضافة موقع استدامة جديد',
             initialName: '',
-            initialType: 'حاوية إعادة تدوير القوارير',
+            // ⛔️ أزلنا خيار "حاوية إعادة تدوير القوارير" وجعلنا الافتراضي "الأوراق"
+            initialType: 'حاوية إعادة تدوير الأوراق',
             initialProvider: '',
             initialActive: true,
             onSubmit:
@@ -1508,10 +1511,7 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                     ),
                     isExpanded: true,
                     items: const [
-                      DropdownMenuItem(
-                        value: 'حاوية إعادة تدوير القوارير',
-                        child: Text('حاوية إعادة تدوير القوارير'),
-                      ),
+                      // ⛔️ تمت إزالة "حاوية إعادة تدوير القوارير"
                       DropdownMenuItem(
                         value: 'حاوية إعادة تدوير الملابس',
                         child: Text('حاوية إعادة تدوير الملابس'),
@@ -1525,8 +1525,8 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                         child: Text('حاوية إعادة تدوير الأوراق'),
                       ),
                       DropdownMenuItem(
-                        value: 'آلة استرجاع (RVM)',
-                        child: Text('آلة استرجاع (RVM)'),
+                        value: 'آلة إعادة التدوير (RVM)',
+                        child: Text('آلة إعادة التدوير (RVM)'),
                       ),
                     ],
                     onChanged: (val) => setState(() => _type = val ?? _type),
@@ -1707,16 +1707,13 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                           backgroundColor: Colors.transparent,
                           shadowColor: Colors.transparent,
                           padding: const EdgeInsets.symmetric(
-                            vertical:
-                                8, // 👈 خففناها من 14 إلى 8 علشان الزر يصير أنحف
+                            vertical: 8,
                             horizontal: 18,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          minimumSize: const Size.fromHeight(
-                            42,
-                          ), // 👈 ارتفاع الزر
+                          minimumSize: const Size.fromHeight(42),
                         ),
                         onPressed: () async {
                           if (!_formKey.currentState!.validate()) return;
