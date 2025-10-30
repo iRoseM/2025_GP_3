@@ -208,7 +208,7 @@ class _mapPageState extends State<mapPage> {
         lower.contains('organic');
 
     if (isClothes) return 'حاوية إعادة تدوير الملابس';
-    if (isRvm) return 'آلة استرجاع (RVM)';
+    if (isRvm) return 'آلة إعادة التدوير (RVM)';
     if (isPapers) return 'حاوية إعادة تدوير الأوراق';
     if (isFood) return 'حاوية إعادة تدوير بقايا الطعام';
 
@@ -232,7 +232,7 @@ class _mapPageState extends State<mapPage> {
       case 'حاوية إعادة تدوير الأوراق':
         return _iconPapers ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
-      case 'آلة استرجاع (RVM)':
+      case 'آلة إعادة التدوير (RVM)':
         return _iconRvm ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
       case 'حاوية إعادة تدوير بقايا الطعام':
@@ -1476,7 +1476,7 @@ class _mapPageState extends State<mapPage> {
                       SizedBox(width: 8),
                       _LegendIcon(
                         path: 'assets/img/rvmPin.png',
-                        label: 'آلات إعادة التدوير',
+                        label: 'آلات إعادة التدوير (RVM)',
                       ),
                       SizedBox(width: 8),
                       _LegendIcon(
@@ -1537,7 +1537,7 @@ class _mapPageState extends State<mapPage> {
                   ),
                   const SizedBox(height: 6),
                   FilterChip(
-                    label: const Text('آلة استرجاع (RVM)'),
+                    label: const Text('آلة إعادة التدوير (RVM)'),
                     selected: fRvm,
                     onSelected: (v) => setSt(() => fRvm = v),
                   ),
@@ -1557,7 +1557,7 @@ class _mapPageState extends State<mapPage> {
                         final allowed = <String>{};
                         if (fClothes) allowed.add('حاوية إعادة تدوير الملابس');
                         if (fPapers) allowed.add('حاوية إعادة تدوير الأوراق');
-                        if (fRvm) allowed.add('آلة استرجاع (RVM)');
+                        if (fRvm) allowed.add('آلة إعادة التدوير (RVM)');
                         if (fFood)
                           allowed.add('حاوية إعادة تدوير بقايا الطعام');
 
@@ -1728,8 +1728,8 @@ class _RoundBtn extends StatelessWidget {
 class _HeaderUser extends StatelessWidget {
   final String name;
   final int points;
-  final String? avatarPath; // Asset path (اختياري): مثال assets/pfp/pfp1.png
-  final VoidCallback? onTap; // لو حاب تمرّر أكشن مخصص
+  final String? avatarPath;
+  final VoidCallback? onTap;
 
   const _HeaderUser({
     required this.name,
@@ -1802,55 +1802,66 @@ class _HeaderUser extends StatelessWidget {
             ),
           ),
 
-          // شارة النقاط
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.primary, AppColors.primary, AppColors.mint],
-                stops: [0.0, 0.5, 1.0],
-                begin: Alignment.bottomLeft,
-                end: Alignment.topRight,
+          // شارة النقاط - تم التعديل لتأخذ نفس ستايل الهوم بيج
+          InkWell(
+            borderRadius: BorderRadius.circular(100),
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [
+                    AppColors.primary,
+                    AppColors.primary,
+                    AppColors.mint,
+                  ],
+                  stops: [0.0, 0.5, 1.0],
+                  begin: Alignment.bottomLeft,
+                  end: Alignment.topRight,
+                ),
+                borderRadius: BorderRadius.circular(100),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(.35), // نفس الهوم بيج
+                    blurRadius: 14, // نفس الهوم بيج
+                    offset: const Offset(0, 6), // نفس الهوم بيج
+                  ),
+                ],
               ),
-              borderRadius: BorderRadius.circular(100),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(.35),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.stars_rounded, color: Colors.white, size: 18),
-                const SizedBox(width: 6),
-                Text(
-                  '$points',
-                  style: const TextStyle(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.stars_rounded,
                     color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
+                    size: 18, // نفس الهوم بيج
                   ),
-                ),
-                const SizedBox(width: 4),
-                const Text(
-                  'نقطة',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
+                  const SizedBox(width: 6),
+                  Text(
+                    '$points',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14, // نفس الهوم بيج
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  const Text(
+                    'نقطة',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12, // نفس الهوم بيج
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
 
-    // 👇 نفس فكرة التنقل: البطاقة كلها قابلة للنقر وتفتح صفحة البروفايل
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap:
@@ -1862,111 +1873,6 @@ class _HeaderUser extends StatelessWidget {
             );
           },
       child: card,
-    );
-  }
-}
-
-/// ===== نسخة Live: تجيب الاسم + النقاط + الأفاتار من Firestore وتستعمل _HeaderUser =====
-class HeaderUserLiveWithPoints extends StatelessWidget {
-  final VoidCallback? onTap;
-
-  const HeaderUserLiveWithPoints({super.key, this.onTap});
-
-  String _extractName(Map<String, dynamic> data, User? user) {
-    return (data['displayName'] ??
-            data['fullName'] ??
-            data['name'] ??
-            data['username'] ??
-            user?.displayName ??
-            user?.email ??
-            'مسؤول')
-        .toString();
-  }
-
-  int _extractPoints(Map<String, dynamic> data) {
-    final p = data['points'] ?? data['score'] ?? 0;
-    if (p is int) return p;
-    return int.tryParse(p.toString()) ?? 0;
-  }
-
-  /// يختار صورة الأفاتار من pfpIndex (0..7) -> assets/pfp/pfp{index+1}.png
-  String? _extractAvatarAsset(Map<String, dynamic> data) {
-    final raw = data['pfpIndex'];
-    int? idx;
-    if (raw is int) {
-      idx = raw;
-    } else if (raw != null) {
-      idx = int.tryParse(raw.toString());
-    }
-    if (idx != null && idx >= 0 && idx < 8) {
-      return 'assets/pfp/pfp${idx + 1}.png';
-    }
-    // لو عندك حقل جاهز لمسار الأصول (avatarPath) استخدمه:
-    final asset = data['avatarPath']?.toString();
-    if (asset != null && asset.trim().isNotEmpty) return asset.trim();
-
-    return null; // سيظهر أيقونة افتراضية
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return _HeaderUser(
-        name: 'مسؤول',
-        points: 0,
-        avatarPath: null,
-        onTap:
-            onTap ??
-            () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const profilePage()),
-              );
-            },
-      );
-    }
-
-    final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
-
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: docRef.snapshots(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return _HeaderUser(
-            name: '...',
-            points: 0,
-            avatarPath: null,
-            onTap:
-                onTap ??
-                () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const profilePage()),
-                  );
-                },
-          );
-        }
-
-        final data = snap.data?.data() ?? {};
-        final name = _extractName(data, user);
-        final points = _extractPoints(data);
-        final avatarPath = _extractAvatarAsset(data);
-
-        return _HeaderUser(
-          name: name,
-          points: points,
-          avatarPath: avatarPath,
-          onTap:
-              onTap ??
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const profilePage()),
-                );
-              },
-        );
-      },
     );
   }
 }

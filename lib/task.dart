@@ -13,6 +13,7 @@ import 'services/bottom_nav.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
+import 'complete_task.dart'; // يحتوي على CompleteTaskSheet
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -37,23 +38,41 @@ class taskPage extends StatefulWidget {
 class _taskPageState extends State<taskPage> {
   final int _currentIndex = 1;
 
+  // ✅ قفل تفاؤلي لكل وثيقة userTask (بدل فلاغ عام)
+  final Set<String> _justCompletedDocIds = <String>{};
+
   void _onTap(int i) {
     if (i == _currentIndex) return;
     switch (i) {
       case 0:
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const homePage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const homePage()),
+        );
         break;
       case 1:
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const taskPage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const taskPage()),
+        );
         break;
       case 2:
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const levelsPage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const levelsPage()),
+        );
         break;
       case 3:
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const mapPage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const mapPage()),
+        );
         break;
       case 4:
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const communityPage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const communityPage()),
+        );
         break;
     }
   }
@@ -66,117 +85,94 @@ class _taskPageState extends State<taskPage> {
   Stream<DocumentSnapshot>? _userTaskStream;
   Map<DateTime, String> _monthStatuses = {};
 
-  DateTime _dayStart(DateTime d) => DateTime(d.year, d.month, d.day); // delete 
-  DateTime _dayEnd(DateTime d) => _dayStart(d).add(const Duration(days: 1)).subtract(const Duration(seconds: 1)); //delete 
+  DateTime _dayStart(DateTime d) => DateTime(d.year, d.month, d.day);
+  DateTime _dayEnd(DateTime d) => _dayStart(
+    d,
+  ).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
   String _yyyyMMdd(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}'; // delete
-   // 🟢 Temporary pool of remaining task IDs for refresh rotation
+      '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
   List<String> _remainingTaskIds = [];
 
-
-  // ============================================================
-  // 🟢 Helper methods for monthly handling
-  // ============================================================
   DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
-  DateTime _monthEnd(DateTime d)   => DateTime(d.year, d.month + 1, 0);
+  DateTime _monthEnd(DateTime d) => DateTime(d.year, d.month + 1, 0);
 
-@override
-void initState() {
-  super.initState();
-  Future.microtask(() async {
-    if (!await hasInternetConnection()) {
-      if (mounted) showNoInternetDialog(context);
-      return;
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() async {
+      if (!await hasInternetConnection()) {
+        if (mounted) showNoInternetDialog(context);
+        return;
+      }
+    });
+    final user = _auth.currentUser;
+    _uid = user?.uid;
+    _selectedDay = _dayStart(DateTime.now());
+    _focusedDay = _selectedDay!;
+    _bootstrapTodayOnly(); // سريع
+  }
+
+  Future<void> _bootstrapTodayOnly() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final today = _dayStart(DateTime.now());
+
+    DateTime authCreated = user.metadata.creationTime?.toLocal() ?? today;
+    DateTime? usersJoin;
+    final udoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+    if (udoc.exists && (udoc.data()?['joinDate'] != null)) {
+      final v = udoc.data()!['joinDate'];
+      if (v is Timestamp) {
+        usersJoin = v.toDate();
+      } else if (v is DateTime) {
+        usersJoin = v;
+      }
     }
-  });
-  final user = _auth.currentUser;
-  _uid = user?.uid;
-  _selectedDay = _dayStart(DateTime.now());
-  _focusedDay  = _selectedDay!;
-  _bootstrapMonth(); // 👈 بدل الدالة القديمة
-}
+    DateTime resolvedJoin = usersJoin == null
+        ? authCreated
+        : (authCreated.isBefore(usersJoin!) ? authCreated : usersJoin!);
+    if (_dayStart(resolvedJoin).isAfter(today)) resolvedJoin = today; // clamp
+    _joinDate = _dayStart(resolvedJoin);
 
-Future<void> _bootstrapMonth() async {
-  final user = _auth.currentUser;
-  if (user == null) return;
+    await _ensureUserTaskForDate(today);
+    await _ensureUserTaskForDate(today.add(const Duration(days: 1)));
 
-  DateTime fallback = user.metadata.creationTime?.toLocal() ?? DateTime.now();
-  _joinDate = _dayStart(fallback);
+    _monthStatuses = await _getTaskStatusesForMonth(today);
 
-  final udoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-  if (udoc.exists && (udoc.data()?['joinDate'] != null)) {
-    _joinDate = _dayStart((udoc.data()!['joinDate'] as Timestamp).toDate());
+    _attachUserTaskStreamFor(_selectedDay!);
+    if (mounted) setState(() {});
   }
 
-  // ✅ ولّدي مهام الشهر الحالي كاملة (حتى اليوم) + باكر
-  await _ensureMonthBackfill(DateTime.now());
-
-  _attachUserTaskStreamFor(_selectedDay!);
-  if (mounted) setState(() {});
-  }
-
-//   // ✅ توليد/استرجاع مهام كل أيام الشهر (حتى اليوم) + الغد لو الشهر الحالي
-// Future<void> _ensureMonthBackfill(DateTime anyDayInMonth) async {
-//   if (_uid == null) return;
-
-//   final ms = _monthStart(anyDayInMonth);
-//   final me = _monthEnd(anyDayInMonth);
-//   final today = _dayStart(DateTime.now());
-
-//   // ✅ نولّد مهام الشهر كامل (حتى الأيام بعد اليوم)
-//   for (DateTime d = ms; !d.isAfter(me); d = d.add(const Duration(days: 1))) {
-//     // لا تنشئ مهمة قبل تاريخ انضمام المستخدم
-//     if (_joinDate != null && d.isBefore(_joinDate!)) continue;
-//     await _ensureUserTaskForDate(d);
-//   }
-
-//   // ✅ لو الشهر السابق ما تولّد بعد، ولّده برضو
-//   final prevMonthStart = DateTime(ms.year, ms.month - 1, 1);
-//   final prevMonthEnd = DateTime(ms.year, ms.month, 0);
-//   for (DateTime d = prevMonthStart; !d.isAfter(prevMonthEnd); d = d.add(const Duration(days: 1))) {
-//     if (_joinDate != null && d.isBefore(_joinDate!)) continue;
-//     await _ensureUserTaskForDate(d);
-//   }
-// }
-
-  // ✅ توليد/استرجاع مهام كل أيام الشهر (مع منع التكرار المتتالي)
   Future<void> _ensureMonthBackfill(DateTime anyDayInMonth) async {
     if (_uid == null) return;
-
     final ms = _monthStart(anyDayInMonth);
     final me = _monthEnd(anyDayInMonth);
 
-    // نحدد الشهر السابق (حتى نضمن تسلسل صحيح)
     final prevMonthStart = DateTime(ms.year, ms.month - 1, 1);
     final prevMonthEnd = DateTime(ms.year, ms.month, 0);
 
-    // ✅ 1. ولّدي الشهر السابق أولاً
-    for (DateTime d = prevMonthStart;
-        !d.isAfter(prevMonthEnd);
-        d = d.add(const Duration(days: 1))) {
-      if (_joinDate != null && d.isBefore(_joinDate!)) continue; // قبل الانضمام
+    for (
+      DateTime d = prevMonthStart;
+      !d.isAfter(prevMonthEnd);
+      d = d.add(const Duration(days: 1))
+    ) {
+      if (_joinDate != null && d.isBefore(_joinDate!)) continue;
       await _ensureUserTaskForDate(d);
-      await Future.delayed(const Duration(milliseconds: 100)); // ⏳ تأخير بسيط لضمان الكتابة في فايربيز
     }
-
-    // ✅ 2. ثم الشهر الحالي (من بدايته إلى نهايته)
     final today = _dayStart(DateTime.now());
     for (DateTime d = ms; !d.isAfter(me); d = d.add(const Duration(days: 1))) {
-      if (_joinDate != null && d.isBefore(_joinDate!)) continue; // قبل الانضمام
+      if (_joinDate != null && d.isBefore(_joinDate!)) continue;
       await _ensureUserTaskForDate(d);
-      await Future.delayed(const Duration(milliseconds: 100)); // ⏳ نفس التأخير
     }
 
-    // ✅ بعد ما نخلص، نحدث المهام لليوم الحالي في الواجهة
     _attachUserTaskStreamFor(_selectedDay ?? today);
     if (mounted) setState(() {});
   }
 
-
-
-  // ============================================================
-  // 🟢 Get daily markers (completed / uncompleted / pending)
-  // ============================================================
   Future<Map<DateTime, String>> _getTaskStatusesForMonth(DateTime month) async {
     if (_uid == null) return {};
     final ms = _monthStart(month);
@@ -199,9 +195,6 @@ Future<void> _bootstrapMonth() async {
     return map;
   }
 
-  // ============================================================
-  // 🔄 Refresh current task (change user's daily task manually)
-  // ============================================================
   Future<void> _refreshUserTask(Map<String, dynamic> currentTask) async {
     if (_uid == null || _selectedDay == null) return;
 
@@ -209,15 +202,14 @@ Future<void> _bootstrapMonth() async {
     final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
     final now = DateTime.now();
 
-    // جلب المهام النشطة + مهام الشهر القادم
     final tasksSnap = await FirebaseFirestore.instance
         .collection('tasks')
         .where('status', isEqualTo: 'active')
         .get();
 
-    final currentMonthKey = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+    final currentMonthKey =
+        "${now.year}-${now.month.toString().padLeft(2, '0')}";
 
-    // تصفية المهام
     final validTasks = tasksSnap.docs.where((doc) {
       final data = doc.data();
       dynamic vf = data['visible_from'];
@@ -240,38 +232,45 @@ Future<void> _bootstrapMonth() async {
         expiryMonth = em;
       }
 
-      final isVisible = visibleFrom == null || visibleFrom.compareTo(currentMonthKey) <= 1;
-      final notExpired = expiryMonth == null || expiryMonth.compareTo(currentMonthKey) >= 0;
+      final isVisible =
+          (visibleFrom == null) ||
+          (visibleFrom.compareTo(currentMonthKey) <= 0);
+      final notExpired =
+          (expiryMonth == null) ||
+          (expiryMonth.compareTo(currentMonthKey) >= 0);
       return isVisible && notExpired;
     }).toList();
 
     if (validTasks.isEmpty) return;
 
-    // إذا كانت القائمة المؤقتة فارغة، املأها بجميع المهام المتاحة
     if (_remainingTaskIds.isEmpty) {
       _remainingTaskIds = validTasks.map((doc) => doc.id).toList();
-      print("🔁 Refilled remaining task pool with ${_remainingTaskIds.length} tasks");
     }
 
-    // حذف المهمة الحالية من القائمة
     _remainingTaskIds.remove(currentTask['id']);
 
-    // إزالة مهمة الأمس والغد من القائمة (منع التكرار)
     String? yTaskId, tTaskId;
-    final yesterday = _dayStart(_selectedDay!.subtract(const Duration(days: 1)));
+    final yesterday = _dayStart(
+      _selectedDay!.subtract(const Duration(days: 1)),
+    );
     final tomorrow = _dayStart(_selectedDay!.add(const Duration(days: 1)));
 
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
     final tKey = '${_uid!}_${_yyyyMMdd(tomorrow)}';
-    final ySnap = await FirebaseFirestore.instance.collection('userTasks').doc(yKey).get();
-    final tSnap = await FirebaseFirestore.instance.collection('userTasks').doc(tKey).get();
+    final ySnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(yKey)
+        .get();
+    final tSnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(tKey)
+        .get();
 
     if (ySnap.exists) yTaskId = ySnap.data()?['taskId'] as String?;
     if (tSnap.exists) tTaskId = tSnap.data()?['taskId'] as String?;
     _remainingTaskIds.remove(yTaskId);
     _remainingTaskIds.remove(tTaskId);
 
-    // 🔍 إذا انتهت كل المهام
     if (_remainingTaskIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -282,21 +281,15 @@ Future<void> _bootstrapMonth() async {
           backgroundColor: AppColors.primary,
         ),
       );
-
-      // إعادة تعبئة القائمة بالمهام الأصلية
       _remainingTaskIds = validTasks.map((doc) => doc.id).toList();
-      print("🔄 Task pool refilled for looping again");
     }
 
-    // اختيار مهمة جديدة عشوائية من القائمة
     final rnd = Random(DateTime.now().millisecondsSinceEpoch);
     final newTaskId = _remainingTaskIds[rnd.nextInt(_remainingTaskIds.length)];
-    _remainingTaskIds.remove(newTaskId); // حذفها من القائمة حتى لا تتكرر فورًا
+    _remainingTaskIds.remove(newTaskId);
 
     await ref.update({'taskId': newTaskId});
 
-    // 🧾 طباعة ومؤشر نجاح
-    print('✅ New task assigned: $newTaskId (Remaining: ${_remainingTaskIds.length})');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -308,166 +301,122 @@ Future<void> _bootstrapMonth() async {
     );
   }
 
-  // ============================================================
-  // Ensure userTask exists with ACTIVE tasks (monthly visibility)
-  // ============================================================
   Future<void> _ensureUserTaskForDate(DateTime day) async {
-  if (_uid == null) return;
+    if (_uid == null) return;
 
-  final today = _dayStart(DateTime.now());
-  if (_joinDate != null && day.isBefore(_joinDate!)) return;
+    final today = _dayStart(DateTime.now());
+    if (_joinDate != null && day.isBefore(_joinDate!)) return;
 
-  // ❌ لا نمنع الأيام المستقبلية داخل نفس الشهر
-  final now = DateTime.now();
-  if (day.year > now.year ||
-      (day.year == now.year && day.month > now.month + 1)) {
-    return; // بس نمنع الأشهر الجاية أو السنوات الجاية
+    final now = DateTime.now();
+    if (day.year > now.year ||
+        (day.year == now.year && day.month > now.month + 1))
+      return;
+
+    final key = '${_uid!}_${_yyyyMMdd(day)}';
+    final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
+    final snap = await ref.get();
+    if (snap.exists) return;
+
+    final monthKey = "${day.year}-${day.month.toString().padLeft(2, '0')}";
+
+    final tasksSnap = await FirebaseFirestore.instance
+        .collection('tasks')
+        .where('status', isEqualTo: 'active')
+        .get();
+
+    final validTasks = tasksSnap.docs.where((doc) {
+      final data = doc.data();
+      dynamic vf = data['visible_from'];
+      dynamic em = data['expiry_month'];
+
+      String? visibleFrom;
+      String? expiryMonth;
+
+      if (vf is Timestamp) {
+        final d = vf.toDate();
+        visibleFrom = "${d.year}-${d.month.toString().padLeft(2, '0')}";
+      } else if (vf is String) {
+        visibleFrom = vf;
+      }
+
+      if (em is Timestamp) {
+        final d = em.toDate();
+        expiryMonth = "${d.year}-${d.month.toString().padLeft(2, '0')}";
+      } else if (em is String) {
+        expiryMonth = em;
+      }
+
+      final isVisible =
+          (visibleFrom == null) || (visibleFrom.compareTo(monthKey) <= 0);
+      final notExpired =
+          (expiryMonth == null) || (expiryMonth.compareTo(monthKey) >= 0);
+      return isVisible && notExpired;
+    }).toList();
+
+    if (validTasks.isEmpty) return;
+
+    String? yTaskId;
+    final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
+    final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
+    final ySnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(yKey)
+        .get();
+    if (ySnap.exists) yTaskId = ySnap.data()?['taskId'] as String?;
+
+    final excludedIds = {yTaskId}..removeWhere((id) => id == null);
+    final candidates = validTasks
+        .where((doc) => !excludedIds.contains(doc.id))
+        .toList();
+    final pool = candidates.isEmpty ? validTasks : candidates;
+
+    final rnd = Random(
+      DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch,
+    );
+    final picked = pool[rnd.nextInt(pool.length)];
+    final pickedData = picked.data();
+    final pickedTitle = pickedData['title'] ?? '(بدون عنوان)';
+    final pickedDesc = pickedData['description'] ?? '';
+    final pickedPoints = pickedData['points'] ?? 0;
+    final pickedValidation = pickedData['validationStrategy'] ?? 'غير محددة';
+
+    final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
+    final start = _dayStart(day);
+    final end = _dayEnd(day);
+    final double carbon = (rnd.nextDouble() * 0.42 + 0.08);
+
+    await ref.set({
+      'userId': _uid,
+      'taskId': picked.id,
+      'selectedAt': Timestamp.fromDate(start),
+      'status': status,
+      'completedAt': null,
+      'carbonFootPrint': carbon,
+      'windowStart': Timestamp.fromDate(start),
+      'windowEnd': Timestamp.fromDate(end),
+
+      // de-normalized
+      'taskTitle': pickedTitle,
+      'taskDescription': pickedDesc,
+      'taskPoints': pickedPoints,
+      'taskValidation': pickedValidation,
+    });
   }
-
-  final key = '${_uid!}_${_yyyyMMdd(day)}';
-  final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
-  final snap = await ref.get();
-  if (snap.exists) return;
-
-  final currentMonthKey = "${now.year}-${now.month.toString().padLeft(2, '0')}";
-
-  // 🟢 جلب المهام النشطة فقط
-  final tasksSnap = await FirebaseFirestore.instance
-      .collection('tasks')
-      .where('status', isEqualTo: 'active')
-      .get();
-
-  final validTasks = tasksSnap.docs.where((doc) {
-    final data = doc.data();
-    dynamic vf = data['visible_from'];
-    dynamic em = data['expiry_month'];
-
-    String? visibleFrom;
-    String? expiryMonth;
-
-    if (vf is Timestamp) {
-      final d = vf.toDate();
-      visibleFrom = "${d.year}-${d.month.toString().padLeft(2, '0')}";
-    } else if (vf is String) {
-      visibleFrom = vf;
-    }
-
-    if (em is Timestamp) {
-      final d = em.toDate();
-      expiryMonth = "${d.year}-${d.month.toString().padLeft(2, '0')}";
-    } else if (em is String) {
-      expiryMonth = em;
-    }
-
-    final isVisible =
-        visibleFrom == null || visibleFrom.compareTo(currentMonthKey) <= 0;
-    final notExpired =
-        expiryMonth == null || expiryMonth.compareTo(currentMonthKey) >= 0;
-    return isVisible && notExpired;
-  }).toList();
-
-  if (validTasks.isEmpty) return;
-
-  // ============================================================
-  // 🟢 منع تكرار المهمة مع اليوم السابق فقط
-  // ============================================================
-  String? yTaskId;
-  final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
-  final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
-  final ySnap = await FirebaseFirestore.instance
-      .collection('userTasks')
-      .doc(yKey)
-      .get();
-  if (ySnap.exists) yTaskId = ySnap.data()?['taskId'] as String?;
-
-  final excludedIds = {yTaskId}..removeWhere((id) => id == null);
-  final candidates =
-      validTasks.where((doc) => !excludedIds.contains(doc.id)).toList();
-  final pool = candidates.isEmpty ? validTasks : candidates;
-
-  // 🧩 Debug prints (للتجربة)
-  print('📅 [${_yyyyMMdd(day)}]');
-  print(' ├─ مهمة الأمس: ${yTaskId ?? "لا يوجد"}');
-  print(' ├─ عدد المهام الأصلية: ${validTasks.length}');
-  print(' ├─ عدد المهام بعد الاستبعاد: ${candidates.length}');
-  if (candidates.isEmpty) {
-    print(' ⚠️ لا توجد مهام بديلة كافية، تم استخدام القائمة الأصلية.');
-  }
-
-  // 🔹 اختيار عشوائي من المتبقي
-  final rnd = Random(DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch);
-  final picked = pool[rnd.nextInt(pool.length)];
-
-  // 🟢 اطبع عنوان المهمة المختارة
-  final pickedTitle = picked.data()['title'] ?? '(بدون عنوان)';
-  print(' ✅ المهمة المختارة لليوم: $pickedTitle (${picked.id})');
-
-  // ============================================================
-  // 🟢 إنشاء وثيقة userTask
-  // ============================================================
-  final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
-  final start = _dayStart(day);
-  final end = _dayEnd(day);
-  final double carbon = (rnd.nextDouble() * 0.42 + 0.08);
-
-  await ref.set({
-    'userId': _uid,
-    'taskId': picked.id,
-    'selectedAt': Timestamp.fromDate(start),
-    'status': status,
-    'completedAt': null,
-    'carbonFootPrint': carbon,
-    'windowStart': Timestamp.fromDate(start),
-    'windowEnd': Timestamp.fromDate(end),
-  });
-}
 
   void _attachUserTaskStreamFor(DateTime day) {
     if (_uid == null) return;
     final key = '${_uid!}_${_yyyyMMdd(day)}';
     setState(() {
-      _userTaskStream = FirebaseFirestore.instance.collection('userTasks').doc(key).snapshots();
+      _userTaskStream = FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(key)
+          .snapshots();
     });
   }
 
   bool _isWithinDayWindow(DateTime day, DateTime now) {
     return now.isAfter(_dayStart(day).subtract(const Duration(seconds: 1))) &&
         now.isBefore(_dayEnd(day).add(const Duration(seconds: 1)));
-  }
-
-
-  // ============================================================
-  // 🟢 توليد مهام الشهر الحالي واللي قبله كاملة
-  // ============================================================
-  Future<void> _bootstrapFullMonth() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    // نحدد تاريخ انضمام المستخدم
-    DateTime fallback = user.metadata.creationTime?.toLocal() ?? DateTime.now();
-    _joinDate = _dayStart(fallback);
-
-    final udoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-    if (udoc.exists && (udoc.data()?['joinDate'] != null)) {
-      _joinDate = _dayStart((udoc.data()!['joinDate'] as Timestamp).toDate());
-    }
-
-    // نحدد الشهر الحالي واللي قبله
-    final now = DateTime.now();
-    // final currentMonthStart = DateTime(now.year, now.month, 1);
-    final prevMonthStart = DateTime(now.year, now.month - 1, 1);
-
-    // ✅ نولّد مهام من أول يوم بالشهر السابق حتى اليوم الحالي
-    for (DateTime d = prevMonthStart;
-        !d.isAfter(now);
-        d = d.add(const Duration(days: 1))) {
-      if (_joinDate != null && d.isBefore(_joinDate!)) continue; // ما كان جزء من نمير بعد
-      await _ensureUserTaskForDate(d);
-    }
-
-    // تحديث الواجهة
-    _attachUserTaskStreamFor(_selectedDay!);
-    if (mounted) setState(() {});
   }
 
   @override
@@ -486,126 +435,161 @@ Future<void> _bootstrapMonth() async {
               final statusBar = MediaQuery.of(context).padding.top;
               final topPadding = statusBar + 20 + 12;
               final viewInsets = MediaQuery.of(context).viewInsets.bottom;
-              final bottomPad =
-                  viewInsets > 0 ? viewInsets + 16 : kBottomNavigationBarHeight + 24;
+              final bottomPad = viewInsets > 0
+                  ? viewInsets + 16
+                  : kBottomNavigationBarHeight + 24;
 
               return SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPad),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('مهامي',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.dark)),
-                    // const SizedBox(height: 15),
+                    Text(
+                      'مهامي',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
+                      ),
+                    ),
                     const SizedBox(height: 15),
 
-                    // 🪴 مؤشر النمو (Growth Indicator)
                     _buildGrowthIndicator(
-                      levelName: 'بذرة', // ← Level 1 (can later be dynamic)
+                      levelName: 'بذرة',
                       level: 1,
                       tasksPerDay: 1,
-                      progressToNext: 0.45, // e.g. 45% toward next level
+                      progressToNext: 0.45,
                     ),
 
                     const SizedBox(height: 15),
                     _buildCalendar(),
                     const SizedBox(height: 8),
+
                     _userTaskStream == null
                         ? const Center(
                             child: Padding(
-                                padding: EdgeInsets.symmetric(vertical: 40),
-                                child: CircularProgressIndicator(
-                                    color: AppColors.primary)))
+                              padding: EdgeInsets.symmetric(vertical: 40),
+                              child: CircularProgressIndicator(
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          )
                         : StreamBuilder<DocumentSnapshot>(
                             stream: _userTaskStream!,
                             builder: (context, snap) {
                               if (snap.connectionState ==
                                   ConnectionState.waiting) {
                                 return const Center(
-                                    child: Padding(
-                                        padding:
-                                            EdgeInsets.symmetric(vertical: 40),
-                                        child: CircularProgressIndicator(
-                                            color: AppColors.primary)));
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 40),
+                                    child: CircularProgressIndicator(
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                );
                               }
-                              // ✅ نتحقق أولاً من اليوم المختار
-                              final sel = _selectedDay ?? _dayStart(DateTime.now());
+
+                              final sel =
+                                  _selectedDay ?? _dayStart(DateTime.now());
                               final today = _dayStart(DateTime.now());
+                              final nextMonthStart = DateTime(
+                                today.year,
+                                today.month + 1,
+                                1,
+                              );
 
-                              // ✅ الشهر القادم فقط نعتبره "لم يُفتح بعد"
-                              final nextMonthStart = DateTime(today.year, today.month + 1, 1);
-
-                              // 🔴 أولاً: قبل الانضمام
-                              if (_joinDate != null && sel.isBefore(_joinDate!)) {
+                              if (_joinDate != null &&
+                                  sel.isBefore(_joinDate!)) {
                                 return _buildUnavailableCard(
                                   title: 'غير متاحة',
                                   subtitle: 'لم تكن ضمن نمير في هذا التاريخ.',
                                 );
                               }
 
-                              // 🟡 بعد التحقق من الانضمام، نتحقق من وجود المهمة
                               if (!snap.hasData || !snap.data!.exists) {
                                 return _buildUnavailableCard(
                                   title: 'لا توجد مهام متاحة',
-                                  subtitle: 'خطأ في جلب المهمة لهذا اليوم.',
+                                  subtitle: 'لا توجد مهمة لليوم المحدد.',
                                 );
                               }
 
-                              final ut = snap.data!.data() as Map<String, dynamic>;
-                              final taskId = ut['taskId'] as String?;
+                              final ut =
+                                  snap.data!.data() as Map<String, dynamic>;
 
-                              // 🔴 بعد نهاية الشهر الحالي (الشهر القادم)
                               if (sel.isAfter(nextMonthStart)) {
                                 return _buildUnavailableCard(
                                   title: 'غير متاحة',
-                                  subtitle: 'هذا الشهر لم يُفتح بعد. الرجاء العودة لاحقًا.',
+                                  subtitle:
+                                      'هذا الشهر لم يُفتح بعد. الرجاء العودة لاحقًا.',
                                 );
                               }
-                              // ✅ المهمة اليومية
-                              return FutureBuilder<DocumentSnapshot>(
-                                future: FirebaseFirestore.instance
-                                    .collection('tasks')
-                                    .doc(taskId)
-                                    .get(),
-                                builder: (context, taskSnap) {
-                                  if (taskSnap.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return const Center(
-                                      child: Padding(
-                                        padding:
-                                            EdgeInsets.symmetric(vertical: 40),
-                                        child: CircularProgressIndicator(
-                                            color: AppColors.primary),
-                                      ),
-                                    );
-                                  }
 
-                                  if (!taskSnap.hasData ||
-                                      !taskSnap.data!.exists) {
-                                    return _buildUnavailableCard(
-                                      title: 'المهمة غير متاحة',
-                                      subtitle: 'قد تكون حُذفت من النظام.',
-                                    );
-                                  }
+                              final data = <String, dynamic>{
+                                'title': ut['taskTitle'] ?? '(بدون عنوان)',
+                                'description': ut['taskDescription'] ?? '',
+                                'points': ut['taskPoints'] ?? 0,
+                                'validationStrategy':
+                                    ut['taskValidation'] ?? 'غير محددة',
+                                'id': ut['taskId'] ?? '',
+                                'status': ut['status'] ?? 'pending',
+                              };
 
-                                  final data = taskSnap.data!.data()
-                                      as Map<String, dynamic>;
-
-                                  // 🟢 اليوم الحالي
-                                  if (isSameDay(sel, today)) {
+                              // لو الوثيقة قديمة (نقرأ المهمة من tasks)
+                              if ((ut['taskTitle'] == null ||
+                                      ut['taskDescription'] == null) &&
+                                  ut['taskId'] != null) {
+                                return FutureBuilder<DocumentSnapshot>(
+                                  future: FirebaseFirestore.instance
+                                      .collection('tasks')
+                                      .doc(ut['taskId'])
+                                      .get(),
+                                  builder: (context, tSnap) {
+                                    if (tSnap.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 40,
+                                          ),
+                                          child: CircularProgressIndicator(
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    if (!tSnap.hasData || !tSnap.data!.exists) {
+                                      return _buildUnavailableCard(
+                                        title: 'المهمة غير متاحة',
+                                        subtitle: 'قد تكون حُذفت من النظام.',
+                                      );
+                                    }
+                                    final td =
+                                        tSnap.data!.data()
+                                            as Map<String, dynamic>;
+                                    final fData = {
+                                      'title': td['title'] ?? '(بدون عنوان)',
+                                      'description': td['description'] ?? '',
+                                      'points': td['points'] ?? 0,
+                                      'validationStrategy':
+                                          td['validationStrategy'] ??
+                                          'غير محددة',
+                                      'id': ut['taskId'],
+                                      'status': ut['status'] ?? 'pending',
+                                    };
                                     return _buildUserTaskCard(
-                                        taskData: data, canPerform: true);
-                                  }
+                                      taskData: fData,
+                                      canPerform: isSameDay(sel, today),
+                                    );
+                                  },
+                                );
+                              }
 
-                                  // 🟡 أي يوم سابق من نفس الشهر أو الشهر الماضي
-                                  return _buildUserTaskCard(
-                                      taskData: data, canPerform: false);
-                                },
+                              return _buildUserTaskCard(
+                                taskData: data,
+                                canPerform: isSameDay(sel, today),
                               );
-                            }),
+                            },
+                          ),
                   ],
                 ),
               );
@@ -618,6 +602,7 @@ Future<void> _bootstrapMonth() async {
       ),
     );
   }
+
   // -------------------------------------------------------------
   // 🌱 Growth Progress Bar
   // -------------------------------------------------------------
@@ -625,9 +610,8 @@ Future<void> _bootstrapMonth() async {
     required String levelName,
     required int level,
     required int tasksPerDay,
-    required double progressToNext, // 0.0 - 1.0
+    required double progressToNext,
   }) {
-    // 🎨 Gradient colors
     Color startColor = const Color(0xFFB6E9C1);
     Color endColor = const Color(0xFF4BAA98);
 
@@ -638,11 +622,13 @@ Future<void> _bootstrapMonth() async {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 🌱 Level line
           Row(
             children: [
-              const Icon(Icons.energy_savings_leaf_outlined,
-                  size: 18, color: Color(0xFF4BAA98)),
+              const Icon(
+                Icons.energy_savings_leaf_outlined,
+                size: 18,
+                color: Color(0xFF4BAA98),
+              ),
               const SizedBox(width: 5),
               Text(
                 '$levelName – المستوى $level',
@@ -657,16 +643,13 @@ Future<void> _bootstrapMonth() async {
                 '$tasksPerDay مهمة يوميًا',
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 12.5,
-                  color: const Color(0xFF4BAA98),
+                  color: Color(0xFF4BAA98),
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 4),
-
-          // 🌈 Animated progress bar (thin)
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: Stack(
@@ -679,7 +662,8 @@ Future<void> _bootstrapMonth() async {
                   duration: const Duration(milliseconds: 900),
                   curve: Curves.easeOutCubic,
                   height: 4,
-                  width: MediaQuery.of(context).size.width *
+                  width:
+                      MediaQuery.of(context).size.width *
                       progressToNext.clamp(0.0, 1.0),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -692,9 +676,7 @@ Future<void> _bootstrapMonth() async {
               ],
             ),
           ),
-
           const SizedBox(height: 2),
-
           Align(
             alignment: Alignment.centerRight,
             child: Text(
@@ -711,6 +693,7 @@ Future<void> _bootstrapMonth() async {
       ),
     );
   }
+
   // -------------------------------------------------------------
   // 🟩 Calendar & Card Builders
   // -------------------------------------------------------------
@@ -722,13 +705,16 @@ Future<void> _bootstrapMonth() async {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.primary, width: 2),
         boxShadow: const [
-          BoxShadow(color: Color(0x11000000), blurRadius: 8, offset: Offset(0, 3))
+          BoxShadow(
+            color: Color(0x11000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
         ],
       ),
       child: TableCalendar(
         onPageChanged: (focused) async {
           _focusedDay = focused;
-          await _ensureMonthBackfill(focused);
           _monthStatuses = await _getTaskStatusesForMonth(focused);
           if (mounted) setState(() {});
         },
@@ -744,34 +730,40 @@ Future<void> _bootstrapMonth() async {
             fontWeight: FontWeight.w800,
             fontSize: 18,
           ),
-          leftChevronIcon: const Icon(Icons.chevron_left, color: AppColors.primary),
-          rightChevronIcon: const Icon(Icons.chevron_right, color: AppColors.primary),
+          leftChevronIcon: const Icon(
+            Icons.chevron_left,
+            color: AppColors.primary,
+          ),
+          rightChevronIcon: const Icon(
+            Icons.chevron_right,
+            color: AppColors.primary,
+          ),
         ),
         selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-        onDaySelected: (selected, focused) {
+        onDaySelected: (selected, focused) async {
           setState(() {
             _selectedDay = selected;
             _focusedDay = focused;
+            // لا نصفر شيء هنا؛ لأن القفل صار per-doc
           });
+          await _ensureUserTaskForDate(_dayStart(selected));
           _attachUserTaskStreamFor(selected);
         },
-
-        // 🎨 هنا نتحكم بألوان الأيام والدائرة المحددة
         calendarStyle: CalendarStyle(
           todayDecoration: BoxDecoration(
-            color: AppColors.primary33, // لون اليوم الحقيقي (مثلاً لون باهت)
+            color: AppColors.primary33,
             shape: BoxShape.circle,
           ),
           selectedDecoration: BoxDecoration(
-            color: AppColors.primary, // 🎨 هذا لون الدائرة لليوم المحدد
+            color: AppColors.primary,
             shape: BoxShape.circle,
           ),
           selectedTextStyle: GoogleFonts.ibmPlexSansArabic(
-            color: Colors.white, // لون رقم اليوم داخل الدائرة
+            color: Colors.white,
             fontWeight: FontWeight.w700,
           ),
           todayTextStyle: GoogleFonts.ibmPlexSansArabic(
-            color: AppColors.dark, // لون رقم اليوم الحالي
+            color: AppColors.dark,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -787,18 +779,37 @@ Future<void> _bootstrapMonth() async {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 6))],
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title,
-            style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.dark)),
-        if (subtitle != null) ...[
-          const SizedBox(height: 8),
-          Text(subtitle,
-              style: GoogleFonts.ibmPlexSansArabic(fontSize: 14, color: Colors.black87)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
         ],
-      ]),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.dark,
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 14,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -810,6 +821,16 @@ Future<void> _bootstrapMonth() async {
     final description = taskData['description'] ?? 'لا يوجد وصف متاح.';
     final points = taskData['points'] ?? 0;
     final validation = taskData['validationStrategy'] ?? 'غير محددة';
+    final status = taskData['status'] ?? 'pending';
+
+    // ✅ حضّر اليوم المحدد والـ docId لليوم
+    final sel = _selectedDay ?? _dayStart(DateTime.now());
+    final uid = _uid ?? '';
+    final userTaskDocId = uid.isEmpty ? '' : '${uid}_${_yyyyMMdd(sel)}';
+
+    // ✅ اقفل فقط للوثيقة/اليوم الحالي إذا أنجزناها للتو أو كانت مكتملة بالـDB
+    final isCompleted =
+        (status == 'completed') || _justCompletedDocIds.contains(userTaskDocId);
 
     return Container(
       width: double.infinity,
@@ -879,41 +900,61 @@ Future<void> _bootstrapMonth() async {
           ),
           const SizedBox(height: 20),
 
-          // 🟢 زر تنفيذ المهمة (ظاهر دائماً)
+          // ✅ زر الإكمال
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: null, // ❌ ما يسوي أي شيء
-              style: ElevatedButton.styleFrom(
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+              onPressed: isCompleted
+                  ? null
+                  : () async {
+                      final result = await showCompleteTaskSheet(
+                        context,
+                        taskData,
+                        selectedDay: sel,
+                        userTaskDocId: userTaskDocId,
+                      );
+                      if (result == true && mounted) {
+                        // ✅ قفل تفاؤلي لهذه الوثيقة فقط
+                        _justCompletedDocIds.add(userTaskDocId);
+                        _attachUserTaskStreamFor(sel);
+                        setState(() {});
+                      }
+                    },
+              style: ButtonStyle(
+                elevation: WidgetStateProperty.all(0),
+                shadowColor: WidgetStateProperty.all(Colors.transparent),
+                backgroundColor: WidgetStateProperty.all(Colors.transparent),
+                overlayColor: WidgetStateProperty.all(Colors.transparent),
+                shape: WidgetStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
-                // 🟢 التدرج الأخضر (من نفس كود الألوان المستخدم)
-                backgroundColor: Colors.transparent,
-              ).copyWith(
-                backgroundColor: WidgetStateProperty.resolveWith((states) {
-                  return null; // لأننا بنضيف التدرج يدوياً داخل الـ Ink
-                }),
+                padding: WidgetStateProperty.all(
+                  const EdgeInsets.symmetric(vertical: 14),
+                ),
+                splashFactory: NoSplash.splashFactory,
               ),
               child: Ink(
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFFB6E9C1), // startColor (mint)
-                      Color(0xFF4BAA98), // endColor (primary)
-                    ],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                  ),
+                  gradient: isCompleted
+                      ? LinearGradient(
+                          colors: [Colors.grey.shade400, Colors.grey.shade300],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        )
+                      : const LinearGradient(
+                          colors: [AppColors.primary, AppColors.mint],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Container(
                   alignment: Alignment.center,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   child: Text(
-                    'تمم المهمة',
+                    isCompleted ? 'تم الإنجاز ✅' : 'تمم المهمة',
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
@@ -924,8 +965,8 @@ Future<void> _bootstrapMonth() async {
               ),
             ),
           ),
-          // 🔄 زر تحديث المهمة — يظهر فقط في حال canPerform == true
-          if (canPerform) ...[
+
+          if (canPerform && !isCompleted) ...[
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
@@ -951,7 +992,9 @@ Future<void> _bootstrapMonth() async {
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text('تأكيد التحديث'),
-                      content: const Text('هل أنت متأكد من رغبتك في تغيير هذه المهمة؟'),
+                      content: const Text(
+                        'هل أنت متأكد من رغبتك في تغيير هذه المهمة؟',
+                      ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
@@ -964,9 +1007,9 @@ Future<void> _bootstrapMonth() async {
                       ],
                     ),
                   );
-
                   if (confirm == true) {
                     await _refreshUserTask(taskData);
+                    _attachUserTaskStreamFor(sel);
                   }
                 },
               ),
@@ -976,4 +1019,26 @@ Future<void> _bootstrapMonth() async {
       ),
     );
   }
+}
+
+// -------------------------------------------------------------
+// ✅ دالة الفتح (تمرير selectedDay / userTaskDocId)
+// -------------------------------------------------------------
+Future<bool?> showCompleteTaskSheet(
+  BuildContext context,
+  Map<String, dynamic> taskData, {
+  required DateTime selectedDay, // يوم الكالندر
+  required String userTaskDocId, // DocId لليوم
+}) {
+  return showModalBottomSheet<bool?>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => CompleteTaskSheet(
+      taskData: taskData,
+      selectedDay: selectedDay,
+      userTaskDocId: userTaskDocId,
+    ),
+  );
 }
