@@ -370,6 +370,10 @@ class _ReportCardState extends State<_ReportCard> {
           notifTitle = 'البلاغ غير صحيح';
           notifMsg =
               'بعد التحقق من البلاغ المتعلّق بـ "$type"${neighborhood.isNotEmpty ? ' في حي $neighborhood' : ''}، تبيّن أنه غير صحيح ♻️';
+        } else if (decision == 'pending') {
+          notifTitle = 'تمت إعادة البلاغ للمراجعة';
+          notifMsg =
+              'تمت إعادة البلاغ المتعلّق بـ "$type"${neighborhood.isNotEmpty ? ' في حي $neighborhood' : ''} للمراجعة من جديد 🔄';
         }
       }
 

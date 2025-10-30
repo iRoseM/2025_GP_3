@@ -1336,6 +1336,12 @@ class _AdminMapPageState extends State<AdminMapPage> {
       });
 
       _applyCurrentFilters();
+
+      final controller = await _mapCtrl.future;
+      await controller.animateCamera(
+        CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: 16)),
+      );
+
       debugPrint('✅ تم حفظ الفاسيلتي في Firestore وإظهارها على الخريطة');
     } catch (e) {
       debugPrint('❌ خطأ في الحفظ: $e');
