@@ -1,10 +1,9 @@
-import 'dart:io'; // لعرض Image.file
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-// ✅ لرفع صورة الإثبات وتخزين الرابط
 import 'package:firebase_storage/firebase_storage.dart';
 
 class AppColors {
@@ -20,22 +19,17 @@ class AppColors {
   static const tealSoft = Color(0xFF75BCAF);
 }
 
-Future<void> showCompleteTaskSheet(
-  BuildContext context,
-  Map<String, dynamic> taskData,
-) {
-  return showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => CompleteTaskSheet(taskData: taskData),
-  );
-}
-
 class CompleteTaskSheet extends StatefulWidget {
   final Map<String, dynamic> taskData;
-  const CompleteTaskSheet({super.key, required this.taskData});
+  final DateTime selectedDay; // ✅ اليوم المُختار من التقويم
+  final String userTaskDocId; // ✅ وثيقة userTasks المراد تحديثها
+
+  const CompleteTaskSheet({
+    super.key,
+    required this.taskData,
+    required this.selectedDay,
+    required this.userTaskDocId,
+  });
 
   @override
   State<CompleteTaskSheet> createState() => _CompleteTaskSheetState();
@@ -50,7 +44,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   bool _isCapturing = false;
 
   String? _inlineError;
-  String? _capturedPath; // ❗ ملف مؤقت داخل التطبيق — لا يذهب للاستديو
+  String? _capturedPath; // ملف مؤقت داخل التطبيق
   double _flashOpacity = 0.0;
 
   int _currentCameraIndex = 0;
@@ -67,15 +61,16 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
-  /// ✅ تمنح النقاط + تحدّث userTasks لليوم، مع دعم carbonFootPrint و evidence
-  Future<void> _awardPointsAndCompleteToday(
+  /// ✅ يمنح النقاط + يحدّث وثيقة userTasks المحددة (وليس "اليوم الآن")
+  Future<void> _awardPointsAndCompleteSelected(
     int points, {
+    required String docId, // وثيقة اليوم المحدد
+    required DateTime selectedDay, // اليوم المحدد
     String? taskId,
-    double? carbonFootPrint, // رقم اختياري
-    String? photoUrl, // رابط الصورة من Storage
-    String?
-    photoStoragePath, // المسار داخل Storage (يسهّل الحذف الإداري لاحقًا)
-    Map<String, dynamic>? extra, // أي حقول إضافية مستقبلًا
+    double? carbonFootPrint,
+    String? photoUrl,
+    String? photoStoragePath,
+    Map<String, dynamic>? extra,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -83,26 +78,33 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }
     final uid = user.uid;
 
-    // 1) زيادة النقاط
+    // 1) زيادة النقاط للمستخدم
     final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
     await userRef.update({'points': FieldValue.increment(points)});
 
-    // 2) userTasks (مفتاح اليوم)
-    final today = DateTime.now();
-    final key =
-        '${uid}_${_yyyyMMdd(DateTime(today.year, today.month, today.day))}';
-    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(key);
+    // 2) تحديث وثيقة اليوم المحدد فقط
+    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(docId);
 
     final payload = <String, dynamic>{
       'userId': uid,
       if (taskId != null) 'taskId': taskId,
       'status': 'completed',
       'completedAt': FieldValue.serverTimestamp(),
-
-      // ✅ تخزين البصمة الكربونية (Number)
+      // نثبت نافذة اليوم/التواريخ لو كانت مفقودة
+      'selectedAt': Timestamp.fromDate(
+        DateTime(selectedDay.year, selectedDay.month, selectedDay.day),
+      ),
+      'windowStart': Timestamp.fromDate(
+        DateTime(selectedDay.year, selectedDay.month, selectedDay.day),
+      ),
+      'windowEnd': Timestamp.fromDate(
+        DateTime(
+          selectedDay.year,
+          selectedDay.month,
+          selectedDay.day,
+        ).add(const Duration(days: 1)).subtract(const Duration(seconds: 1)),
+      ),
       if (carbonFootPrint != null) 'carbonFootPrint': carbonFootPrint,
-
-      // ✅ كائن دليل اختياري للصورة
       if (photoUrl != null)
         'evidence': {
           'type': 'photo',
@@ -110,8 +112,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           if (photoStoragePath != null) 'storagePath': photoStoragePath,
           'uploadedAt': FieldValue.serverTimestamp(),
         },
-
-      // ✅ أي حقول إضافية
       if (extra != null) ...extra,
     };
 
@@ -122,7 +122,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     if (_openingCamera) return;
     setState(() {
       _openingCamera = true;
-      _capturedPath = null; // إخفاء معاينة سابقة
+      _capturedPath = null;
     });
     try {
       _cameras ??= await availableCameras();
@@ -176,7 +176,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   Future<void> _cycleFlash() async {
     if (!(_controller?.value.isInitialized ?? false)) return;
-    // Off → Auto → Always → Torch → Off
     switch (_flashMode) {
       case FlashMode.off:
         _flashMode = FlashMode.auto;
@@ -265,7 +264,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         .trim();
     final taskId = task['id'] as String?;
 
-    // 👇 إن كانت المهمة تتطلب إثبات صورة
     final requiresPhotoExact = validation == 'التحقق عبر معالجة الصور';
 
     return Directionality(
@@ -300,7 +298,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   ),
                   Text(
                     'إتمام المهمة',
-                    textAlign: TextAlign.right,
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
@@ -310,7 +307,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   const SizedBox(height: 8),
                   Text(
                     title,
-                    textAlign: TextAlign.right,
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -338,7 +334,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   const SizedBox(height: 16),
                   Text(
                     desc,
-                    textAlign: TextAlign.right,
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 14,
                       height: 1.7,
@@ -545,8 +540,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     );
   }
 
-  /// ✅ يلتقط الصورة، يرفعها إلى Storage، ثم يحدّث userTasks
-  /// ويقوم بحذف ملف الصورة المؤقت من جهاز المستخدم بعد الإنهاء.
+  /// ✅ يلتقط/يرفع الصورة (إن وُجدت) ثم يحدّث وثيقة userTasks لليوم المحدد فقط
   Future<void> _onCapturePressed({required int points, String? taskId}) async {
     try {
       setState(() {
@@ -556,53 +550,59 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       await Future.delayed(const Duration(milliseconds: 90));
       if (mounted) setState(() => _flashOpacity = 0.0);
 
-      final file = await _controller!.takePicture();
+      XFile? file;
+      if (_controller != null && (_controller!.value.isInitialized)) {
+        file = await _controller!.takePicture();
+      }
+
       if (!mounted) return;
 
-      setState(() => _capturedPath = file.path);
+      if (file != null) setState(() => _capturedPath = file!.path);
 
-      // (اختياري) اقرأ بصمة الكربون من بيانات المهمة إذا كانت موجودة
       final double? carbon = widget.taskData['carbonFootPrint'] is num
           ? (widget.taskData['carbonFootPrint'] as num).toDouble()
           : null;
 
-      // ✅ رفع الصورة إلى Firebase Storage
+      // ✅ رفع الصورة إلى Firebase Storage (اختياري)
       String? downloadUrl;
       String? storagePath;
       try {
-        final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
-        final now = DateTime.now();
-        final y = now.year.toString().padLeft(4, '0');
-        final m = now.month.toString().padLeft(2, '0');
-        final d = now.day.toString().padLeft(2, '0');
-        final fileName =
-            'task_${taskId ?? 'unknown'}_${now.millisecondsSinceEpoch}.jpg';
+        if (file != null) {
+          final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
+          final now = DateTime.now();
+          final y = now.year.toString().padLeft(4, '0');
+          final m = now.month.toString().padLeft(2, '0');
+          final d = now.day.toString().padLeft(2, '0');
+          final fileName =
+              'task_${taskId ?? 'unknown'}_${now.millisecondsSinceEpoch}.jpg';
 
-        final ref = FirebaseStorage.instance
-            .ref()
-            .child('task_photos')
-            .child(uid)
-            .child('$y$m$d')
-            .child(fileName);
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('task_photos')
+              .child(uid)
+              .child('$y$m$d')
+              .child(fileName);
 
-        await ref.putFile(
-          File(file.path),
-          SettableMetadata(
-            contentType: 'image/jpeg',
-            cacheControl: 'public,max-age=3600',
-          ),
-        );
-        downloadUrl = await ref.getDownloadURL();
-        storagePath = ref.fullPath;
+          await ref.putFile(
+            File(file.path),
+            SettableMetadata(
+              contentType: 'image/jpeg',
+              cacheControl: 'public,max-age=3600',
+            ),
+          );
+          downloadUrl = await ref.getDownloadURL();
+          storagePath = ref.fullPath;
+        }
       } catch (_) {
-        // لو فشل الرفع، سنكمل بدون صورة
         downloadUrl = null;
         storagePath = null;
       }
 
-      // ✅ منح النقاط وتحديث userTasks مع الحقول الإضافية
-      await _awardPointsAndCompleteToday(
+      // ✅ تحديث الوثيقة المحددة (وليس اليوم الحالي)
+      await _awardPointsAndCompleteSelected(
         points,
+        docId: widget.userTaskDocId,
+        selectedDay: widget.selectedDay,
         taskId: taskId,
         carbonFootPrint: carbon,
         photoUrl: downloadUrl,
@@ -611,7 +611,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
       await Future.delayed(const Duration(milliseconds: 1200));
 
-      // ✅ نافذة النجاح + حذف الملف المؤقت بعد الضغط على "تم"
+      // ✅ نافذة النجاح + حذف الملف المؤقت عند الإغلاق
       await showDialog(
         context: context,
         barrierDismissible: false,
@@ -672,21 +672,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                             ),
                           ),
                           onPressed: () async {
-                            // 🧹 حذف الملف المؤقت قبل الإغلاق
                             try {
                               if (_capturedPath != null) {
                                 final f = File(_capturedPath!);
                                 if (await f.exists()) await f.delete();
                                 _capturedPath = null;
                               }
-                            } catch (_) {
-                              // تجاهل أي خطأ بالحذف
-                            }
-
+                            } catch (_) {}
                             Navigator.pop(context); // يغلق الـ dialog
                             Navigator.of(
                               context,
-                            ).pop(true); // يغلق الـ bottomSheet
+                            ).pop(true); // يغلق الـ bottomSheet ويُرجِع true
                           },
                           child: Text(
                             'تم',

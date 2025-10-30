@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
-import 'package:camera/camera.dart';
 
 import 'home.dart';
 import 'map.dart';
@@ -14,7 +13,7 @@ import 'services/bottom_nav.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
-import 'complete_task.dart';
+import 'complete_task.dart'; // يحتوي على CompleteTaskSheet
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -39,8 +38,8 @@ class taskPage extends StatefulWidget {
 class _taskPageState extends State<taskPage> {
   final int _currentIndex = 1;
 
-  // ✅ قفل تفاؤلي بعد الإكمال مباشرةً
-  bool _localJustCompleted = false;
+  // ✅ قفل تفاؤلي لكل وثيقة userTask (بدل فلاغ عام)
+  final Set<String> _justCompletedDocIds = <String>{};
 
   void _onTap(int i) {
     if (i == _currentIndex) return;
@@ -127,10 +126,11 @@ class _taskPageState extends State<taskPage> {
         .get();
     if (udoc.exists && (udoc.data()?['joinDate'] != null)) {
       final v = udoc.data()!['joinDate'];
-      if (v is Timestamp)
+      if (v is Timestamp) {
         usersJoin = v.toDate();
-      else if (v is DateTime)
+      } else if (v is DateTime) {
         usersJoin = v;
+      }
     }
     DateTime resolvedJoin = usersJoin == null
         ? authCreated
@@ -245,9 +245,6 @@ class _taskPageState extends State<taskPage> {
 
     if (_remainingTaskIds.isEmpty) {
       _remainingTaskIds = validTasks.map((doc) => doc.id).toList();
-      print(
-        "🔁 Refilled remaining task pool with ${_remainingTaskIds.length} tasks",
-      );
     }
 
     _remainingTaskIds.remove(currentTask['id']);
@@ -285,7 +282,6 @@ class _taskPageState extends State<taskPage> {
         ),
       );
       _remainingTaskIds = validTasks.map((doc) => doc.id).toList();
-      print("🔄 Task pool refilled for looping again");
     }
 
     final rnd = Random(DateTime.now().millisecondsSinceEpoch);
@@ -294,9 +290,6 @@ class _taskPageState extends State<taskPage> {
 
     await ref.update({'taskId': newTaskId});
 
-    print(
-      '✅ New task assigned: $newTaskId (Remaining: ${_remainingTaskIds.length})',
-    );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -541,7 +534,7 @@ class _taskPageState extends State<taskPage> {
                                 'status': ut['status'] ?? 'pending',
                               };
 
-                              // لو الوثيقة قديمة
+                              // لو الوثيقة قديمة (نقرأ المهمة من tasks)
                               if ((ut['taskTitle'] == null ||
                                       ut['taskDescription'] == null) &&
                                   ut['taskId'] != null) {
@@ -722,7 +715,6 @@ class _taskPageState extends State<taskPage> {
       child: TableCalendar(
         onPageChanged: (focused) async {
           _focusedDay = focused;
-          _localJustCompleted = false; // ✅ صفّر عند تغيير الشهر/الصفحة
           _monthStatuses = await _getTaskStatusesForMonth(focused);
           if (mounted) setState(() {});
         },
@@ -752,7 +744,7 @@ class _taskPageState extends State<taskPage> {
           setState(() {
             _selectedDay = selected;
             _focusedDay = focused;
-            _localJustCompleted = false; // ✅ صفّر عند تغيير اليوم
+            // لا نصفر شيء هنا؛ لأن القفل صار per-doc
           });
           await _ensureUserTaskForDate(_dayStart(selected));
           _attachUserTaskStreamFor(selected);
@@ -831,8 +823,14 @@ class _taskPageState extends State<taskPage> {
     final validation = taskData['validationStrategy'] ?? 'غير محددة';
     final status = taskData['status'] ?? 'pending';
 
-    // ✅ اقفل إذا الحالة مكتملة أو إذا أكملنا للتو (قبل وصول الـStream)
-    final isCompleted = (status == 'completed') || _localJustCompleted;
+    // ✅ حضّر اليوم المحدد والـ docId لليوم
+    final sel = _selectedDay ?? _dayStart(DateTime.now());
+    final uid = _uid ?? '';
+    final userTaskDocId = uid.isEmpty ? '' : '${uid}_${_yyyyMMdd(sel)}';
+
+    // ✅ اقفل فقط للوثيقة/اليوم الحالي إذا أنجزناها للتو أو كانت مكتملة بالـDB
+    final isCompleted =
+        (status == 'completed') || _justCompletedDocIds.contains(userTaskDocId);
 
     return Container(
       width: double.infinity,
@@ -902,21 +900,23 @@ class _taskPageState extends State<taskPage> {
           ),
           const SizedBox(height: 20),
 
-          // ✅ الزر: يتغير حسب الحالة
+          // ✅ زر الإكمال
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
               onPressed: isCompleted
-                  ? null // 🔒 غير قابل للنقر إذا مكتملة
+                  ? null
                   : () async {
                       final result = await showCompleteTaskSheet(
                         context,
                         taskData,
+                        selectedDay: sel,
+                        userTaskDocId: userTaskDocId,
                       );
                       if (result == true && mounted) {
-                        // ✅ اقفل الزر فورًا، وبعدين خلي الـStream يحدث الحالة
-                        _localJustCompleted = true;
-                        _attachUserTaskStreamFor(_selectedDay!);
+                        // ✅ قفل تفاؤلي لهذه الوثيقة فقط
+                        _justCompletedDocIds.add(userTaskDocId);
+                        _attachUserTaskStreamFor(sel);
                         setState(() {});
                       }
                     },
@@ -1009,7 +1009,7 @@ class _taskPageState extends State<taskPage> {
                   );
                   if (confirm == true) {
                     await _refreshUserTask(taskData);
-                    _attachUserTaskStreamFor(_selectedDay!);
+                    _attachUserTaskStreamFor(sel);
                   }
                 },
               ),
@@ -1021,16 +1021,24 @@ class _taskPageState extends State<taskPage> {
   }
 }
 
-// تعديل دالة showCompleteTaskSheet في نفس الملف أو في ملف complete_task.dart
+// -------------------------------------------------------------
+// ✅ دالة الفتح (تمرير selectedDay / userTaskDocId)
+// -------------------------------------------------------------
 Future<bool?> showCompleteTaskSheet(
   BuildContext context,
-  Map<String, dynamic> taskData,
-) {
+  Map<String, dynamic> taskData, {
+  required DateTime selectedDay, // يوم الكالندر
+  required String userTaskDocId, // DocId لليوم
+}) {
   return showModalBottomSheet<bool?>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => CompleteTaskSheet(taskData: taskData),
+    builder: (_) => CompleteTaskSheet(
+      taskData: taskData,
+      selectedDay: selectedDay,
+      userTaskDocId: userTaskDocId,
+    ),
   );
 }
