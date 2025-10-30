@@ -431,29 +431,44 @@ class _ReportCardState extends State<_ReportCard> {
     final ctrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('رفض التقرير'),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'سبب الرفض (اختياري)',
-            hintText: 'اكتب سببًا موجزًا',
+      builder: (_) => Directionality(
+        textDirection: TextDirection.rtl, // ✅ يخلي النصوص يمين
+        child: AlertDialog(
+          title: const Text('رفض التقرير'),
+          content: TextField(
+            controller: ctrl,
+            maxLines: 3,
+            textAlign: TextAlign.right,
+            decoration: const InputDecoration(
+              labelText: 'سبب الرفض (اختياري)',
+              hintText: 'اكتب سببًا موجزًا',
+              alignLabelWithHint: true,
+            ),
           ),
+          actions: [
+            Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.stretch, // يخلي الأزرار تاخذ عرض مناسب
+              children: [
+                Align(
+                  alignment: Alignment.centerRight, // ✅ زر الإلغاء يمين
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('إلغاء'),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                FilledButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await _updateDecision('rejected', reason: ctrl.text);
+                  },
+                  child: const Text('رفض'),
+                ),
+              ],
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _updateDecision('rejected', reason: ctrl.text);
-            },
-            child: const Text('رفض'),
-          ),
-        ],
       ),
     );
   }
@@ -461,22 +476,41 @@ class _ReportCardState extends State<_ReportCard> {
   void _confirmReturn() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('إرجاع لقيد المراجعة'),
-        content: const Text('هل أنت متأكد من إرجاع هذا التقرير لقيد المراجعة؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
+      builder: (_) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('إرجاع لقيد المراجعة'),
+          content: const Text(
+            'هل أنت متأكد من إرجاع هذا التقرير لقيد المراجعة؟',
           ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _updateDecision('pending');
-            },
-            child: const Text('تأكيد'),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
+          actionsPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 8,
           ),
-        ],
+          actions: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerRight, // ✅ زر الإلغاء على اليمين
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('إلغاء'),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                FilledButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await _updateDecision('pending');
+                  },
+                  child: const Text('تأكيد'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -529,7 +563,7 @@ class _ReportCardState extends State<_ReportCard> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
                     name.isEmpty ? 'حاوية بدون اسم' : name,
@@ -545,7 +579,10 @@ class _ReportCardState extends State<_ReportCard> {
                   const SizedBox(height: 8),
                   FilledButton.icon(
                     icon: const Icon(Icons.copy),
-                    label: const Text('نسخ معرف الحاوية'),
+                    label: const Text(
+                      'نسخ معرف الحاوية',
+                      textAlign: TextAlign.right,
+                    ),
                     onPressed: () async {
                       await Clipboard.setData(ClipboardData(text: id));
                       if (!mounted) return;
