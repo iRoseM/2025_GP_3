@@ -448,91 +448,90 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
     );
   }
 
-Widget _buildExpandedTaskContent(Map<String, dynamic> task) {
-  final statusText = _getTaskStatus(task); // ✅ أضيفيه هنا
-  return Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          task['description'] ?? '',
-          style: const TextStyle(fontSize: 14, color: AppColors.dark),
-        ),
-        const SizedBox(height: 8),
-
-        // 🔹 طريقة التحقق
-        Text(
-          'طريقة التحقق: ${task['validationStrategy'] ?? 'غير محددة'}',
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.sea,
-          ),
-        ),
-        const SizedBox(height: 6),
-
-        // 🔹 النقاط
-        Text(
-          'النقاط: ${task['points'] ?? 0}',
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: AppColors.primary,
-          ),
-        ),
-
-        // 🔹 تاريخ الانتهاء (فقط للمهام المنتهية)
-        if (statusText == 'منتهية' && task['expiry_month'] != null) ...[
-          const SizedBox(height: 6),
+  Widget _buildExpandedTaskContent(Map<String, dynamic> task) {
+    final statusText = _getTaskStatus(task); // ✅ أضيفيه هنا
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            'تاريخ الانتهاء: ${task['expiry_month']}',
+            task['description'] ?? '',
+            style: const TextStyle(fontSize: 14, color: AppColors.dark),
+          ),
+          const SizedBox(height: 8),
+
+          // 🔹 طريقة التحقق
+          Text(
+            'طريقة التحقق: ${task['validationStrategy'] ?? 'غير محددة'}',
             style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: Colors.redAccent,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.sea,
             ),
           ),
-        ],
+          const SizedBox(height: 6),
 
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit_outlined, color: Colors.grey),
-              onPressed: () async {
-                final updated = await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => AddTaskPage(task: task)),
-                );
-                if (updated == true) _fetchTasks();
-              },
+          // 🔹 النقاط
+          Text(
+            'النقاط: ${task['points'] ?? 0}',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
             ),
-            IconButton(
-              icon: Icon(
-                task['status'] == 'hidden'
-                    ? Icons.visibility_rounded
-                    : Icons.visibility_off_rounded,
-                color: task['status'] == 'hidden'
-                    ? AppColors.primary
-                    : Colors.redAccent,
+          ),
+
+          // 🔹 تاريخ الانتهاء (فقط للمهام المنتهية)
+          if (statusText == 'منتهية' && task['expiry_month'] != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'تاريخ الانتهاء: ${task['expiry_month']}',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Colors.redAccent,
               ),
-              onPressed: () {
-                if (task['status'] == 'hidden') {
-                  _unhideTaskDialog(task);
-                } else {
-                  _hideTaskDialog(task);
-                }
-              },
             ),
           ],
-        ),
-      ],
-    ),
-  );
-}
 
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, color: Colors.grey),
+                onPressed: () async {
+                  final updated = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => AddTaskPage(task: task)),
+                  );
+                  if (updated == true) _fetchTasks();
+                },
+              ),
+              IconButton(
+                icon: Icon(
+                  task['status'] == 'hidden'
+                      ? Icons.visibility_rounded
+                      : Icons.visibility_off_rounded,
+                  color: task['status'] == 'hidden'
+                      ? AppColors.primary
+                      : Colors.redAccent,
+                ),
+                onPressed: () {
+                  if (task['status'] == 'hidden') {
+                    _unhideTaskDialog(task);
+                  } else {
+                    _hideTaskDialog(task);
+                  }
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // 🔹 إخفاء المهمة (بدل الحذف)
@@ -1295,8 +1294,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                     ),
                                     padding: const EdgeInsets.all(10),
                                     preferBelow: false,
-                                    triggerMode:
-                                        TooltipTriggerMode.tap, // 🔹 Mobile-friendly
+                                    triggerMode: TooltipTriggerMode
+                                        .tap, // 🔹 Mobile-friendly
                                     child: const Icon(
                                       Icons.info_outline,
                                       color: AppColors.primary,
@@ -1312,9 +1311,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 isExpanded: true,
                                 decoration: const InputDecoration(
                                   hintText: 'اختر طريقة التحقق',
-                                  prefixIcon: Icon(Icons.verified_outlined, color: AppColors.primary),
+                                  prefixIcon: Icon(
+                                    Icons.verified_outlined,
+                                    color: AppColors.primary,
+                                  ),
                                   border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                                    borderRadius: BorderRadius.all(
+                                      Radius.circular(12),
+                                    ),
                                   ),
                                 ),
                                 items: const [
@@ -1325,12 +1329,18 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   DropdownMenuItem(
                                     value: 'التحقق عبر معالجة الصور',
                                     enabled: false, // 🔒 مؤقتًا غير متاح
-                                    child: Text('التحقق عبر معالجة الصور', style: TextStyle(color: Colors.grey)),
+                                    child: Text(
+                                      'التحقق عبر معالجة الصور',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
                                   ),
                                   DropdownMenuItem(
                                     value: 'التحقق عبر تتبع القراءة',
                                     enabled: false,
-                                    child: Text('التحقق عبر تتبع القراءة', style: TextStyle(color: Colors.grey)),
+                                    child: Text(
+                                      'التحقق عبر تتبع القراءة',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
                                   ),
                                 ],
                                 onChanged: (v) {
