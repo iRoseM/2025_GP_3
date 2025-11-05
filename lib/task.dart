@@ -37,9 +37,7 @@ class taskPage extends StatefulWidget {
 
 class _taskPageState extends State<taskPage> {
   final int _currentIndex = 1;
-
-  // ✅ قفل تفاؤلي لكل وثيقة userTask (بدل فلاغ عام)
-  final Set<String> _justCompletedDocIds = <String>{};
+  bool _isInitializing = true;
 
   void _onTap(int i) {
     if (i == _currentIndex) return;
@@ -99,17 +97,22 @@ class _taskPageState extends State<taskPage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() async {
-      if (!await hasInternetConnection()) {
-        if (mounted) showNoInternetDialog(context);
-        return;
-      }
-    });
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
     final user = _auth.currentUser;
     _uid = user?.uid;
     _selectedDay = _dayStart(DateTime.now());
     _focusedDay = _selectedDay!;
-    _bootstrapTodayOnly(); // سريع
+
+    await _bootstrapTodayOnly();
+
+    if (mounted) {
+      setState(() {
+        _isInitializing = false;
+      });
+    }
   }
 
   Future<void> _bootstrapTodayOnly() async {
@@ -118,12 +121,34 @@ class _taskPageState extends State<taskPage> {
 
     final today = _dayStart(DateTime.now());
 
+    // 🔥 جعل العمليات تعمل بالتوازي
+    await Future.wait([
+      _loadUserJoinDate(user, today),
+      _ensureUserTaskForDate(today),
+      _ensureUserTaskForDate(today.add(const Duration(days: 1))),
+    ]);
+
+    // 🔥 تحميل بيانات الشهر في الخلفية
+    _getTaskStatusesForMonth(today).then((statuses) {
+      if (mounted) {
+        setState(() {
+          _monthStatuses = statuses;
+        });
+      }
+    });
+
+    _attachUserTaskStreamFor(_selectedDay!);
+  }
+
+  Future<void> _loadUserJoinDate(User user, DateTime today) async {
     DateTime authCreated = user.metadata.creationTime?.toLocal() ?? today;
     DateTime? usersJoin;
+
     final udoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
         .get();
+
     if (udoc.exists && (udoc.data()?['joinDate'] != null)) {
       final v = udoc.data()!['joinDate'];
       if (v is Timestamp) {
@@ -132,19 +157,13 @@ class _taskPageState extends State<taskPage> {
         usersJoin = v;
       }
     }
+
     DateTime resolvedJoin = usersJoin == null
         ? authCreated
         : (authCreated.isBefore(usersJoin!) ? authCreated : usersJoin!);
-    if (_dayStart(resolvedJoin).isAfter(today)) resolvedJoin = today; // clamp
+    if (_dayStart(resolvedJoin).isAfter(today)) resolvedJoin = today;
+
     _joinDate = _dayStart(resolvedJoin);
-
-    await _ensureUserTaskForDate(today);
-    await _ensureUserTaskForDate(today.add(const Duration(days: 1)));
-
-    _monthStatuses = await _getTaskStatusesForMonth(today);
-
-    _attachUserTaskStreamFor(_selectedDay!);
-    if (mounted) setState(() {});
   }
 
   Future<void> _ensureMonthBackfill(DateTime anyDayInMonth) async {
@@ -355,6 +374,7 @@ class _taskPageState extends State<taskPage> {
 
     if (validTasks.isEmpty) return;
 
+    // 🔥 استبعاد اليوم السابق فقط (النسخة المعدلة)
     String? yTaskId;
     final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
@@ -421,6 +441,28 @@ class _taskPageState extends State<taskPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isInitializing) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: AppColors.primary),
+              SizedBox(height: 20),
+              Text(
+                'جاري تحميل المهام...',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 16,
+                  color: AppColors.dark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -744,7 +786,6 @@ class _taskPageState extends State<taskPage> {
           setState(() {
             _selectedDay = selected;
             _focusedDay = focused;
-            // لا نصفر شيء هنا؛ لأن القفل صار per-doc
           });
           await _ensureUserTaskForDate(_dayStart(selected));
           _attachUserTaskStreamFor(selected);
@@ -828,9 +869,10 @@ class _taskPageState extends State<taskPage> {
     final uid = _uid ?? '';
     final userTaskDocId = uid.isEmpty ? '' : '${uid}_${_yyyyMMdd(sel)}';
 
-    // ✅ اقفل فقط للوثيقة/اليوم الحالي إذا أنجزناها للتو أو كانت مكتملة بالـDB
-    final isCompleted =
-        (status == 'completed') || _justCompletedDocIds.contains(userTaskDocId);
+    // ✅ حالات الزر: نعتمد على status من Firestore فقط
+    final isSubmitted = (status == 'submitted');
+    final isCompleted = (status == 'completed');
+    final isPending = (status == 'pending');
 
     return Container(
       width: double.infinity,
@@ -900,11 +942,11 @@ class _taskPageState extends State<taskPage> {
           ),
           const SizedBox(height: 20),
 
-          // ✅ زر الإكمال
+          // ✅ زر الإكمال (بنفس التنسيق القديم)
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: isCompleted
+              onPressed: (isCompleted || isSubmitted)
                   ? null
                   : () async {
                       final result = await showCompleteTaskSheet(
@@ -914,8 +956,7 @@ class _taskPageState extends State<taskPage> {
                         userTaskDocId: userTaskDocId,
                       );
                       if (result == true && mounted) {
-                        // ✅ قفل تفاؤلي لهذه الوثيقة فقط
-                        _justCompletedDocIds.add(userTaskDocId);
+                        // تحديث البيانات مباشرة من Firestore
                         _attachUserTaskStreamFor(sel);
                         setState(() {});
                       }
@@ -937,7 +978,7 @@ class _taskPageState extends State<taskPage> {
               ),
               child: Ink(
                 decoration: BoxDecoration(
-                  gradient: isCompleted
+                  gradient: isCompleted || isSubmitted
                       ? LinearGradient(
                           colors: [Colors.grey.shade400, Colors.grey.shade300],
                           begin: Alignment.centerLeft,
@@ -954,7 +995,9 @@ class _taskPageState extends State<taskPage> {
                   alignment: Alignment.center,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   child: Text(
-                    isCompleted ? 'تم الإنجاز ✅' : 'تمم المهمة',
+                    isCompleted
+                        ? 'تم الإنجاز ✅'
+                        : (isSubmitted ? 'بانتظار المراجعة ⏳' : 'تمم المهمة'),
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,

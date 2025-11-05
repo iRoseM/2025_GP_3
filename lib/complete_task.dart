@@ -21,8 +21,8 @@ class AppColors {
 
 class CompleteTaskSheet extends StatefulWidget {
   final Map<String, dynamic> taskData;
-  final DateTime selectedDay; // ✅ اليوم المُختار من التقويم
-  final String userTaskDocId; // ✅ وثيقة userTasks المراد تحديثها
+  final DateTime selectedDay; // اليوم المُختار من التقويم
+  final String userTaskDocId; // وثيقة userTasks المراد تحديثها
 
   const CompleteTaskSheet({
     super.key,
@@ -39,83 +39,267 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
 
-  bool _ready = false;
-  bool _openingCamera = false;
-  bool _isCapturing = false;
+  bool _ready = false; // الكاميرا جاهزة للمعاينة
+  bool _openingCamera = false; // جاري فتح/تهيئة الكاميرا
+  bool _isCapturing = false; // قفل أثناء الالتقاط
+  bool _isUploading = false; // قفل أثناء الرفع/الإرسال
 
-  String? _inlineError;
-  String? _capturedPath; // ملف مؤقت داخل التطبيق
+  String? _inlineError; // ✅ رسالة قصيرة تظهر فوق الكاميرا
+  String? _capturedPath; // مسار الصورة الملتقطة للمعاينة
   double _flashOpacity = 0.0;
 
   int _currentCameraIndex = 0;
   FlashMode _flashMode = FlashMode.off;
 
-  double _minZoom = 1.0;
-  double _maxZoom = 1.0;
-  double _zoom = 1.0;
-
-  double _minExposure = 0.0;
-  double _maxExposure = 0.0;
-  double _exposure = 0.0;
+  double _minZoom = 1.0, _maxZoom = 1.0, _zoom = 1.0;
+  double _minExposure = 0.0, _maxExposure = 0.0, _exposure = 0.0;
 
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
-  /// ✅ يمنح النقاط + يحدّث وثيقة userTasks المحددة (وليس "اليوم الآن")
-  Future<void> _awardPointsAndCompleteSelected(
-    int points, {
-    required String docId, // وثيقة اليوم المحدد
-    required DateTime selectedDay, // اليوم المحدد
+  // ======== Friendly, short error mapping (Arabic) ========
+  String _friendlyError(Object e) {
+    // Camera
+    if (e is CameraException) {
+      switch (e.code) {
+        case 'cameraAccessDenied':
+        case 'CameraAccessDenied':
+          return 'السماح للكاميرا مرفوض.';
+        case 'cameraDisconnected':
+          return 'تم فصل الكاميرا.';
+        default:
+          return 'خطأ في الكاميرا.';
+      }
+    }
+    // Firebase Storage / Firestore
+    if (e is FirebaseException) {
+      final code = e.code.toLowerCase();
+      if (code.contains('permission-denied')) return 'صلاحيات غير كافية.';
+      if (code.contains('unauthorized')) return 'غير مُخوّل للرفع.';
+      if (code.contains('object-not-found'))
+        return 'المسار غير موجود في التخزين.';
+      if (code.contains('not-found')) return 'المورد غير موجود.';
+      if (code.contains('quota-exceeded')) return 'تم تجاوز الحصة التخزينية.';
+      if (code.contains('retry-limit-exceeded'))
+        return 'انقطع الاتصال أثناء الرفع.';
+      if (code.contains('unavailable')) return 'الخدمة غير متاحة مؤقتًا.';
+      return 'خطأ (${e.code}).';
+    }
+    // Generic
+    final s = e.toString();
+    if (s.contains('socket') || s.contains('host'))
+      return 'تحقق من اتصال الإنترنت.';
+    return 'حدث خطأ غير متوقع.';
+  }
+
+  void _showInlineError(String msg) {
+    setState(() => _inlineError = msg);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _inlineError = null);
+    });
+  }
+
+  // ---------------------------
+  // التقاط آمن مع إعادة محاولة
+  // ---------------------------
+  Future<XFile?> _safeTakePicture() async {
+    if (_controller == null || !_controller!.value.isInitialized) {
+      _showInlineError('الكاميرا غير جاهزة.');
+      return null;
+    }
+    if (_controller!.value.isTakingPicture) return null;
+
+    try {
+      return await _controller!.takePicture();
+    } on CameraException catch (e) {
+      debugPrint('CameraException: ${e.code} | ${e.description}');
+      try {
+        await Future.delayed(const Duration(milliseconds: 150));
+        if (!_controller!.value.isInitialized ||
+            _controller!.value.isTakingPicture)
+          return null;
+        return await _controller!.takePicture();
+      } catch (e2) {
+        debugPrint('Retry takePicture failed: $e2');
+        _showInlineError(_friendlyError(e));
+        return null;
+      }
+    } catch (e) {
+      debugPrint('takePicture generic error: $e');
+      _showInlineError(_friendlyError(e));
+      return null;
+    }
+  }
+
+  // -----------------------------------------
+  // رفع الصورة + إنشاء submission + تحديث userTasks → submitted
+  // -----------------------------------------
+  Future<void> _createSubmissionAndMarkSubmitted({
+    required String localPath,
+    required int taskPoints,
     String? taskId,
-    double? carbonFootPrint,
-    String? photoUrl,
-    String? photoStoragePath,
     Map<String, dynamic>? extra,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      throw Exception('المستخدم غير مسجل دخول.');
+      throw Exception('يرجى تسجيل الدخول.');
     }
+
+    final file = File(localPath);
+    if (!await file.exists()) {
+      throw Exception('لم يتم العثور على ملف الصورة.');
+    }
+
     final uid = user.uid;
+    final dayKey = _yyyyMMdd(widget.selectedDay);
+    final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
+    final name = DateTime.now().millisecondsSinceEpoch.toString();
 
-    // 1) زيادة النقاط للمستخدم
-    final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
-    await userRef.update({'points': FieldValue.increment(points)});
+    final storage = FirebaseStorage.instance;
+    final storageRef = storage.ref('$basePath/$name.jpg');
 
-    // 2) تحديث وثيقة اليوم المحدد فقط
-    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(docId);
+    Future<void> tryUpload() async {
+      try {
+        await storageRef.putFile(
+          file,
+          SettableMetadata(
+            contentType: 'image/jpeg',
+            cacheControl: 'public,max-age=3600',
+          ),
+        );
+      } on FirebaseException catch (e) {
+        // 🔹 يعرض رسالة قصيرة على الكاميرا بدل Snackbar
+        _showInlineError(
+          e.code == 'permission-denied'
+              ? 'صلاحيات غير كافية'
+              : e.code == 'unauthorized'
+              ? 'غير مخوّل للرفع'
+              : 'فشل الرفع (${e.code})',
+        );
+        rethrow;
+      } catch (e) {
+        _showInlineError('تعذر رفع الصورة');
+        rethrow;
+      }
+    }
 
-    final payload = <String, dynamic>{
-      'userId': uid,
-      if (taskId != null) 'taskId': taskId,
-      'status': 'completed',
-      'completedAt': FieldValue.serverTimestamp(),
-      // نثبت نافذة اليوم/التواريخ لو كانت مفقودة
-      'selectedAt': Timestamp.fromDate(
-        DateTime(selectedDay.year, selectedDay.month, selectedDay.day),
-      ),
-      'windowStart': Timestamp.fromDate(
-        DateTime(selectedDay.year, selectedDay.month, selectedDay.day),
-      ),
-      'windowEnd': Timestamp.fromDate(
-        DateTime(
-          selectedDay.year,
-          selectedDay.month,
-          selectedDay.day,
-        ).add(const Duration(days: 1)).subtract(const Duration(seconds: 1)),
-      ),
-      if (carbonFootPrint != null) 'carbonFootPrint': carbonFootPrint,
-      if (photoUrl != null)
+    try {
+      try {
+        await tryUpload();
+      } catch (_) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        await tryUpload();
+      }
+    } on FirebaseException catch (e) {
+      debugPrint('Storage upload error: ${e.code} | ${e.message}');
+      throw FirebaseException(
+        plugin: e.plugin,
+        code: e.code,
+        message: _friendlyError(e),
+      );
+    } catch (e) {
+      debugPrint('Storage upload generic error: $e');
+      throw Exception(_friendlyError(e));
+    }
+
+    // ✅ getDownloadURL مع محاولة ثانية
+    Future<String> getUrlWithRetry() async {
+      try {
+        return await storageRef.getDownloadURL();
+      } catch (_) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        return await storageRef.getDownloadURL();
+      }
+    }
+
+    String downloadUrl;
+    try {
+      downloadUrl = await getUrlWithRetry();
+    } on FirebaseException catch (e) {
+      debugPrint('getDownloadURL error: ${e.code} | ${e.message}');
+      try {
+        await storageRef.delete();
+      } catch (_) {}
+      throw FirebaseException(
+        plugin: e.plugin,
+        code: e.code,
+        message: _friendlyError(e),
+      );
+    } catch (e) {
+      try {
+        await storageRef.delete();
+      } catch (_) {}
+      throw Exception(_friendlyError(e));
+    }
+
+    // ✅ كتابة Firestore داخل معاملة، وإن فشلت نحذف الصورة كي لا تبقى يتيمة
+    final subRef = FirebaseFirestore.instance.collection('submissions').doc();
+    final utRef = FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(widget.userTaskDocId);
+
+    try {
+      // العملية الأولى: إنشاء submission
+      await subRef.set({
+        'userId': uid,
+        'userTaskDocId': widget.userTaskDocId,
+        'taskId': taskId ?? '',
+        'taskTitle': widget.taskData['title'] ?? '',
+        'taskPoints': taskPoints,
+        'status': 'pending',
+        'imageUrls': [downloadUrl],
+        'createdAt': FieldValue.serverTimestamp(),
+        'processedAt': null,
+        'processedBy': null,
+        if (extra != null) ...extra,
+      });
+
+      // العملية الثانية: تحديث userTask
+      await utRef.set({
+        'status': 'submitted',
+        'submittedAt': FieldValue.serverTimestamp(),
         'evidence': {
           'type': 'photo',
-          'url': photoUrl,
-          if (photoStoragePath != null) 'storagePath': photoStoragePath,
+          'url': downloadUrl,
+          'storagePath': storageRef.fullPath,
           'uploadedAt': FieldValue.serverTimestamp(),
         },
-      if (extra != null) ...extra,
-    };
-
-    await utRef.set(payload, SetOptions(merge: true));
+        'taskTitle': widget.taskData['title'] ?? '',
+        'taskPoints': taskPoints,
+        if (taskId != null) 'taskId': taskId,
+        'selectedAt': Timestamp.fromDate(
+          DateTime(
+            widget.selectedDay.year,
+            widget.selectedDay.month,
+            widget.selectedDay.day,
+          ),
+        ),
+        'windowStart': Timestamp.fromDate(
+          DateTime(
+            widget.selectedDay.year,
+            widget.selectedDay.month,
+            widget.selectedDay.day,
+          ),
+        ),
+        'windowEnd': Timestamp.fromDate(
+          DateTime(
+            widget.selectedDay.year,
+            widget.selectedDay.month,
+            widget.selectedDay.day,
+          ).add(const Duration(days: 1)).subtract(const Duration(seconds: 1)),
+        ),
+      }, SetOptions(merge: true));
+    } on FirebaseException catch (e) {
+      debugPrint('Firestore write error: ${e.code} | ${e.message}');
+      try {
+        await storageRef.delete();
+      } catch (_) {}
+      throw FirebaseException(
+        plugin: e.plugin,
+        code: e.code,
+        message: _friendlyError(e),
+      );
+    }
   }
 
   Future<void> _openCamera({int? index}) async {
@@ -127,7 +311,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     try {
       _cameras ??= await availableCameras();
       if (_cameras == null || _cameras!.isEmpty) {
-        throw Exception('لا توجد كاميرا متاحة على هذا الجهاز.');
+        throw CameraException('NoCamera', 'لا توجد كاميرا متاحة.');
       }
 
       if (index != null) {
@@ -135,10 +319,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       }
 
       final description = _cameras![_currentCameraIndex];
-      _controller?.dispose();
+      await _controller?.dispose();
       _controller = CameraController(
         description,
-        ResolutionPreset.high,
+        ResolutionPreset.high, // غيّرها لـ medium لو تبغى حجم ملف أقل
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
@@ -159,7 +343,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
       if (mounted) setState(() => _ready = true);
     } catch (e) {
-      _showInlineError('تعذر فتح الكاميرا');
+      debugPrint('Open camera error: $e');
+      _showInlineError(_friendlyError(e));
     } finally {
       if (mounted) setState(() => _openingCamera = false);
     }
@@ -167,7 +352,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   Future<void> _switchCamera() async {
     if ((_cameras?.length ?? 0) < 2) {
-      _showInlineError('لا توجد كاميرا أخرى');
+      _showInlineError('لا توجد كاميرا أخرى.');
       return;
     }
     final next = (_currentCameraIndex + 1) % _cameras!.length;
@@ -193,8 +378,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     try {
       await _controller!.setFlashMode(_flashMode);
       setState(() {});
-    } catch (_) {
-      _showInlineError('لا يمكن تغيير الفلاش الآن');
+    } catch (e) {
+      _showInlineError(_friendlyError(e));
     }
   }
 
@@ -204,8 +389,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     try {
       await _controller!.setZoomLevel(_zoom);
       setState(() {});
-    } catch (_) {
-      _showInlineError('تعذر ضبط الزوم');
+    } catch (e) {
+      _showInlineError('تعذر ضبط التقريب.');
     }
   }
 
@@ -215,8 +400,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     try {
       await _controller!.setExposureOffset(_exposure);
       setState(() {});
-    } catch (_) {
-      _showInlineError('تعذر ضبط التعريض');
+    } catch (e) {
+      _showInlineError('تعذر ضبط التعريض.');
     }
   }
 
@@ -234,17 +419,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     try {
       await _controller!.setFocusPoint(Offset(nx, ny));
       await _controller!.setExposurePoint(Offset(nx, ny));
-      _showInlineError('تم التركيز');
+      _showInlineError('تم التركيز.');
     } catch (_) {
-      _showInlineError('تعذر التركيز هنا');
+      _showInlineError('تعذر التركيز هنا.');
     }
-  }
-
-  void _showInlineError(String msg) {
-    setState(() => _inlineError = msg);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _inlineError = null);
-    });
   }
 
   @override
@@ -263,7 +441,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         .toString()
         .trim();
     final taskId = task['id'] as String?;
-
     final requiresPhotoExact = validation == 'التحقق عبر معالجة الصور';
 
     return Directionality(
@@ -409,6 +586,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                 ),
                                               ),
                                       ),
+                                      // Top controls
                                       Positioned(
                                         top: 10,
                                         right: 10,
@@ -447,6 +625,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                           ],
                                         ),
                                       ),
+                                      // Bottom sliders
                                       Positioned(
                                         bottom: 10,
                                         left: 12,
@@ -471,6 +650,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                           ],
                                         ),
                                       ),
+                                      // ✅ Inline short error over preview
                                       if (_inlineError != null)
                                         Positioned(
                                           top: 12,
@@ -481,7 +661,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                             ),
                                             decoration: BoxDecoration(
                                               color: Colors.black.withOpacity(
-                                                0.7,
+                                                0.72,
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(12),
@@ -496,6 +676,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                             ),
                                           ),
                                         ),
+                                      // Flash overlay
                                       IgnorePointer(
                                         child: AnimatedOpacity(
                                           opacity: _flashOpacity,
@@ -522,15 +703,193 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
                   const SizedBox(height: 16),
 
-                  if (_ready && requiresPhotoExact)
-                    _gradientButton(
-                      label: _isCapturing ? 'جاري الالتقاط...' : 'التقاط صورة',
-                      icon: Icons.camera,
-                      onTap: _isCapturing
-                          ? null
-                          : () =>
-                                _onCapturePressed(points: pts, taskId: taskId),
-                    ),
+                  // أزرار الإجراءات (تتغير حسب الحالة)
+                  if (_ready && requiresPhotoExact) ...[
+                    if (_capturedPath == null)
+                      _gradientButton(
+                        label: _isCapturing
+                            ? 'جاري الالتقاط...'
+                            : 'التقاط صورة',
+                        icon: Icons.camera,
+                        onTap: _isCapturing
+                            ? null
+                            : () async {
+                                setState(() {
+                                  _isCapturing = true;
+                                  _flashOpacity = 0.9;
+                                });
+                                await Future.delayed(
+                                  const Duration(milliseconds: 90),
+                                );
+                                if (mounted)
+                                  setState(() => _flashOpacity = 0.0);
+
+                                final shot = await _safeTakePicture();
+                                if (!mounted) return;
+                                if (shot != null)
+                                  setState(() => _capturedPath = shot.path);
+                                setState(() => _isCapturing = false);
+                              },
+                      )
+                    else
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _gradientButton(
+                            label: _isUploading
+                                ? 'جاري الإرسال...'
+                                : 'إرسال للمراجعة',
+                            icon: Icons.cloud_upload,
+                            onTap: _isUploading
+                                ? null
+                                : () async {
+                                    if (_capturedPath == null) return;
+                                    setState(() => _isUploading = true);
+                                    try {
+                                      await _createSubmissionAndMarkSubmitted(
+                                        localPath: _capturedPath!,
+                                        taskPoints: pts,
+                                        taskId: taskId,
+                                      );
+
+                                      // نافذة نجاح
+                                      await showDialog(
+                                        context: context,
+                                        barrierDismissible: false,
+                                        builder: (context) => Dialog(
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                          ),
+                                          insetPadding:
+                                              const EdgeInsets.symmetric(
+                                                horizontal: 24,
+                                              ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(20),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.check_circle,
+                                                  color: AppColors.primary,
+                                                  size: 64,
+                                                ),
+                                                const SizedBox(height: 16),
+                                                Text(
+                                                  'تم إرسال الإثبات للمراجعة',
+                                                  textAlign: TextAlign.center,
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        fontSize: 18,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: AppColors.dark,
+                                                      ),
+                                                ),
+                                                const SizedBox(height: 10),
+                                                Text(
+                                                  'سيقوم المشرف بمراجعة الصورة واعتماد المهمة أو رفضها.',
+                                                  textAlign: TextAlign.center,
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        fontSize: 15,
+                                                        height: 1.6,
+                                                      ),
+                                                ),
+                                                const SizedBox(height: 18),
+                                                SizedBox(
+                                                  width: 120,
+                                                  child: ElevatedButton(
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor:
+                                                          AppColors.primary,
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              12,
+                                                            ),
+                                                      ),
+                                                      padding:
+                                                          const EdgeInsets.symmetric(
+                                                            vertical: 10,
+                                                          ),
+                                                    ),
+                                                    onPressed: () =>
+                                                        Navigator.pop(context),
+                                                    child: Text(
+                                                      'حسناً',
+                                                      style:
+                                                          GoogleFonts.ibmPlexSansArabic(
+                                                            color: Colors.white,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+
+                                      // حذف مؤقت/إغلاق
+                                      try {
+                                        if (_capturedPath != null) {
+                                          final f = File(_capturedPath!);
+                                          if (await f.exists())
+                                            await f.delete();
+                                        }
+                                      } catch (_) {}
+                                      if (!mounted) return;
+                                      Navigator.of(context).pop(true);
+                                    } catch (e) {
+                                      debugPrint('Submit error: $e');
+                                      if (!mounted) return;
+                                      _showInlineError(_friendlyError(e));
+                                    } finally {
+                                      if (mounted)
+                                        setState(() => _isUploading = false);
+                                    }
+                                  },
+                          ),
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            icon: const Icon(
+                              Icons.refresh,
+                              color: AppColors.primary,
+                            ),
+                            label: Text(
+                              'إعادة التقاط',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(
+                                color: AppColors.primary,
+                                width: 2,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            onPressed: () async {
+                              try {
+                                if (_capturedPath != null) {
+                                  final f = File(_capturedPath!);
+                                  if (await f.exists()) await f.delete();
+                                }
+                              } catch (_) {}
+                              setState(() => _capturedPath = null);
+                            },
+                          ),
+                        ],
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -538,175 +897,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         },
       ),
     );
-  }
-
-  /// ✅ يلتقط/يرفع الصورة (إن وُجدت) ثم يحدّث وثيقة userTasks لليوم المحدد فقط
-  Future<void> _onCapturePressed({required int points, String? taskId}) async {
-    try {
-      setState(() {
-        _isCapturing = true;
-        _flashOpacity = 0.9;
-      });
-      await Future.delayed(const Duration(milliseconds: 90));
-      if (mounted) setState(() => _flashOpacity = 0.0);
-
-      XFile? file;
-      if (_controller != null && (_controller!.value.isInitialized)) {
-        file = await _controller!.takePicture();
-      }
-
-      if (!mounted) return;
-
-      if (file != null) setState(() => _capturedPath = file!.path);
-
-      final double? carbon = widget.taskData['carbonFootPrint'] is num
-          ? (widget.taskData['carbonFootPrint'] as num).toDouble()
-          : null;
-
-      // ✅ رفع الصورة إلى Firebase Storage (اختياري)
-      String? downloadUrl;
-      String? storagePath;
-      try {
-        if (file != null) {
-          final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
-          final now = DateTime.now();
-          final y = now.year.toString().padLeft(4, '0');
-          final m = now.month.toString().padLeft(2, '0');
-          final d = now.day.toString().padLeft(2, '0');
-          final fileName =
-              'task_${taskId ?? 'unknown'}_${now.millisecondsSinceEpoch}.jpg';
-
-          final ref = FirebaseStorage.instance
-              .ref()
-              .child('task_photos')
-              .child(uid)
-              .child('$y$m$d')
-              .child(fileName);
-
-          await ref.putFile(
-            File(file.path),
-            SettableMetadata(
-              contentType: 'image/jpeg',
-              cacheControl: 'public,max-age=3600',
-            ),
-          );
-          downloadUrl = await ref.getDownloadURL();
-          storagePath = ref.fullPath;
-        }
-      } catch (_) {
-        downloadUrl = null;
-        storagePath = null;
-      }
-
-      // ✅ تحديث الوثيقة المحددة (وليس اليوم الحالي)
-      await _awardPointsAndCompleteSelected(
-        points,
-        docId: widget.userTaskDocId,
-        selectedDay: widget.selectedDay,
-        taskId: taskId,
-        carbonFootPrint: carbon,
-        photoUrl: downloadUrl,
-        photoStoragePath: storagePath,
-      );
-
-      await Future.delayed(const Duration(milliseconds: 1200));
-
-      // ✅ نافذة النجاح + حذف الملف المؤقت عند الإغلاق
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.55,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset(
-                      'assets/img/nameerCamera.png',
-                      height: 120,
-                      fit: BoxFit.contain,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '!أنجزت مهمتك بنجاح',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.dark,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'شكرًا لمساهمتك البيئية ❤️ تم اعتماد إنجازك وإضافة النقاط إلى حسابك.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.dark,
-                        height: 1.6,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Center(
-                      child: SizedBox(
-                        width: 140,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 10,
-                            ),
-                          ),
-                          onPressed: () async {
-                            try {
-                              if (_capturedPath != null) {
-                                final f = File(_capturedPath!);
-                                if (await f.exists()) await f.delete();
-                                _capturedPath = null;
-                              }
-                            } catch (_) {}
-                            Navigator.pop(context); // يغلق الـ dialog
-                            Navigator.of(
-                              context,
-                            ).pop(true); // يغلق الـ bottomSheet ويُرجِع true
-                          },
-                          child: Text(
-                            'تم',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    } catch (e) {
-      _showInlineError('فشل الالتقاط أو التحديث، حاول مرة أخرى');
-    } finally {
-      if (mounted) setState(() => _isCapturing = false);
-    }
   }
 
   Widget _buildPhotoInstructions() {

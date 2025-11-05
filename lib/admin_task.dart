@@ -87,18 +87,26 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       final qs = await FirebaseFirestore.instance
           .collection('categories')
           .get();
+
+      print('عدد الفئات المستلمة: ${qs.docs.length}'); // للديبق
+
       final names =
           qs.docs
-              .map((d) => (d['name'] ?? '').toString().trim())
-              .where((n) => n.isNotEmpty)
+              .map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                print('بيانات الفئة: $data'); // للديبق
+                return data['name']?.toString() ?? '';
+              })
+              .where((name) => name.isNotEmpty)
               .toList()
             ..sort((a, b) => a.compareTo(b));
+
       setState(() {
         _categories = names;
         _isCatsLoading = false;
       });
     } catch (e) {
-      debugPrint('Error loading categories: $e');
+      print('خطأ في تحميل الفئات: $e');
       setState(() => _isCatsLoading = false);
     }
   }
@@ -504,7 +512,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                 onPressed: () async {
                   final updated = await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => AddTaskPage(task: task)),
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          AddTaskPage(categories: _categories, task: task),
+                    ),
                   );
                   if (updated == true) _fetchTasks();
                 },
@@ -833,7 +844,9 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                   Navigator.pop(context);
                   final updated = await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const AddTaskPage()),
+                    MaterialPageRoute(
+                      builder: (_) => AddTaskPage(categories: _categories),
+                    ),
                   );
                   if (updated == true) _fetchTasks();
                 },
@@ -1040,9 +1053,9 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 }
 
 class AddTaskPage extends StatefulWidget {
-  final Map<String, dynamic>? task; // null => add, not null => edit
-  const AddTaskPage({super.key, this.task});
-
+  final Map<String, dynamic>? task;
+  final List<String> categories;
+  const AddTaskPage({super.key, this.task, required this.categories});
   @override
   State<AddTaskPage> createState() => _AddTaskPageState();
 }
@@ -1100,28 +1113,51 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   Future<void> _loadCategories() async {
-    final qs = await _categoriesCol.get();
-    setState(() {
-      _categories =
-          qs.docs
-              .map((d) => (d['name'] ?? '').toString().trim())
-              .where((n) => n.isNotEmpty)
-              .toList()
-            ..sort((a, b) => a.compareTo(b));
-      _catsLoading = false;
-    });
+    try {
+      final qs = await _categoriesCol.get();
+      print('🔍 AddTaskPage - عدد الفئات: ${qs.docs.length}'); // ديبق
+
+      final names = <String>[];
+      for (var doc in qs.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final name = data['name']?.toString().trim();
+        if (name != null && name.isNotEmpty) {
+          names.add(name);
+          print('فئة: $name');
+        }
+      }
+
+      names.sort((a, b) => a.compareTo(b));
+
+      setState(() {
+        _categories = names;
+        _catsLoading = false;
+      });
+    } catch (e) {
+      print('AddTaskPage - خطأ في تحميل الفئات: $e');
+      setState(() => _catsLoading = false);
+    }
   }
 
   void _prefillIfEditing() {
     final t = widget.task;
     if (t == null) return;
+
     _isEditing = true;
-    _titleCtrl.text = t['title'] ?? '';
-    _descCtrl.text = t['description'] ?? '';
+
+    _titleCtrl.text = t['title']?.toString() ?? '';
+    _descCtrl.text = t['description']?.toString() ?? '';
     _pointsCtrl.text = t['points']?.toString() ?? '';
-    _selectedCategory = t['category'];
-    _validationType = t['validationStrategy'];
-    _expiryMonth = t['expiry_month'];
+
+    _selectedCategory = t['category']?.toString();
+    _validationType = t['validationStrategy']?.toString();
+    _expiryMonth = t['expiry_month']?.toString();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -1276,26 +1312,25 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                     : null,
                               ),
                               const SizedBox(height: 20),
-                              // 🟩 طريقة التحقق مع التولتيب (ℹ️)
                               Row(
                                 children: [
                                   _fieldLabel('طريقة التحقق', required: true),
                                   const SizedBox(width: 6),
                                   Tooltip(
                                     message:
-                                        'حاليًا لا يمكن اختيار طرق التحقق الأخرى نظرًا لعدم توفر الموارد الكافية وعدم جاهزية النظام بعد لطرق التحقق بالصور أو إعادة التتبع.',
+                                        'التحقق عبر الصور: للمهام التي تتطلب إثباتًا بصريًا\nالتحقق عبر التتبع: للمهام القرائية والتدريبات',
                                     textStyle: GoogleFonts.ibmPlexSansArabic(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700,
+                                      fontSize: 14,
                                     ),
                                     decoration: BoxDecoration(
                                       color: Colors.black87,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    padding: const EdgeInsets.all(10),
+                                    padding: const EdgeInsets.all(12),
                                     preferBelow: false,
-                                    triggerMode: TooltipTriggerMode
-                                        .tap, // 🔹 Mobile-friendly
+                                    triggerMode: TooltipTriggerMode.tap,
                                     child: const Icon(
                                       Icons.info_outline,
                                       color: AppColors.primary,
@@ -1323,23 +1358,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 ),
                                 items: const [
                                   DropdownMenuItem(
-                                    value: 'التحقق اليدوي',
-                                    child: Text('التحقق اليدوي'),
-                                  ),
-                                  DropdownMenuItem(
                                     value: 'التحقق عبر معالجة الصور',
-                                    enabled: false, // 🔒 مؤقتًا غير متاح
-                                    child: Text(
-                                      'التحقق عبر معالجة الصور',
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
+                                    child: Text('التحقق عبر معالجة الصور'),
                                   ),
                                   DropdownMenuItem(
-                                    value: 'التحقق عبر تتبع القراءة',
-                                    enabled: false,
+                                    value:
+                                        'التحقق عبر اختبار قصير أو نظام القراءة',
                                     child: Text(
-                                      'التحقق عبر تتبع القراءة',
-                                      style: TextStyle(color: Colors.grey),
+                                      'التحقق عبر اختبار قصير أو نظام القراءة',
                                     ),
                                   ),
                                 ],
@@ -1596,29 +1622,31 @@ class _AddTaskPageState extends State<AddTaskPage> {
         .replaceAll(RegExp(r'\s+'), ' ')
         .toLowerCase();
 
-    final existing = await _tasks
-        .where('title_normalized', isEqualTo: normalizedTitle)
-        .limit(1)
-        .get();
+    // 🔹 التحقق من التكرار (فقط للإضافة الجديدة)
+    if (widget.task == null) {
+      final existing = await _tasks
+          .where('title_normalized', isEqualTo: normalizedTitle)
+          .limit(1)
+          .get();
 
-    if (existing.docs.isNotEmpty &&
-        (widget.task == null || existing.docs.first.id != widget.task!['id'])) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.redAccent,
-          content: Text(
-            'اسم المهمة "${_titleCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
-            style: GoogleFonts.ibmPlexSansArabic(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
+      if (existing.docs.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text(
+              'اسم المهمة "${_titleCtrl.text.trim()}" مستخدم بالفعل',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        ),
-      );
-      return;
+        );
+        return;
+      }
     }
 
-    // 🔸 تحديد الحالة حسب شهر الانتهاء
+    // 🔹 تحديد الحالة
     String status = 'active';
     if (_expiryMonth != null && _expiryMonth!.compareTo(currentMonth) <= 0) {
       status = 'hidden';
@@ -1632,42 +1660,26 @@ class _AddTaskPageState extends State<AddTaskPage> {
       'category': _selectedCategory,
       'validationStrategy': _validationType,
       'status': status,
-      'visible_from': nextMonth, // يبدأ الشهر القادم
-      'expiry_month': _expiryMonth,
+      'visible_from': nextMonth,
+      if (_expiryMonth != null) 'expiry_month': _expiryMonth,
       'managedBy': 'nameer admin',
-      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(), // 🔹 أضفنا updatedAt
     };
 
     try {
       if (widget.task == null) {
+        data['createdAt'] = FieldValue.serverTimestamp();
         await _tasks.add(data);
       } else {
         await _tasks.doc(widget.task!['id']).update(data);
       }
 
       if (mounted) {
-        String successMessage;
-        if (widget.task == null) {
-          // إضافة جديدة
-          if (status == 'hidden') {
-            successMessage = 'تم حفظ المهمة ✅ (ستنتهي هذا الشهر)';
-          } else {
-            successMessage = 'تم حفظ المهمة ✅ (ستظهر الشهر القادم)';
-          }
-        } else {
-          // تعديل
-          if (status == 'hidden') {
-            successMessage = 'تم تحديث المهمة ✅ (تم تحديد تاريخ انتهاء)';
-          } else {
-            successMessage = 'تم تحديث المهمة ✅';
-          }
-        }
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.green,
             content: Text(
-              successMessage,
+              widget.task == null ? 'تم حفظ المهمة ✅' : 'تم تحديث المهمة ✅',
               style: GoogleFonts.ibmPlexSansArabic(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -1694,7 +1706,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     String? selected,
   }) async {
     int year = initialYear;
-    String? result;
+    String? result = selected; // 🔥 نبدأ بالقيمة الحالية
 
     bool isPast(int y, int m) {
       final nowY = now.year, nowM = now.month;
@@ -1750,7 +1762,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // 🔁 عكسنا الاتجاه
                         IconButton(
                           tooltip: 'السنة السابقة',
                           onPressed: () => setSt(() => year--),
@@ -1789,7 +1800,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                         final m = i + 1;
                         final key = "$year-${m.toString().padLeft(2, '0')}";
                         final disabled = isPast(year, m);
-                        final isSelected = selected == key;
+                        final isSelected =
+                            result == key; // 🔥 نستخدم result بدل selected
 
                         return SizedBox(
                           width:
@@ -1802,8 +1814,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             onPressed: disabled
                                 ? null
                                 : () {
-                                    result = key;
-                                    Navigator.pop(context);
+                                    // 🔥 إذا الشهر مختار أصلاً، نمسح الاختيار (deselect)
+                                    if (isSelected) {
+                                      result = null;
+                                    } else {
+                                      result = key;
+                                    }
+                                    setSt(() {}); // 🔥 نحدث الواجهة
                                   },
                             style:
                                 ElevatedButton.styleFrom(
@@ -1816,7 +1833,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   ),
                                 ).merge(
                                   ButtonStyle(
-                                    // خلفية متدرجة مثل أزراركم إذا مختار، أو إطار خفيف إن لم يُختَر
                                     backgroundColor:
                                         WidgetStateProperty.resolveWith((
                                           states,
@@ -1869,45 +1885,70 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
                     const SizedBox(height: 16),
 
-                    // // أزرار أسفل (مسح/إغلاق)
-                    // Row(
-                    //   children: [
-                    //     Expanded(
-                    //       child: OutlinedButton(
-                    //         style: OutlinedButton.styleFrom(
-                    //           side: const BorderSide(color: Colors.redAccent, width: 1.2),
-                    //           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    //           padding: const EdgeInsets.symmetric(vertical: 12),
-                    //         ),
-                    //         onPressed: () { result = null; Navigator.pop(context); },
-                    //         child: Text('إلغاء',
-                    //           style: GoogleFonts.ibmPlexSansArabic(
-                    //             color: Colors.redAccent, fontWeight: FontWeight.w700)),
-                    //       ),
-                    //     ),
-                    //     const SizedBox(width: 10),
-                    //     Expanded(
-                    //       child: Container(
-                    //         decoration: const BoxDecoration(
-                    //           gradient: LinearGradient(colors: [AppColors.primary, AppColors.mint]),
-                    //           borderRadius: BorderRadius.all(Radius.circular(12)),
-                    //         ),
-                    //         child: ElevatedButton(
-                    //           onPressed: () { selected = null; result = null; Navigator.pop(context); },
-                    //           style: ElevatedButton.styleFrom(
-                    //             backgroundColor: Colors.transparent,
-                    //             shadowColor: Colors.transparent,
-                    //             padding: const EdgeInsets.symmetric(vertical: 12),
-                    //             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    //           ),
-                    //           child: Text('مسح الاختيار',
-                    //             style: GoogleFonts.ibmPlexSansArabic(
-                    //               color: Colors.white, fontWeight: FontWeight.w800)),
-                    //         ),
-                    //       ),
-                    //     ),
-                    //   ],
-                    // ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(
+                                color: Colors.redAccent,
+                                width: 1.2,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            onPressed: () {
+                              result = selected;
+                              Navigator.pop(context);
+                            },
+                            child: Text(
+                              'إلغاء',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                color: Colors.redAccent,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [AppColors.primary, AppColors.mint],
+                              ),
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(12),
+                              ),
+                            ),
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                'تم',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),

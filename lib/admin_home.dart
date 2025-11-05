@@ -13,6 +13,7 @@ import 'admin_map.dart';
 import 'profile.dart';
 import 'services/background_container.dart';
 import 'services/title_header.dart';
+import 'admin_task_check.dart'; // ✅ لفتح صفحة مراجعة المهام
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -254,7 +255,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
                   const SizedBox(height: 26),
 
-                  // 📊 Dashboard Container (كما هو)
+                  // 📊 Dashboard Container
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
@@ -294,6 +295,131 @@ class _AdminHomePageState extends State<AdminHomePage> {
                         _buildStat("الأثر الكربوني الإجمالي", "122.42 كجم"),
                       ],
                     ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 📨 خانة الطلبات الجديدة — تضغطها تروح لـ admin_task_check
+                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('submissions')
+                        .where('status', isEqualTo: 'pending')
+                        .snapshots(),
+                    builder: (context, snap) {
+                      final isLoading =
+                          snap.connectionState == ConnectionState.waiting;
+                      final count = (snap.data?.docs.length ?? 0);
+
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AdminTaskCheckPage(),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 16,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.grey.withOpacity(0.15),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                            border: Border.all(
+                              color: AppColors.primary.withOpacity(0.2),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              // أيقونة
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withOpacity(.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.fact_check_outlined,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+
+                              // النصوص
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'طلبات مهام جديدة للمراجعة',
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.dark,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      isLoading
+                                          ? 'جاري التحميل...'
+                                          : (count == 0
+                                                ? 'لا توجد طلبات جديدة حالياً'
+                                                : 'لديك $count طلب${count == 1 ? '' : 'ات'} بانتظار الاعتماد'),
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        fontSize: 13.5,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // شارة العدد + سهم
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withOpacity(.12),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      isLoading ? '—' : '$count',
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  const Icon(
+                                    Icons.chevron_left,
+                                    color: AppColors.primary,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
