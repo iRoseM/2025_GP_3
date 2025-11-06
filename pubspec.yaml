@@ -35,6 +35,9 @@ dependencies:
   flutter_local_notifications: ^17.2.2
   shared_preferences: ^2.2.2
   camera: ^0.10.5+5
+  file_picker: ^8.0.3
+  image_picker: ^1.1.2
+
   
   
 
