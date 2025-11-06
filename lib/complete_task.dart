@@ -756,81 +756,109 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                       await showDialog(
                                         context: context,
                                         barrierDismissible: false,
-                                        builder: (context) => Dialog(
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              20,
+                                        builder: (context) {
+                                          return Dialog(
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
                                             ),
-                                          ),
-                                          insetPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 24,
-                                              ),
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(20),
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(
-                                                  Icons.check_circle,
-                                                  color: AppColors.primary,
-                                                  size: 64,
+                                            insetPadding:
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 24,
                                                 ),
-                                                const SizedBox(height: 16),
-                                                Text(
-                                                  'تم إرسال الإثبات للمراجعة',
-                                                  textAlign: TextAlign.center,
-                                                  style:
-                                                      GoogleFonts.ibmPlexSansArabic(
-                                                        fontSize: 18,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: AppColors.dark,
-                                                      ),
+                                            child: SizedBox(
+                                              width:
+                                                  340, // 👈 نفس الثبات في عرض نافذة البلاغ
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(
+                                                  20,
                                                 ),
-                                                const SizedBox(height: 10),
-                                                Text(
-                                                  'سيقوم المشرف بمراجعة الصورة واعتماد المهمة أو رفضها.',
-                                                  textAlign: TextAlign.center,
-                                                  style:
-                                                      GoogleFonts.ibmPlexSansArabic(
-                                                        fontSize: 15,
-                                                        height: 1.6,
-                                                      ),
-                                                ),
-                                                const SizedBox(height: 18),
-                                                SizedBox(
-                                                  width: 120,
-                                                  child: ElevatedButton(
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor:
-                                                          AppColors.primary,
-                                                      shape: RoundedRectangleBorder(
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              12,
-                                                            ),
-                                                      ),
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            vertical: 10,
-                                                          ),
+                                                child: Column(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    // 👇 استعمل نفس الصورة المستخدمة في بلاغ المرافق (عدّل المسار لو مختلف)
+                                                    Image.asset(
+                                                      'assets/img/nameerCamera.png',
+                                                      height: 120,
+                                                      fit: BoxFit.contain,
                                                     ),
-                                                    onPressed: () =>
-                                                        Navigator.pop(context),
-                                                    child: Text(
-                                                      'حسناً',
+                                                    const SizedBox(height: 16),
+                                                    Text(
+                                                      '!تم تسجيل مشاركتك بنجاح',
+                                                      textAlign:
+                                                          TextAlign.center,
                                                       style:
                                                           GoogleFonts.ibmPlexSansArabic(
-                                                            color: Colors.white,
+                                                            fontSize: 20,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color:
+                                                                AppColors.dark,
                                                           ),
                                                     ),
-                                                  ),
+                                                    const SizedBox(height: 12),
+                                                    Text(
+                                                      'جاري إرسالها للجنة المراجعة.\n'
+                                                      'عند الاعتماد، سيتم إضافة النقاط البيئية إلى حسابك تلقائيًا 🌱',
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                      style:
+                                                          GoogleFonts.ibmPlexSansArabic(
+                                                            fontSize: 16,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                            color:
+                                                                AppColors.dark,
+                                                          ),
+                                                    ),
+                                                    const SizedBox(height: 24),
+                                                    Center(
+                                                      child: SizedBox(
+                                                        width: 140,
+                                                        child: ElevatedButton(
+                                                          style: ElevatedButton.styleFrom(
+                                                            backgroundColor:
+                                                                AppColors
+                                                                    .primary,
+                                                            shape: RoundedRectangleBorder(
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    12,
+                                                                  ),
+                                                            ),
+                                                            padding:
+                                                                const EdgeInsets.symmetric(
+                                                                  horizontal:
+                                                                      24,
+                                                                  vertical: 10,
+                                                                ),
+                                                          ),
+                                                          onPressed: () =>
+                                                              Navigator.pop(
+                                                                context,
+                                                              ),
+                                                          child: Text(
+                                                            'تم',
+                                                            style:
+                                                                GoogleFonts.ibmPlexSansArabic(
+                                                                  color: Colors
+                                                                      .white,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w700,
+                                                                  fontSize: 16,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
-                                              ],
+                                              ),
                                             ),
-                                          ),
-                                        ),
+                                          );
+                                        },
                                       );
 
                                       // حذف مؤقت/إغلاق
