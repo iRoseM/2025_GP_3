@@ -21,7 +21,9 @@ class AppColors {
   static const accent = Color(0xFFF4A340);
   static const sea = Color(0xFF1F7A8C);
   static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
+  static const primary33 = Color(
+    0x544BAA98,
+  ); // شفافية خفيفة (نفس إحساس الحقول المقفولة)
   static const light = Color(0xFF79D0BE);
   static const background = Color(0xFFF3FAF7);
   static const mint = Color(0xFFB6E9C1);
@@ -89,6 +91,24 @@ class _taskPageState extends State<taskPage> {
   ).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
+
+  // ✅ Helpers لتمييز أيام الإنجاز في الكاليندر
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+  bool _isCompletedDay(DateTime d) =>
+      _monthStatuses[_dateOnly(d)] == 'completed';
+
+  // ✅ لتفادي setState أثناء البناء
+  void _updateMonthStatusFor(DateTime day, String status) {
+    final key = _dateOnly(day);
+    if (_monthStatuses[key] == status) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _monthStatuses[key] = status;
+      });
+    });
+  }
+
   List<String> _remainingTaskIds = [];
 
   DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
@@ -121,14 +141,12 @@ class _taskPageState extends State<taskPage> {
 
     final today = _dayStart(DateTime.now());
 
-    // 🔥 جعل العمليات تعمل بالتوازي
     await Future.wait([
       _loadUserJoinDate(user, today),
       _ensureUserTaskForDate(today),
       _ensureUserTaskForDate(today.add(const Duration(days: 1))),
     ]);
 
-    // 🔥 تحميل بيانات الشهر في الخلفية
     _getTaskStatusesForMonth(today).then((statuses) {
       if (mounted) {
         setState(() {
@@ -192,26 +210,49 @@ class _taskPageState extends State<taskPage> {
     if (mounted) setState(() {});
   }
 
+  // ✅ استعلام الشهر مع Fallback لو مافيه Index
   Future<Map<DateTime, String>> _getTaskStatusesForMonth(DateTime month) async {
     if (_uid == null) return {};
     final ms = _monthStart(month);
     final me = _monthEnd(month);
 
-    final qs = await FirebaseFirestore.instance
-        .collection('userTasks')
-        .where('userId', isEqualTo: _uid)
-        .where('selectedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(ms))
-        .where('selectedAt', isLessThanOrEqualTo: Timestamp.fromDate(me))
-        .get();
+    try {
+      final qs = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .where('userId', isEqualTo: _uid)
+          .where('selectedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(ms))
+          .where('selectedAt', isLessThanOrEqualTo: Timestamp.fromDate(me))
+          .get();
 
-    Map<DateTime, String> map = {};
-    for (var doc in qs.docs) {
-      final data = doc.data();
-      final status = data['status'] as String? ?? 'pending';
-      final day = (data['selectedAt'] as Timestamp).toDate();
-      map[DateTime(day.year, day.month, day.day)] = status;
+      final map = <DateTime, String>{};
+      for (var doc in qs.docs) {
+        final data = doc.data();
+        final status = data['status'] as String? ?? 'pending';
+        final day = (data['selectedAt'] as Timestamp).toDate();
+        map[DateTime(day.year, day.month, day.day)] = status;
+      }
+      return map;
+    } on FirebaseException catch (e) {
+      if (e.code == 'failed-precondition') {
+        final all = await FirebaseFirestore.instance
+            .collection('userTasks')
+            .where('userId', isEqualTo: _uid)
+            .get();
+
+        final map = <DateTime, String>{};
+        for (final doc in all.docs) {
+          final data = doc.data();
+          final ts = data['selectedAt'];
+          if (ts is! Timestamp) continue;
+          final day = ts.toDate();
+          if (day.isBefore(ms) || day.isAfter(me)) continue;
+          final status = data['status'] as String? ?? 'pending';
+          map[DateTime(day.year, day.month, day.day)] = status;
+        }
+        return map;
+      }
+      rethrow;
     }
-    return map;
   }
 
   Future<void> _refreshUserTask(Map<String, dynamic> currentTask) async {
@@ -374,7 +415,6 @@ class _taskPageState extends State<taskPage> {
 
     if (validTasks.isEmpty) return;
 
-    // 🔥 استبعاد اليوم السابق فقط (النسخة المعدلة)
     String? yTaskId;
     final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
@@ -449,7 +489,7 @@ class _taskPageState extends State<taskPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(color: AppColors.primary),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               Text(
                 'جاري تحميل المهام...',
                 style: GoogleFonts.ibmPlexSansArabic(
@@ -557,6 +597,11 @@ class _taskPageState extends State<taskPage> {
 
                               final ut =
                                   snap.data!.data() as Map<String, dynamic>;
+
+                              // ✅ حدّث خريطة حالة اليوم المختار (Post-frame)
+                              final newStatus =
+                                  (ut['status'] as String?) ?? 'pending';
+                              _updateMonthStatusFor(sel, newStatus);
 
                               if (sel.isAfter(nextMonthStart)) {
                                 return _buildUnavailableCard(
@@ -764,6 +809,7 @@ class _taskPageState extends State<taskPage> {
         firstDay: DateTime.utc(2020),
         lastDay: DateTime.utc(2030),
         calendarFormat: CalendarFormat.month,
+
         headerStyle: HeaderStyle(
           formatButtonVisible: false,
           titleCentered: true,
@@ -781,6 +827,7 @@ class _taskPageState extends State<taskPage> {
             color: AppColors.primary,
           ),
         ),
+
         selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
         onDaySelected: (selected, focused) async {
           setState(() {
@@ -790,13 +837,15 @@ class _taskPageState extends State<taskPage> {
           await _ensureUserTaskForDate(_dayStart(selected));
           _attachUserTaskStreamFor(selected);
         },
+
+        // ✅ لا نغيّر selected، ونخلي today رمادي شفاف خفيف
         calendarStyle: CalendarStyle(
           todayDecoration: BoxDecoration(
-            color: AppColors.primary33,
+            color: Colors.black.withOpacity(0.08), // رمادي شفاف لليوم الحالي
             shape: BoxShape.circle,
           ),
-          selectedDecoration: BoxDecoration(
-            color: AppColors.primary,
+          selectedDecoration: const BoxDecoration(
+            color: AppColors.primary, // كما هو
             shape: BoxShape.circle,
           ),
           selectedTextStyle: GoogleFonts.ibmPlexSansArabic(
@@ -807,6 +856,48 @@ class _taskPageState extends State<taskPage> {
             color: AppColors.dark,
             fontWeight: FontWeight.w700,
           ),
+        ),
+
+        // ✅ نرسم دائرة الإنجاز بدون ما نغيّر قياسات الخليّة (بدون رفع اليوم)
+        calendarBuilders: CalendarBuilders(
+          defaultBuilder: (context, day, focusedDay) {
+            final bool isSel = isSameDay(day, _selectedDay);
+            final bool isToday = isSameDay(day, _dayStart(DateTime.now()));
+            final bool showCompleted =
+                _isCompletedDay(day) && !isSel && !isToday;
+
+            return SizedBox.expand(
+              // يضمن أن الحجم لا يتغير
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (showCompleted)
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color:
+                              AppColors.primary33, // نفس إحساس الحقول المقفولة
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  // الرقم في الوسط دائماً
+                  Center(
+                    child: Text(
+                      '${day.day}',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        color: AppColors.dark,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -864,15 +955,12 @@ class _taskPageState extends State<taskPage> {
     final validation = taskData['validationStrategy'] ?? 'غير محددة';
     final status = taskData['status'] ?? 'pending';
 
-    // ✅ حضّر اليوم المحدد والـ docId لليوم
     final sel = _selectedDay ?? _dayStart(DateTime.now());
     final uid = _uid ?? '';
     final userTaskDocId = uid.isEmpty ? '' : '${uid}_${_yyyyMMdd(sel)}';
 
-    // ✅ حالات الزر: نعتمد على status من Firestore فقط
     final isSubmitted = (status == 'submitted');
     final isCompleted = (status == 'completed');
-    final isPending = (status == 'pending');
 
     return Container(
       width: double.infinity,
@@ -942,7 +1030,7 @@ class _taskPageState extends State<taskPage> {
           ),
           const SizedBox(height: 20),
 
-          // ✅ زر الإكمال (بنفس التنسيق القديم)
+          // زر الإكمال
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -956,7 +1044,6 @@ class _taskPageState extends State<taskPage> {
                         userTaskDocId: userTaskDocId,
                       );
                       if (result == true && mounted) {
-                        // تحديث البيانات مباشرة من Firestore
                         _attachUserTaskStreamFor(sel);
                         setState(() {});
                       }
@@ -978,17 +1065,23 @@ class _taskPageState extends State<taskPage> {
               ),
               child: Ink(
                 decoration: BoxDecoration(
-                  gradient: isCompleted || isSubmitted
-                      ? LinearGradient(
-                          colors: [Colors.grey.shade400, Colors.grey.shade300],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        )
-                      : const LinearGradient(
-                          colors: [AppColors.primary, AppColors.mint],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
+                  color: isCompleted ? AppColors.primary33 : null,
+                  gradient: (!isCompleted)
+                      ? (isSubmitted
+                            ? LinearGradient(
+                                colors: [
+                                  Colors.grey.shade400,
+                                  Colors.grey.shade300,
+                                ],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                              )
+                            : const LinearGradient(
+                                colors: [AppColors.primary, AppColors.mint],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                              ))
+                      : null,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Container(
@@ -1001,7 +1094,7 @@ class _taskPageState extends State<taskPage> {
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
-                      color: Colors.white,
+                      color: isCompleted ? AppColors.dark : Colors.white,
                     ),
                   ),
                 ),

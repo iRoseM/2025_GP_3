@@ -73,6 +73,18 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
     }
   }
 
+  /// 🔐 يجبر تحديث الـ ID token عشان الــ admin claim يظهر في القواعد
+  Future<void> _ensureAdminClaims() async {
+    final u = FirebaseAuth.instance.currentUser;
+    if (u == null) return;
+    await u.getIdToken(true);
+    final tok = await u.getIdTokenResult();
+    // ignore: avoid_print
+    print(
+      'Admin claims → admin=${tok.claims?['admin']} role=${tok.claims?['role']} uid=${u.uid}',
+    );
+  }
+
   // 🔎 سحب طلبات المراجعة (بدون orderBy مؤقتاً)
   Stream<QuerySnapshot> _pendingSubs() {
     return FirebaseFirestore.instance
@@ -82,8 +94,15 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         .snapshots();
   }
 
-  // ✅ اعتماد
+  // تنسيق يوم بصيغة yyyy-MM-dd (بدون حزم إضافية)
+  String _dayId(DateTime dt) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
+  }
+
   Future<void> _approve(BuildContext context, DocumentSnapshot subDoc) async {
+    await _ensureAdminClaims();
+
     final data = subDoc.data() as Map<String, dynamic>;
     final userTaskDocId = data['userTaskDocId'] as String;
     final userId = data['userId'] as String;
@@ -94,43 +113,50 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         .collection('userTasks')
         .doc(userTaskDocId);
     final subRef = subDoc.reference;
-
     final admin = FirebaseAuth.instance.currentUser;
+
+    // يوم الإنجاز (للكاليندر)
+    final todayId = _dayId(DateTime.now());
+    final dayMarkRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('dayMarks')
+        .doc(todayId);
 
     try {
       await FirebaseFirestore.instance.runTransaction((trx) async {
+        // —— read & guard ——
         final subSnap = await trx.get(subRef);
         if (!subSnap.exists) throw 'الطلب غير موجود.';
         final sub = subSnap.data() as Map<String, dynamic>;
-        if (sub['status'] != 'pending') {
-          throw 'تمت معالجة هذا الطلب مسبقاً.';
-        }
+        if (sub['status'] != 'pending') throw 'تمت معالجة هذا الطلب مسبقاً.';
 
         final utSnap = await trx.get(utRef);
         if (!utSnap.exists) throw 'userTask غير موجود.';
         final ut = utSnap.data() as Map<String, dynamic>;
-        final currentStatus = ut['status'] as String? ?? 'pending';
-        final canComplete = (currentStatus != 'completed');
+        final currentStatus = (ut['status'] as String?) ?? 'pending';
+        final canComplete = currentStatus != 'completed';
 
-        // submissions → approved
+        // —— submissions → approved ——
         trx.update(subRef, {
           'status': 'approved',
           'processedAt': FieldValue.serverTimestamp(),
           'processedBy': admin?.uid,
         });
 
-        // userTasks → completed
+        // —— userTasks → completed + canRetry=false ——
         trx.update(utRef, {
           'status': 'completed',
           'completedAt': FieldValue.serverTimestamp(),
+          'canRetry': false,
         });
 
-        // نقاط المستخدم (مرة واحدة فقط)
+        // —— users.points (اختياري) ——
         if (canComplete && taskPoints > 0) {
           trx.update(usersRef, {'points': FieldValue.increment(taskPoints)});
         }
 
-        // سجل تاريخ
+        // —— history ——
         final historyRef = FirebaseFirestore.instance
             .collection('users')
             .doc(userId)
@@ -143,28 +169,49 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
           'points': taskPoints,
           'at': FieldValue.serverTimestamp(),
         });
+
+        // —— dayMarks (للكاليندر: دائرة خضراء شفافة) ——
+        trx.set(dayMarkRef, {
+          'count': FieldValue.increment(1),
+          'lastAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        // —— notifications ——
+        final notifRef = FirebaseFirestore.instance
+            .collection('notifications')
+            .doc();
+        trx.set(notifRef, {
+          'type': 'submission_approved',
+          'userId': userId,
+          'submissionId': subRef.id,
+          'taskTitle': data['taskTitle'],
+          'createdAt': FieldValue.serverTimestamp(),
+          'seen': false,
+          'message': 'تم اعتماد طلبك لمهمة: ${data['taskTitle'] ?? ''}',
+        });
       });
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم اعتماد الطلب وتحديث النقاط ✅')),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم اعتماد الطلب وتحديث النقاط ✅')),
+      );
     } catch (e) {
+      // ignore: avoid_print
       print('❌ خطأ في الاعتماد: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
     }
   }
 
-  // ❌ رفض
   Future<void> _reject(BuildContext context, DocumentSnapshot subDoc) async {
+    await _ensureAdminClaims();
+
     final admin = FirebaseAuth.instance.currentUser;
     final data = subDoc.data() as Map<String, dynamic>;
     final userTaskDocId = data['userTaskDocId'] as String;
+    final userId = data['userId'] as String? ?? '';
 
     final subRef = subDoc.reference;
     final utRef = FirebaseFirestore.instance
@@ -173,38 +220,70 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
 
     try {
       await FirebaseFirestore.instance.runTransaction((trx) async {
+        // —— read & guard ——
         final subSnap = await trx.get(subRef);
         if (!subSnap.exists) throw 'الطلب غير موجود.';
         final sub = subSnap.data() as Map<String, dynamic>;
-        if (sub['status'] != 'pending') {
-          throw 'تمت معالجة هذا الطلب مسبقاً.';
-        }
+        if (sub['status'] != 'pending') throw 'تمت معالجة هذا الطلب مسبقاً.';
 
+        // —— submissions → rejected ——
         trx.update(subRef, {
           'status': 'rejected',
           'processedAt': FieldValue.serverTimestamp(),
           'processedBy': admin?.uid,
         });
 
-        // userTasks → rejected
+        // —— userTasks → rejected + canRetry=true ——
         trx.update(utRef, {
           'status': 'rejected',
           'rejectedAt': FieldValue.serverTimestamp(),
+          'canRetry': true,
         });
+
+        // —— history ——
+        if (userId.isNotEmpty) {
+          final historyRef = FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .collection('history')
+              .doc();
+          trx.set(historyRef, {
+            'type': 'task_rejected',
+            'userTaskDocId': userTaskDocId,
+            'submissionId': subRef.id,
+            'points': 0,
+            'at': FieldValue.serverTimestamp(),
+          });
+        }
+
+        // —— notifications ——
+        if (userId.isNotEmpty) {
+          final notifRef = FirebaseFirestore.instance
+              .collection('notifications')
+              .doc();
+          trx.set(notifRef, {
+            'type': 'submission_rejected',
+            'userId': userId,
+            'submissionId': subRef.id,
+            'taskTitle': data['taskTitle'],
+            'createdAt': FieldValue.serverTimestamp(),
+            'seen': false,
+            'message': 'تم رفض طلبك لمهمة: ${data['taskTitle'] ?? ''}',
+          });
+        }
       });
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('تم رفض الطلب ❌')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم رفض الطلب ❌')));
     } catch (e) {
+      // ignore: avoid_print
       print('❌ خطأ في الرفض: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
     }
   }
 
@@ -231,9 +310,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
           extendBody: true,
           extendBodyBehindAppBar: true,
           backgroundColor: Colors.transparent,
-
           appBar: const NameerAppBar(showTitleInBar: false, showBack: true),
-
           body: AnimatedBackgroundContainer(
             child: Builder(
               builder: (context) {
@@ -351,6 +428,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                     [];
 
                                 return Card(
+                                  key: ValueKey(d.id),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
                                   ),
@@ -391,6 +469,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                                         ),
                                                     child: Image.network(
                                                       url,
+                                                      key: ValueKey(url),
                                                       height: 100,
                                                       width: 100,
                                                       fit: BoxFit.cover,
