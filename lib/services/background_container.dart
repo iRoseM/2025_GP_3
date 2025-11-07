@@ -33,22 +33,32 @@ class _AnimatedBackgroundContainerState
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand, // ✅ makes background fill under everything
-      children: [
-        AnimatedBuilder(
-          animation: _bgCtrl,
-          builder: (_, __) => CustomPaint(
-            painter: _BgPainter(_bgCtrl.value),
-            child: const SizedBox.expand(),
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        // نضمن ارتفاع نهائي حتى لو انحطت داخل SliverToBoxAdapter
+        final double height =
+            (constraints.hasBoundedHeight && constraints.maxHeight.isFinite)
+            ? constraints.maxHeight
+            : MediaQuery.of(context).size.height;
+
+        return SizedBox(
+          height: height,
+          width: double.infinity,
+          child: Stack(
+            fit: StackFit.expand, // آمن الآن لأن عندنا ارتفاع finite
+            children: [
+              AnimatedBuilder(
+                animation: _bgCtrl,
+                builder: (_, __) => CustomPaint(
+                  painter: _BgPainter(_bgCtrl.value),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              SafeArea(top: true, bottom: false, child: widget.child),
+            ],
           ),
-        ),
-        SafeArea(
-          top: true,
-          bottom: false, // ✅ allow background under nav bar
-          child: widget.child,
-        ),
-      ],
+        );
+      },
     );
   }
 }

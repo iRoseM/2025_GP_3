@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/animation.dart';
+import 'rewards.dart';
 
 import 'task.dart';
 import 'community.dart';
@@ -459,12 +460,15 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                 ),
 
                                 _PointsChip(
-                                  points:
-                                      snap.connectionState ==
-                                          ConnectionState.waiting
-                                      ? 0
-                                      : points,
-                                  onTap: () {},
+                                  points: points,
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const RewardsPage(),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ],
                             ),
@@ -585,7 +589,14 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                     child: _InlineBanner(
                       label:
                           'احفظ حيّك نظيفًا - شارك الآن واربح نقاطاً مضاعفة!',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const RewardsPage(),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
