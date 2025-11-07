@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
+import 'dart:async';
 
 import 'home.dart';
 import 'map.dart';
@@ -21,9 +22,7 @@ class AppColors {
   static const accent = Color(0xFFF4A340);
   static const sea = Color(0xFF1F7A8C);
   static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(
-    0x544BAA98,
-  ); // شفافية خفيفة (نفس إحساس الحقول المقفولة)
+  static const primary33 = Color(0x544BAA98); // شفافية خفيفة
   static const light = Color(0xFF79D0BE);
   static const background = Color(0xFFF3FAF7);
   static const mint = Color(0xFFB6E9C1);
@@ -39,7 +38,12 @@ class taskPage extends StatefulWidget {
 
 class _taskPageState extends State<taskPage> {
   final int _currentIndex = 1;
+
   bool _isInitializing = true;
+
+  // ✅ فحص تمهيدي لمنع الدوران اللانهائي
+  bool _precheckDone = false;
+  String? _precheckError;
 
   void _onTap(int i) {
     if (i == _currentIndex) return;
@@ -92,12 +96,10 @@ class _taskPageState extends State<taskPage> {
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
-  // ✅ Helpers لتمييز أيام الإنجاز في الكاليندر
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
   bool _isCompletedDay(DateTime d) =>
       _monthStatuses[_dateOnly(d)] == 'completed';
 
-  // ✅ لتفادي setState أثناء البناء
   void _updateMonthStatusFor(DateTime day, String status) {
     final key = _dateOnly(day);
     if (_monthStatuses[key] == status) return;
@@ -126,7 +128,12 @@ class _taskPageState extends State<taskPage> {
     _selectedDay = _dayStart(DateTime.now());
     _focusedDay = _selectedDay!;
 
+    if (!await hasInternetConnection()) {
+      if (mounted) showNoInternetDialog(context);
+    }
+
     await _bootstrapTodayOnly();
+    await _precheckTodayDoc();
 
     if (mounted) {
       setState(() {
@@ -154,8 +161,66 @@ class _taskPageState extends State<taskPage> {
         });
       }
     });
+  }
 
-    _attachUserTaskStreamFor(_selectedDay!);
+  Future<void> _precheckTodayDoc() async {
+    if (_uid == null) {
+      setState(() {
+        _precheckDone = true;
+        _precheckError = 'unauthenticated';
+      });
+      return;
+    }
+
+    try {
+      final sel = _selectedDay ?? _dayStart(DateTime.now());
+      final key = '${_uid!}_${_yyyyMMdd(sel)}';
+      final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
+
+      var snap = await ref.get().timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => throw TimeoutException('timeout-get-userTask'),
+      );
+
+      if (!snap.exists) {
+        await _ensureUserTaskForDate(sel);
+        snap = await ref.get().timeout(
+          const Duration(seconds: 8),
+          onTimeout: () =>
+              throw TimeoutException('timeout-get-userTask-after-create'),
+        );
+      }
+
+      _attachUserTaskStreamFor(sel);
+
+      if (mounted) {
+        setState(() {
+          _precheckDone = true;
+          _precheckError = null;
+        });
+      }
+    } on TimeoutException catch (e) {
+      if (mounted) {
+        setState(() {
+          _precheckDone = true;
+          _precheckError = e.message ?? 'timeout';
+        });
+      }
+    } on FirebaseException catch (e) {
+      if (mounted) {
+        setState(() {
+          _precheckDone = true;
+          _precheckError = e.code;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _precheckDone = true;
+          _precheckError = e.toString();
+        });
+      }
+    }
   }
 
   Future<void> _loadUserJoinDate(User user, DateTime today) async {
@@ -210,7 +275,6 @@ class _taskPageState extends State<taskPage> {
     if (mounted) setState(() {});
   }
 
-  // ✅ استعلام الشهر مع Fallback لو مافيه Index
   Future<Map<DateTime, String>> _getTaskStatusesForMonth(DateTime month) async {
     if (_uid == null) return {};
     final ms = _monthStart(month);
@@ -255,28 +319,30 @@ class _taskPageState extends State<taskPage> {
     }
   }
 
+  // =======================
+  // ✅ تحديث مهمة اليوم المختار + الحقول المنزوعة التطبيع
+  // =======================
   Future<void> _refreshUserTask(Map<String, dynamic> currentTask) async {
     if (_uid == null || _selectedDay == null) return;
 
-    final key = '${_uid!}_${_yyyyMMdd(_selectedDay!)}';
-    final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
-    final now = DateTime.now();
+    final selected = _dayStart(_selectedDay!);
+    final monthKey =
+        "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
 
+    final utKey = '${_uid!}_${_yyyyMMdd(selected)}';
+    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(utKey);
+
+    // 1) مهام الشهر المتاحة
     final tasksSnap = await FirebaseFirestore.instance
         .collection('tasks')
         .where('status', isEqualTo: 'active')
         .get();
 
-    final currentMonthKey =
-        "${now.year}-${now.month.toString().padLeft(2, '0')}";
-
     final validTasks = tasksSnap.docs.where((doc) {
       final data = doc.data();
       dynamic vf = data['visible_from'];
       dynamic em = data['expiry_month'];
-
-      String? visibleFrom;
-      String? expiryMonth;
+      String? visibleFrom, expiryMonth;
 
       if (vf is Timestamp) {
         final d = vf.toDate();
@@ -284,7 +350,6 @@ class _taskPageState extends State<taskPage> {
       } else if (vf is String) {
         visibleFrom = vf;
       }
-
       if (em is Timestamp) {
         final d = em.toDate();
         expiryMonth = "${d.year}-${d.month.toString().padLeft(2, '0')}";
@@ -293,30 +358,33 @@ class _taskPageState extends State<taskPage> {
       }
 
       final isVisible =
-          (visibleFrom == null) ||
-          (visibleFrom.compareTo(currentMonthKey) <= 0);
+          (visibleFrom == null) || (visibleFrom.compareTo(monthKey) <= 0);
       final notExpired =
-          (expiryMonth == null) ||
-          (expiryMonth.compareTo(currentMonthKey) >= 0);
+          (expiryMonth == null) || (expiryMonth.compareTo(monthKey) >= 0);
       return isVisible && notExpired;
     }).toList();
 
-    if (validTasks.isEmpty) return;
-
-    if (_remainingTaskIds.isEmpty) {
-      _remainingTaskIds = validTasks.map((doc) => doc.id).toList();
+    if (validTasks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'لا توجد مهام مُتاحة لهذا الشهر.',
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+          ),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+      return;
     }
 
-    _remainingTaskIds.remove(currentTask['id']);
+    // 2) تجنّب تكرار المهمات القريبة
+    final yesterday = _dayStart(selected.subtract(const Duration(days: 1)));
+    final tomorrow = _dayStart(selected.add(const Duration(days: 1)));
 
     String? yTaskId, tTaskId;
-    final yesterday = _dayStart(
-      _selectedDay!.subtract(const Duration(days: 1)),
-    );
-    final tomorrow = _dayStart(_selectedDay!.add(const Duration(days: 1)));
-
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
     final tKey = '${_uid!}_${_yyyyMMdd(tomorrow)}';
+
     final ySnap = await FirebaseFirestore.instance
         .collection('userTasks')
         .doc(yKey)
@@ -325,40 +393,32 @@ class _taskPageState extends State<taskPage> {
         .collection('userTasks')
         .doc(tKey)
         .get();
-
     if (ySnap.exists) yTaskId = ySnap.data()?['taskId'] as String?;
     if (tSnap.exists) tTaskId = tSnap.data()?['taskId'] as String?;
-    _remainingTaskIds.remove(yTaskId);
-    _remainingTaskIds.remove(tTaskId);
 
-    if (_remainingTaskIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'لقد عرضنا لك جميع المهام! سيتم إعادة التدوير من البداية.',
-            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-          ),
-          backgroundColor: AppColors.primary,
-        ),
-      );
-      _remainingTaskIds = validTasks.map((doc) => doc.id).toList();
-    }
+    final excluded = <String?>{currentTask['id'] as String?, yTaskId, tTaskId}
+      ..removeWhere((e) => e == null);
+    final pool = validTasks.where((doc) => !excluded.contains(doc.id)).toList();
+    final finalPool = pool.isEmpty ? validTasks : pool;
 
+    // 3) اختيار عشوائي
     final rnd = Random(DateTime.now().millisecondsSinceEpoch);
-    final newTaskId = _remainingTaskIds[rnd.nextInt(_remainingTaskIds.length)];
-    _remainingTaskIds.remove(newTaskId);
+    final picked = finalPool[rnd.nextInt(finalPool.length)];
+    final pickedData = picked.data();
 
-    await ref.update({'taskId': newTaskId});
+    // 4) حقول منزوعة التطبيع
+    final denorm = {
+      'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
+      'taskDescription': pickedData['description'] ?? '',
+      'taskPoints': pickedData['points'] ?? 0,
+      'taskValidation': pickedData['validationStrategy'] ?? 'غير محددة',
+    };
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'تم تحديث المهمة بنجاح 🎯',
-          style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-        ),
-        backgroundColor: AppColors.primary,
-      ),
-    );
+    // 5) تحديث وثيقة اليوم
+    await utRef.update({'taskId': picked.id, ...denorm});
+
+    // 6) إعادة ربط الستريم
+    _attachUserTaskStreamFor(selected);
   }
 
   Future<void> _ensureUserTaskForDate(DateTime day) async {
@@ -367,10 +427,12 @@ class _taskPageState extends State<taskPage> {
     final today = _dayStart(DateTime.now());
     if (_joinDate != null && day.isBefore(_joinDate!)) return;
 
+    // لا نسمح بإنشاء مستقبل بعيد
     final now = DateTime.now();
     if (day.year > now.year ||
-        (day.year == now.year && day.month > now.month + 1))
+        (day.year == now.year && day.month > now.month + 1)) {
       return;
+    }
 
     final key = '${_uid!}_${_yyyyMMdd(day)}';
     final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
@@ -443,15 +505,14 @@ class _taskPageState extends State<taskPage> {
     final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
     final start = _dayStart(day);
     final end = _dayEnd(day);
-    final double carbon = (rnd.nextDouble() * 0.42 + 0.08);
 
+    // ⛔️ لا نضع أي حقل carbonFootPrint هنا
     await ref.set({
       'userId': _uid,
       'taskId': picked.id,
       'selectedAt': Timestamp.fromDate(start),
       'status': status,
       'completedAt': null,
-      'carbonFootPrint': carbon,
       'windowStart': Timestamp.fromDate(start),
       'windowEnd': Timestamp.fromDate(end),
 
@@ -547,7 +608,26 @@ class _taskPageState extends State<taskPage> {
                     _buildCalendar(),
                     const SizedBox(height: 8),
 
-                    _userTaskStream == null
+                    (!_precheckDone)
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 40),
+                              child: CircularProgressIndicator(
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          )
+                        : (_precheckError != null)
+                        ? _buildUnavailableCard(
+                            title: 'تعذّر تحميل مهمة اليوم',
+                            subtitle: (_precheckError == 'permission-denied')
+                                ? 'صلاحيات غير كافية لقراءة مهامك. تأكدي أنك مسجّلة دخولًا وأن قواعد Firestore تسمح لصاحب الوثيقة بالقراءة.'
+                                : (_precheckError!.contains('unavailable') ||
+                                      _precheckError!.contains('network'))
+                                ? 'مشكلة اتصال مؤقتة. تحقّقي من الإنترنت ثم جرّبي التحديث.'
+                                : 'خطأ: $_precheckError',
+                          )
+                        : (_userTaskStream == null)
                         ? const Center(
                             child: Padding(
                               padding: EdgeInsets.symmetric(vertical: 40),
@@ -598,7 +678,6 @@ class _taskPageState extends State<taskPage> {
                               final ut =
                                   snap.data!.data() as Map<String, dynamic>;
 
-                              // ✅ حدّث خريطة حالة اليوم المختار (Post-frame)
                               final newStatus =
                                   (ut['status'] as String?) ?? 'pending';
                               _updateMonthStatusFor(sel, newStatus);
@@ -621,7 +700,6 @@ class _taskPageState extends State<taskPage> {
                                 'status': ut['status'] ?? 'pending',
                               };
 
-                              // لو الوثيقة قديمة (نقرأ المهمة من tasks)
                               if ((ut['taskTitle'] == null ||
                                       ut['taskDescription'] == null) &&
                                   ut['taskId'] != null) {
@@ -809,7 +887,6 @@ class _taskPageState extends State<taskPage> {
         firstDay: DateTime.utc(2020),
         lastDay: DateTime.utc(2030),
         calendarFormat: CalendarFormat.month,
-
         headerStyle: HeaderStyle(
           formatButtonVisible: false,
           titleCentered: true,
@@ -827,7 +904,6 @@ class _taskPageState extends State<taskPage> {
             color: AppColors.primary,
           ),
         ),
-
         selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
         onDaySelected: (selected, focused) async {
           setState(() {
@@ -835,17 +911,18 @@ class _taskPageState extends State<taskPage> {
             _focusedDay = focused;
           });
           await _ensureUserTaskForDate(_dayStart(selected));
-          _attachUserTaskStreamFor(selected);
+          _precheckDone = false;
+          _precheckError = null;
+          setState(() {});
+          await _precheckTodayDoc();
         },
-
-        // ✅ لا نغيّر selected، ونخلي today رمادي شفاف خفيف
         calendarStyle: CalendarStyle(
           todayDecoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.08), // رمادي شفاف لليوم الحالي
+            color: Colors.black.withOpacity(0.08),
             shape: BoxShape.circle,
           ),
           selectedDecoration: const BoxDecoration(
-            color: AppColors.primary, // كما هو
+            color: AppColors.primary,
             shape: BoxShape.circle,
           ),
           selectedTextStyle: GoogleFonts.ibmPlexSansArabic(
@@ -857,8 +934,6 @@ class _taskPageState extends State<taskPage> {
             fontWeight: FontWeight.w700,
           ),
         ),
-
-        // ✅ نرسم دائرة الإنجاز بدون ما نغيّر قياسات الخليّة (بدون رفع اليوم)
         calendarBuilders: CalendarBuilders(
           defaultBuilder: (context, day, focusedDay) {
             final bool isSel = isSameDay(day, _selectedDay);
@@ -867,7 +942,6 @@ class _taskPageState extends State<taskPage> {
                 _isCompletedDay(day) && !isSel && !isToday;
 
             return SizedBox.expand(
-              // يضمن أن الحجم لا يتغير
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -877,13 +951,11 @@ class _taskPageState extends State<taskPage> {
                         width: 36,
                         height: 36,
                         decoration: const BoxDecoration(
-                          color:
-                              AppColors.primary33, // نفس إحساس الحقول المقفولة
+                          color: AppColors.primary33,
                           shape: BoxShape.circle,
                         ),
                       ),
                     ),
-                  // الرقم في الوسط دائماً
                   Center(
                     child: Text(
                       '${day.day}',
@@ -1049,16 +1121,16 @@ class _taskPageState extends State<taskPage> {
                       }
                     },
               style: ButtonStyle(
-                elevation: WidgetStateProperty.all(0),
-                shadowColor: WidgetStateProperty.all(Colors.transparent),
-                backgroundColor: WidgetStateProperty.all(Colors.transparent),
-                overlayColor: WidgetStateProperty.all(Colors.transparent),
-                shape: WidgetStateProperty.all(
+                elevation: MaterialStateProperty.all(0),
+                shadowColor: MaterialStateProperty.all(Colors.transparent),
+                backgroundColor: MaterialStateProperty.all(Colors.transparent),
+                overlayColor: MaterialStateProperty.all(Colors.transparent),
+                shape: MaterialStateProperty.all(
                   RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                padding: WidgetStateProperty.all(
+                padding: MaterialStateProperty.all(
                   const EdgeInsets.symmetric(vertical: 14),
                 ),
                 splashFactory: NoSplash.splashFactory,

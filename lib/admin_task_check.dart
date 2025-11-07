@@ -25,6 +25,207 @@ class AppColors {
   static const tealSoft = Color(0xFF75BCAF);
 }
 
+// =====================================================
+// 🔰 حساب وربط عوامل الانبعاث + التسجيل عند الاعتماد
+// =====================================================
+
+final _fs = FirebaseFirestore.instance;
+
+// ——— إعدادات موحّدة لمجموعة العوامل ———
+const String _efCollection = 'emissionFactors';
+const String _efValueField = 'ef_kgco2_per_unit'; // حقلك الحالي
+
+class CarbonCalcResult {
+  final double kgCO2;
+  final String direction; // "save" | "emit"
+  final Map<String, dynamic> meta;
+  CarbonCalcResult({
+    required this.kgCO2,
+    required this.direction,
+    required this.meta,
+  });
+}
+
+// 🔎 جلب مستند عامل بالمعرّف
+Future<Map<String, dynamic>?> _getEfDoc(String id) async {
+  if (id.isEmpty) return null;
+  final snap = await _fs.collection(_efCollection).doc(id).get();
+  if (!snap.exists) return null;
+  final data = snap.data();
+  if (data == null) return null;
+  return {'id': snap.id, ...data};
+}
+
+double _numOr0(dynamic v) =>
+    (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
+
+// ✅ قارئ مرن لقيمة العامل (يدعم أسماء متعددة + valueField داخل الوثيقة)
+double? _readEfValueFlexible(
+  Map<String, dynamic> efDoc, {
+  String? preferField,
+}) {
+  double? _asDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v.trim());
+    return null;
+  }
+
+  if (preferField != null && preferField.isNotEmpty) {
+    final v = _asDouble(efDoc[preferField]);
+    if (v != null) return v;
+  }
+
+  final vfInDoc = efDoc['valueField'] ?? efDoc['efValueField'];
+  if (vfInDoc is String && vfInDoc.isNotEmpty) {
+    final v = _asDouble(efDoc[vfInDoc]);
+    if (v != null) return v;
+  }
+
+  final candidates = <String>[
+    'ef_kgco2_per_unit',
+    'value',
+    'kgPerKm',
+    'perKm',
+    'co2PerKm',
+    'co2_per_km',
+    'factor',
+  ];
+  for (final k in candidates) {
+    final v = _asDouble(efDoc[k]);
+    if (v != null) return v;
+  }
+  return null;
+}
+
+// للتوافق مع الاستدعاءات القديمة
+double? _readEfValue(Map<String, dynamic> efDoc) =>
+    _readEfValueFlexible(efDoc, preferField: _efValueField);
+
+Future<Map<String, dynamic>?> resolveEmissionFactorForTask(
+  Map<String, dynamic> task,
+) async {
+  final directRef = (task['emissionFactorRef'] ?? task['emission_factor_ref'])
+      ?.toString()
+      .trim();
+
+  if (directRef != null && directRef.isNotEmpty) {
+    final doc = await _getEfDoc(directRef);
+    if (doc != null) return doc;
+  }
+
+  String normalize(String? s) =>
+      (s ?? '').toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  final title = normalize(task['title'] ?? task['title_normalized']);
+  final desc = normalize(task['description']);
+  final cat = (task['category'] ?? '').toString();
+
+  final words = <String>{
+    ...title.split(' ').where((w) => w.isNotEmpty),
+    ...desc.split(' ').where((w) => w.isNotEmpty),
+  };
+
+  final qs = await _fs.collection(_efCollection).limit(50).get();
+  int bestScore = -1;
+  Map<String, dynamic>? best;
+
+  for (final d in qs.docs) {
+    final data = d.data();
+    final kws =
+        (data['keywords'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    final efCat = data['category']?.toString() ?? '';
+
+    int score = 0;
+    if (cat.isNotEmpty && efCat.isNotEmpty && efCat == cat) score += 2;
+    for (final k in kws) {
+      final nk = k.toLowerCase();
+      if (words.contains(nk)) score += 1;
+      if (nk.length > 2 && (title.contains(nk) || desc.contains(nk))) {
+        score += 1;
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = {'id': d.id, ...data};
+    }
+  }
+
+  return best;
+}
+
+Future<CarbonCalcResult?> computeCarbonForTask({
+  required Map<String, dynamic> task,
+  required int count,
+  required double distanceKm,
+}) async {
+  final ef = await resolveEmissionFactorForTask(task);
+  if (ef == null) return null;
+
+  final rawMode = (ef['calcMode'] ?? ef['calc_mode'] ?? 'perItem').toString();
+  final calcMode = rawMode.toLowerCase();
+  final direction = (ef['direction'] ?? 'save').toString();
+
+  double kg = 0.0;
+  final meta = <String, dynamic>{
+    'mode': rawMode,
+    'ef_id': ef['id'],
+    'ef_name': ef['name'],
+    'direction': direction,
+  };
+
+  Future<double?> _efValByRef(String? ref) async {
+    if (ref == null || ref.isEmpty) return null;
+    final doc = await _getEfDoc(ref);
+    if (doc == null) return null;
+    return _readEfValueFlexible(doc, preferField: _efValueField);
+  }
+
+  if (calcMode == 'peritem') {
+    final perItem = _readEfValueFlexible(ef, preferField: _efValueField) ?? 0.0;
+    kg = perItem * count.clamp(0, 1000000);
+    meta.addAll({'count': count, 'ef': perItem});
+  } else if (calcMode == 'perkm') {
+    final perKm = _readEfValueFlexible(ef, preferField: _efValueField) ?? 0.0;
+    kg = perKm * distanceKm.clamp(0, 1000000);
+    meta.addAll({'distanceKm': distanceKm, 'ef': perKm});
+  } else if (calcMode == 'deltaperkm') {
+    final baselineRef = (ef['baselineFactorRef'] ?? ef['baseline_factor_ref'])
+        ?.toString();
+    final actualRef = (ef['actualFactorRef'] ?? ef['actual_factor_ref'])
+        ?.toString();
+    if (baselineRef == null ||
+        baselineRef.isEmpty ||
+        actualRef == null ||
+        actualRef.isEmpty) {
+      return null;
+    }
+    final base = await _efValByRef(baselineRef) ?? 0.0;
+    final act = await _efValByRef(actualRef) ?? 0.0;
+    final delta = base - act;
+    kg = (delta > 0 ? delta : 0.0) * distanceKm.clamp(0, 1000000);
+    meta.addAll({
+      'distanceKm': distanceKm,
+      'ef_baseline_id': baselineRef,
+      'ef_actual_id': actualRef,
+      'baseline_per_km': base,
+      'actual_per_km': act,
+      'delta_per_km': delta,
+    });
+  } else {
+    final perItem = _readEfValueFlexible(ef, preferField: _efValueField) ?? 0.0;
+    kg = perItem * count.clamp(0, 1000000);
+    meta.addAll({'count': count, 'ef': perItem, 'fallback': true});
+  }
+
+  if (kg < 0) kg = 0;
+  final finalKg = (direction.toLowerCase() == 'save') ? kg : 0.0;
+
+  return CarbonCalcResult(kgCO2: finalKg, direction: direction, meta: meta);
+}
+
+// =====================================================
+
 class AdminTaskCheckPage extends StatefulWidget {
   const AdminTaskCheckPage({super.key});
 
@@ -34,11 +235,14 @@ class AdminTaskCheckPage extends StatefulWidget {
 
 class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
   int _currentIndex = 2;
+  bool _isAdmin = false;
+  String? _uid;
 
   @override
   void initState() {
     super.initState();
     _checkConnection();
+    _ensureAdminClaims();
   }
 
   Future<void> _checkConnection() async {
@@ -73,40 +277,266 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
     }
   }
 
-  /// 🔐 يجبر تحديث الـ ID token عشان الــ admin claim يظهر في القواعد
   Future<void> _ensureAdminClaims() async {
     final u = FirebaseAuth.instance.currentUser;
+    _uid = u?.uid;
     if (u == null) return;
     await u.getIdToken(true);
     final tok = await u.getIdTokenResult();
-    // ignore: avoid_print
-    print(
-      'Admin claims → admin=${tok.claims?['admin']} role=${tok.claims?['role']} uid=${u.uid}',
+    final isAdm =
+        (tok.claims?['admin'] == true) || (tok.claims?['role'] == 'admin');
+    debugPrint(
+      '[claims] admin=${tok.claims?['admin']} role=${tok.claims?['role']} uid=${u.uid}',
     );
+    if (mounted) {
+      setState(() {
+        _isAdmin = isAdm;
+      });
+    }
   }
 
-  // 🔎 سحب طلبات المراجعة (بدون orderBy مؤقتاً)
   Stream<QuerySnapshot> _pendingSubs() {
-    return FirebaseFirestore.instance
-        .collection('submissions')
-        .where('status', isEqualTo: 'pending')
-        // .orderBy('createdAt', descending: true) // ⏳ مؤقتاً حتى ينشئ الفهرس
-        .snapshots();
+    final col = FirebaseFirestore.instance.collection('submissions');
+    if (_isAdmin) {
+      // نأخذ metadata changes عشان نشوف كتابة محلية/فشل مزامنة
+      return col
+          .where('status', isEqualTo: 'pending')
+          .snapshots(includeMetadataChanges: true);
+    } else {
+      final uid = _uid ?? FirebaseAuth.instance.currentUser?.uid ?? '';
+      return col
+          .where('status', isEqualTo: 'pending')
+          .where('userId', isEqualTo: uid)
+          .snapshots(includeMetadataChanges: true);
+    }
   }
 
-  // تنسيق يوم بصيغة yyyy-MM-dd (بدون حزم إضافية)
   String _dayId(DateTime dt) {
     String two(int v) => v.toString().padLeft(2, '0');
     return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
   }
 
+  // =================== helpers لحساب الكربون ===================
+
+  Future<Map<String, dynamic>?> _getFactorByRef(String refId) async {
+    if (refId.isEmpty) return null;
+    final snap = await FirebaseFirestore.instance
+        .collection(_efCollection)
+        .doc(refId)
+        .get();
+    if (!snap.exists) return null;
+    return snap.data() as Map<String, dynamic>;
+  }
+
+  double _round2(double v) => (v * 100).roundToDouble() / 100.0;
+
+  Future<double> _computeSavedKgCO2({
+    String? calcMode,
+    String? efRef,
+    String? baselineRef,
+    String direction = 'save',
+    required int count,
+    required double distanceKm,
+    required Map<String, dynamic> taskSnapshotOrMinimal,
+  }) async {
+    calcMode ??= taskSnapshotOrMinimal['calcMode'] as String?;
+    efRef ??= taskSnapshotOrMinimal['emissionFactorRef'] as String?;
+    baselineRef ??= taskSnapshotOrMinimal['baselineFactorRef'] as String?;
+    direction = (taskSnapshotOrMinimal['direction'] as String?) ?? direction;
+
+    final mode = (calcMode ?? 'perItem').toString().toLowerCase();
+    if (direction.toLowerCase() != 'save') return 0.0;
+
+    if (mode == 'peritem') {
+      if ((efRef ?? '').isEmpty || count <= 0) return 0.0;
+      final f = await _getFactorByRef(efRef!);
+      if (f == null) return 0.0;
+      final factor = _readEfValueFlexible(f, preferField: _efValueField) ?? 0.0;
+      return _round2(count * factor);
+    }
+
+    if (mode == 'perkm') {
+      if ((efRef ?? '').isEmpty || distanceKm <= 0) return 0.0;
+      final f = await _getFactorByRef(efRef!);
+      if (f == null) return 0.0;
+      final factor = _readEfValueFlexible(f, preferField: _efValueField) ?? 0.0;
+      return _round2(distanceKm * factor);
+    }
+
+    if (mode == 'deltaperkm') {
+      if ((baselineRef ?? '').isEmpty ||
+          (efRef ?? '').isEmpty ||
+          distanceKm <= 0) {
+        return 0.0;
+      }
+      final baseF = await _getFactorByRef(baselineRef!);
+      final actF = await _getFactorByRef(efRef!);
+      if (baseF == null || actF == null) return 0.0;
+      final base =
+          _readEfValueFlexible(baseF, preferField: _efValueField) ?? 0.0;
+      final act = _readEfValueFlexible(actF, preferField: _efValueField) ?? 0.0;
+      final delta = base - act;
+      if (delta <= 0) return 0.0;
+      return _round2(delta * distanceKm);
+    }
+
+    if ((efRef ?? '').isEmpty || count <= 0) return 0.0;
+    final f = await _getFactorByRef(efRef!);
+    if (f == null) return 0.0;
+    final factor = _readEfValueFlexible(f, preferField: _efValueField) ?? 0.0;
+    return _round2(count * factor);
+  }
+
+  // =====================================================
+  // 🧮 دالة خاصة لمهام deltaPerKm: تحسب + تحدث userTasks و users
+  // =====================================================
+  Future<double> _computeAndPersistDeltaPerKm({
+    required Map<String, dynamic> task, // ممكن ما يحتوي baseline/actual
+    required String userTaskDocId,
+    required String uid,
+    required double distanceKm,
+  }) async {
+    try {
+      if (distanceKm <= 0) {
+        throw Exception('distanceKm يجب أن تكون أكبر من صفر');
+      }
+
+      // 1) جرّب تقرا من المهمة
+      String? baselineRef =
+          (task['baselineFactorRef'] ?? task['baseline_factor_ref'])
+              ?.toString();
+      String? actualRef =
+          (task['emissionFactorRef'] ??
+                  task['actualFactorRef'] ??
+                  task['emission_factor_ref'])
+              ?.toString();
+
+      // 2) إن ما وُجدت بالمهمة، حاول تجيب وثيقة EF ثم استخرج منها
+      Future<Map<String, dynamic>?> _loadEfFromTaskOrResolve() async {
+        // أولوية: إن كان بالمهمة emissionFactorRef مباشر
+        final taskEfId =
+            (task['emissionFactorRef'] ?? task['emission_factor_ref'])
+                ?.toString();
+        if (taskEfId != null && taskEfId.isNotEmpty) {
+          return await _getEfDoc(taskEfId);
+        }
+        // وإلا حاوِل نعمل resolve ذكي بالكلمات/التصنيف
+        return await resolveEmissionFactorForTask(task);
+      }
+
+      if ((baselineRef == null || baselineRef.isEmpty) ||
+          (actualRef == null || actualRef.isEmpty)) {
+        final efDoc = await _loadEfFromTaskOrResolve();
+        if (efDoc != null) {
+          baselineRef ??=
+              (efDoc['baselineFactorRef'] ?? efDoc['baseline_factor_ref'])
+                  ?.toString();
+          // ملاحظة: في EF اسم الحقل عندك actualFactorRef
+          actualRef ??=
+              (efDoc['actualFactorRef'] ??
+                      efDoc['emissionFactorRef'] ??
+                      efDoc['actual_factor_ref'] ??
+                      efDoc['emission_factor_ref'])
+                  ?.toString();
+        }
+      }
+
+      if (baselineRef == null ||
+          baselineRef.isEmpty ||
+          actualRef == null ||
+          actualRef.isEmpty) {
+        final idOrTitle = task['id'] ?? task['title'] ?? '(task?)';
+        throw Exception(
+          'baseline/actual factor refs مفقودة (task=$idOrTitle). تأكد من baselineFactorRef و actualFactorRef في EF.',
+        );
+      }
+
+      Future<double?> _getVal(String id) async {
+        final snap = await FirebaseFirestore.instance
+            .collection(_efCollection)
+            .doc(id)
+            .get();
+        if (!snap.exists) return null;
+        final m = snap.data() as Map<String, dynamic>?;
+        if (m == null) return null;
+        return _readEfValueFlexible(m, preferField: _efValueField);
+      }
+
+      final base = await _getVal(baselineRef) ?? 0.0;
+      final act = await _getVal(actualRef) ?? 0.0;
+      final delta = base - act;
+      final savedKg = delta > 0 ? (delta * distanceKm) : 0.0;
+
+      final batch = FirebaseFirestore.instance.batch();
+      final utRef = FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(userTaskDocId);
+      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+
+      batch.update(utRef, {
+        'savedKgCO2': savedKg,
+        'distanceKm': distanceKm,
+        'completedAt': FieldValue.serverTimestamp(),
+      });
+
+      batch.set(userRef, {
+        'totalCarbonSaved': FieldValue.increment(savedKg),
+        'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      await batch.commit();
+      debugPrint(
+        '[deltaPerKm] ✅ saved=+$savedKg kgCO₂ @ $distanceKm km (base=$base, act=$act) [baseline=$baselineRef, actual=$actualRef]',
+      );
+      return savedKg;
+    } catch (e) {
+      debugPrint('❌ _computeAndPersistDeltaPerKm error: $e');
+      rethrow;
+    }
+  }
+
+  // =================== الدالة الرئيسية (اعتماد) ===================
+
   Future<void> _approve(BuildContext context, DocumentSnapshot subDoc) async {
     await _ensureAdminClaims();
+    debugPrint('[approve] start • isAdmin=$_isAdmin, subId=${subDoc.id}');
+    if (!_isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يحتاج صلاحية أدمن لاعتماد الطلب')),
+      );
+      return;
+    }
 
     final data = subDoc.data() as Map<String, dynamic>;
-    final userTaskDocId = data['userTaskDocId'] as String;
-    final userId = data['userId'] as String;
+    final userTaskDocId = (data['userTaskDocId'] ?? '').toString();
+    final userId = (data['userId'] ?? '').toString();
+    if (userTaskDocId.isEmpty || userId.isEmpty) {
+      debugPrint('[approve] ❌ userTaskDocId/userId empty. data=$data');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('الطلب ناقص userId/userTaskDocId')),
+        );
+      }
+      return;
+    }
+
     final taskPoints = (data['taskPoints'] ?? 0) as int;
+    final taskId = (data['taskId'] ?? '').toString();
+    final taskTitle =
+        (data['taskTitle'] ?? data['task_title'] ?? '(بدون عنوان)').toString();
+
+    final count = (data['count'] is int)
+        ? (data['count'] as int)
+        : int.tryParse('${data['count'] ?? ''}') ?? 1;
+
+    final submittedDistanceKm = (data['distanceKm'] is num)
+        ? (data['distanceKm'] as num).toDouble()
+        : double.tryParse('${data['distanceKm'] ?? ''}') ?? 0.0;
+
+    String? calcMode = (data['calcMode'] as String?);
+    String? efRef = (data['emissionFactorRef'] as String?);
+    String? baselineRef = (data['baselineFactorRef'] as String?);
+    String direction = (data['direction'] as String?) ?? 'save';
 
     final usersRef = FirebaseFirestore.instance.collection('users').doc(userId);
     final utRef = FirebaseFirestore.instance
@@ -115,7 +545,82 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
     final subRef = subDoc.reference;
     final admin = FirebaseAuth.instance.currentUser;
 
-    // يوم الإنجاز (للكاليندر)
+    // جلب نسخة المهمة (للربط الذكي + قراءات fallback للمسافة)
+    Map<String, dynamic> taskMapForCarbon = {};
+    if (taskId.isNotEmpty) {
+      final t = await FirebaseFirestore.instance
+          .collection('tasks')
+          .doc(taskId)
+          .get();
+      if (t.exists && t.data() != null) {
+        taskMapForCarbon = {'id': t.id, ...t.data()!};
+      }
+    }
+    if (taskMapForCarbon.isEmpty) {
+      taskMapForCarbon = {
+        'id': taskId,
+        'title': taskTitle,
+        'title_normalized': taskTitle
+            .toLowerCase()
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim(),
+        'description': (data['taskDescription'] ?? data['task_desc'] ?? ''),
+        'category': (data['taskCategory'] ?? data['category'] ?? ''),
+        if (data['emissionFactorRef'] != null)
+          'emissionFactorRef': data['emissionFactorRef'],
+        if (data['baselineFactorRef'] != null)
+          'baselineFactorRef': data['baselineFactorRef'],
+        if (data['calcMode'] != null) 'calcMode': data['calcMode'],
+        if (data['direction'] != null) 'direction': data['direction'],
+      };
+    }
+
+    // ✅ Fallback للمسافة إذا ما وصلت من المستخدم
+    double effectiveDistanceKm = submittedDistanceKm;
+    double _n(dynamic v) =>
+        (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
+
+    if (effectiveDistanceKm <= 0) {
+      final defKm = _n(taskMapForCarbon['defaultKmOnSubmit']); // مثال: 6.0
+      final minKm = _n(taskMapForCarbon['minKm']); // مثال: 1.0
+      effectiveDistanceKm = defKm > 0 ? defKm : 0.0;
+      if (effectiveDistanceKm < minKm) effectiveDistanceKm = minKm;
+    }
+
+    // 👇 نحدد المود النهائي بعد جلب المهمة
+    final effectiveCalcMode =
+        (calcMode ?? taskMapForCarbon['calcMode'] ?? 'perItem')
+            .toString()
+            .toLowerCase();
+
+    // 🔢 حساب/تحديث savedKgCO2
+    double savedKgCO2 = 0.0;
+
+    if (effectiveCalcMode == 'deltaperkm') {
+      // ✅ مسار deltaPerKm: نحسب ونحدّث userTasks + users فوراً
+      savedKgCO2 = await _computeAndPersistDeltaPerKm(
+        task: {
+          ...taskMapForCarbon,
+          if (baselineRef != null) 'baselineFactorRef': baselineRef,
+          if (efRef != null) 'emissionFactorRef': efRef,
+        },
+        userTaskDocId: userTaskDocId,
+        uid: userId,
+        distanceKm: effectiveDistanceKm,
+      );
+    } else {
+      // 🔁 باقي الأنماط (perItem وغيرها)
+      savedKgCO2 = await _computeSavedKgCO2(
+        calcMode: calcMode,
+        efRef: efRef,
+        baselineRef: baselineRef,
+        direction: direction,
+        count: count,
+        distanceKm: effectiveDistanceKm,
+        taskSnapshotOrMinimal: taskMapForCarbon,
+      );
+    }
+
     final todayId = _dayId(DateTime.now());
     final dayMarkRef = FirebaseFirestore.instance
         .collection('users')
@@ -125,7 +630,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
 
     try {
       await FirebaseFirestore.instance.runTransaction((trx) async {
-        // —— read & guard ——
+        // —— read & guard —— //
         final subSnap = await trx.get(subRef);
         if (!subSnap.exists) throw 'الطلب غير موجود.';
         final sub = subSnap.data() as Map<String, dynamic>;
@@ -137,67 +642,117 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         final currentStatus = (ut['status'] as String?) ?? 'pending';
         final canComplete = currentStatus != 'completed';
 
-        // —— submissions → approved ——
-        trx.update(subRef, {
+        // —— submissions → approved —— //
+        final subUpdate = <String, dynamic>{
           'status': 'approved',
           'processedAt': FieldValue.serverTimestamp(),
           'processedBy': admin?.uid,
-        });
+        };
+        if (savedKgCO2 > 0) subUpdate['savedKgCO2'] = savedKgCO2;
+        if (effectiveDistanceKm > 0 && (submittedDistanceKm <= 0)) {
+          subUpdate['distanceKm'] = effectiveDistanceKm;
+        }
+        trx.update(subRef, subUpdate);
 
-        // —— userTasks → completed + canRetry=false ——
-        trx.update(utRef, {
+        // —— userTasks → completed + canRetry=false —— //
+        final utUpdate = <String, dynamic>{
           'status': 'completed',
           'completedAt': FieldValue.serverTimestamp(),
           'canRetry': false,
-        });
+        };
+        // لمسار deltaPerKm كتبناه سابقاً
+        if (effectiveCalcMode != 'deltaperkm') {
+          if (savedKgCO2 > 0) utUpdate['savedKgCO2'] = savedKgCO2;
+          if (effectiveDistanceKm > 0 && (submittedDistanceKm <= 0)) {
+            utUpdate['distanceKm'] = effectiveDistanceKm;
+          }
+        }
+        trx.update(utRef, utUpdate);
 
-        // —— users.points (اختياري) ——
+        // —— users.points —— //
         if (canComplete && taskPoints > 0) {
           trx.update(usersRef, {'points': FieldValue.increment(taskPoints)});
         }
 
-        // —— history ——
+        // —— history —— //
         final historyRef = FirebaseFirestore.instance
             .collection('users')
             .doc(userId)
             .collection('history')
             .doc();
-        trx.set(historyRef, {
+        final histData = <String, dynamic>{
           'type': 'task_approved',
           'userTaskDocId': userTaskDocId,
           'submissionId': subRef.id,
           'points': taskPoints,
           'at': FieldValue.serverTimestamp(),
-        });
+          'taskTitle': taskTitle,
+        };
+        if (savedKgCO2 > 0) histData['savedKgCO2'] = savedKgCO2;
+        trx.set(historyRef, histData);
 
-        // —— dayMarks (للكاليندر: دائرة خضراء شفافة) ——
+        // —— إجمالي الكربون المحفوظ + طابع الوقت —— //
+        if (effectiveCalcMode != 'deltaperkm') {
+          trx.set(usersRef, {
+            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+            if (savedKgCO2 > 0)
+              'totalCarbonSaved': FieldValue.increment(savedKgCO2),
+          }, SetOptions(merge: true));
+        } else {
+          trx.set(usersRef, {
+            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
+
+        // —— dayMarks —— //
         trx.set(dayMarkRef, {
           'count': FieldValue.increment(1),
           'lastAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
-        // —— notifications ——
+        // —— notifications —— //
         final notifRef = FirebaseFirestore.instance
             .collection('notifications')
             .doc();
+
+        String _fmtKgLocal(double kg) {
+          final v = ((kg * 100).roundToDouble() / 100.0);
+          return v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 2);
+        }
+
+        final carbonMsg = (savedKgCO2 > 0)
+            ? ' — وفَّرت ${_fmtKgLocal(savedKgCO2)}'
+            : '';
+
         trx.set(notifRef, {
           'type': 'submission_approved',
           'userId': userId,
           'submissionId': subRef.id,
-          'taskTitle': data['taskTitle'],
+          'taskTitle': taskTitle,
+          'points': taskPoints,
           'createdAt': FieldValue.serverTimestamp(),
           'seen': false,
-          'message': 'تم اعتماد طلبك لمهمة: ${data['taskTitle'] ?? ''}',
+          'title': 'تم الاعتماد 🎉',
+          'body': (savedKgCO2 > 0)
+              ? 'أُضيفت $taskPoints نقطة. وفَّرت ${_fmtKgLocal(savedKgCO2)} 🌿'
+              : 'أُضيفت $taskPoints نقطة.',
+          'message': 'تم اعتماد طلبك لمهمة: $taskTitle$carbonMsg',
+          if (savedKgCO2 > 0) 'savedKgCO2': savedKgCO2,
+          if (effectiveDistanceKm > 0) 'distanceKm': effectiveDistanceKm,
         });
       });
 
+      debugPrint(
+        '[approve] ✅ transaction done. savedKg=$savedKgCO2 mode=$effectiveCalcMode',
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم اعتماد الطلب وتحديث النقاط ✅')),
+        const SnackBar(
+          content: Text('تم اعتماد الطلب وتحديث النقاط + الكربون ✅'),
+        ),
       );
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ خطأ في الاعتماد: $e');
+      debugPrint('❌ خطأ في الاعتماد: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -207,11 +762,17 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
 
   Future<void> _reject(BuildContext context, DocumentSnapshot subDoc) async {
     await _ensureAdminClaims();
+    if (!_isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يحتاج صلاحية أدمن لرفض الطلب')),
+      );
+      return;
+    }
 
     final admin = FirebaseAuth.instance.currentUser;
     final data = subDoc.data() as Map<String, dynamic>;
-    final userTaskDocId = data['userTaskDocId'] as String;
-    final userId = data['userId'] as String? ?? '';
+    final userTaskDocId = (data['userTaskDocId'] ?? '').toString();
+    final userId = (data['userId'] ?? '').toString();
 
     final subRef = subDoc.reference;
     final utRef = FirebaseFirestore.instance
@@ -220,27 +781,23 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
 
     try {
       await FirebaseFirestore.instance.runTransaction((trx) async {
-        // —— read & guard ——
         final subSnap = await trx.get(subRef);
         if (!subSnap.exists) throw 'الطلب غير موجود.';
         final sub = subSnap.data() as Map<String, dynamic>;
         if (sub['status'] != 'pending') throw 'تمت معالجة هذا الطلب مسبقاً.';
 
-        // —— submissions → rejected ——
         trx.update(subRef, {
           'status': 'rejected',
           'processedAt': FieldValue.serverTimestamp(),
           'processedBy': admin?.uid,
         });
 
-        // —— userTasks → rejected + canRetry=true ——
         trx.update(utRef, {
           'status': 'rejected',
           'rejectedAt': FieldValue.serverTimestamp(),
           'canRetry': true,
         });
 
-        // —— history ——
         if (userId.isNotEmpty) {
           final historyRef = FirebaseFirestore.instance
               .collection('users')
@@ -254,10 +811,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
             'points': 0,
             'at': FieldValue.serverTimestamp(),
           });
-        }
 
-        // —— notifications ——
-        if (userId.isNotEmpty) {
           final notifRef = FirebaseFirestore.instance
               .collection('notifications')
               .doc();
@@ -278,8 +832,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('تم رفض الطلب ❌')));
     } catch (e) {
-      // ignore: avoid_print
-      print('❌ خطأ في الرفض: $e');
+      debugPrint('❌ خطأ في الرفض: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -325,13 +878,46 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        children: [
+                          Text(
+                            'مراجعة المهام',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _isAdmin
+                                  ? AppColors.primary33
+                                  : Colors.orange.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              _isAdmin ? 'أدمن' : 'حساب عادي',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: _isAdmin
+                                    ? AppColors.dark
+                                    : Colors.orange,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      // 🔎 Debug يظهر حالة الأدمن
                       Text(
-                        'مراجعة المهام',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
-                        ),
+                        'debug • isAdmin: $_isAdmin',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[700]),
                       ),
                       const SizedBox(height: 15),
 
@@ -400,7 +986,9 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                     ),
                                     const SizedBox(height: 16),
                                     Text(
-                                      'لا توجد طلبات قيد الانتظار.',
+                                      _isAdmin
+                                          ? 'لا توجد طلبات قيد الانتظار.'
+                                          : 'لا توجد طلباتك قيد الانتظار.',
                                       style: GoogleFonts.ibmPlexSansArabic(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
@@ -413,7 +1001,17 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                               );
                             }
 
-                            final docs = snap.data!.docs;
+                            final docs = [...snap.data!.docs];
+                            int _ts(QueryDocumentSnapshot d) {
+                              final v =
+                                  (d.data()
+                                      as Map<String, dynamic>)['createdAt'];
+                              if (v is Timestamp)
+                                return v.millisecondsSinceEpoch;
+                              return -1;
+                            }
+
+                            docs.sort((a, b) => _ts(b).compareTo(_ts(a)));
 
                             return ListView.separated(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -426,6 +1024,9 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                 final images =
                                     (m['imageUrls'] as List?)?.cast<String>() ??
                                     [];
+
+                                final count = (m['count']?.toString() ?? '');
+                                final km = (m['distanceKm']?.toString() ?? '');
 
                                 return Card(
                                   key: ValueKey(d.id),
@@ -455,6 +1056,25 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                             color: Colors.grey[700],
                                           ),
                                         ),
+                                        if (count.isNotEmpty || km.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 6,
+                                            ),
+                                            child: Text(
+                                              [
+                                                if (count.isNotEmpty)
+                                                  'العدد: $count',
+                                                if (km.isNotEmpty)
+                                                  'المسافة: $km كم',
+                                              ].join(' • '),
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    fontSize: 12,
+                                                    color: Colors.grey[700],
+                                                  ),
+                                            ),
+                                          ),
                                         const SizedBox(height: 8),
                                         if (images.isNotEmpty)
                                           Wrap(
@@ -555,8 +1175,17 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                           children: [
                                             Expanded(
                                               child: ElevatedButton.icon(
-                                                onPressed: () =>
-                                                    _approve(context, d),
+                                                onPressed: _isAdmin
+                                                    ? () async {
+                                                        debugPrint(
+                                                          '[approve] tap ${d.id}',
+                                                        );
+                                                        await _approve(
+                                                          context,
+                                                          d,
+                                                        );
+                                                      }
+                                                    : null,
                                                 icon: const Icon(
                                                   Icons.check_circle_outline,
                                                 ),
@@ -565,6 +1194,10 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                                   backgroundColor:
                                                       AppColors.primary,
                                                   foregroundColor: Colors.white,
+                                                  disabledBackgroundColor:
+                                                      Colors.grey[300],
+                                                  disabledForegroundColor:
+                                                      Colors.grey[600],
                                                   padding:
                                                       const EdgeInsets.symmetric(
                                                         vertical: 12,
@@ -575,8 +1208,9 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                             const SizedBox(width: 10),
                                             Expanded(
                                               child: OutlinedButton.icon(
-                                                onPressed: () =>
-                                                    _reject(context, d),
+                                                onPressed: _isAdmin
+                                                    ? () => _reject(context, d)
+                                                    : null,
                                                 icon: const Icon(
                                                   Icons.cancel_outlined,
                                                 ),
@@ -590,13 +1224,28 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                                     color: AppColors.primary,
                                                     width: 2,
                                                   ),
-                                                  foregroundColor:
-                                                      AppColors.primary,
+                                                  foregroundColor: _isAdmin
+                                                      ? AppColors.primary
+                                                      : Colors.grey[600],
                                                 ),
                                               ),
                                             ),
                                           ],
                                         ),
+                                        if (!_isAdmin)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 8,
+                                            ),
+                                            child: Text(
+                                              'ملاحظة: تحتاج صلاحية أدمن لاعتماد/رفض الطلبات.',
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    fontSize: 12,
+                                                    color: Colors.orange[800],
+                                                  ),
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ),
@@ -612,6 +1261,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
               },
             ),
           ),
+          // لا يوجد BottomNav هنا حاليًا
         ),
       ),
     );
