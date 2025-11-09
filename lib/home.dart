@@ -83,7 +83,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _initHome();
-
+    ensureUserCarbonFields();
     // Added to solve an error
     _floatingCtrl = AnimationController(
       vsync: this,
@@ -479,6 +479,15 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                   ),
                 ),
 
+                // === إجمالي خفض الكربون ===
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: const _CarbonFootprintCard(),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
                 // Daily progress
                 SliverToBoxAdapter(
                   child: Padding(
@@ -491,7 +500,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                         'سلسلة الاستدامة: 3 أيام متتالية 🔥',
                       ],
                       onTapDetails: () {},
-                      colored: false, // أبيض
+                      colored: false,
                     ),
                   ),
                 ),
@@ -859,6 +868,250 @@ class _InlineBanner extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _CarbonFootprintCard extends StatelessWidget {
+  const _CarbonFootprintCard({super.key});
+
+  // ✅ دالة عرض رقم الكربون بدقة ذكية
+  String _fmtKg(num? v) {
+    final d = (v ?? 0).toDouble();
+    if (d == 0) return '0';
+
+    // أرقام صغيرة جدًا: أظهر 3 منازل (مثل 0.037 -> 0.037)
+    if (d < 0.1) return d.toStringAsFixed(3);
+
+    // أقل من 1: منزلتين (0.04 -> 0.04، 0.25 -> 0.25)
+    if (d < 1) return d.toStringAsFixed(2);
+
+    // من 1 إلى أقل من 10: منزلة واحدة إذا لم يكن عددًا صحيحًا
+    if (d < 10) {
+      return (d == d.roundToDouble())
+          ? d.toStringAsFixed(0)
+          : d.toStringAsFixed(1);
+    }
+
+    // 10 أو أكثر: بدون كسور إذا كان عددًا صحيحًا، وإلا منزل واحدة
+    return (d == d.roundToDouble())
+        ? d.toStringAsFixed(0)
+        : d.toStringAsFixed(1);
+  }
+
+  num _safeToNum(dynamic x) {
+    if (x is num) return x;
+    if (x == null) return 0;
+    return num.tryParse(x.toString()) ?? 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+        border: Border.all(color: Color(0xFFE8F1EE), width: 1.5),
+      ),
+      child: uid == null
+          ? _buildRow(
+              context,
+              title: 'إجمالي خفض الكربون',
+              valueText: '0',
+              unit: 'كجم CO₂e',
+              loading: false,
+            )
+          : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
+                  .snapshots(),
+              builder: (context, snap) {
+                // 🔸 حالة التحميل
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return _buildRow(
+                    context,
+                    title: 'إجمالي خفض الكربون',
+                    valueText: '—',
+                    unit: 'كجم CO₂e',
+                    loading: true,
+                  );
+                }
+
+                // 🔸 خطأ أو لا توجد بيانات
+                if (snap.hasError || !snap.hasData || !snap.data!.exists) {
+                  return _buildRow(
+                    context,
+                    title: 'إجمالي خفض الكربون',
+                    valueText: '0',
+                    unit: 'كجم CO₂e',
+                    loading: false,
+                  );
+                }
+
+                final data = snap.data!.data();
+
+                // نقرأ الحقل الموحّد
+                num totalKg = 0;
+                if (data != null) {
+                  final vNew = data['totalCarbonSaved'];
+                  totalKg = _safeToNum(vNew);
+                }
+
+                // حماية من NaN أو القيم السالبة
+                if (totalKg.isNaN) totalKg = 0;
+                if (totalKg < 0) totalKg = 0;
+
+                return _buildRow(
+                  context,
+                  title: 'إجمالي خفض الكربون',
+                  valueText: _fmtKg(totalKg),
+                  unit: 'كجم CO₂e',
+                  loading: false,
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _buildRow(
+    BuildContext context, {
+    required String title,
+    required String valueText,
+    required String unit,
+    required bool loading,
+  }) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Row(
+        children: [
+          // النصوص
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // العنوان
+                Text(
+                  title,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.dark,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // القيمة والوحدة
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (loading)
+                      const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    else
+                      Text(
+                        valueText,
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.primary,
+                          height: 1.0,
+                        ),
+                      ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        unit,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black.withOpacity(.6),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // الأيقونة
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.primary, AppColors.mint],
+                begin: Alignment.bottomLeft,
+                end: Alignment.topRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(.25),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.eco_rounded, color: Colors.white, size: 28),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 🟢 تستدعى مثلاً داخل homePage.initState()
+Future<void> ensureUserCarbonFields() async {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return;
+
+  final ref = FirebaseFirestore.instance.collection('users').doc(uid);
+  final snap = await ref.get();
+
+  if (!snap.exists) {
+    await ref.set({
+      'uid': uid,
+      'role': 'regular',
+      'points': 0,
+      'totalCarbonSaved': 0,
+      'lastCarbonUpdateAt': null,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    return;
+  }
+
+  final data = snap.data()!;
+  final updates = <String, dynamic>{};
+
+  if (!data.containsKey('points')) updates['points'] = 0;
+  if (!data.containsKey('totalCarbonSaved')) updates['totalCarbonSaved'] = 0;
+  if (!data.containsKey('lastCarbonUpdateAt')) {
+    updates['lastCarbonUpdateAt'] = null;
+  }
+
+  if (updates.isNotEmpty) {
+    updates['updatedAt'] = FieldValue.serverTimestamp();
+    await ref.set(updates, SetOptions(merge: true));
   }
 }
 

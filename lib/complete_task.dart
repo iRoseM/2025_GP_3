@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:geolocator/geolocator.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -21,8 +23,8 @@ class AppColors {
 
 class CompleteTaskSheet extends StatefulWidget {
   final Map<String, dynamic> taskData;
-  final DateTime selectedDay; // اليوم المُختار من التقويم
-  final String userTaskDocId; // وثيقة userTasks المراد تحديثها
+  final DateTime selectedDay; // اليوم من التقويم
+  final String userTaskDocId; // userId_yyyyMMdd
 
   const CompleteTaskSheet({
     super.key,
@@ -39,13 +41,13 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
 
-  bool _ready = false; // الكاميرا جاهزة للمعاينة
-  bool _openingCamera = false; // جاري فتح/تهيئة الكاميرا
-  bool _isCapturing = false; // قفل أثناء الالتقاط
-  bool _isUploading = false; // قفل أثناء الرفع/الإرسال
+  bool _ready = false;
+  bool _openingCamera = false;
+  bool _isCapturing = false;
+  bool _isUploading = false;
 
-  String? _inlineError; // ✅ رسالة قصيرة تظهر فوق الكاميرا
-  String? _capturedPath; // مسار الصورة الملتقطة للمعاينة
+  String? _inlineError;
+  String? _capturedPath;
   double _flashOpacity = 0.0;
 
   int _currentCameraIndex = 0;
@@ -54,12 +56,62 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   double _minZoom = 1.0, _maxZoom = 1.0, _zoom = 1.0;
   double _minExposure = 0.0, _maxExposure = 0.0, _exposure = 0.0;
 
+  // تتبع تلقائي للمسافة (اختياري)
+  Position? _startPos;
+  GeoPoint? _geoStart, _geoEnd;
+  double? _autoDistanceKmComputed;
+
+  // ----------------- Helpers -----------------
+  Map<String, dynamic> get _calcRequires {
+    final v = widget.taskData['calc_requires'];
+    return (v is Map)
+        ? v.map((k, v) => MapEntry(k.toString(), v))
+        : <String, dynamic>{};
+  }
+
+  bool get _autoDistance =>
+      (_calcRequires['autoDistance'] == true) ||
+      (widget.taskData['autoDistance'] == true);
+
+  bool get _isTransportTask {
+    final s =
+        '${widget.taskData['category'] ?? ''} ${widget.taskData['title'] ?? ''}';
+    final kws = [
+      'نقل',
+      'المواصلات',
+      'مترو',
+      'ميترو',
+      'قطار',
+      'باص',
+      'حافلة',
+      'دراجة',
+      'سكوتر',
+      'مشياً',
+      'مشيا',
+    ];
+    return kws.any((k) => s.contains(k));
+  }
+
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
-  // ======== Friendly, short error mapping (Arabic) ========
+  double _deg2rad(double deg) => deg * math.pi / 180.0;
+  double _haversineKm(double lat1, double lon1, double lat2, double lon2) {
+    const R = 6371.0;
+    final dLat = _deg2rad(lat2 - lat1);
+    final dLon = _deg2rad(lon2 - lon1);
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_deg2rad(lat1)) *
+            math.cos(_deg2rad(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return R * c;
+  }
+
+  // ===== Friendly error =====
   String _friendlyError(Object e) {
-    // Camera
     if (e is CameraException) {
       switch (e.code) {
         case 'cameraAccessDenied':
@@ -71,37 +123,189 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           return 'خطأ في الكاميرا.';
       }
     }
-    // Firebase Storage / Firestore
     if (e is FirebaseException) {
       final code = e.code.toLowerCase();
       if (code.contains('permission-denied')) return 'صلاحيات غير كافية.';
-      if (code.contains('unauthorized')) return 'غير مُخوّل للرفع.';
-      if (code.contains('object-not-found'))
-        return 'المسار غير موجود في التخزين.';
+      if (code.contains('unauthorized')) return 'غير مُخوّل.';
+      if (code.contains('object-not-found')) return 'المسار غير موجود.';
       if (code.contains('not-found')) return 'المورد غير موجود.';
-      if (code.contains('quota-exceeded')) return 'تم تجاوز الحصة التخزينية.';
-      if (code.contains('retry-limit-exceeded'))
-        return 'انقطع الاتصال أثناء الرفع.';
+      if (code.contains('quota-exceeded')) return 'تم تجاوز الحصة.';
+      if (code.contains('retry-limit-exceeded')) return 'انقطع الاتصال.';
       if (code.contains('unavailable')) return 'الخدمة غير متاحة مؤقتًا.';
       return 'خطأ (${e.code}).';
     }
-    // Generic
     final s = e.toString();
-    if (s.contains('socket') || s.contains('host'))
-      return 'تحقق من اتصال الإنترنت.';
+    if (s.contains('socket') || s.contains('host')) return 'تحقق من الإنترنت.';
     return 'حدث خطأ غير متوقع.';
   }
 
   void _showInlineError(String msg) {
+    if (!mounted) return;
     setState(() => _inlineError = msg);
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) setState(() => _inlineError = null);
     });
   }
 
-  // ---------------------------
-  // التقاط آمن مع إعادة محاولة
-  // ---------------------------
+  // ===== GPS (اختياري) =====
+  Future<void> _ensureLocationPermission() async {
+    try {
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        perm = await Geolocator.requestPermission();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _captureStartIfNeeded() async {
+    if (!_autoDistance) return;
+    try {
+      await _ensureLocationPermission();
+      final p = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      _startPos = p;
+      _geoStart = GeoPoint(p.latitude, p.longitude);
+    } catch (_) {}
+  }
+
+  Future<void> _captureEndAndComputeDistance() async {
+    if (!_autoDistance) return;
+    try {
+      await _ensureLocationPermission();
+      final end = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      _geoEnd = GeoPoint(end.latitude, end.longitude);
+      final start = _startPos ?? end;
+      final km = _haversineKm(
+        start.latitude,
+        start.longitude,
+        end.latitude,
+        end.longitude,
+      );
+      _autoDistanceKmComputed = km;
+      if (mounted) setState(() {});
+    } catch (_) {}
+  }
+
+  // ===== Emission factors (مرن) =====
+  static const String _kEfCollection = 'emissionFactors';
+
+  double? _asDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v.trim());
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> _getEfDoc(String id) async {
+    if (id.isEmpty) return null;
+    final doc = await FirebaseFirestore.instance
+        .collection(_kEfCollection)
+        .doc(id)
+        .get();
+    return doc.data();
+  }
+
+  /// يرجّع قيمة العامل (kgCO2e لكل وحدة) حتى لو اختلف اسم الحقل.
+  /// يدعم:
+  /// - valueField محدد داخل الـ task أو داخل مستند العامل
+  /// - أسماء شائعة: ef_kgco2_per_unit, value, kgPerKm, perKm, co2PerKm, co2_per_km, factor
+  Future<double?> _getEfPerUnit(String id, {String? valueFieldFromTask}) async {
+    final d = await _getEfDoc(id);
+    if (d == null) return null;
+
+    // 1) لو حدّدت اسم الحقل في الـ task
+    if (valueFieldFromTask != null && valueFieldFromTask.isNotEmpty) {
+      final v = _asDouble(d[valueFieldFromTask]);
+      if (v != null) return v;
+    }
+
+    // 2) لو المستند نفسه يحدّد اسم الحقل
+    final vfInDoc = d['valueField'] ?? d['efValueField'];
+    if (vfInDoc is String && vfInDoc.isNotEmpty) {
+      final v = _asDouble(d[vfInDoc]);
+      if (v != null) return v;
+    }
+
+    // 3) أسماء شائعة (أضفنا ef_kgco2_per_unit)
+    final candidates = [
+      'ef_kgco2_per_unit',
+      'value',
+      'kgPerKm',
+      'perKm',
+      'co2PerKm',
+      'co2_per_km',
+      'factor',
+    ];
+    for (final k in candidates) {
+      final v = _asDouble(d[k]);
+      if (v != null) return v;
+    }
+    return null;
+  }
+
+  /// حساب التوفير للكربون لوضعَي perKm / deltaPerKm فقط
+  Future<double> _computeCarbonSaved({
+    required String efIdFromTask,
+    required double km,
+    String?
+    valueFieldFromTask, // لو تبغى تمرّر اسم الحقل (مثل ef_kgco2_per_unit)
+  }) async {
+    if (km <= 0) return 0.0;
+
+    final efDoc = await _getEfDoc(efIdFromTask) ?? {};
+    final calcMode =
+        (efDoc['calcMode'] ?? widget.taskData['calcMode'] ?? 'perKm')
+            .toString()
+            .toLowerCase();
+
+    final baseRef =
+        (efDoc['baselineFactorRef'] ?? widget.taskData['baselineFactorRef'])
+            ?.toString();
+    final actRef =
+        (efDoc['actualFactorRef'] ?? widget.taskData['actualFactorRef'])
+            ?.toString();
+
+    if (calcMode == 'perkm') {
+      final perKmVal = await _getEfPerUnit(
+        efIdFromTask,
+        valueFieldFromTask: valueFieldFromTask,
+      );
+      if (perKmVal == null) return 0.0;
+
+      // في perKm: لو direction=save نحسب saving، لو emit نرجّع 0 (أو ممكن تعتبره انبعاث)
+      final dir = (efDoc['direction'] ?? widget.taskData['direction'] ?? '')
+          .toString()
+          .toLowerCase();
+      final isSave = (dir.isEmpty || dir == 'save');
+      return (isSave ? perKmVal : 0.0) * km;
+    }
+
+    if (calcMode == 'deltaperkm') {
+      final baseline = baseRef != null
+          ? await _getEfPerUnit(baseRef, valueFieldFromTask: valueFieldFromTask)
+          : null;
+      double? actual = await _getEfPerUnit(
+        efIdFromTask,
+        valueFieldFromTask: valueFieldFromTask,
+      );
+      if ((actual == null || actual == 0.0) && actRef != null) {
+        actual = await _getEfPerUnit(
+          actRef,
+          valueFieldFromTask: valueFieldFromTask,
+        );
+      }
+      final delta = ((baseline ?? 0.0) - (actual ?? 0.0));
+      return (delta > 0 ? delta : 0.0) * km;
+    }
+
+    // perItem غير مستخدم هنا
+    return 0.0;
+  }
+
+  // ===== التقاط الصورة بأمان =====
   Future<XFile?> _safeTakePicture() async {
     if (_controller == null || !_controller!.value.isInitialized) {
       _showInlineError('الكاميرا غير جاهزة.');
@@ -112,33 +316,30 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     try {
       return await _controller!.takePicture();
     } on CameraException catch (e) {
-      debugPrint('CameraException: ${e.code} | ${e.description}');
       try {
         await Future.delayed(const Duration(milliseconds: 150));
         if (!_controller!.value.isInitialized ||
-            _controller!.value.isTakingPicture)
+            _controller!.value.isTakingPicture) {
           return null;
+        }
         return await _controller!.takePicture();
-      } catch (e2) {
-        debugPrint('Retry takePicture failed: $e2');
+      } catch (_) {
         _showInlineError(_friendlyError(e));
         return null;
       }
     } catch (e) {
-      debugPrint('takePicture generic error: $e');
       _showInlineError(_friendlyError(e));
       return null;
     }
   }
 
-  // -----------------------------------------
-  // رفع الصورة + إنشاء submission + تحديث userTasks → submitted
-  // -----------------------------------------
+  // ===== رفع وإنشاء submission + تحديث userTasks =====
   Future<void> _createSubmissionAndMarkSubmitted({
     required String localPath,
     required int taskPoints,
     String? taskId,
-    Map<String, dynamic>? extra,
+    double? distanceKm,
+    double? carbonSaved,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -168,7 +369,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           ),
         );
       } on FirebaseException catch (e) {
-        // 🔹 يعرض رسالة قصيرة على الكاميرا بدل Snackbar
         _showInlineError(
           e.code == 'permission-denied'
               ? 'صلاحيات غير كافية'
@@ -177,7 +377,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
               : 'فشل الرفع (${e.code})',
         );
         rethrow;
-      } catch (e) {
+      } catch (_) {
         _showInlineError('تعذر رفع الصورة');
         rethrow;
       }
@@ -191,18 +391,15 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         await tryUpload();
       }
     } on FirebaseException catch (e) {
-      debugPrint('Storage upload error: ${e.code} | ${e.message}');
       throw FirebaseException(
         plugin: e.plugin,
         code: e.code,
         message: _friendlyError(e),
       );
     } catch (e) {
-      debugPrint('Storage upload generic error: $e');
       throw Exception(_friendlyError(e));
     }
 
-    // ✅ getDownloadURL مع محاولة ثانية
     Future<String> getUrlWithRetry() async {
       try {
         return await storageRef.getDownloadURL();
@@ -216,7 +413,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     try {
       downloadUrl = await getUrlWithRetry();
     } on FirebaseException catch (e) {
-      debugPrint('getDownloadURL error: ${e.code} | ${e.message}');
       try {
         await storageRef.delete();
       } catch (_) {}
@@ -232,82 +428,81 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       throw Exception(_friendlyError(e));
     }
 
-    // ✅ كتابة Firestore داخل معاملة، وإن فشلت نحذف الصورة كي لا تبقى يتيمة
     final subRef = FirebaseFirestore.instance.collection('submissions').doc();
     final utRef = FirebaseFirestore.instance
         .collection('userTasks')
         .doc(widget.userTaskDocId);
 
-    try {
-      // العملية الأولى: إنشاء submission
-      await subRef.set({
-        'userId': uid,
-        'userTaskDocId': widget.userTaskDocId,
-        'taskId': taskId ?? '',
-        'taskTitle': widget.taskData['title'] ?? '',
-        'taskPoints': taskPoints,
-        'status': 'pending',
-        'imageUrls': [downloadUrl],
-        'createdAt': FieldValue.serverTimestamp(),
-        'processedAt': null,
-        'processedBy': null,
-        if (extra != null) ...extra,
-      });
+    // اجمع إكستراز
+    final extra = <String, dynamic>{};
+    if (distanceKm != null) extra['distanceKm'] = distanceKm;
+    if (carbonSaved != null) extra['carbonSaved'] = carbonSaved;
+    if (_geoStart != null) extra['geoStart'] = _geoStart;
+    if (_geoEnd != null) extra['geoEnd'] = _geoEnd;
 
-      // العملية الثانية: تحديث userTask
-      await utRef.set({
-        'status': 'submitted',
-        'submittedAt': FieldValue.serverTimestamp(),
-        'evidence': {
-          'type': 'photo',
-          'url': downloadUrl,
-          'storagePath': storageRef.fullPath,
-          'uploadedAt': FieldValue.serverTimestamp(),
-        },
-        'taskTitle': widget.taskData['title'] ?? '',
-        'taskPoints': taskPoints,
-        if (taskId != null) 'taskId': taskId,
-        'selectedAt': Timestamp.fromDate(
-          DateTime(
-            widget.selectedDay.year,
-            widget.selectedDay.month,
-            widget.selectedDay.day,
-          ),
-        ),
-        'windowStart': Timestamp.fromDate(
-          DateTime(
-            widget.selectedDay.year,
-            widget.selectedDay.month,
-            widget.selectedDay.day,
-          ),
-        ),
-        'windowEnd': Timestamp.fromDate(
-          DateTime(
-            widget.selectedDay.year,
-            widget.selectedDay.month,
-            widget.selectedDay.day,
-          ).add(const Duration(days: 1)).subtract(const Duration(seconds: 1)),
-        ),
-      }, SetOptions(merge: true));
-    } on FirebaseException catch (e) {
-      debugPrint('Firestore write error: ${e.code} | ${e.message}');
-      try {
-        await storageRef.delete();
-      } catch (_) {}
-      throw FirebaseException(
-        plugin: e.plugin,
-        code: e.code,
-        message: _friendlyError(e),
-      );
+    // مرجع عامل الانبعاث (اختياري)
+    final efId =
+        (widget.taskData['ef_ref'] ??
+                widget.taskData['efRef'] ??
+                widget.taskData['emissionFactorRef'] ??
+                widget.taskData['emission_factor_ref'])
+            ?.toString();
+    if (efId != null && efId.isNotEmpty) {
+      extra['emissionFactorRef'] = efId; // اسم موحّد
     }
+
+    // calcMode (لو موجود بالمهمة)
+    final calcMode = widget.taskData['calcMode']?.toString();
+    if (calcMode != null && calcMode.isNotEmpty) {
+      extra['calcMode'] = calcMode;
+    }
+
+    // كتابة submission
+    await subRef.set({
+      'userId': uid,
+      'userTaskDocId': widget.userTaskDocId,
+      'taskId': taskId ?? '',
+      'taskTitle': widget.taskData['title'] ?? '',
+      'taskPoints': taskPoints,
+      'status': 'pending',
+      'imageUrls': [downloadUrl],
+      'createdAt': FieldValue.serverTimestamp(),
+      'processedAt': null,
+      'processedBy': null,
+      ...extra,
+    });
+
+    // تحديث userTasks → submitted (merge) - فقط الحقول المسموحة بقواعدك
+    await utRef.set({
+      'userId': uid, // مهم لو الوثيقة غير موجودة أصلًا
+      'status': 'submitted',
+      'submittedAt': FieldValue.serverTimestamp(),
+      'evidence': {
+        'type': 'photo',
+        'url': downloadUrl,
+        'storagePath': storageRef.fullPath,
+        'uploadedAt': FieldValue.serverTimestamp(),
+      },
+      'taskTitle': widget.taskData['title'] ?? '',
+      'taskPoints': taskPoints,
+      if (taskId != null) 'taskId': taskId,
+      if (distanceKm != null) 'distanceKm': distanceKm,
+      if (carbonSaved != null) 'carbonSaved': carbonSaved,
+      if (_geoStart != null) 'geoStart': _geoStart,
+      if (_geoEnd != null) 'geoEnd': _geoEnd,
+      // ⛔️ لا نرسل selectedAt/windowStart/windowEnd هنا (تُكتب وقت إنشاء وثيقة اليوم)
+    }, SetOptions(merge: true));
   }
 
+  // ===== Camera controls =====
   Future<void> _openCamera({int? index}) async {
     if (_openingCamera) return;
-    setState(() {
-      _openingCamera = true;
-      _capturedPath = null;
-    });
+    if (mounted) {
+      setState(() {
+        _openingCamera = true;
+        _capturedPath = null;
+      });
+    }
     try {
       _cameras ??= await availableCameras();
       if (_cameras == null || _cameras!.isEmpty) {
@@ -322,7 +517,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       await _controller?.dispose();
       _controller = CameraController(
         description,
-        ResolutionPreset.high, // غيّرها لـ medium لو تبغى حجم ملف أقل
+        ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
@@ -343,7 +538,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
       if (mounted) setState(() => _ready = true);
     } catch (e) {
-      debugPrint('Open camera error: $e');
       _showInlineError(_friendlyError(e));
     } finally {
       if (mounted) setState(() => _openingCamera = false);
@@ -377,7 +571,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }
     try {
       await _controller!.setFlashMode(_flashMode);
-      setState(() {});
+      if (mounted) setState(() {});
     } catch (e) {
       _showInlineError(_friendlyError(e));
     }
@@ -388,8 +582,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     _zoom = value.clamp(_minZoom, _maxZoom);
     try {
       await _controller!.setZoomLevel(_zoom);
-      setState(() {});
-    } catch (e) {
+      if (mounted) setState(() {});
+    } catch (_) {
       _showInlineError('تعذر ضبط التقريب.');
     }
   }
@@ -399,8 +593,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     _exposure = value.clamp(_minExposure, _maxExposure);
     try {
       await _controller!.setExposureOffset(_exposure);
-      setState(() {});
-    } catch (e) {
+      if (mounted) setState(() {});
+    } catch (_) {
       _showInlineError('تعذر ضبط التعريض.');
     }
   }
@@ -423,6 +617,13 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     } catch (_) {
       _showInlineError('تعذر التركيز هنا.');
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // إن كان autoDistance مفعّلًا، نلتقط نقطة البداية بصمت
+    _captureStartIfNeeded();
   }
 
   @override
@@ -516,7 +717,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                       height: 1.7,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
                   if (requiresPhotoExact && !_ready) _buildPhotoInstructions(),
                   const SizedBox(height: 16),
@@ -650,7 +851,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                           ],
                                         ),
                                       ),
-                                      // ✅ Inline short error over preview
                                       if (_inlineError != null)
                                         Positioned(
                                           top: 12,
@@ -676,7 +876,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                             ),
                                           ),
                                         ),
-                                      // Flash overlay
                                       IgnorePointer(
                                         child: AnimatedOpacity(
                                           opacity: _flashOpacity,
@@ -703,7 +902,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
                   const SizedBox(height: 16),
 
-                  // أزرار الإجراءات (تتغير حسب الحالة)
+                  // أزرار الإرسال/الالتقاط
                   if (_ready && requiresPhotoExact) ...[
                     if (_capturedPath == null)
                       _gradientButton(
@@ -714,6 +913,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                         onTap: _isCapturing
                             ? null
                             : () async {
+                                if (!mounted) return;
                                 setState(() {
                                   _isCapturing = true;
                                   _flashOpacity = 0.9;
@@ -721,14 +921,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 await Future.delayed(
                                   const Duration(milliseconds: 90),
                                 );
-                                if (mounted)
+                                if (mounted) {
                                   setState(() => _flashOpacity = 0.0);
+                                }
 
                                 final shot = await _safeTakePicture();
                                 if (!mounted) return;
-                                if (shot != null)
+                                if (shot != null) {
                                   setState(() => _capturedPath = shot.path);
-                                setState(() => _isCapturing = false);
+                                }
+                                if (mounted) {
+                                  setState(() => _isCapturing = false);
+                                }
                               },
                       )
                     else
@@ -744,15 +948,85 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 ? null
                                 : () async {
                                     if (_capturedPath == null) return;
+
+                                    // التقط نقطة النهاية واحسب المسافة تلقائياً (إن كان مفعلاً)
+                                    if (_autoDistance) {
+                                      await _captureEndAndComputeDistance();
+                                    }
+
+                                    // 🔒 تعقيم المسافة + كلَبسة اختيارية من بيانات المهمة
+                                    double? safeDistanceKm;
+                                    final rawKm = _autoDistance
+                                        ? _autoDistanceKmComputed
+                                        : null;
+
+                                    double? minKm, maxKm;
+                                    final mk = widget.taskData['minKm'];
+                                    final xk = widget.taskData['maxKm'];
+                                    if (mk is num) minKm = mk.toDouble();
+                                    if (xk is num) maxKm = xk.toDouble();
+
+                                    if (rawKm != null &&
+                                        rawKm.isFinite &&
+                                        !rawKm.isNaN &&
+                                        rawKm > 0) {
+                                      double clamped = rawKm;
+                                      clamped = clamped.clamp(
+                                        minKm ?? 0.2,
+                                        maxKm ?? 50.0,
+                                      );
+                                      safeDistanceKm = double.parse(
+                                        clamped.toStringAsFixed(3),
+                                      );
+                                    }
+
+                                    if (!mounted) return;
                                     setState(() => _isUploading = true);
                                     try {
+                                      // حساب الكربون إن توفر ef_ref ومسافة صالحة
+                                      double? carbonSaved;
+                                      final efId =
+                                          (widget.taskData['ef_ref'] ??
+                                                  widget.taskData['efRef'] ??
+                                                  widget
+                                                      .taskData['emissionFactorRef'] ??
+                                                  widget
+                                                      .taskData['emission_factor_ref'])
+                                              ?.toString();
+
+                                      // اسم الحقل الحقيقي عندك
+                                      const efValueField = 'ef_kgco2_per_unit';
+
+                                      if (efId != null &&
+                                          efId.isNotEmpty &&
+                                          safeDistanceKm != null) {
+                                        carbonSaved = await _computeCarbonSaved(
+                                          efIdFromTask: efId,
+                                          km: safeDistanceKm,
+                                          valueFieldFromTask:
+                                              efValueField, // مهم
+                                        );
+                                        if (carbonSaved != null &&
+                                            carbonSaved.isFinite &&
+                                            !carbonSaved.isNaN &&
+                                            carbonSaved > 0) {
+                                          carbonSaved = double.parse(
+                                            carbonSaved.toStringAsFixed(3),
+                                          );
+                                        } else {
+                                          carbonSaved = null;
+                                        }
+                                      }
+
                                       await _createSubmissionAndMarkSubmitted(
                                         localPath: _capturedPath!,
                                         taskPoints: pts,
                                         taskId: taskId,
+                                        distanceKm: safeDistanceKm,
+                                        carbonSaved: carbonSaved,
                                       );
 
-                                      // نافذة نجاح
+                                      if (!mounted) return;
                                       await showDialog(
                                         context: context,
                                         barrierDismissible: false,
@@ -767,8 +1041,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                   horizontal: 24,
                                                 ),
                                             child: SizedBox(
-                                              width:
-                                                  340, // 👈 نفس الثبات في عرض نافذة البلاغ
+                                              width: 340,
                                               child: Padding(
                                                 padding: const EdgeInsets.all(
                                                   20,
@@ -777,7 +1050,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                   mainAxisSize:
                                                       MainAxisSize.min,
                                                   children: [
-                                                    // 👇 استعمل نفس الصورة المستخدمة في بلاغ المرافق (عدّل المسار لو مختلف)
                                                     Image.asset(
                                                       'assets/img/nameerCamera.png',
                                                       height: 120,
@@ -799,8 +1071,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                     ),
                                                     const SizedBox(height: 12),
                                                     Text(
-                                                      'جاري إرسالها للجنة المراجعة.\n'
-                                                      'عند الاعتماد، سيتم إضافة النقاط البيئية إلى حسابك تلقائيًا 🌱',
+                                                      'جاري إرسالها للجنة المراجعة.\nعند الاعتماد، ستُضاف نقاطك تلقائيًا',
                                                       textAlign:
                                                           TextAlign.center,
                                                       style:
@@ -861,23 +1132,24 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         },
                                       );
 
-                                      // حذف مؤقت/إغلاق
+                                      // تنظيف الصورة + إغلاق
                                       try {
                                         if (_capturedPath != null) {
                                           final f = File(_capturedPath!);
-                                          if (await f.exists())
+                                          if (await f.exists()) {
                                             await f.delete();
+                                          }
                                         }
                                       } catch (_) {}
                                       if (!mounted) return;
                                       Navigator.of(context).pop(true);
                                     } catch (e) {
-                                      debugPrint('Submit error: $e');
                                       if (!mounted) return;
                                       _showInlineError(_friendlyError(e));
                                     } finally {
-                                      if (mounted)
+                                      if (mounted) {
                                         setState(() => _isUploading = false);
+                                      }
                                     }
                                   },
                           ),
@@ -912,7 +1184,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   if (await f.exists()) await f.delete();
                                 }
                               } catch (_) {}
-                              setState(() => _capturedPath = null);
+                              if (mounted) {
+                                setState(() => _capturedPath = null);
+                              }
                             },
                           ),
                         ],
@@ -930,7 +1204,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   Widget _buildPhotoInstructions() {
     final bullets = [
       'تأكد من أن الإضاءة جيدة والعنصر واضح.',
-      'التقط صورة تُظهر قيامك بالمهمة (مثل رمي العبوة في الحاوية).',
+      'التقط صورة تُظهر قيامك بالمهمة (مثل دخول بوابة المترو/التذكرة).',
       'لا تستخدم صورًا من الإنترنت.',
       'التقط من زاوية مناسبة وبدون فلاش إن أمكن.',
     ];

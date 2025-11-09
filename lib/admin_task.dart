@@ -88,13 +88,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           .collection('categories')
           .get();
 
-      print('عدد الفئات المستلمة: ${qs.docs.length}'); // للديبق
-
       final names =
           qs.docs
               .map((doc) {
                 final data = doc.data() as Map<String, dynamic>;
-                print('بيانات الفئة: $data'); // للديبق
                 return data['name']?.toString() ?? '';
               })
               .where((name) => name.isNotEmpty)
@@ -106,7 +103,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
         _isCatsLoading = false;
       });
     } catch (e) {
-      print('خطأ في تحميل الفئات: $e');
+      debugPrint('خطأ في تحميل الفئات: $e');
       setState(() => _isCatsLoading = false);
     }
   }
@@ -154,7 +151,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 🔹 Main UI Build (fixed to match original Nameer style)
+  // 🔹 Main UI Build
   // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
@@ -176,12 +173,9 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               query.isEmpty || title.contains(query) || desc.contains(query);
           final matchesCategory =
               _selectedCategories.isEmpty || _selectedCategories.contains(cat);
-
-          // 🔹 فلترة حسب الحالة
           final matchesStatus =
               _selectedStatusSet.isEmpty ||
               _selectedStatusSet.contains(_getTaskStatus(task));
-
           return matchesSearch && matchesCategory && matchesStatus;
         }).toList()..sort((a, b) {
           if (a['status'] == b['status']) return 0;
@@ -197,10 +191,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           extendBodyBehindAppBar: true,
           backgroundColor: Colors.transparent,
 
-          // ✅ نفس الهيدر الأصلي (شفاف)
           appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
 
-          // ✅ خلفية متحركة خضراء شفافة
           body: AnimatedBackgroundContainer(
             child: Builder(
               builder: (context) {
@@ -216,7 +208,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 👇 العنوان نفس النسخة القديمة
                             Text(
                               'قائمة المهام',
                               style: GoogleFonts.ibmPlexSansArabic(
@@ -226,10 +217,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                               ),
                             ),
                             const SizedBox(height: 15),
-
                             _buildSearchBar(),
                             const SizedBox(height: 12),
-
                             Expanded(child: _buildTaskList(filteredTasks)),
                           ],
                         ),
@@ -238,7 +227,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
             ),
           ),
 
-          // ✅ زر الإضافة (نفس الموقع والحجم واللون)
           floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
           floatingActionButton: _buildAddFab(),
 
@@ -401,8 +389,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-
-                // 🔹 Custom Trailing to keep arrow vertically aligned with status tag
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -457,7 +443,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   }
 
   Widget _buildExpandedTaskContent(Map<String, dynamic> task) {
-    final statusText = _getTaskStatus(task); // ✅ أضيفيه هنا
+    final statusText = _getTaskStatus(task);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -545,50 +531,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 🔹 إخفاء المهمة (بدل الحذف)
-  // void _hideTaskDialog(Map<String, dynamic> task) {
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) {
-  //       return AlertDialog(
-  //         title: Text('إخفاء المهمة',
-  //             style: GoogleFonts.ibmPlexSansArabic(
-  //                 fontWeight: FontWeight.w800, color: AppColors.dark)),
-  //         content: Text(
-  //           'سيتم إخفاء هذه المهمة من الشهر القادم.\nهل ترغب بالمتابعة؟',
-  //           style: GoogleFonts.ibmPlexSansArabic(fontSize: 14),
-  //         ),
-  //         actions: [
-  //           TextButton(
-  //             onPressed: () => Navigator.pop(context),
-  //             child: const Text('إلغاء',
-  //                 style: TextStyle(color: Colors.redAccent)),
-  //           ),
-  //           ElevatedButton(
-  //             style: ElevatedButton.styleFrom(
-  //                 backgroundColor: AppColors.primary),
-  //             onPressed: () async {
-  //               await _taskCollection
-  //                   .doc(task['id'])
-  //                   .update({'status': 'hidden'});
-  //               Navigator.pop(context);
-  //               _fetchTasks();
-  //               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-  //                 content: Text('تم إخفاء المهمة ✅',
-  //                     style: GoogleFonts.ibmPlexSansArabic(
-  //                         fontWeight: FontWeight.w700)),
-  //               ));
-  //             },
-  //             child: const Text('تأكيد'),
-  //           ),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
-  // ---------------------------------------------------------------------------
-  // 🔹 منطق "إخفاء المهمة" المعدل وفق القاعدة الشهرية الجديدة
-  // ---------------------------------------------------------------------------
+  // 🔹 منطق "إخفاء المهمة" المعدل وفق القاعدة الشهرية
   void _hideTaskDialog(Map<String, dynamic> task) async {
     final now = DateTime.now();
     final nextMonthDate = DateTime(now.year, now.month + 1, 1);
@@ -608,7 +551,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
             ),
           ),
           content: Text(
-            'هل أنت متأكد من إخفاء هذه المهمة؟ سيتم تطبيق الإخفاء في الشهر القادم (${nextMonthKey})',
+            'هل أنت متأكد من إخفاء هذه المهمة؟ سيتم تطبيق الإخفاء في الشهر القادم ($nextMonthKey)',
             style: GoogleFonts.ibmPlexSansArabic(color: Colors.black87),
           ),
           actions: [
@@ -647,7 +590,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                       });
 
                   if (mounted) {
-                    // ✅ Pop-up to inform admin
                     showDialog(
                       context: context,
                       builder: (context) => Directionality(
@@ -668,7 +610,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                             ],
                           ),
                           content: Text(
-                            'سيتم تطبيق الإخفاء تلقائيًا في بداية الشهر القادم (${nextMonthKey}).',
+                            'سيتم تطبيق الإخفاء تلقائيًا في بداية الشهر القادم ($nextMonthKey).',
                             style: GoogleFonts.ibmPlexSansArabic(
                               color: AppColors.dark,
                               fontWeight: FontWeight.w600,
@@ -782,9 +724,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 
   // ---------------------------------------------------------------------------
   // 🔹 FAB
-  // ---------------------------------------------------------------------------
-  // 🔹 زر الإضافة (نفس التصميم القديم + Bottom Sheet بخيارين)
-  // ---------------------------------------------------------------------------
   Widget _buildAddFab() {
     return Padding(
       padding: const EdgeInsets.only(right: 300, bottom: 10),
@@ -799,7 +738,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 
   // ---------------------------------------------------------------------------
   // 🔹 Bottom Sheet عند الضغط على زر الإضافة
-  // ---------------------------------------------------------------------------
   void _showAddOptionsSheet() {
     showModalBottomSheet(
       context: context,
@@ -835,7 +773,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               ),
               const SizedBox(height: 20),
 
-              // ✅ زر إضافة مهمة جديدة
               _gradientActionButton(
                 icon: Icons.check_circle_outline,
                 label: 'إضافة مهمة جديدة',
@@ -854,7 +791,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 
               const SizedBox(height: 12),
 
-              // ✅ زر إضافة فئة جديدة
               _gradientActionButton(
                 icon: Icons.category_outlined,
                 label: 'إضافة فئة جديدة',
@@ -876,8 +812,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 🔹 زر Gradient مع أيقونة (نفس شكل الأزرار القديمة)
-  // ---------------------------------------------------------------------------
+  // 🔹 زر Gradient مع أيقونة
   Widget _gradientActionButton({
     required IconData icon,
     required String label,
@@ -913,7 +848,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 🔹 فلترة حسب الفئة فقط (تبقى بسيطة)
+  // 🔹 فلترة
   void _showFilterSheet() {
     showModalBottomSheet(
       context: context,
@@ -923,7 +858,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       ),
       builder: (_) {
         final selectedLocal = Set<String>.from(_selectedCategories);
-        final selectedStatuses = Set<String>.from(_selectedStatusSet ?? {});
+        final selectedStatuses = Set<String>.from(_selectedStatusSet);
         final statuses = ['نشطة', 'غير نشطة', 'منتهية'];
 
         return StatefulBuilder(
@@ -943,7 +878,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                     ),
                     const SizedBox(height: 12),
 
-                    // 🔸 قسم الفئات
                     Align(
                       alignment: Alignment.centerRight,
                       child: Text(
@@ -980,7 +914,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 
                     const SizedBox(height: 16),
 
-                    // 🔸 قسم الحالة (Multiple selection)
                     Align(
                       alignment: Alignment.centerRight,
                       child: Text(
@@ -1025,8 +958,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                         Navigator.pop(context);
                         setState(() {
                           _selectedCategories = selectedLocal;
-                          _selectedStatusSet =
-                              selectedStatuses; // ✅ update multiple statuses
+                          _selectedStatusSet = selectedStatuses;
                         });
                       },
                       child: const Text('تطبيق'),
@@ -1036,7 +968,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                         Navigator.pop(context);
                         setState(() {
                           _selectedCategories.clear();
-                          _selectedStatusSet?.clear();
+                          _selectedStatusSet
+                              .clear(); // ← تم تعديلها (بدل ?.clear)
                         });
                       },
                       child: const Text('إلغاء الفلاتر'),
@@ -1051,6 +984,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
     );
   }
 }
+
+// ===============  Add / Edit Task Page  ==================
 
 class AddTaskPage extends StatefulWidget {
   final Map<String, dynamic>? task;
@@ -1102,7 +1037,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   void _generateMonths() {
-    // 🗓 توليد قائمة الأشهر القادمة (مثلاً حتى نهاية 2026)
     final months = <String>[];
     final start = DateTime.now();
     for (int i = 0; i < 24; i++) {
@@ -1115,26 +1049,21 @@ class _AddTaskPageState extends State<AddTaskPage> {
   Future<void> _loadCategories() async {
     try {
       final qs = await _categoriesCol.get();
-      print('🔍 AddTaskPage - عدد الفئات: ${qs.docs.length}'); // ديبق
-
       final names = <String>[];
       for (var doc in qs.docs) {
         final data = doc.data() as Map<String, dynamic>;
         final name = data['name']?.toString().trim();
         if (name != null && name.isNotEmpty) {
           names.add(name);
-          print('فئة: $name');
         }
       }
-
       names.sort((a, b) => a.compareTo(b));
-
       setState(() {
         _categories = names;
         _catsLoading = false;
       });
     } catch (e) {
-      print('AddTaskPage - خطأ في تحميل الفئات: $e');
+      debugPrint('AddTaskPage - خطأ في تحميل الفئات: $e');
       setState(() => _catsLoading = false);
     }
   }
@@ -1154,10 +1083,214 @@ class _AddTaskPageState extends State<AddTaskPage> {
     _expiryMonth = t['expiry_month']?.toString();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // ✅ Helpers: تعرّف “هل هي مهمة تنقل؟” + تطبيع نص
+  bool _isTransportTask({String? category, required String text}) {
+    final txt = text.toLowerCase();
+    final cat = (category ?? '').toLowerCase();
+    final transportWords = [
+      'نقل',
+      'المواصلات',
+      'تنقل',
+      'مشاة',
+      'دراجة',
+      'سكوتر',
+      'مترو',
+      'باص',
+      'حافلة',
+      'قطار',
+      'سير',
+    ];
+    final catHit = transportWords.any((w) => cat.contains(w));
+    final txtHit = transportWords.any((w) => txt.contains(w));
+    return catHit || txtHit;
+  }
+
+  String _norm(String s) =>
+      s.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+
+  // ---------------------------------------------------------------------------
+  // ✅ الربط التلقائي مع emissionFactors (EF)
+  Future<Map<String, dynamic>?> _autoPickEfForTask({
+    required String title,
+    required String desc,
+    required String? category,
+  }) async {
+    final efSnap = await FirebaseFirestore.instance
+        .collection('emissionFactors')
+        .get();
+    if (efSnap.docs.isEmpty) return null;
+
+    final text = _norm('$title $desc');
+    final isTransport = _isTransportTask(category: category, text: text);
+
+    int scoreFor(Map<String, dynamic> m) {
+      int s = 0;
+      final kws = (m['keywords'] is List)
+          ? List.from(m['keywords'])
+          : <dynamic>[];
+      for (final k in kws) {
+        final kw = k.toString().trim().toLowerCase();
+        if (kw.isEmpty) continue;
+        if (text.contains(kw)) s += 2; // كل كلمة مفتاحية = +2
+      }
+      if (category != null && (m['category']?.toString() == category)) s += 1;
+      final pri = (m['priority'] is num) ? (m['priority'] as num).toInt() : 0;
+      s += pri; // نعطي أولوية إضافية إن وُجدت
+      return s;
+    }
+
+    // ✳️ مرشح عام
+    final factors = efSnap.docs.map((d) {
+      final m = d.data();
+      m['__id'] = d.id;
+      m['__score'] = scoreFor(m);
+      return m;
+    }).toList();
+
+    // ============== حالة النقل: deltaPerKm ==============
+    if (isTransport) {
+      // baseline (سيارة)
+      Map<String, dynamic>? pickBaseline() {
+        final candidates = factors.where((m) {
+          final unit = (m['unit']?.toString() ?? '').toLowerCase();
+          final kws = (m['keywords'] is List)
+              ? List.from(m['keywords'])
+              : <dynamic>[];
+          final kwTxt = kws.map((e) => e.toString().toLowerCase()).join(' ');
+          final typeTag = (m['type']?.toString() ?? '').toLowerCase();
+          final looksCar =
+              kwTxt.contains('car') ||
+              kwTxt.contains('سيارة') ||
+              kwTxt.contains('بنزين') ||
+              kwTxt.contains('petrol') ||
+              kwTxt.contains('gasoline');
+          final isBaselineTag =
+              typeTag.contains('transport_baseline') ||
+              kwTxt.contains('baseline');
+          return unit == 'km' && (looksCar || isBaselineTag);
+        }).toList();
+
+        if (candidates.isEmpty) return null;
+        candidates.sort(
+          (a, b) => (b['__score'] as int).compareTo(a['__score'] as int),
+        );
+        return candidates.first;
+      }
+
+      // actual (الموضوع المستدام المرغوب)
+      Map<String, dynamic>? pickActual() {
+        final candidates = factors.where((m) {
+          final unit = (m['unit']?.toString() ?? '').toLowerCase();
+          final kws = (m['keywords'] is List)
+              ? List.from(m['keywords'])
+              : <dynamic>[];
+          final kwTxt = kws.map((e) => e.toString().toLowerCase()).join(' ');
+          final sustainableHit =
+              kwTxt.contains('walk') ||
+              kwTxt.contains('مشاة') ||
+              kwTxt.contains('foot') ||
+              kwTxt.contains('bicycle') ||
+              kwTxt.contains('bike') ||
+              kwTxt.contains('دراجة') ||
+              kwTxt.contains('metro') ||
+              kwTxt.contains('مترو') ||
+              kwTxt.contains('bus') ||
+              kwTxt.contains('باص') ||
+              kwTxt.contains('حافلة') ||
+              kwTxt.contains('train') ||
+              kwTxt.contains('قطار') ||
+              kwTxt.contains('scooter') ||
+              kwTxt.contains('سكوتر');
+          // لازم يكون km
+          return unit == 'km' && (sustainableHit || scoreFor(m) > 0);
+        }).toList();
+
+        if (candidates.isEmpty) return null;
+        candidates.sort(
+          (a, b) => (b['__score'] as int).compareTo(a['__score'] as int),
+        );
+        return candidates.first;
+      }
+
+      final base = pickBaseline();
+      final act = pickActual();
+
+      if (base != null && act != null) {
+        return {
+          'calcMode': 'deltaPerKm',
+          'direction': 'save',
+          'baselineFactorRef': base['__id'],
+          'actualFactorRef': act['__id'],
+          'calc_requires': {
+            'askCount': false,
+            'askDistanceKm': true,
+            'autoDistance': true,
+          },
+          '__chosen_name':
+              'Baseline: ${base['name'] ?? base['__id']} / Actual: ${act['name'] ?? act['__id']}',
+          '__unit': 'km',
+        };
+      }
+
+      // لو ما لقينا الاثنين، ننزل لخيار perKm على الـ actual لوحده
+      if (act != null) {
+        return {
+          'calcMode': 'perKm',
+          'direction': 'save',
+          'ef_ref': act['__id'],
+          'calc_requires': {
+            'askCount': false,
+            'askDistanceKm': true,
+            'autoDistance': true,
+          },
+          '__chosen_name': act['name'] ?? act['__id'],
+          '__unit': 'km',
+        };
+      }
+      // وإلا بنرجع إلى perItem fallback بالأسفل
+    }
+
+    // ============== غير النقل: perItem ==============
+    Map<String, dynamic>? pickNonTransport() {
+      final candidates = factors.toList();
+      // نفضّل unit=item إن وجد
+      candidates.sort((a, b) {
+        final scoreCmp = (b['__score'] as int).compareTo(a['__score'] as int);
+        if (scoreCmp != 0) return scoreCmp;
+        final ua = (a['unit']?.toString() ?? '').toLowerCase();
+        final ub = (b['unit']?.toString() ?? '').toLowerCase();
+        // item أولاً
+        final ia = ua == 'item' ? 1 : 0;
+        final ib = ub == 'item' ? 1 : 0;
+        return ib.compareTo(ia);
+      });
+      return candidates.isEmpty ? null : candidates.first;
+    }
+
+    final chosen = pickNonTransport();
+    if (chosen == null) return null;
+
+    final unit = (chosen['unit']?.toString() ?? '').toLowerCase();
+    final askCount = unit == 'item';
+    final askDistance = unit == 'km';
+
+    return {
+      'calcMode': askDistance ? 'perKm' : 'perItem',
+      'direction': 'save',
+      'ef_ref': chosen['__id'],
+      'calc_requires': {
+        'askCount': askCount,
+        'askDistanceKm': askDistance,
+        'autoDistance': askDistance,
+      },
+      '__chosen_name': chosen['name'] ?? chosen['__id'],
+      '__unit': unit,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -1178,20 +1311,15 @@ class _AddTaskPageState extends State<AddTaskPage> {
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
-          // نمد الجسم خلف الهيدر لنعالج الـ padding يدويًا
           extendBodyBehindAppBar: true,
           backgroundColor: AppColors.background,
-
-          // هيدر نمير الموحّد
           appBar: const NameerAppBar(
-            showTitleInBar: false, // العنوان خارج الهيدر (تحت)
+            showTitleInBar: false,
             showBack: true,
             height: 80,
           ),
-
           body: Builder(
             builder: (context) {
-              // padding علوي = statusBar + ارتفاع الهيدر + مسافة بسيطة
               final statusBar = MediaQuery.of(context).padding.top;
               const headerH = 20.0;
               const gap = 12.0;
@@ -1202,7 +1330,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ✅ العنوان ثابت تحت الهيدر
                     Text(
                       titleText,
                       textAlign: TextAlign.right,
@@ -1214,7 +1341,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // ✅ السكرول يبدأ من تحت العنوان
                     Expanded(
                       child: SingleChildScrollView(
                         child: Form(
@@ -1244,7 +1370,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 maxLines: 2,
                                 decoration: const InputDecoration(
                                   hintText:
-                                      'مثال: التوعية بأهمية إعادة التدوير',
+                                      'مثال: سلّم الورق لمركز إعادة التدوير',
                                   prefixIcon: Icon(Icons.description_outlined),
                                 ),
                                 onChanged: (_) => _isDirty = true,
@@ -1312,13 +1438,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                     : null,
                               ),
                               const SizedBox(height: 20),
+
                               Row(
                                 children: [
                                   _fieldLabel('طريقة التحقق', required: true),
                                   const SizedBox(width: 6),
                                   Tooltip(
                                     message:
-                                        'التحقق عبر الصور: للمهام التي تتطلب إثباتًا بصريًا\nالتحقق عبر التتبع: للمهام القرائية والتدريبات',
+                                        'التحقق عبر الصور: للمهام التي تتطلب إثباتًا بصريًا\nالتحقق عبر اختبار قصير/قراءة: للمهام المعرفية',
                                     textStyle: GoogleFonts.ibmPlexSansArabic(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700,
@@ -1381,10 +1508,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 },
                               ),
                               const SizedBox(height: 20),
-                              _fieldLabel(
-                                'تاريخ انتهاء المهمة (شهر)',
-                                required: false,
-                              ),
+
+                              _fieldLabel('تاريخ انتهاء المهمة (شهر)'),
                               const SizedBox(height: 8),
                               InkWell(
                                 onTap: () async {
@@ -1538,7 +1663,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 🟩 Gradient "تأكيد الخروج" button
                     Container(
                       width: double.infinity,
                       decoration: const BoxDecoration(
@@ -1578,7 +1702,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
                     const SizedBox(height: 10),
 
-                    // 🔴 Red outlined cancel button
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(
@@ -1613,14 +1736,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 🧩 منطق الحفظ
+  // 🧩 منطق الحفظ — إضافة الحقول تلقائيًا حسب الـ mapping
   Future<void> _saveTask() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final normalizedTitle = _titleCtrl.text
-        .trim()
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .toLowerCase();
+    final title = _titleCtrl.text.trim();
+    final desc = _descCtrl.text.trim();
+    final normalizedTitle = _norm(title);
 
     // 🔹 التحقق من التكرار (فقط للإضافة الجديدة)
     if (widget.task == null) {
@@ -1628,13 +1750,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
           .where('title_normalized', isEqualTo: normalizedTitle)
           .limit(1)
           .get();
-
       if (existing.docs.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Colors.redAccent,
             content: Text(
-              'اسم المهمة "${_titleCtrl.text.trim()}" مستخدم بالفعل',
+              'اسم المهمة "$title" مستخدم بالفعل',
               style: GoogleFonts.ibmPlexSansArabic(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -1652,10 +1773,18 @@ class _AddTaskPageState extends State<AddTaskPage> {
       status = 'hidden';
     }
 
-    final data = {
-      'title': _titleCtrl.text.trim(),
+    // ✅ الربط التلقائي EF + اختيار calcMode حسب نوع المهمة (تنقل/غيره)
+    final autoEf = await _autoPickEfForTask(
+      title: title,
+      desc: desc,
+      category: _selectedCategory,
+    );
+
+    // إعداد البيانات الأساسية
+    final data = <String, dynamic>{
+      'title': title,
       'title_normalized': normalizedTitle,
-      'description': _descCtrl.text.trim(),
+      'description': desc,
       'points': int.parse(_pointsCtrl.text),
       'category': _selectedCategory,
       'validationStrategy': _validationType,
@@ -1663,8 +1792,46 @@ class _AddTaskPageState extends State<AddTaskPage> {
       'visible_from': nextMonth,
       if (_expiryMonth != null) 'expiry_month': _expiryMonth,
       'managedBy': 'nameer admin',
-      'updatedAt': FieldValue.serverTimestamp(), // 🔹 أضفنا updatedAt
+      'updatedAt': FieldValue.serverTimestamp(),
     };
+
+    // 🟢 نضيف الحقول الخاصة بالكربون حسب mapping:
+    if (autoEf != null) {
+      final calcMode = (autoEf['calcMode'] ?? 'perItem').toString();
+      data['calcMode'] = calcMode;
+      data['direction'] = 'save';
+
+      // المتطلبات للواجهة
+      if (autoEf['calc_requires'] != null) {
+        data['calc_requires'] = autoEf['calc_requires'];
+      }
+
+      if (calcMode.toLowerCase() == 'deltaperkm') {
+        // baseline + actual
+        if (autoEf['baselineFactorRef'] != null) {
+          data['baselineFactorRef'] = autoEf['baselineFactorRef'];
+        }
+        if (autoEf['actualFactorRef'] != null) {
+          // نخزن actual تحت emissionFactorRef
+          data['emissionFactorRef'] = autoEf['actualFactorRef'];
+        }
+      } else if (calcMode.toLowerCase() == 'perkm') {
+        if (autoEf['ef_ref'] != null)
+          data['emissionFactorRef'] = autoEf['ef_ref'];
+      } else {
+        // perItem
+        if (autoEf['ef_ref'] != null)
+          data['emissionFactorRef'] = autoEf['ef_ref'];
+      }
+    } else {
+      // لو ما قدر يربط، نتبع القاعدة: النقل ⇒ deltaPerKm غير ذلك ⇒ perItem (بدون مراجع)
+      final isTransport = _isTransportTask(
+        category: _selectedCategory,
+        text: '$title $desc',
+      );
+      data['calcMode'] = isTransport ? 'deltaPerKm' : 'perItem';
+      data['direction'] = 'save';
+    }
 
     try {
       if (widget.task == null) {
@@ -1695,10 +1862,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 🗓 Bottom Sheet لاختيار (السنة + الشهر) بشكل جميل
-  // يرجّع String مثل "2026-06" أو null لو أُغلِق بدون اختيار.
-  // يمنع اختيار الأشهر الماضية.
-  // ---------------------------------------------------------------------------
+  // 🗓 Bottom Sheet لاختيار (السنة + الشهر)
   Future<String?> _showExpiryMonthPicker({
     required BuildContext context,
     required int initialYear,
@@ -1706,7 +1870,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     String? selected,
   }) async {
     int year = initialYear;
-    String? result = selected; // 🔥 نبدأ بالقيمة الحالية
+    String? result = selected;
 
     bool isPast(int y, int m) {
       final nowY = now.year, nowM = now.month;
@@ -1758,7 +1922,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // رأس: سنة + أسهم
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -1792,7 +1955,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     ),
                     const SizedBox(height: 10),
 
-                    // شبكة الأشهر (3 أعمدة)
                     Wrap(
                       spacing: 10,
                       runSpacing: 10,
@@ -1800,8 +1962,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                         final m = i + 1;
                         final key = "$year-${m.toString().padLeft(2, '0')}";
                         final disabled = isPast(year, m);
-                        final isSelected =
-                            result == key; // 🔥 نستخدم result بدل selected
+                        final isSelected = result == key;
 
                         return SizedBox(
                           width:
@@ -1814,13 +1975,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             onPressed: disabled
                                 ? null
                                 : () {
-                                    // 🔥 إذا الشهر مختار أصلاً، نمسح الاختيار (deselect)
                                     if (isSelected) {
-                                      result = null;
+                                      result = null; // إلغاء الاختيار
                                     } else {
                                       result = key;
                                     }
-                                    setSt(() {}); // 🔥 نحدث الواجهة
+                                    setSt(() {});
                                   },
                             style:
                                 ElevatedButton.styleFrom(
@@ -1834,9 +1994,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 ).merge(
                                   ButtonStyle(
                                     backgroundColor:
-                                        WidgetStateProperty.resolveWith((
-                                          states,
-                                        ) {
+                                        MaterialStateProperty.resolveWith<
+                                          Color?
+                                        >((states) {
                                           if (disabled)
                                             return Colors.grey.shade200;
                                           return Colors.transparent;
@@ -2042,9 +2202,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 }
 
 // ---------------------------------------------------------------------------
-// 🟨 Add / Edit Category Page
-//  ملاحظة: لم يتم تعديل المنطق هنا لأنها لا تتأثر بتغييرات الجدولة أو الحالة.
-//  تظل كما هي فقط لإضافة وتعديل الفئات (categories).
+// 🟨 Add / Edit Category Page (بدون تغيير في المنطق)
 // ---------------------------------------------------------------------------
 
 class AddCategoryPage extends StatefulWidget {
@@ -2145,7 +2303,6 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 🟩 Gradient "تأكيد الخروج" button
                     Container(
                       width: double.infinity,
                       decoration: const BoxDecoration(
@@ -2185,7 +2342,6 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
 
                     const SizedBox(height: 10),
 
-                    // 🔴 Red outlined cancel button
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(
@@ -2231,18 +2387,15 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
         child: Scaffold(
           extendBodyBehindAppBar: true,
           backgroundColor: AppColors.background,
-
-          // ✅ هيدر نمير الموحّد
           appBar: NameerAppBar(
             showTitleInBar: false,
             showBack: true,
             height: 80,
           ),
-
           body: Builder(
             builder: (context) {
               final statusBar = MediaQuery.of(context).padding.top;
-              const headerH = 20.0; // نفس ارتفاع الهيدر
+              const headerH = 20.0;
               const gap = 12.0;
               final topPadding = statusBar + headerH + gap;
 
@@ -2253,7 +2406,6 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // ✅ العنوان أسفل الهيدر مباشرة
                       Text(
                         titleText,
                         textAlign: TextAlign.right,
@@ -2364,7 +2516,6 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
           .toLowerCase();
 
       if (widget.category == null) {
-        // 🔹 Duplicate check
         final dup = await _categoriesCol
             .where('name_normalized', isEqualTo: normalized)
             .limit(1)
@@ -2459,11 +2610,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
   }) {
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.primary, AppColors.mint],
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-        ),
+        gradient: LinearGradient(colors: [AppColors.primary, AppColors.mint]),
         borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       child: ElevatedButton(
