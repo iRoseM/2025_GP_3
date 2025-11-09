@@ -14,7 +14,6 @@
 
     <!-- خدمات أمامية -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- ⚠ صلاحية جديدة من API 34. لو compileSdk < 34 احذفي هذا السطر أو علّقيه -->
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE_LOCATION"
         tools:targetApi="u" />
