@@ -13,6 +13,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:Nameer/services/connection.dart';
+import 'services/background_tracker.dart';
 
 import 'services/launch_decider.dart';
 import 'services/firebase_options.dart';
@@ -98,13 +99,17 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 }
 /* ======================= تهيئة ======================= */
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await setupFlutterNotifications();
-  // 🔔 تفعيل استقبال الإشعارات بالخلفية
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
+  // Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // تتبّع الخلفية (نفعّله قبل runApp)
+  await BackgroundTracker.initialize();
+  // الإشعارات المحلية + FCM
+  await setupFlutterNotifications();
+  // استقبال رسائل FCM بالخلفية
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   runApp(const MyApp());
 }
 

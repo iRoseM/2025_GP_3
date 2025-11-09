@@ -37,9 +37,9 @@ dependencies:
   camera: ^0.10.5+5
   file_picker: ^8.0.3
   image_picker: ^1.1.2
-
-  
-  
+  flutter_background_service: ^5.0.5
+  flutter_background_service_android: ^6.2.2
+  google_place_plus: ^1.0.0  
 
 
 dev_dependencies:

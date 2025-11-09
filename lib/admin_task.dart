@@ -152,7 +152,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 
   // ---------------------------------------------------------------------------
   // 🔹 Main UI Build
-  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
@@ -190,9 +189,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           extendBody: true,
           extendBodyBehindAppBar: true,
           backgroundColor: Colors.transparent,
-
           appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
-
           body: AnimatedBackgroundContainer(
             child: Builder(
               builder: (context) {
@@ -226,10 +223,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               },
             ),
           ),
-
           floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
           floatingActionButton: _buildAddFab(),
-
           bottomNavigationBar: isKeyboardOpen
               ? null
               : AdminBottomNav(
@@ -788,9 +783,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                   if (updated == true) _fetchTasks();
                 },
               ),
-
               const SizedBox(height: 12),
-
               _gradientActionButton(
                 icon: Icons.category_outlined,
                 label: 'إضافة فئة جديدة',
@@ -968,8 +961,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                         Navigator.pop(context);
                         setState(() {
                           _selectedCategories.clear();
-                          _selectedStatusSet
-                              .clear(); // ← تم تعديلها (بدل ?.clear)
+                          _selectedStatusSet.clear();
                         });
                       },
                       child: const Text('إلغاء الفلاتر'),
@@ -1088,209 +1080,145 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // ✅ Helpers: تعرّف “هل هي مهمة تنقل؟” + تطبيع نص
-  bool _isTransportTask({String? category, required String text}) {
-    final txt = text.toLowerCase();
-    final cat = (category ?? '').toLowerCase();
-    final transportWords = [
-      'نقل',
-      'المواصلات',
-      'تنقل',
-      'مشاة',
-      'دراجة',
-      'سكوتر',
-      'مترو',
-      'باص',
-      'حافلة',
-      'قطار',
-      'سير',
-    ];
-    final catHit = transportWords.any((w) => cat.contains(w));
-    final txtHit = transportWords.any((w) => txt.contains(w));
-    return catHit || txtHit;
-  }
-
+  // ✅ تطبيع نص بسيط
   String _norm(String s) =>
       s.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
 
   // ---------------------------------------------------------------------------
-  // ✅ الربط التلقائي مع emissionFactors (EF)
+  // ✅ الربط التلقائي EF بالاعتماد على (keywords) فقط
+  //
+  // الفكرة:
+  // 1) نقرأ emissionFactors حيث efStatus == 'active'
+  // 2) نحسب درجة تطابق بناءً على الكلمات المفتاحية لكل عامل مقابل نص المهمة (العنوان + الوصف)
+  // 3) نختار أعلى عامل مطابق (actual)
+  // 4) نبحث أيضًا عن baseline مناسب (سيارة/بنزين) عبر الكلمات المفتاحية الخاصة به
+  // 5) نقرر calcMode:
+  //    - إذا actual.unit == 'km' ولدينا baseline.unit == 'km' ⇒ deltaPerKm
+  //    - إذا actual.unit == 'km' فقط ⇒ perKm
+  //    - غير ذلك ⇒ perItem
   Future<Map<String, dynamic>?> _autoPickEfForTask({
     required String title,
     required String desc,
-    required String? category,
   }) async {
+    final text = _norm('$title $desc');
+
     final efSnap = await FirebaseFirestore.instance
         .collection('emissionFactors')
+        .where('isActive', isEqualTo: true)
         .get();
+
     if (efSnap.docs.isEmpty) return null;
 
-    final text = _norm('$title $desc');
-    final isTransport = _isTransportTask(category: category, text: text);
-
-    int scoreFor(Map<String, dynamic> m) {
+    int scoreKeywords(List kws, String txt) {
       int s = 0;
-      final kws = (m['keywords'] is List)
-          ? List.from(m['keywords'])
-          : <dynamic>[];
       for (final k in kws) {
         final kw = k.toString().trim().toLowerCase();
         if (kw.isEmpty) continue;
-        if (text.contains(kw)) s += 2; // كل كلمة مفتاحية = +2
+        if (txt.contains(kw)) s += 2; // كل keyword تطابق = +2
       }
-      if (category != null && (m['category']?.toString() == category)) s += 1;
-      final pri = (m['priority'] is num) ? (m['priority'] as num).toInt() : 0;
-      s += pri; // نعطي أولوية إضافية إن وُجدت
       return s;
     }
 
-    // ✳️ مرشح عام
-    final factors = efSnap.docs.map((d) {
-      final m = d.data();
-      m['__id'] = d.id;
-      m['__score'] = scoreFor(m);
-      return m;
+    // جهّز قائمة العوامل مع سكور المطابقة
+    final List<Map<String, dynamic>> factors = efSnap.docs.map((d) {
+      final m = d.data() as Map<String, dynamic>;
+      final List kws = (m['keywords'] is List)
+          ? List.from(m['keywords'])
+          : <dynamic>[];
+      final s = scoreKeywords(kws, text);
+      return {
+        ...m,
+        '__id': d.id,
+        '__score': s,
+        '__unit': (m['unit']?.toString() ?? '').toLowerCase(),
+      };
     }).toList();
 
-    // ============== حالة النقل: deltaPerKm ==============
-    if (isTransport) {
-      // baseline (سيارة)
-      Map<String, dynamic>? pickBaseline() {
-        final candidates = factors.where((m) {
-          final unit = (m['unit']?.toString() ?? '').toLowerCase();
-          final kws = (m['keywords'] is List)
-              ? List.from(m['keywords'])
-              : <dynamic>[];
-          final kwTxt = kws.map((e) => e.toString().toLowerCase()).join(' ');
-          final typeTag = (m['type']?.toString() ?? '').toLowerCase();
-          final looksCar =
-              kwTxt.contains('car') ||
-              kwTxt.contains('سيارة') ||
-              kwTxt.contains('بنزين') ||
-              kwTxt.contains('petrol') ||
-              kwTxt.contains('gasoline');
-          final isBaselineTag =
-              typeTag.contains('transport_baseline') ||
-              kwTxt.contains('baseline');
-          return unit == 'km' && (looksCar || isBaselineTag);
-        }).toList();
-
-        if (candidates.isEmpty) return null;
-        candidates.sort(
-          (a, b) => (b['__score'] as int).compareTo(a['__score'] as int),
-        );
-        return candidates.first;
-      }
-
-      // actual (الموضوع المستدام المرغوب)
-      Map<String, dynamic>? pickActual() {
-        final candidates = factors.where((m) {
-          final unit = (m['unit']?.toString() ?? '').toLowerCase();
-          final kws = (m['keywords'] is List)
-              ? List.from(m['keywords'])
-              : <dynamic>[];
-          final kwTxt = kws.map((e) => e.toString().toLowerCase()).join(' ');
-          final sustainableHit =
-              kwTxt.contains('walk') ||
-              kwTxt.contains('مشاة') ||
-              kwTxt.contains('foot') ||
-              kwTxt.contains('bicycle') ||
-              kwTxt.contains('bike') ||
-              kwTxt.contains('دراجة') ||
-              kwTxt.contains('metro') ||
-              kwTxt.contains('مترو') ||
-              kwTxt.contains('bus') ||
-              kwTxt.contains('باص') ||
-              kwTxt.contains('حافلة') ||
-              kwTxt.contains('train') ||
-              kwTxt.contains('قطار') ||
-              kwTxt.contains('scooter') ||
-              kwTxt.contains('سكوتر');
-          // لازم يكون km
-          return unit == 'km' && (sustainableHit || scoreFor(m) > 0);
-        }).toList();
-
-        if (candidates.isEmpty) return null;
-        candidates.sort(
-          (a, b) => (b['__score'] as int).compareTo(a['__score'] as int),
-        );
-        return candidates.first;
-      }
-
-      final base = pickBaseline();
-      final act = pickActual();
-
-      if (base != null && act != null) {
-        return {
-          'calcMode': 'deltaPerKm',
-          'direction': 'save',
-          'baselineFactorRef': base['__id'],
-          'actualFactorRef': act['__id'],
-          'calc_requires': {
-            'askCount': false,
-            'askDistanceKm': true,
-            'autoDistance': true,
-          },
-          '__chosen_name':
-              'Baseline: ${base['name'] ?? base['__id']} / Actual: ${act['name'] ?? act['__id']}',
-          '__unit': 'km',
-        };
-      }
-
-      // لو ما لقينا الاثنين، ننزل لخيار perKm على الـ actual لوحده
-      if (act != null) {
-        return {
-          'calcMode': 'perKm',
-          'direction': 'save',
-          'ef_ref': act['__id'],
-          'calc_requires': {
-            'askCount': false,
-            'askDistanceKm': true,
-            'autoDistance': true,
-          },
-          '__chosen_name': act['name'] ?? act['__id'],
-          '__unit': 'km',
-        };
-      }
-      // وإلا بنرجع إلى perItem fallback بالأسفل
+    // اختر الـ actual الأفضل (أعلى سكور)
+    factors.sort(
+      (a, b) => (b['__score'] as int).compareTo(a['__score'] as int),
+    );
+    final Map<String, dynamic>? bestActual = factors.isNotEmpty
+        ? factors.first
+        : null;
+    if (bestActual == null || (bestActual['__score'] as int) <= 0) {
+      // لا يوجد تطابق مفيد
+      return null;
     }
 
-    // ============== غير النقل: perItem ==============
-    Map<String, dynamic>? pickNonTransport() {
-      final candidates = factors.toList();
-      // نفضّل unit=item إن وجد
-      candidates.sort((a, b) {
-        final scoreCmp = (b['__score'] as int).compareTo(a['__score'] as int);
-        if (scoreCmp != 0) return scoreCmp;
-        final ua = (a['unit']?.toString() ?? '').toLowerCase();
-        final ub = (b['unit']?.toString() ?? '').toLowerCase();
-        // item أولاً
-        final ia = ua == 'item' ? 1 : 0;
-        final ib = ub == 'item' ? 1 : 0;
-        return ib.compareTo(ia);
-      });
-      return candidates.isEmpty ? null : candidates.first;
+    // حاول إيجاد baseline (سيارة/بنزين...) بواسطة كلمات مفتاحية baseline/car
+    bool looksBaseline(Map<String, dynamic> m) {
+      final kws = (m['keywords'] is List)
+          ? List.from(m['keywords'])
+          : <dynamic>[];
+      final joined = kws.map((e) => e.toString().toLowerCase()).join(' ');
+      return joined.contains('car') ||
+          joined.contains('سيارة') ||
+          joined.contains('gasoline') ||
+          joined.contains('petrol') ||
+          joined.contains('baseline') ||
+          joined.contains('unknown fuel');
     }
 
-    final chosen = pickNonTransport();
-    if (chosen == null) return null;
+    final kmOnly = (Map<String, dynamic> m) => (m['__unit'] == 'km');
 
-    final unit = (chosen['unit']?.toString() ?? '').toLowerCase();
-    final askCount = unit == 'item';
-    final askDistance = unit == 'km';
+    // فلترة baseline محتملة بوحدة كم
+    final baselineCandidates =
+        factors.where((m) => kmOnly(m) && looksBaseline(m)).toList()..sort(
+          (a, b) => (b['__score'] as int).compareTo(a['__score'] as int),
+        );
+    final Map<String, dynamic>? baseline = baselineCandidates.isNotEmpty
+        ? baselineCandidates.first
+        : null;
 
-    return {
-      'calcMode': askDistance ? 'perKm' : 'perItem',
-      'direction': 'save',
-      'ef_ref': chosen['__id'],
-      'calc_requires': {
-        'askCount': askCount,
-        'askDistanceKm': askDistance,
-        'autoDistance': askDistance,
-      },
-      '__chosen_name': chosen['name'] ?? chosen['__id'],
-      '__unit': unit,
-    };
+    // تحديد الـ calcMode بحسب الوحدات
+    if (bestActual['__unit'] == 'km' &&
+        baseline != null &&
+        baseline['__unit'] == 'km') {
+      // deltaPerKm (سيارة مقابل وسيلة مستدامة)
+      return {
+        'calcMode': 'deltaPerKm',
+        'direction': 'save',
+        'baselineFactorRef': baseline['__id'],
+        'actualFactorRef': bestActual['__id'],
+        'calc_requires': {
+          'askCount': false,
+          'askDistanceKm': true,
+          'autoDistance': true,
+        },
+        '__chosen_name':
+            'Baseline: ${baseline['name'] ?? baseline['__id']} / Actual: ${bestActual['name'] ?? bestActual['__id']}',
+        '__unit': 'km',
+      };
+    } else if (bestActual['__unit'] == 'km') {
+      // perKm (عامل واحد فقط بالكم)
+      return {
+        'calcMode': 'perKm',
+        'direction': 'save',
+        'ef_ref': bestActual['__id'],
+        'calc_requires': {
+          'askCount': false,
+          'askDistanceKm': true,
+          'autoDistance': true,
+        },
+        '__chosen_name': bestActual['name'] ?? bestActual['__id'],
+        '__unit': 'km',
+      };
+    } else {
+      // perItem (أو أي وحدة غير كم) — نفضّل item
+      return {
+        'calcMode': 'perItem',
+        'direction': 'save',
+        'ef_ref': bestActual['__id'],
+        'calc_requires': {
+          'askCount': true,
+          'askDistanceKm': false,
+          'autoDistance': false,
+        },
+        '__chosen_name': bestActual['name'] ?? bestActual['__id'],
+        '__unit': bestActual['__unit'],
+      };
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1301,7 +1229,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     final titleText = isEdit ? 'تعديل المهمة' : 'إضافة مهمة جديدة';
 
     return PopScope(
-      canPop: false,
+      canPop: true,
       onPopInvoked: (didPop) async {
         if (didPop) return;
         if (await _confirmLeaveIfDirty()) {
@@ -1353,7 +1281,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                               TextFormField(
                                 controller: _titleCtrl,
                                 decoration: const InputDecoration(
-                                  hintText: 'مثال: إعادة تدوير الورق',
+                                  hintText:
+                                      'مثال: استخدام المترو بدلاً من السيارة',
                                   prefixIcon: Icon(Icons.task_alt_outlined),
                                 ),
                                 onChanged: (_) => _isDirty = true,
@@ -1370,7 +1299,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 maxLines: 2,
                                 decoration: const InputDecoration(
                                   hintText:
-                                      'مثال: سلّم الورق لمركز إعادة التدوير',
+                                      'مثال: اذهب بالمترو لمحطتين بدل استخدام السيارة',
                                   prefixIcon: Icon(Icons.description_outlined),
                                 ),
                                 onChanged: (_) => _isDirty = true,
@@ -1392,9 +1321,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 onChanged: (_) => _isDirty = true,
                                 validator: (v) {
                                   final n = int.tryParse(v ?? '');
-                                  if (n == null || n <= 0) {
+                                  if (n == null || n <= 0)
                                     return 'أدخل عددًا صحيحًا موجبًا';
-                                  }
                                   return null;
                                 },
                               ),
@@ -1501,9 +1429,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   _isDirty = true;
                                 },
                                 validator: (v) {
-                                  if (v == null || v.isEmpty) {
+                                  if (v == null || v.isEmpty)
                                     return 'اختر طريقة التحقق';
-                                  }
                                   return null;
                                 },
                               ),
@@ -1736,7 +1663,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 🧩 منطق الحفظ — إضافة الحقول تلقائيًا حسب الـ mapping
+  // 🧩 منطق الحفظ — يعتمد على mapping بالـ keywords + efStatus
   Future<void> _saveTask() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -1773,12 +1700,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
       status = 'hidden';
     }
 
-    // ✅ الربط التلقائي EF + اختيار calcMode حسب نوع المهمة (تنقل/غيره)
-    final autoEf = await _autoPickEfForTask(
-      title: title,
-      desc: desc,
-      category: _selectedCategory,
-    );
+    // ✅ الربط التلقائي EF (keywords-only)
+    final autoEf = await _autoPickEfForTask(title: title, desc: desc);
 
     // إعداد البيانات الأساسية
     final data = <String, dynamic>{
@@ -1801,13 +1724,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
       data['calcMode'] = calcMode;
       data['direction'] = 'save';
 
-      // المتطلبات للواجهة
       if (autoEf['calc_requires'] != null) {
         data['calc_requires'] = autoEf['calc_requires'];
       }
 
       if (calcMode.toLowerCase() == 'deltaperkm') {
-        // baseline + actual
         if (autoEf['baselineFactorRef'] != null) {
           data['baselineFactorRef'] = autoEf['baselineFactorRef'];
         }
@@ -1815,21 +1736,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
           // نخزن actual تحت emissionFactorRef
           data['emissionFactorRef'] = autoEf['actualFactorRef'];
         }
-      } else if (calcMode.toLowerCase() == 'perkm') {
-        if (autoEf['ef_ref'] != null)
-          data['emissionFactorRef'] = autoEf['ef_ref'];
       } else {
-        // perItem
-        if (autoEf['ef_ref'] != null)
+        if (autoEf['ef_ref'] != null) {
           data['emissionFactorRef'] = autoEf['ef_ref'];
+        }
       }
     } else {
-      // لو ما قدر يربط، نتبع القاعدة: النقل ⇒ deltaPerKm غير ذلك ⇒ perItem (بدون مراجع)
-      final isTransport = _isTransportTask(
-        category: _selectedCategory,
-        text: '$title $desc',
-      );
-      data['calcMode'] = isTransport ? 'deltaPerKm' : 'perItem';
+      // fallback بسيط: لو ما في تطابق، نخلي perItem (بدون مراجع) — الواجهة تقدر تطلب إدخال يدوي لاحقًا
+      data['calcMode'] = 'perItem';
       data['direction'] = 'save';
     }
 
@@ -1976,7 +1890,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 ? null
                                 : () {
                                     if (isSelected) {
-                                      result = null; // إلغاء الاختيار
+                                      result = null;
                                     } else {
                                       result = key;
                                     }
@@ -2154,11 +2068,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }) {
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.primary, AppColors.mint],
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
-        ),
+        gradient: LinearGradient(colors: [AppColors.primary, AppColors.mint]),
         borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       child: ElevatedButton(
@@ -2308,8 +2218,6 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
                           colors: [AppColors.primary, AppColors.mint],
-                          begin: Alignment.bottomLeft,
-                          end: Alignment.topRight,
                         ),
                         borderRadius: BorderRadius.all(Radius.circular(14)),
                       ),

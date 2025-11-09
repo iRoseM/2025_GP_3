@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:async'; // ⏱️ للـ timeout
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
@@ -7,6 +8,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+import 'services/map_pick_route.dart';
+
+// 🔑 مفتاح Google Places/Maps للاقتراحات والمسارات داخل MapPickRoutePage
+const String kMapsApiKey = 'YOUR_GOOGLE_PLACES_API_KEY';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -56,10 +63,15 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   double _minZoom = 1.0, _maxZoom = 1.0, _zoom = 1.0;
   double _minExposure = 0.0, _maxExposure = 0.0, _exposure = 0.0;
 
-  // تتبع تلقائي للمسافة (اختياري)
+  // GPS & مسافة
   Position? _startPos;
   GeoPoint? _geoStart, _geoEnd;
   double? _autoDistanceKmComputed;
+
+  // ===== مسار يدوي عبر الخريطة =====
+  LatLng? _manualStart;
+  LatLng? _manualEnd;
+  double? _manualDistanceKm;
 
   // ----------------- Helpers -----------------
   Map<String, dynamic> get _calcRequires {
@@ -147,7 +159,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
   }
 
-  // ===== GPS (اختياري) =====
+  // ===== GPS (اختياري + fallback) =====
   Future<void> _ensureLocationPermission() async {
     try {
       var perm = await Geolocator.checkPermission();
@@ -159,7 +171,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   }
 
   Future<void> _captureStartIfNeeded() async {
-    if (!_autoDistance) return;
+    if (!(_autoDistance || _isTransportTask)) return;
     try {
       await _ensureLocationPermission();
       final p = await Geolocator.getCurrentPosition(
@@ -171,7 +183,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   }
 
   Future<void> _captureEndAndComputeDistance() async {
-    if (!_autoDistance) return;
+    if (!(_autoDistance || _isTransportTask)) return;
     try {
       await _ensureLocationPermission();
       final end = await Geolocator.getCurrentPosition(
@@ -209,27 +221,21 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   }
 
   /// يرجّع قيمة العامل (kgCO2e لكل وحدة) حتى لو اختلف اسم الحقل.
-  /// يدعم:
-  /// - valueField محدد داخل الـ task أو داخل مستند العامل
-  /// - أسماء شائعة: ef_kgco2_per_unit, value, kgPerKm, perKm, co2PerKm, co2_per_km, factor
   Future<double?> _getEfPerUnit(String id, {String? valueFieldFromTask}) async {
     final d = await _getEfDoc(id);
     if (d == null) return null;
 
-    // 1) لو حدّدت اسم الحقل في الـ task
     if (valueFieldFromTask != null && valueFieldFromTask.isNotEmpty) {
       final v = _asDouble(d[valueFieldFromTask]);
       if (v != null) return v;
     }
 
-    // 2) لو المستند نفسه يحدّد اسم الحقل
     final vfInDoc = d['valueField'] ?? d['efValueField'];
     if (vfInDoc is String && vfInDoc.isNotEmpty) {
       final v = _asDouble(d[vfInDoc]);
       if (v != null) return v;
     }
 
-    // 3) أسماء شائعة (أضفنا ef_kgco2_per_unit)
     final candidates = [
       'ef_kgco2_per_unit',
       'value',
@@ -246,26 +252,25 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return null;
   }
 
-  /// حساب التوفير للكربون لوضعَي perKm / deltaPerKm فقط
+  /// حساب التوفير للكربون لوضعَي perKm / deltaPerKm
   Future<double> _computeCarbonSaved({
     required String efIdFromTask,
     required double km,
-    String?
-    valueFieldFromTask, // لو تبغى تمرّر اسم الحقل (مثل ef_kgco2_per_unit)
+    String? valueFieldFromTask,
   }) async {
     if (km <= 0) return 0.0;
 
     final efDoc = await _getEfDoc(efIdFromTask) ?? {};
-    final calcMode =
-        (efDoc['calcMode'] ?? widget.taskData['calcMode'] ?? 'perKm')
-            .toString()
-            .toLowerCase();
+    final taskCalcMode = (widget.taskData['calcMode'] ?? '').toString().trim();
+    final efCalcMode = (efDoc['calcMode'] ?? '').toString().trim();
+    final calcMode = (taskCalcMode.isNotEmpty ? taskCalcMode : efCalcMode)
+        .toLowerCase();
 
     final baseRef =
-        (efDoc['baselineFactorRef'] ?? widget.taskData['baselineFactorRef'])
+        (widget.taskData['baselineFactorRef'] ?? efDoc['baselineFactorRef'])
             ?.toString();
     final actRef =
-        (efDoc['actualFactorRef'] ?? widget.taskData['actualFactorRef'])
+        (widget.taskData['actualFactorRef'] ?? efDoc['actualFactorRef'])
             ?.toString();
 
     if (calcMode == 'perkm') {
@@ -275,8 +280,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       );
       if (perKmVal == null) return 0.0;
 
-      // في perKm: لو direction=save نحسب saving، لو emit نرجّع 0 (أو ممكن تعتبره انبعاث)
-      final dir = (efDoc['direction'] ?? widget.taskData['direction'] ?? '')
+      final dir = (widget.taskData['direction'] ?? efDoc['direction'] ?? '')
           .toString()
           .toLowerCase();
       final isSave = (dir.isEmpty || dir == 'save');
@@ -301,7 +305,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return (delta > 0 ? delta : 0.0) * km;
     }
 
-    // perItem غير مستخدم هنا
     return 0.0;
   }
 
@@ -341,6 +344,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     double? distanceKm,
     double? carbonSaved,
   }) async {
+    debugPrint('⏫ بدء رفع الصورة وإنشاء المستندات...');
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw Exception('يرجى تسجيل الدخول.');
@@ -361,13 +365,20 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
     Future<void> tryUpload() async {
       try {
-        await storageRef.putFile(
-          file,
-          SettableMetadata(
-            contentType: 'image/jpeg',
-            cacheControl: 'public,max-age=3600',
-          ),
-        );
+        debugPrint('📤 putFile()...');
+        await storageRef
+            .putFile(
+              file,
+              SettableMetadata(
+                contentType: 'image/jpeg',
+                cacheControl: 'public,max-age=3600',
+              ),
+            )
+            .timeout(const Duration(seconds: 60));
+        debugPrint('✅ putFile() تم.');
+      } on TimeoutException {
+        _showInlineError('انتهى وقت رفع الصورة، جرّب لاحقًا.');
+        rethrow;
       } on FirebaseException catch (e) {
         _showInlineError(
           e.code == 'permission-denied'
@@ -396,16 +407,25 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         code: e.code,
         message: _friendlyError(e),
       );
+    } on TimeoutException {
+      throw Exception('انتهى وقت رفع الصورة.');
     } catch (e) {
       throw Exception(_friendlyError(e));
     }
 
     Future<String> getUrlWithRetry() async {
       try {
-        return await storageRef.getDownloadURL();
-      } catch (_) {
+        debugPrint('🔗 getDownloadURL()...');
+        final url = await storageRef.getDownloadURL().timeout(
+          const Duration(seconds: 20),
+        );
+        debugPrint('✅ getDownloadURL() تم.');
+        return url;
+      } on TimeoutException {
         await Future.delayed(const Duration(milliseconds: 200));
-        return await storageRef.getDownloadURL();
+        return await storageRef.getDownloadURL().timeout(
+          const Duration(seconds: 20),
+        );
       }
     }
 
@@ -421,6 +441,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         code: e.code,
         message: _friendlyError(e),
       );
+    } on TimeoutException {
+      try {
+        await storageRef.delete();
+      } catch (_) {}
+      throw Exception('انتهى وقت جلب رابط الصورة.');
     } catch (e) {
       try {
         await storageRef.delete();
@@ -451,13 +476,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       extra['emissionFactorRef'] = efId; // اسم موحّد
     }
 
-    // calcMode (لو موجود بالمهمة)
     final calcMode = widget.taskData['calcMode']?.toString();
     if (calcMode != null && calcMode.isNotEmpty) {
       extra['calcMode'] = calcMode;
     }
 
-    // كتابة submission
+    debugPrint('📝 كتابة submission...');
     await subRef.set({
       'userId': uid,
       'userTaskDocId': widget.userTaskDocId,
@@ -472,9 +496,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       ...extra,
     });
 
-    // تحديث userTasks → submitted (merge) - فقط الحقول المسموحة بقواعدك
+    debugPrint('🛠️ تحديث userTasks (submitted)...');
     await utRef.set({
-      'userId': uid, // مهم لو الوثيقة غير موجودة أصلًا
+      'userId': uid,
       'status': 'submitted',
       'submittedAt': FieldValue.serverTimestamp(),
       'evidence': {
@@ -490,8 +514,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       if (carbonSaved != null) 'carbonSaved': carbonSaved,
       if (_geoStart != null) 'geoStart': _geoStart,
       if (_geoEnd != null) 'geoEnd': _geoEnd,
-      // ⛔️ لا نرسل selectedAt/windowStart/windowEnd هنا (تُكتب وقت إنشاء وثيقة اليوم)
     }, SetOptions(merge: true));
+
+    debugPrint('✅ الإرسال اكتمل.');
   }
 
   // ===== Camera controls =====
@@ -527,7 +552,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       _minZoom = await _controller!.getMinZoomLevel();
       _maxZoom = await _controller!.getMaxZoomLevel();
       _zoom = _zoom.clamp(_minZoom, _maxZoom);
-
       _minExposure = await _controller!.getMinExposureOffset();
       _maxExposure = await _controller!.getMaxExposureOffset();
       _exposure = _exposure.clamp(_minExposure, _maxExposure);
@@ -622,14 +646,53 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   @override
   void initState() {
     super.initState();
-    // إن كان autoDistance مفعّلًا، نلتقط نقطة البداية بصمت
-    _captureStartIfNeeded();
+    // لم نعد نستخدم تتبّع الخلفية. فقط نحفظ نقطة البداية كـ fallback للخط المستقيم.
+    if (_autoDistance || _isTransportTask) {
+      _captureStartIfNeeded();
+    }
   }
 
   @override
   void dispose() {
     _controller?.dispose();
     super.dispose();
+  }
+
+  // ====== زر "ابدأ" لمهام النقل: يفتح الخريطة إجباري ثم الكاميرا ======
+  Future<void> _startFlowForTransportTask() async {
+    // 1) افتح صفحة الخريطة لاختيار البداية/النهاية
+    final MapRoutePickResult? res = await Navigator.push<MapRoutePickResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MapPickRoutePage(
+          initialStart: _manualStart,
+          initialEnd: _manualEnd,
+          googleApiKey: kMapsApiKey, // ← مهم جدًا
+        ),
+      ),
+    );
+
+    if (!mounted || res == null) return;
+
+    // 2) احفظ النقاط والمسافة
+    setState(() {
+      _manualStart = res.start;
+      _manualEnd = res.end;
+
+      _manualDistanceKm = _haversineKm(
+        res.start.latitude,
+        res.start.longitude,
+        res.end.latitude,
+        res.end.longitude,
+      );
+
+      // جهّز geoStart/geoEnd من المسار اليدوي
+      _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
+      _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
+    });
+
+    // 3) افتح الكاميرا مباشرة
+    await _openCamera();
   }
 
   @override
@@ -643,6 +706,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         .trim();
     final taskId = task['id'] as String?;
     final requiresPhotoExact = validation == 'التحقق عبر معالجة الصور';
+
+    // شروطنا:
+    final isTransport = (_autoDistance || _isTransportTask);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -719,21 +785,44 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   ),
                   const SizedBox(height: 16),
 
-                  if (requiresPhotoExact && !_ready) _buildPhotoInstructions(),
+                  // ✅ دائمًا تظهر التعليمات أولاً
+                  _buildPhotoInstructions(),
                   const SizedBox(height: 16),
 
+                  // ===== تدفّق الأزرار حسب نوع المهمة =====
+                  if (requiresPhotoExact && !isTransport) ...[
+                    // 🎯 مهام عادية: بعد التعليمات -> "ابدأ التصوير"
+                    if (!_ready)
+                      _gradientButton(
+                        label: 'ابدأ التصوير',
+                        icon: Icons.camera_alt,
+                        onTap: _openingCamera ? null : () => _openCamera(),
+                        loading: _openingCamera,
+                      ),
+                  ] else if (requiresPhotoExact && isTransport) ...[
+                    // 🚇 مهام نقل/autoDistance: بعد التعليمات -> "ابدأ" يفتح الخريطة ثم الكاميرا
+                    if (!_ready)
+                      _gradientButton(
+                        label: 'ابدأ',
+                        icon: Icons.play_arrow_rounded,
+                        onTap: () => _startFlowForTransportTask(),
+                      ),
+                    if (_manualDistanceKm != null && !_ready) ...[
+                      const SizedBox(height: 10),
+                      _hintCard(
+                        'المسار المحدد: ${_manualDistanceKm!.toStringAsFixed(2)} كم\nاضغط "ابدأ" مرة أخرى لفتح الكاميرا إذا رغبت بتعديل المسار.',
+                      ),
+                    ],
+                  ],
+
+                  const SizedBox(height: 16),
+
+                  // ===== واجهة الكاميرا =====
                   if (requiresPhotoExact)
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 250),
                       child: !_ready
-                          ? _gradientButton(
-                              label: 'ابدأ التصوير',
-                              icon: Icons.camera_alt,
-                              onTap: _openingCamera
-                                  ? null
-                                  : () => _openCamera(),
-                              loading: _openingCamera,
-                            )
+                          ? const SizedBox.shrink()
                           : SizedBox(
                               height: 420,
                               child: LayoutBuilder(
@@ -902,7 +991,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
                   const SizedBox(height: 16),
 
-                  // أزرار الإرسال/الالتقاط
+                  // ===== أزرار الإرسال/الالتقاط =====
                   if (_ready && requiresPhotoExact) ...[
                     if (_capturedPath == null)
                       _gradientButton(
@@ -949,41 +1038,83 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 : () async {
                                     if (_capturedPath == null) return;
 
-                                    // التقط نقطة النهاية واحسب المسافة تلقائياً (إن كان مفعلاً)
-                                    if (_autoDistance) {
-                                      await _captureEndAndComputeDistance();
-                                    }
-
-                                    // 🔒 تعقيم المسافة + كلَبسة اختيارية من بيانات المهمة
-                                    double? safeDistanceKm;
-                                    final rawKm = _autoDistance
-                                        ? _autoDistanceKmComputed
-                                        : null;
-
-                                    double? minKm, maxKm;
-                                    final mk = widget.taskData['minKm'];
-                                    final xk = widget.taskData['maxKm'];
-                                    if (mk is num) minKm = mk.toDouble();
-                                    if (xk is num) maxKm = xk.toDouble();
-
-                                    if (rawKm != null &&
-                                        rawKm.isFinite &&
-                                        !rawKm.isNaN &&
-                                        rawKm > 0) {
-                                      double clamped = rawKm;
-                                      clamped = clamped.clamp(
-                                        minKm ?? 0.2,
-                                        maxKm ?? 50.0,
-                                      );
-                                      safeDistanceKm = double.parse(
-                                        clamped.toStringAsFixed(3),
-                                      );
-                                    }
-
-                                    if (!mounted) return;
+                                    if (!mounted || _isUploading) return;
                                     setState(() => _isUploading = true);
+
                                     try {
-                                      // حساب الكربون إن توفر ef_ref ومسافة صالحة
+                                      // 1) المسافة من المسار اليدوي (إن وُجد)
+                                      final manualKm = _manualDistanceKm;
+
+                                      // 2) الخط المستقيم كـ fallback عبر GPS
+                                      await _captureEndAndComputeDistance();
+                                      double? straightKm;
+                                      if (_autoDistanceKmComputed != null &&
+                                          _autoDistanceKmComputed!.isFinite &&
+                                          _autoDistanceKmComputed! > 0) {
+                                        straightKm = double.parse(
+                                          _autoDistanceKmComputed!
+                                              .toStringAsFixed(3),
+                                        );
+                                      }
+
+                                      // 3) اختر الأفضل: يدوي > مستقيم
+                                      double? pickedKm;
+                                      if (manualKm != null && manualKm > 0) {
+                                        pickedKm = manualKm;
+                                      } else if (straightKm != null &&
+                                          straightKm > 0) {
+                                        pickedKm = straightKm;
+                                      }
+
+                                      // 3.1) fallback ثالث: defaultKmOnSubmit لو askDistanceKm=true
+                                      final askDistanceKm =
+                                          widget.taskData['askDistanceKm'] ==
+                                          true;
+                                      final defaultKmOnSubmit =
+                                          (widget.taskData['defaultKmOnSubmit']
+                                              is num)
+                                          ? (widget.taskData['defaultKmOnSubmit']
+                                                    as num)
+                                                .toDouble()
+                                          : null;
+                                      if (pickedKm == null &&
+                                          askDistanceKm &&
+                                          defaultKmOnSubmit != null) {
+                                        pickedKm = defaultKmOnSubmit;
+                                      }
+
+                                      // 4) Clamp حسب min/max من بيانات المهمة
+                                      double? minKm, maxKm;
+                                      final mk = widget.taskData['minKm'];
+                                      final xk = widget.taskData['maxKm'];
+                                      if (mk is num) minKm = mk.toDouble();
+                                      if (xk is num) maxKm = xk.toDouble();
+
+                                      double? safeDistanceKm;
+                                      if (pickedKm != null && pickedKm > 0) {
+                                        safeDistanceKm = pickedKm.clamp(
+                                          minKm ?? 0.2,
+                                          maxKm ?? 50.0,
+                                        );
+                                        safeDistanceKm = double.parse(
+                                          safeDistanceKm.toStringAsFixed(3),
+                                        );
+                                      }
+
+                                      // ✅ استخدم نقاط المسار اليدوي لو موجودة
+                                      if (_manualStart != null &&
+                                          _manualEnd != null) {
+                                        _geoStart = GeoPoint(
+                                          _manualStart!.latitude,
+                                          _manualStart!.longitude,
+                                        );
+                                        _geoEnd = GeoPoint(
+                                          _manualEnd!.latitude,
+                                          _manualEnd!.longitude,
+                                        );
+                                      }
+
+                                      // 5) حساب الكربون إن توفر ef_ref ومسافة صالحة
                                       double? carbonSaved;
                                       final efId =
                                           (widget.taskData['ef_ref'] ??
@@ -994,7 +1125,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                       .taskData['emission_factor_ref'])
                                               ?.toString();
 
-                                      // اسم الحقل الحقيقي عندك
                                       const efValueField = 'ef_kgco2_per_unit';
 
                                       if (efId != null &&
@@ -1003,8 +1133,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         carbonSaved = await _computeCarbonSaved(
                                           efIdFromTask: efId,
                                           km: safeDistanceKm,
-                                          valueFieldFromTask:
-                                              efValueField, // مهم
+                                          valueFieldFromTask: efValueField,
                                         );
                                         if (carbonSaved != null &&
                                             carbonSaved.isFinite &&
@@ -1018,6 +1147,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         }
                                       }
 
+                                      // 6) إنشاء السجلّات
                                       await _createSubmissionAndMarkSubmitted(
                                         localPath: _capturedPath!,
                                         taskPoints: pts,
@@ -1259,6 +1389,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _hintCard(String text) => _hintCardWidget(text);
+
+  Widget _hintCardWidget(String text) {
+    return Material(
+      elevation: 2,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(text, textAlign: TextAlign.center),
       ),
     );
   }
