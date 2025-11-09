@@ -9,6 +9,7 @@ import 'home.dart';
 import 'map.dart';
 import 'levels.dart';
 import 'community.dart';
+import 'article_page.dart'; 
 import 'services/bottom_nav.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
@@ -1034,9 +1035,21 @@ class _taskPageState extends State<taskPage> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: (isCompleted || isSubmitted)
-                  ? null
-                  : () async {
+            onPressed: (isCompleted || isSubmitted)
+                ? null
+                : () async {
+                    if (validation == "quiz") {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ArticlePage(
+                            userTaskDocId: userTaskDocId,      // << مهم عشان نثبت المقال
+                            taskId: taskData['id'],            // ربط اختياري
+                          ),
+                        ),
+                      );
+                    } else {
+                      // ✅ السلوك العادي لبقية أنواع المهام
                       final result = await showCompleteTaskSheet(
                         context,
                         taskData,
@@ -1047,7 +1060,8 @@ class _taskPageState extends State<taskPage> {
                         _attachUserTaskStreamFor(sel);
                         setState(() {});
                       }
-                    },
+                    }
+                  },
               style: ButtonStyle(
                 elevation: WidgetStateProperty.all(0),
                 shadowColor: WidgetStateProperty.all(Colors.transparent),
