@@ -12,7 +12,6 @@ import 'services/title_header.dart';
 import 'task.dart'; // فيه AppColors + NameerAppBar
 import 'services/background_container.dart';
 
-
 class AppColors {
   static const primary = Color(0xFF4BAA98);
   static const dark = Color(0xFF3C3C3B);
@@ -27,25 +26,22 @@ class AppColors {
   static const mint = Color(0xFFB6E9C1);
   static const tealSoft = Color(0xFF75BCAF);
 }
+
 class ArticlePage extends StatefulWidget {
   final String userTaskDocId; // مثال: "{uid}_YYYYMMDD"
-  final String? taskId;       // ربط اختياري
+  final String? taskId; // ربط اختياري
 
-  const ArticlePage({
-    super.key,
-    required this.userTaskDocId,
-    this.taskId,
-  });
+  const ArticlePage({super.key, required this.userTaskDocId, this.taskId});
 
   @override
   State<ArticlePage> createState() => _ArticlePageState();
 }
 
 class _ArticlePageState extends State<ArticlePage> {
-  Map<String, dynamic>? _article;   // articleData المحفوظ/المعروض
+  Map<String, dynamic>? _article; // articleData المحفوظ/المعروض
   bool _loading = true;
   bool _error = false;
-  bool _showReadButton = false;     // يظهر فقط عند نهاية الصفحة
+  bool _showReadButton = false; // يظهر فقط عند نهاية الصفحة
 
   @override
   void initState() {
@@ -54,119 +50,222 @@ class _ArticlePageState extends State<ArticlePage> {
   }
 
   // ========== الخطوة 1: قراءة/جلب المقال وتثبيته ==========
-Future<void> _loadOrFetchArticle() async {
-  try {
-    final userTaskRef = FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(widget.userTaskDocId);
+  Future<void> _loadOrFetchArticle() async {
+    try {
+      final userTaskRef = FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(widget.userTaskDocId);
 
-    final snap = await userTaskRef.get();
-    final data = snap.data() ?? {};
+      final snap = await userTaskRef.get();
+      final data = snap.data() ?? {};
 
-    // ✅ لو عنده articleId، نجيب المقال من articles مباشرة
-    if (data.containsKey('articleId') && data['articleId'] != null) {
-      final artSnap = await FirebaseFirestore.instance
-          .collection('articles')
-          .doc(data['articleId'])
-          .get();
+      // ✅ لو عنده articleId، نجيب المقال من articles مباشرة
+      if (data.containsKey('articleId') && data['articleId'] != null) {
+        final artSnap = await FirebaseFirestore.instance
+            .collection('articles')
+            .doc(data['articleId'])
+            .get();
 
-      if (artSnap.exists) {
-        setState(() {
-          _article = artSnap.data();
-          _loading = false;
-        });
-        return;
+        if (artSnap.exists) {
+          setState(() {
+            _article = artSnap.data();
+            _loading = false;
+          });
+          return;
+        }
       }
+
+      // 🆕 أول مرة: نجلب مقال جديد ونخزّنه في Collection articles
+      final art = await _fetchRandomArticle();
+      // 🔍 جلب النص الكامل من المصدر (بديل عن الـ content المقطوع)
+      String fullText = '';
+      if ((art['url'] ?? '').toString().isNotEmpty) {
+        fullText = await _fetchFullText(art['url']);
+      }
+
+      // إذا النص اللي رجع ناقص، نستخدم النص المدمج
+      if (fullText.isEmpty || fullText.length < 400) {
+        fullText = art['content'] ?? art['description'] ?? '';
+      }
+
+      // أضيفي هنا userId من FirebaseAuth لو متاح عندك
+      final auth = FirebaseAuth.instance;
+      User? user = auth.currentUser;
+      if (user == null) {
+        final cred = await auth.signInAnonymously();
+        user = cred.user;
+        debugPrint('👤 Signed in anonymously: ${user?.uid}');
+      }
+      final articleDoc = await FirebaseFirestore.instance
+          .collection('articles')
+          .add({
+            'taskId': widget.taskId,
+            'userId': user!.uid, // ✅ ضروري
+            'userTaskDocId': widget.userTaskDocId,
+            'title': art['title'],
+            'description': art['description'],
+            // 'content': art['content'],
+            'content': fullText,
+            'url': art['url'],
+            'urlToImage': art['urlToImage'],
+            'sourceName': art['sourceName'],
+            'publishedAt': art['publishedAt'],
+            'language': 'ar',
+            'category': 'environment',
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+
+      // 🔗 نحفظ فقط الـ articleId في userTasks
+      await userTaskRef.update({'articleId': articleDoc.id});
+
+      setState(() {
+        _article = art;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint("❌ Article fetch/save error: $e");
+      setState(() {
+        _error = true;
+        _loading = false;
+      });
     }
-
-    // 🆕 أول مرة: نجلب مقال جديد ونخزّنه في Collection articles
-    final art = await _fetchRandomArticle();
-
-    // أضيفي هنا userId من FirebaseAuth لو متاح عندك
-    final userId = data['userId'] ?? 'unknown_user';
-
-    final articleDoc = await FirebaseFirestore.instance
-        .collection('articles')
-        .add({
-      'taskId': widget.taskId,
-      'userId': userId,
-      'userTaskDocId': widget.userTaskDocId,
-      'title': art['title'],
-      'description': art['description'],
-      'content': art['content'],
-      'url': art['url'],
-      'urlToImage': art['urlToImage'],
-      'sourceName': art['sourceName'],
-      'publishedAt': art['publishedAt'],
-      'language': 'ar',
-      'category': 'environment',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    // 🔗 نحفظ فقط الـ articleId في userTasks
-    await userTaskRef.update({'articleId': articleDoc.id});
-
-    setState(() {
-      _article = art;
-      _loading = false;
-    });
-  } catch (e) {
-    debugPrint("❌ Article fetch/save error: $e");
-    setState(() {
-      _error = true;
-      _loading = false;
-    });
   }
-}
-
 
   // ========== الخطوة 2: NewsAPI -> مقال عشوائي عربي ==========
-  Future<Map<String, dynamic>> _fetchRandomArticle() async {
-    const apiKey = "2a2d935013454a568f3c8301982a275c";
-    const query = "البيئة OR الاستدامة OR إعادة التدوير OR الطاقة OR السعودية";
+  // Future<Map<String, dynamic>> _fetchRandomArticle() async {
+  //   const apiKey = '2a2d935013454a568f3c8301982a275c';
+  //   // ✅ استخدم كلمات مفتاحية أوسع + ترميز صحيح
+  //   const query =
+  //       'البيئة OR الطبيعة OR إعادة التدوير OR الطاقة المتجددةOR الاستدامة';
+  //   final url = Uri.parse(
+  //     'https://newsapi.org/v2/everything?q=${Uri.encodeComponent(query)}&language=ar&pageSize=20&sortBy=publishedAt&apiKey=$apiKey',
+  //   );
 
+  //   debugPrint('🔍 Fetching from: $url');
+
+  //   final res = await http.get(url, headers: {'User-Agent': 'NameerApp/1.0'});
+  //   if (res.statusCode != 200) {
+  //     throw Exception('❌ NewsAPI returned ${res.statusCode}');
+  //   }
+
+  //   final jsonBody = json.decode(res.body);
+  //   final List arts = jsonBody['articles'] ?? [];
+
+  //   if (arts.isEmpty) {
+  //     debugPrint(
+  //       '⚠️ No Arabic articles returned. totalResults=${jsonBody['totalResults']}',
+  //     );
+  //     throw Exception('No articles');
+  //   }
+
+  //   final rnd = Random();
+  //   final art = arts[rnd.nextInt(arts.length)] as Map<String, dynamic>;
+
+  //   // ✅ تنظيف المحتوى
+  //   String content = (art['content'] ?? '').toString();
+  //   content = content
+  //       .replaceAll(RegExp(r'\[.*?\]'), '')
+  //       .replaceAll(RegExp(r'http\S+'), '')
+  //       .replaceAll(RegExp(r'pic\.twitter\.com/\S+'), '')
+  //       .replaceAll(RegExp(r'[@#]'), '')
+  //       .replaceAll(RegExp(r'[^\u0600-\u06FFa-zA-Z0-9\s،.!؟:؛-]'), ' ')
+  //       .replaceAll(RegExp(r'\s+'), ' ')
+  //       .trim();
+
+  //   if (content.isEmpty || content.length < 100) {
+  //     content = (art['description'] ?? '').toString();
+  //   }
+
+  //   return {
+  //     'title': art['title'] ?? '',
+  //     'description': art['description'] ?? '',
+  //     'content': content,
+  //     'url': art['url'] ?? '',
+  //     'urlToImage': art['urlToImage'] ?? '',
+  //     'sourceName': art['source']?['name'] ?? '',
+  //     'publishedAt': art['publishedAt'] ?? '',
+  //   };
+  // }
+
+  Future<Map<String, dynamic>> _fetchRandomArticle() async {
+    const apiKey = '2a2d935013454a568f3c8301982a275c';
+    // 🔓 مؤقتًا نفتح الشروط عشان نتاكد من الاتصال
+    const query = 'Saudi OR السعودية OR بيئة OR environment OR world';
     final url = Uri.parse(
-      "https://newsapi.org/v2/everything"
-      "?q=$query&language=ar&pageSize=12&sortBy=publishedAt&apiKey=$apiKey",
+      'https://newsapi.org/v2/everything?q=${Uri.encodeComponent(query)}&pageSize=20&sortBy=publishedAt&apiKey=$apiKey',
     );
 
-    final res = await http.get(url, headers: {"User-Agent": "NameerApp/1.0"});
+    debugPrint('🌍 Fetching from: $url');
+
+    final res = await http.get(url, headers: {'User-Agent': 'NameerApp/1.0'});
     if (res.statusCode != 200) {
-      throw Exception("NewsAPI status: ${res.statusCode}");
+      throw Exception('❌ NewsAPI returned ${res.statusCode}');
     }
 
-    final body = json.decode(res.body);
-    final List arts = body['articles'] ?? [];
-    if (arts.isEmpty) throw Exception("No Arabic articles");
+    final jsonBody = json.decode(res.body);
+    final List arts = jsonBody['articles'] ?? [];
 
-    arts.shuffle(Random());
-    final art = Map<String, dynamic>.from(arts.first);
+    if (arts.isEmpty) {
+      debugPrint(
+        '⚠️ No articles found at all (totalResults=${jsonBody['totalResults']})',
+      );
+      throw Exception('No articles');
+    }
+
+    final rnd = Random();
+    final art = arts[rnd.nextInt(arts.length)] as Map<String, dynamic>;
+
+    String content = (art['content'] ?? '').toString();
+    content = content
+        .replaceAll(RegExp(r'\[.*?\]'), '')
+        .replaceAll(RegExp(r'http\S+'), '')
+        .replaceAll(RegExp(r'pic\.twitter\.com/\S+'), '')
+        .replaceAll(RegExp(r'[@#]'), '')
+        .replaceAll(RegExp(r'[^\u0600-\u06FFa-zA-Z0-9\s،.!؟:؛-]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (content.isEmpty || content.length < 100) {
+      content = (art['description'] ?? '').toString();
+    }
 
     return {
       'title': art['title'] ?? '',
       'description': art['description'] ?? '',
-      'content': (art['content'] ?? '').toString(),
+      'content': content,
       'url': art['url'] ?? '',
       'urlToImage': art['urlToImage'] ?? '',
       'sourceName': art['source']?['name'] ?? '',
       'publishedAt': art['publishedAt'] ?? '',
-      'taskId': widget.taskId,
     };
   }
 
   // ========== الخطوة 3: جلب النص الكامل من المصدر ==========
   Future<String> _fetchFullText(String url) async {
     try {
-      final resp = await http.get(Uri.parse(url), headers: {
-        "User-Agent": "NameerBot/1.0 (+app)",
-        "Accept-Language": "ar,en;q=0.7",
-      });
+      final resp = await http.get(
+        Uri.parse(url),
+        headers: {
+          "User-Agent": "NameerBot/1.0 (+app)",
+          "Accept-Language": "ar,en;q=0.7",
+        },
+      );
       if (resp.statusCode != 200) return '';
 
       final doc = html_parser.parse(resp.body);
 
       // حذف العناصر غير المفيدة
-      for (final sel in ['script','style','noscript','header','footer','nav','form','iframe','svg']) {
+      for (final sel in [
+        'script',
+        'style',
+        'noscript',
+        'header',
+        'footer',
+        'nav',
+        'form',
+        'iframe',
+        'svg',
+      ]) {
         doc.querySelectorAll(sel).forEach((e) => e.remove());
       }
 
@@ -174,8 +273,13 @@ Future<void> _loadOrFetchArticle() async {
       final candidates = [
         'article',
         "[itemprop='articleBody']",
-        '.article-body', '.post-content', '.entry-content',
-        '.content__article-body', '.story-body', '.content', 'main'
+        '.article-body',
+        '.post-content',
+        '.entry-content',
+        '.content__article-body',
+        '.story-body',
+        '.content',
+        'main',
       ];
       for (final sel in candidates) {
         final el = doc.querySelector(sel);
@@ -187,7 +291,10 @@ Future<void> _loadOrFetchArticle() async {
 
       // Fallback: دمج كل الفقرات
       final ps = doc.getElementsByTagName('p');
-      final merged = ps.map((e) => e.text.trim()).where((t) => t.isNotEmpty).join('\n\n');
+      final merged = ps
+          .map((e) => e.text.trim())
+          .where((t) => t.isNotEmpty)
+          .join('\n\n');
       return _clean(merged);
     } catch (e) {
       debugPrint('⚠️ _fetchFullText error: $e');
@@ -198,8 +305,8 @@ Future<void> _loadOrFetchArticle() async {
   // ========== الخطوة 4: تنظيف نص ==========
   String _clean(String? t) {
     final s = (t ?? '')
-        .replaceAll(RegExp(r'\[.*?\]'), '')                 // [+123 chars]
-        .replaceAll(RegExp(r'http\S+'), '')                 // روابط
+        .replaceAll(RegExp(r'\[.*?\]'), '') // [+123 chars]
+        .replaceAll(RegExp(r'http\S+'), '') // روابط
         .replaceAll(RegExp(r'pic\.twitter\.com/\S+'), '')
         .replaceAll(RegExp(r'[@#]'), '')
         .replaceAll(RegExp(r'[^\u0600-\u06FFa-zA-Z0-9\s،.!؟:؛-]'), ' ')
@@ -215,7 +322,7 @@ Future<void> _loadOrFetchArticle() async {
     if (c.contains(RegExp(r'\[\+\d+\s*chars\]'))) return true; // نمط NewsAPI
     if (c.length < 400) return true; // قصير على مقال كامل
     return false;
-    }
+  }
 
   String _mergePreview(dynamic content, dynamic description) {
     final c = (content ?? '').toString();
@@ -237,13 +344,13 @@ Future<void> _loadOrFetchArticle() async {
         'taskId': taskId ?? '',
         'title': art['title'] ?? '',
         'description': art['description'] ?? '',
-        'content': fullContent,                        // النص الكامل
+        'content': fullContent, // النص الكامل
         'url': art['url'] ?? '',
         'urlToImage': art['urlToImage'] ?? '',
         'sourceName': art['sourceName'] ?? '',
         'language': 'ar',
-        'category': 'environment',                    // مطابقة لقواعدك
-        'createdAt': FieldValue.serverTimestamp(),    // مطابقة لقواعدك
+        'category': 'environment', // مطابقة لقواعدك
+        'createdAt': FieldValue.serverTimestamp(), // مطابقة لقواعدك
         // ملاحظـة: قواعدك لا تشترط publishedAt، لذا تركناه.
       });
     } catch (e) {
@@ -270,16 +377,16 @@ Future<void> _loadOrFetchArticle() async {
                   child: CircularProgressIndicator(color: AppColors.primary),
                 )
               : _error
-                  ? Center(
-                      child: Text(
-                        "حدث خطأ أثناء جلب المقال. حاول لاحقًا.",
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          color: AppColors.dark,
-                          fontSize: 16,
-                        ),
-                      ),
-                    )
-                  : _buildBodyWithRevealButton(),
+              ? Center(
+                  child: Text(
+                    "حدث خطأ أثناء جلب المقال. حاول لاحقًا.",
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      color: AppColors.dark,
+                      fontSize: 16,
+                    ),
+                  ),
+                )
+              : _buildBodyWithRevealButton(),
         ),
       ),
     );
@@ -290,7 +397,8 @@ Future<void> _loadOrFetchArticle() async {
     final a = _article!;
     return NotificationListener<ScrollNotification>(
       onNotification: (scroll) {
-        final atEnd = scroll.metrics.pixels >= scroll.metrics.maxScrollExtent - 60;
+        final atEnd =
+            scroll.metrics.pixels >= scroll.metrics.maxScrollExtent - 60;
         if (atEnd && !_showReadButton) {
           setState(() => _showReadButton = true);
         }
@@ -362,7 +470,9 @@ Future<void> _loadOrFetchArticle() async {
                     SnackBar(
                       content: Text(
                         "تمت القراءة — قريبًا بنفتح صفحة الكويز 🎯",
-                        style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: Colors.white,
+                        ),
                       ),
                       backgroundColor: AppColors.primary,
                     ),
