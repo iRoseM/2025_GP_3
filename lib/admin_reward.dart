@@ -184,32 +184,54 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
         ),
       );
 
+      if (choice == null) {
+        debugPrint('❌ المستخدم أغلق النافذة بدون اختيار');
+        return null;
+      }
+
       // ✅ نفتح حسب الاختيار
       if (choice == 'gallery') {
         final picker = ImagePicker();
         final picked = await picker.pickImage(source: ImageSource.gallery);
-        if (picked == null) return null;
+        if (picked == null) {
+          debugPrint('❌ لم يتم اختيار صورة من المعرض');
+          return null;
+        }
         filePath = picked.path;
       } else if (choice == 'files') {
         final result = await FilePicker.platform.pickFiles(
           type: FileType.image,
         );
-        if (result == null || result.files.isEmpty) return null;
+        if (result == null || result.files.isEmpty) {
+          debugPrint('❌ لم يتم اختيار ملف');
+          return null;
+        }
         filePath = result.files.single.path;
-      } else {
-        return null; // المستخدم لغى
       }
 
-      // نرفع الصورة إلى Firebase Storage
-      final file = File(filePath!);
-      final fileName = 'reward_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final ref = FirebaseStorage.instance.ref().child('rewards/$fileName');
-      await ref.putFile(file);
+      if (filePath == null || !File(filePath).existsSync()) {
+        debugPrint('⚠️ المسار غير صالح أو الملف غير موجود');
+        return null;
+      }
+
+      debugPrint('📸 رفع الصورة من: $filePath');
+
+      // 🟢 نرفع الصورة إلى Firebase Storage (المسار مطابق للرولز)
+      final file = File(filePath);
+      final ref = FirebaseStorage.instance.ref().child(
+        'rewardImages/${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+
+      final uploadTask = await ref.putFile(file);
       final url = await ref.getDownloadURL();
 
+      debugPrint('✅ تم الرفع بنجاح: $url');
       return url;
+    } on FirebaseException catch (e) {
+      debugPrint('❌ Firebase Storage error: ${e.code} - ${e.message}');
+      return null;
     } catch (e) {
-      print('⚠️ خطأ أثناء رفع الصورة: $e');
+      debugPrint('⚠️ خطأ أثناء رفع الصورة: $e');
       return null;
     }
   }
