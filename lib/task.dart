@@ -10,7 +10,7 @@ import 'home.dart';
 import 'map.dart';
 import 'levels.dart';
 import 'community.dart';
-import 'article_page.dart'; 
+import 'article_page.dart';
 import 'services/bottom_nav.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
@@ -134,6 +134,8 @@ class _taskPageState extends State<taskPage> {
     }
 
     await _bootstrapTodayOnly();
+    // ✅ backfill للشهر الحالي + السابق لتظهر كل الأيام
+    await _ensureMonthBackfill(DateTime.now());
     await _precheckTodayDoc();
 
     if (mounted) {
@@ -701,6 +703,11 @@ class _taskPageState extends State<taskPage> {
                                 'status': ut['status'] ?? 'pending',
                               };
 
+                              // ✅ السماح بالإكمال لليوم والماضي فقط
+                              final canPerformDay = !sel.isAfter(
+                                today,
+                              ); // <= اليوم
+
                               if ((ut['taskTitle'] == null ||
                                       ut['taskDescription'] == null) &&
                                   ut['taskId'] != null) {
@@ -744,7 +751,7 @@ class _taskPageState extends State<taskPage> {
                                     };
                                     return _buildUserTaskCard(
                                       taskData: fData,
-                                      canPerform: isSameDay(sel, today),
+                                      canPerform: canPerformDay,
                                     );
                                   },
                                 );
@@ -752,7 +759,7 @@ class _taskPageState extends State<taskPage> {
 
                               return _buildUserTaskCard(
                                 taskData: data,
-                                canPerform: isSameDay(sel, today),
+                                canPerform: canPerformDay,
                               );
                             },
                           ),
@@ -881,6 +888,8 @@ class _taskPageState extends State<taskPage> {
       child: TableCalendar(
         onPageChanged: (focused) async {
           _focusedDay = focused;
+          // ✅ backfill للشهر المعروض
+          await _ensureMonthBackfill(focused);
           _monthStatuses = await _getTaskStatusesForMonth(focused);
           if (mounted) setState(() {});
         },
@@ -1103,37 +1112,36 @@ class _taskPageState extends State<taskPage> {
           ),
           const SizedBox(height: 20),
 
-          // زر الإكمال
+          // زر الإكمال — مفعّل لليوم والماضي فقط
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-            onPressed: (isCompleted || isSubmitted)
-                ? null
-                : () async {
-                    if (validation == "quiz") {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ArticlePage(
-                            userTaskDocId: userTaskDocId,      // << مهم عشان نثبت المقال
-                            taskId: taskData['id'],            // ربط اختياري
+              onPressed: (isCompleted || isSubmitted || !canPerform)
+                  ? null
+                  : () async {
+                      if (validation == "quiz") {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ArticlePage(
+                              userTaskDocId: userTaskDocId,
+                              taskId: taskData['id'],
+                            ),
                           ),
-                        ),
-                      );
-                    } else {
-                      // ✅ السلوك العادي لبقية أنواع المهام
-                      final result = await showCompleteTaskSheet(
-                        context,
-                        taskData,
-                        selectedDay: sel,
-                        userTaskDocId: userTaskDocId,
-                      );
-                      if (result == true && mounted) {
-                        _attachUserTaskStreamFor(sel);
-                        setState(() {});
+                        );
+                      } else {
+                        final result = await showCompleteTaskSheet(
+                          context,
+                          taskData,
+                          selectedDay: sel,
+                          userTaskDocId: userTaskDocId,
+                        );
+                        if (result == true && mounted) {
+                          _attachUserTaskStreamFor(sel);
+                          setState(() {});
+                        }
                       }
-                    }
-                  },
+                    },
               style: ButtonStyle(
                 elevation: MaterialStateProperty.all(0),
                 shadowColor: MaterialStateProperty.all(Colors.transparent),
@@ -1151,24 +1159,22 @@ class _taskPageState extends State<taskPage> {
               ),
               child: Ink(
                 decoration: BoxDecoration(
-                  color: isCompleted ? AppColors.primary33 : null,
-                  gradient: (!isCompleted)
-                      ? (isSubmitted
-                            ? LinearGradient(
-                                colors: [
-                                  Colors.grey.shade400,
-                                  Colors.grey.shade300,
-                                ],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              )
-                            : const LinearGradient(
-                                colors: [AppColors.primary, AppColors.mint],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              ))
-                      : null,
                   borderRadius: BorderRadius.circular(14),
+                  color: (isSubmitted || !canPerform)
+                      ? Colors
+                            .grey
+                            .shade300 // ✅ رمادي في انتظار المراجعة أو لم يحن الوقت
+                      : (isCompleted
+                            ? AppColors
+                                  .primary33 // خفيف بعد الإنجاز
+                            : null),
+                  gradient: (!isCompleted && !isSubmitted && canPerform)
+                      ? const LinearGradient(
+                          colors: [AppColors.primary, AppColors.mint],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        )
+                      : null,
                 ),
                 child: Container(
                   alignment: Alignment.center,
@@ -1176,11 +1182,17 @@ class _taskPageState extends State<taskPage> {
                   child: Text(
                     isCompleted
                         ? 'تم الإنجاز ✅'
-                        : (isSubmitted ? 'بانتظار المراجعة ⏳' : 'تمم المهمة'),
+                        : (isSubmitted
+                              ? 'بانتظار المراجعة ⏳'
+                              : (canPerform
+                                    ? 'تمم المهمة'
+                                    : 'يومها لم يحن بعد 🌞')),
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
-                      color: isCompleted ? AppColors.dark : Colors.white,
+                      color: (isCompleted || isSubmitted || !canPerform)
+                          ? AppColors.dark
+                          : Colors.white,
                     ),
                   ),
                 ),

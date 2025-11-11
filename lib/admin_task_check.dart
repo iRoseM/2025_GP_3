@@ -298,7 +298,6 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
   Stream<QuerySnapshot> _pendingSubs() {
     final col = FirebaseFirestore.instance.collection('submissions');
     if (_isAdmin) {
-      // نأخذ metadata changes عشان نشوف كتابة محلية/فشل مزامنة
       return col
           .where('status', isEqualTo: 'pending')
           .snapshots(includeMetadataChanges: true);
@@ -380,6 +379,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       return _round2(delta * distanceKm);
     }
 
+    // fallback perItem
     if ((efRef ?? '').isEmpty || count <= 0) return 0.0;
     final f = await _getFactorByRef(efRef!);
     if (f == null) return 0.0;
@@ -388,7 +388,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
   }
 
   // =====================================================
-  // 🧮 دالة خاصة لمهام deltaPerKm: تحسب + تحدث userTasks و users
+  // 🧮 deltaPerKm: تحسب + تحدث userTasks و users
   // =====================================================
   Future<double> _computeAndPersistDeltaPerKm({
     required Map<String, dynamic> task, // ممكن ما يحتوي baseline/actual
@@ -413,14 +413,12 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
 
       // 2) إن ما وُجدت بالمهمة، حاول تجيب وثيقة EF ثم استخرج منها
       Future<Map<String, dynamic>?> _loadEfFromTaskOrResolve() async {
-        // أولوية: إن كان بالمهمة emissionFactorRef مباشر
         final taskEfId =
             (task['emissionFactorRef'] ?? task['emission_factor_ref'])
                 ?.toString();
         if (taskEfId != null && taskEfId.isNotEmpty) {
           return await _getEfDoc(taskEfId);
         }
-        // وإلا حاوِل نعمل resolve ذكي بالكلمات/التصنيف
         return await resolveEmissionFactorForTask(task);
       }
 
@@ -431,7 +429,6 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
           baselineRef ??=
               (efDoc['baselineFactorRef'] ?? efDoc['baseline_factor_ref'])
                   ?.toString();
-          // ملاحظة: في EF اسم الحقل عندك actualFactorRef
           actualRef ??=
               (efDoc['actualFactorRef'] ??
                       efDoc['emissionFactorRef'] ??
@@ -496,349 +493,6 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
   }
 
   // =================== الدالة الرئيسية (اعتماد) ===================
-
-  Future<void> _approve(BuildContext context, DocumentSnapshot subDoc) async {
-    await _ensureAdminClaims();
-    debugPrint('[approve] start • isAdmin=$_isAdmin, subId=${subDoc.id}');
-    if (!_isAdmin) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يحتاج صلاحية أدمن لاعتماد الطلب')),
-      );
-      return;
-    }
-
-    final data = subDoc.data() as Map<String, dynamic>;
-    final userTaskDocId = (data['userTaskDocId'] ?? '').toString();
-    final userId = (data['userId'] ?? '').toString();
-    if (userTaskDocId.isEmpty || userId.isEmpty) {
-      debugPrint('[approve] ❌ userTaskDocId/userId empty. data=$data');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('الطلب ناقص userId/userTaskDocId')),
-        );
-      }
-      return;
-    }
-
-    final taskPoints = (data['taskPoints'] ?? 0) as int;
-    final taskId = (data['taskId'] ?? '').toString();
-    final taskTitle =
-        (data['taskTitle'] ?? data['task_title'] ?? '(بدون عنوان)').toString();
-
-    final count = (data['count'] is int)
-        ? (data['count'] as int)
-        : int.tryParse('${data['count'] ?? ''}') ?? 1;
-
-    final submittedDistanceKm = (data['distanceKm'] is num)
-        ? (data['distanceKm'] as num).toDouble()
-        : double.tryParse('${data['distanceKm'] ?? ''}') ?? 0.0;
-
-    String? calcMode = (data['calcMode'] as String?);
-    String? efRef = (data['emissionFactorRef'] as String?);
-    String? baselineRef = (data['baselineFactorRef'] as String?);
-    String direction = (data['direction'] as String?) ?? 'save';
-
-    final usersRef = FirebaseFirestore.instance.collection('users').doc(userId);
-    final utRef = FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(userTaskDocId);
-    final subRef = subDoc.reference;
-    final admin = FirebaseAuth.instance.currentUser;
-
-    // جلب نسخة المهمة (للربط الذكي + قراءات fallback للمسافة)
-    Map<String, dynamic> taskMapForCarbon = {};
-    if (taskId.isNotEmpty) {
-      final t = await FirebaseFirestore.instance
-          .collection('tasks')
-          .doc(taskId)
-          .get();
-      if (t.exists && t.data() != null) {
-        taskMapForCarbon = {'id': t.id, ...t.data()!};
-      }
-    }
-    if (taskMapForCarbon.isEmpty) {
-      taskMapForCarbon = {
-        'id': taskId,
-        'title': taskTitle,
-        'title_normalized': taskTitle
-            .toLowerCase()
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim(),
-        'description': (data['taskDescription'] ?? data['task_desc'] ?? ''),
-        'category': (data['taskCategory'] ?? data['category'] ?? ''),
-        if (data['emissionFactorRef'] != null)
-          'emissionFactorRef': data['emissionFactorRef'],
-        if (data['baselineFactorRef'] != null)
-          'baselineFactorRef': data['baselineFactorRef'],
-        if (data['calcMode'] != null) 'calcMode': data['calcMode'],
-        if (data['direction'] != null) 'direction': data['direction'],
-      };
-    }
-
-    // ✅ Fallback للمسافة إذا ما وصلت من المستخدم
-    double effectiveDistanceKm = submittedDistanceKm;
-    double _n(dynamic v) =>
-        (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
-
-    if (effectiveDistanceKm <= 0) {
-      final defKm = _n(taskMapForCarbon['defaultKmOnSubmit']); // مثال: 6.0
-      final minKm = _n(taskMapForCarbon['minKm']); // مثال: 1.0
-      effectiveDistanceKm = defKm > 0 ? defKm : 0.0;
-      if (effectiveDistanceKm < minKm) effectiveDistanceKm = minKm;
-    }
-
-    // 👇 نحدد المود النهائي بعد جلب المهمة
-    final effectiveCalcMode =
-        (calcMode ?? taskMapForCarbon['calcMode'] ?? 'perItem')
-            .toString()
-            .toLowerCase();
-
-    // 🔢 حساب/تحديث savedKgCO2
-    double savedKgCO2 = 0.0;
-
-    if (effectiveCalcMode == 'deltaperkm') {
-      // ✅ مسار deltaPerKm: نحسب ونحدّث userTasks + users فوراً
-      savedKgCO2 = await _computeAndPersistDeltaPerKm(
-        task: {
-          ...taskMapForCarbon,
-          if (baselineRef != null) 'baselineFactorRef': baselineRef,
-          if (efRef != null) 'emissionFactorRef': efRef,
-        },
-        userTaskDocId: userTaskDocId,
-        uid: userId,
-        distanceKm: effectiveDistanceKm,
-      );
-    } else {
-      // 🔁 باقي الأنماط (perItem وغيرها)
-      savedKgCO2 = await _computeSavedKgCO2(
-        calcMode: calcMode,
-        efRef: efRef,
-        baselineRef: baselineRef,
-        direction: direction,
-        count: count,
-        distanceKm: effectiveDistanceKm,
-        taskSnapshotOrMinimal: taskMapForCarbon,
-      );
-    }
-
-    final todayId = _dayId(DateTime.now());
-    final dayMarkRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('dayMarks')
-        .doc(todayId);
-
-    try {
-      await FirebaseFirestore.instance.runTransaction((trx) async {
-        // —— read & guard —— //
-        final subSnap = await trx.get(subRef);
-        if (!subSnap.exists) throw 'الطلب غير موجود.';
-        final sub = subSnap.data() as Map<String, dynamic>;
-        if (sub['status'] != 'pending') throw 'تمت معالجة هذا الطلب مسبقاً.';
-
-        final utSnap = await trx.get(utRef);
-        if (!utSnap.exists) throw 'userTask غير موجود.';
-        final ut = utSnap.data() as Map<String, dynamic>;
-        final currentStatus = (ut['status'] as String?) ?? 'pending';
-        final canComplete = currentStatus != 'completed';
-
-        // —— submissions → approved —— //
-        final subUpdate = <String, dynamic>{
-          'status': 'approved',
-          'processedAt': FieldValue.serverTimestamp(),
-          'processedBy': admin?.uid,
-        };
-        if (savedKgCO2 > 0) subUpdate['savedKgCO2'] = savedKgCO2;
-        if (effectiveDistanceKm > 0 && (submittedDistanceKm <= 0)) {
-          subUpdate['distanceKm'] = effectiveDistanceKm;
-        }
-        trx.update(subRef, subUpdate);
-
-        // —— userTasks → completed + canRetry=false —— //
-        final utUpdate = <String, dynamic>{
-          'status': 'completed',
-          'completedAt': FieldValue.serverTimestamp(),
-          'canRetry': false,
-        };
-        // لمسار deltaPerKm كتبناه سابقاً
-        if (effectiveCalcMode != 'deltaperkm') {
-          if (savedKgCO2 > 0) utUpdate['savedKgCO2'] = savedKgCO2;
-          if (effectiveDistanceKm > 0 && (submittedDistanceKm <= 0)) {
-            utUpdate['distanceKm'] = effectiveDistanceKm;
-          }
-        }
-        trx.update(utRef, utUpdate);
-
-        // —— users.points —— //
-        if (canComplete && taskPoints > 0) {
-          trx.update(usersRef, {'points': FieldValue.increment(taskPoints)});
-        }
-
-        // —— history —— //
-        final historyRef = FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .collection('history')
-            .doc();
-        final histData = <String, dynamic>{
-          'type': 'task_approved',
-          'userTaskDocId': userTaskDocId,
-          'submissionId': subRef.id,
-          'points': taskPoints,
-          'at': FieldValue.serverTimestamp(),
-          'taskTitle': taskTitle,
-        };
-        if (savedKgCO2 > 0) histData['savedKgCO2'] = savedKgCO2;
-        trx.set(historyRef, histData);
-
-        // —— إجمالي الكربون المحفوظ + طابع الوقت —— //
-        if (effectiveCalcMode != 'deltaperkm') {
-          trx.set(usersRef, {
-            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-            if (savedKgCO2 > 0)
-              'totalCarbonSaved': FieldValue.increment(savedKgCO2),
-          }, SetOptions(merge: true));
-        } else {
-          trx.set(usersRef, {
-            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-        }
-
-        // —— dayMarks —— //
-        trx.set(dayMarkRef, {
-          'count': FieldValue.increment(1),
-          'lastAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-        // —— notifications —— //
-        final notifRef = FirebaseFirestore.instance
-            .collection('notifications')
-            .doc();
-
-        String _fmtKgLocal(double kg) {
-          final v = ((kg * 100).roundToDouble() / 100.0);
-          return v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 2);
-        }
-
-        final carbonMsg = (savedKgCO2 > 0)
-            ? ' — وفَّرت ${_fmtKgLocal(savedKgCO2)}'
-            : '';
-
-        trx.set(notifRef, {
-          'type': 'submission_approved',
-          'userId': userId,
-          'submissionId': subRef.id,
-          'taskTitle': taskTitle,
-          'points': taskPoints,
-          'createdAt': FieldValue.serverTimestamp(),
-          'seen': false,
-          'title': 'تم الاعتماد 🎉',
-          'body': (savedKgCO2 > 0)
-              ? 'أُضيفت $taskPoints نقطة. وفَّرت ${_fmtKgLocal(savedKgCO2)} 🌿'
-              : 'أُضيفت $taskPoints نقطة.',
-          'message': 'تم اعتماد طلبك لمهمة: $taskTitle$carbonMsg',
-          if (savedKgCO2 > 0) 'savedKgCO2': savedKgCO2,
-          if (effectiveDistanceKm > 0) 'distanceKm': effectiveDistanceKm,
-        });
-      });
-
-      debugPrint(
-        '[approve] ✅ transaction done. savedKg=$savedKgCO2 mode=$effectiveCalcMode',
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تم اعتماد الطلب وتحديث النقاط + الكربون ✅'),
-        ),
-      );
-    } catch (e) {
-      debugPrint('❌ خطأ في الاعتماد: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
-    }
-  }
-
-  Future<void> _reject(BuildContext context, DocumentSnapshot subDoc) async {
-    await _ensureAdminClaims();
-    if (!_isAdmin) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('يحتاج صلاحية أدمن لرفض الطلب')),
-      );
-      return;
-    }
-
-    final admin = FirebaseAuth.instance.currentUser;
-    final data = subDoc.data() as Map<String, dynamic>;
-    final userTaskDocId = (data['userTaskDocId'] ?? '').toString();
-    final userId = (data['userId'] ?? '').toString();
-
-    final subRef = subDoc.reference;
-    final utRef = FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(userTaskDocId);
-
-    try {
-      await FirebaseFirestore.instance.runTransaction((trx) async {
-        final subSnap = await trx.get(subRef);
-        if (!subSnap.exists) throw 'الطلب غير موجود.';
-        final sub = subSnap.data() as Map<String, dynamic>;
-        if (sub['status'] != 'pending') throw 'تمت معالجة هذا الطلب مسبقاً.';
-
-        trx.update(subRef, {
-          'status': 'rejected',
-          'processedAt': FieldValue.serverTimestamp(),
-          'processedBy': admin?.uid,
-        });
-
-        trx.update(utRef, {
-          'status': 'rejected',
-          'rejectedAt': FieldValue.serverTimestamp(),
-          'canRetry': true,
-        });
-
-        if (userId.isNotEmpty) {
-          final historyRef = FirebaseFirestore.instance
-              .collection('users')
-              .doc(userId)
-              .collection('history')
-              .doc();
-          trx.set(historyRef, {
-            'type': 'task_rejected',
-            'userTaskDocId': userTaskDocId,
-            'submissionId': subRef.id,
-            'points': 0,
-            'at': FieldValue.serverTimestamp(),
-          });
-
-          final notifRef = FirebaseFirestore.instance
-              .collection('notifications')
-              .doc();
-          trx.set(notifRef, {
-            'type': 'submission_rejected',
-            'userId': userId,
-            'submissionId': subRef.id,
-            'taskTitle': data['taskTitle'],
-            'createdAt': FieldValue.serverTimestamp(),
-            'seen': false,
-            'message': 'تم رفض طلبك لمهمة: ${data['taskTitle'] ?? ''}',
-          });
-        }
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('تم رفض الطلب ❌')));
-    } catch (e) {
-      debugPrint('❌ خطأ في الرفض: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1025,7 +679,11 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                     (m['imageUrls'] as List?)?.cast<String>() ??
                                     [];
 
-                                final count = (m['count']?.toString() ?? '');
+                                // ✅ نقرأ العدد من itemCount أولاً ثم count (للخلفية)
+                                final countStr =
+                                    (m['itemCount'] ?? m['count'])
+                                        ?.toString() ??
+                                    '';
                                 final km = (m['distanceKm']?.toString() ?? '');
 
                                 return Card(
@@ -1056,15 +714,16 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                             color: Colors.grey[700],
                                           ),
                                         ),
-                                        if (count.isNotEmpty || km.isNotEmpty)
+                                        if (countStr.isNotEmpty ||
+                                            km.isNotEmpty)
                                           Padding(
                                             padding: const EdgeInsets.only(
                                               top: 6,
                                             ),
                                             child: Text(
                                               [
-                                                if (count.isNotEmpty)
-                                                  'العدد: $count',
+                                                if (countStr.isNotEmpty)
+                                                  'العدد: $countStr',
                                                 if (km.isNotEmpty)
                                                   'المسافة: $km كم',
                                               ].join(' • '),
@@ -1265,5 +924,353 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         ),
       ),
     );
+  }
+
+  // ========= اعتماد/رفض (نقلتها تحت build لتكون أوضح) =========
+
+  Future<void> _approve(BuildContext context, DocumentSnapshot subDoc) async {
+    await _ensureAdminClaims();
+    if (!_isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يحتاج صلاحية أدمن لاعتماد الطلب')),
+      );
+      return;
+    }
+
+    final data = subDoc.data() as Map<String, dynamic>;
+    final userTaskDocId = (data['userTaskDocId'] ?? '').toString();
+    final userId = (data['userId'] ?? '').toString();
+    if (userTaskDocId.isEmpty || userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('الطلب ناقص userId/userTaskDocId')),
+      );
+      return;
+    }
+
+    final taskPoints = (data['taskPoints'] ?? 0) as int;
+    final taskId = (data['taskId'] ?? '').toString();
+    final taskTitle =
+        (data['taskTitle'] ?? data['task_title'] ?? '(بدون عنوان)').toString();
+
+    int _asInt(dynamic v) => (v is int) ? v : int.tryParse('${v ?? ''}') ?? 0;
+    int itemCount = _asInt(
+      data['itemCount'] ?? data['count'] ?? data['evidence']?['itemCount'],
+    );
+
+    final submittedDistanceKm = (data['distanceKm'] is num)
+        ? (data['distanceKm'] as num).toDouble()
+        : double.tryParse('${data['distanceKm'] ?? ''}') ?? 0.0;
+
+    String? calcMode = (data['calcMode'] as String?);
+    String? efRef = (data['emissionFactorRef'] as String?);
+    String? baselineRef = (data['baselineFactorRef'] as String?);
+    String direction = (data['direction'] as String?) ?? 'save';
+
+    final usersRef = FirebaseFirestore.instance.collection('users').doc(userId);
+    final utRef = FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(userTaskDocId);
+    final subRef = subDoc.reference;
+    final admin = FirebaseAuth.instance.currentUser;
+
+    Map<String, dynamic> taskMapForCarbon = {};
+    if (taskId.isNotEmpty) {
+      final t = await FirebaseFirestore.instance
+          .collection('tasks')
+          .doc(taskId)
+          .get();
+      if (t.exists && t.data() != null) {
+        taskMapForCarbon = {'id': t.id, ...t.data()!};
+      }
+    }
+    if (taskMapForCarbon.isEmpty) {
+      taskMapForCarbon = {
+        'id': taskId,
+        'title': taskTitle,
+        'title_normalized': taskTitle
+            .toLowerCase()
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim(),
+        'description': (data['taskDescription'] ?? data['task_desc'] ?? ''),
+        'category': (data['taskCategory'] ?? data['category'] ?? ''),
+        if (data['emissionFactorRef'] != null)
+          'emissionFactorRef': data['emissionFactorRef'],
+        if (data['baselineFactorRef'] != null)
+          'baselineFactorRef': data['baselineFactorRef'],
+        if (data['calcMode'] != null) 'calcMode': data['calcMode'],
+        if (data['direction'] != null) 'direction': data['direction'],
+        if (data['minItems'] != null) 'minItems': data['minItems'],
+        if (data['maxItems'] != null) 'maxItems': data['maxItems'],
+        if (data['defaultItemsOnSubmit'] != null)
+          'defaultItemsOnSubmit': data['defaultItemsOnSubmit'],
+        if (data['defaultItems'] != null) 'defaultItems': data['defaultItems'],
+      };
+    }
+
+    double _n(dynamic v) =>
+        (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
+    double effectiveDistanceKm = submittedDistanceKm;
+    if (effectiveDistanceKm <= 0) {
+      final defKm = _n(taskMapForCarbon['defaultKmOnSubmit']);
+      final minKm = _n(taskMapForCarbon['minKm']);
+      effectiveDistanceKm = defKm > 0 ? defKm : 0.0;
+      if (effectiveDistanceKm < minKm) effectiveDistanceKm = minKm;
+    }
+
+    final effectiveCalcMode =
+        (calcMode ?? taskMapForCarbon['calcMode'] ?? 'perItem')
+            .toString()
+            .toLowerCase();
+
+    if (effectiveCalcMode == 'peritem' && itemCount <= 0) {
+      try {
+        final utSnap = await utRef.get();
+        if (utSnap.exists) {
+          final ut = utSnap.data() as Map<String, dynamic>?;
+          final fromUt = ut?['itemCount'] ?? ut?['count'];
+          if (fromUt != null) itemCount = _asInt(fromUt);
+        }
+      } catch (_) {}
+      if (itemCount <= 0) {
+        final minItems = _asInt(taskMapForCarbon['minItems']);
+        final maxItems = _asInt(taskMapForCarbon['maxItems']);
+        final defItems = _asInt(taskMapForCarbon['defaultItemsOnSubmit']) > 0
+            ? _asInt(taskMapForCarbon['defaultItemsOnSubmit'])
+            : _asInt(taskMapForCarbon['defaultItems']);
+        int v = defItems > 0 ? defItems : 1;
+        if (minItems > 0 && v < minItems) v = minItems;
+        if (maxItems > 0 && v > maxItems) v = maxItems;
+        itemCount = v;
+      }
+    }
+
+    double savedKgCO2 = 0.0;
+    if (effectiveCalcMode == 'deltaperkm') {
+      savedKgCO2 = await _computeAndPersistDeltaPerKm(
+        task: {
+          ...taskMapForCarbon,
+          if (baselineRef != null) 'baselineFactorRef': baselineRef,
+          if (efRef != null) 'emissionFactorRef': efRef,
+        },
+        userTaskDocId: userTaskDocId,
+        uid: userId,
+        distanceKm: effectiveDistanceKm,
+      );
+    } else {
+      savedKgCO2 = await _computeSavedKgCO2(
+        calcMode: calcMode,
+        efRef: efRef,
+        baselineRef: baselineRef,
+        direction: direction,
+        count: itemCount,
+        distanceKm: effectiveDistanceKm,
+        taskSnapshotOrMinimal: taskMapForCarbon,
+      );
+    }
+
+    String _fmtKgLocal(double kg) {
+      final v = ((kg * 100).roundToDouble() / 100.0);
+      return v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 2);
+    }
+
+    final todayId = _dayId(DateTime.now());
+    final dayMarkRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('dayMarks')
+        .doc(todayId);
+
+    try {
+      await FirebaseFirestore.instance.runTransaction((trx) async {
+        final subSnap = await trx.get(subRef);
+        if (!subSnap.exists) throw 'الطلب غير موجود.';
+        final sub = subSnap.data() as Map<String, dynamic>;
+        if (sub['status'] != 'pending') throw 'تمت معالجة هذا الطلب مسبقاً.';
+
+        final utSnap = await trx.get(utRef);
+        if (!utSnap.exists) throw 'userTask غير موجود.';
+        final ut = utSnap.data() as Map<String, dynamic>;
+        final currentStatus = (ut['status'] as String?) ?? 'pending';
+        final canComplete = currentStatus != 'completed';
+
+        final subUpdate = <String, dynamic>{
+          'status': 'approved',
+          'processedAt': FieldValue.serverTimestamp(),
+          'processedBy': admin?.uid,
+        };
+        if (savedKgCO2 > 0) subUpdate['savedKgCO2'] = savedKgCO2;
+        if (effectiveDistanceKm > 0 && (submittedDistanceKm <= 0)) {
+          subUpdate['distanceKm'] = effectiveDistanceKm;
+        }
+        if ((sub['itemCount'] == null || (sub['itemCount'] == 0)) &&
+            itemCount > 0) {
+          subUpdate['itemCount'] = itemCount;
+        }
+        trx.update(subRef, subUpdate);
+
+        final utUpdate = <String, dynamic>{
+          'status': 'completed',
+          'completedAt': FieldValue.serverTimestamp(),
+          'canRetry': false,
+        };
+        if (effectiveCalcMode != 'deltaperkm') {
+          if (savedKgCO2 > 0) utUpdate['savedKgCO2'] = savedKgCO2;
+          if (effectiveDistanceKm > 0 && (submittedDistanceKm <= 0)) {
+            utUpdate['distanceKm'] = effectiveDistanceKm;
+          }
+          if (itemCount > 0) utUpdate['itemCount'] = itemCount;
+        }
+        trx.update(utRef, utUpdate);
+
+        if (canComplete && taskPoints > 0) {
+          trx.update(usersRef, {'points': FieldValue.increment(taskPoints)});
+        }
+
+        final historyRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('history')
+            .doc();
+        final histData = <String, dynamic>{
+          'type': 'task_approved',
+          'userTaskDocId': userTaskDocId,
+          'submissionId': subRef.id,
+          'points': taskPoints,
+          'at': FieldValue.serverTimestamp(),
+          'taskTitle': taskTitle,
+        };
+        if (savedKgCO2 > 0) histData['savedKgCO2'] = savedKgCO2;
+        if (itemCount > 0) histData['itemCount'] = itemCount;
+        trx.set(historyRef, histData);
+
+        if (effectiveCalcMode != 'deltaperkm') {
+          trx.set(usersRef, {
+            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+            if (savedKgCO2 > 0)
+              'totalCarbonSaved': FieldValue.increment(savedKgCO2),
+          }, SetOptions(merge: true));
+        } else {
+          trx.set(usersRef, {
+            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
+
+        trx.set(dayMarkRef, {
+          'count': FieldValue.increment(1),
+          'lastAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        final notifRef = FirebaseFirestore.instance
+            .collection('notifications')
+            .doc();
+        final carbonText = _fmtKgLocal(
+          savedKgCO2.isFinite && savedKgCO2 >= 0 ? savedKgCO2 : 0.0,
+        );
+        trx.set(notifRef, {
+          'type': 'submission_approved',
+          'userId': userId,
+          'submissionId': subRef.id,
+          'taskTitle': taskTitle,
+          'points': taskPoints,
+          'savedKgCO2': savedKgCO2.isFinite ? savedKgCO2 : 0.0,
+          if (effectiveDistanceKm > 0) 'distanceKm': effectiveDistanceKm,
+          if (itemCount > 0) 'itemCount': itemCount,
+          'createdAt': FieldValue.serverTimestamp(),
+          'seen': false,
+          'title': 'تم الاعتماد 🎉',
+          'body': 'أُضيفت $taskPoints نقطة • وفَّرت $carbonText كجم CO₂ 🌿',
+          'message':
+              'تم اعتماد طلبك لمهمة: $taskTitle — نقاط: $taskPoints • توفير: $carbonText كجم CO₂',
+          'icon': 'check_circle',
+          'iconColor': '#4CAF50',
+          'accentColor': '#4BAA98',
+        });
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+    }
+  }
+
+  Future<void> _reject(BuildContext context, DocumentSnapshot subDoc) async {
+    await _ensureAdminClaims();
+    if (!_isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('يحتاج صلاحية أدمن لرفض الطلب')),
+      );
+      return;
+    }
+
+    final admin = FirebaseAuth.instance.currentUser;
+    final data = subDoc.data() as Map<String, dynamic>;
+    final userTaskDocId = (data['userTaskDocId'] ?? '').toString();
+    final userId = (data['userId'] ?? '').toString();
+
+    final subRef = subDoc.reference;
+    final utRef = FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(userTaskDocId);
+
+    try {
+      await FirebaseFirestore.instance.runTransaction((trx) async {
+        final subSnap = await trx.get(subRef);
+        if (!subSnap.exists) throw 'الطلب غير موجود.';
+        final sub = subSnap.data() as Map<String, dynamic>;
+        if (sub['status'] != 'pending') throw 'تمت معالجة هذا الطلب مسبقاً.';
+
+        trx.update(subRef, {
+          'status': 'rejected',
+          'processedAt': FieldValue.serverTimestamp(),
+          'processedBy': admin?.uid,
+        });
+
+        trx.update(utRef, {
+          'status': 'rejected',
+          'rejectedAt': FieldValue.serverTimestamp(),
+          'canRetry': true,
+        });
+
+        if (userId.isNotEmpty) {
+          final historyRef = FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .collection('history')
+              .doc();
+          trx.set(historyRef, {
+            'type': 'task_rejected',
+            'userTaskDocId': userTaskDocId,
+            'submissionId': subRef.id,
+            'points': 0,
+            'at': FieldValue.serverTimestamp(),
+          });
+
+          final notifRef = FirebaseFirestore.instance
+              .collection('notifications')
+              .doc();
+          trx.set(notifRef, {
+            'type': 'submission_rejected',
+            'userId': userId,
+            'submissionId': subRef.id,
+            'taskTitle': data['taskTitle'],
+            'createdAt': FieldValue.serverTimestamp(),
+            'seen': false,
+            'message': 'تم رفض طلبك لمهمة: ${data['taskTitle'] ?? ''}',
+          });
+        }
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم رفض الطلب ❌')));
+    } catch (e) {
+      debugPrint('❌ خطأ في الرفض: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+    }
   }
 }

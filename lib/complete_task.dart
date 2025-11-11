@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:async'; // ⏱️ للـ timeout
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:camera/camera.dart';
@@ -12,7 +12,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'services/map_pick_route.dart';
 
-// 🔑 مفتاح Google Places/Maps للاقتراحات والمسارات داخل MapPickRoutePage
 const String kMapsApiKey = 'YOUR_GOOGLE_PLACES_API_KEY';
 
 class AppColors {
@@ -30,8 +29,8 @@ class AppColors {
 
 class CompleteTaskSheet extends StatefulWidget {
   final Map<String, dynamic> taskData;
-  final DateTime selectedDay; // اليوم من التقويم
-  final String userTaskDocId; // userId_yyyyMMdd
+  final DateTime selectedDay;
+  final String userTaskDocId;
 
   const CompleteTaskSheet({
     super.key,
@@ -63,17 +62,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   double _minZoom = 1.0, _maxZoom = 1.0, _zoom = 1.0;
   double _minExposure = 0.0, _maxExposure = 0.0, _exposure = 0.0;
 
-  // GPS & مسافة
   Position? _startPos;
   GeoPoint? _geoStart, _geoEnd;
   double? _autoDistanceKmComputed;
 
-  // ===== مسار يدوي عبر الخريطة =====
   LatLng? _manualStart;
   LatLng? _manualEnd;
   double? _manualDistanceKm;
 
-  // ----------------- Helpers -----------------
+  final TextEditingController _itemCountCtrl = TextEditingController();
+  int? _chosenItems;
+
   Map<String, dynamic> get _calcRequires {
     final v = widget.taskData['calc_requires'];
     return (v is Map)
@@ -104,6 +103,24 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return kws.any((k) => s.contains(k));
   }
 
+  // ==== المعدلة: قراءة calcMode من calc_requires أو الجذر ====
+  bool get _isPerItemMode {
+    final raw = (_calcRequires['calcMode'] ?? widget.taskData['calcMode'] ?? '')
+        .toString()
+        .toLowerCase()
+        .trim();
+    return raw == 'peritem' || raw == 'deltaperitem';
+  }
+
+  // ==== المعدلة: دعم حقول بديلة + calc_requires.askCount ====
+  bool get _askCountFlag =>
+      (_calcRequires['askCount'] == true) ||
+      (widget.taskData['askCount'] == true) ||
+      (widget.taskData['itemsEnabled'] == true) ||
+      (widget.taskData['perItem'] == true);
+
+  bool get _shouldAskCount => _isPerItemMode || _askCountFlag;
+
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
@@ -122,7 +139,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return R * c;
   }
 
-  // ===== Friendly error =====
   String _friendlyError(Object e) {
     if (e is CameraException) {
       switch (e.code) {
@@ -159,7 +175,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
   }
 
-  // ===== GPS (اختياري + fallback) =====
   Future<void> _ensureLocationPermission() async {
     try {
       var perm = await Geolocator.checkPermission();
@@ -202,12 +217,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     } catch (_) {}
   }
 
-  // ===== Emission factors (مرن) =====
   static const String _kEfCollection = 'emissionFactors';
 
   double? _asDouble(dynamic v) {
     if (v is num) return v.toDouble();
     if (v is String) return double.tryParse(v.trim());
+    return null;
+  }
+
+  int? _asInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v.trim());
     return null;
   }
 
@@ -220,7 +241,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return doc.data();
   }
 
-  /// يرجّع قيمة العامل (kgCO2e لكل وحدة) حتى لو اختلف اسم الحقل.
   Future<double?> _getEfPerUnit(String id, {String? valueFieldFromTask}) async {
     final d = await _getEfDoc(id);
     if (d == null) return null;
@@ -238,7 +258,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
     final candidates = [
       'ef_kgco2_per_unit',
+      'ef_kgco2_per_item',
       'value',
+      'kgPerItem',
+      'perItem',
       'kgPerKm',
       'perKm',
       'co2PerKm',
@@ -252,14 +275,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return null;
   }
 
-  /// حساب التوفير للكربون لوضعَي perKm / deltaPerKm
-  Future<double> _computeCarbonSaved({
+  Future<double> _computeCarbonSavedFlexible({
     required String efIdFromTask,
-    required double km,
+    double? km,
+    int? items,
     String? valueFieldFromTask,
   }) async {
-    if (km <= 0) return 0.0;
-
     final efDoc = await _getEfDoc(efIdFromTask) ?? {};
     final taskCalcMode = (widget.taskData['calcMode'] ?? '').toString().trim();
     final efCalcMode = (efDoc['calcMode'] ?? '').toString().trim();
@@ -273,21 +294,21 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         (widget.taskData['actualFactorRef'] ?? efDoc['actualFactorRef'])
             ?.toString();
 
-    if (calcMode == 'perkm') {
+    final dir = (widget.taskData['direction'] ?? efDoc['direction'] ?? '')
+        .toString()
+        .toLowerCase();
+    final isSave = (dir.isEmpty || dir == 'save');
+
+    if (calcMode == 'perkm' && km != null && km > 0) {
       final perKmVal = await _getEfPerUnit(
         efIdFromTask,
         valueFieldFromTask: valueFieldFromTask,
       );
       if (perKmVal == null) return 0.0;
-
-      final dir = (widget.taskData['direction'] ?? efDoc['direction'] ?? '')
-          .toString()
-          .toLowerCase();
-      final isSave = (dir.isEmpty || dir == 'save');
       return (isSave ? perKmVal : 0.0) * km;
     }
 
-    if (calcMode == 'deltaperkm') {
+    if (calcMode == 'deltaperkm' && km != null && km > 0) {
       final baseline = baseRef != null
           ? await _getEfPerUnit(baseRef, valueFieldFromTask: valueFieldFromTask)
           : null;
@@ -305,10 +326,39 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return (delta > 0 ? delta : 0.0) * km;
     }
 
+    if (calcMode == 'peritem' && items != null && items > 0) {
+      final perItemVal = await _getEfPerUnit(
+        efIdFromTask,
+        valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_item',
+      );
+      if (perItemVal == null) return 0.0;
+      return (isSave ? perItemVal : 0.0) * items;
+    }
+
+    if (calcMode == 'deltaperitem' && items != null && items > 0) {
+      final baseline = baseRef != null
+          ? await _getEfPerUnit(
+              baseRef,
+              valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_item',
+            )
+          : null;
+      double? actual = await _getEfPerUnit(
+        efIdFromTask,
+        valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_item',
+      );
+      if ((actual == null || actual == 0.0) && actRef != null) {
+        actual = await _getEfPerUnit(
+          actRef,
+          valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_item',
+        );
+      }
+      final delta = ((baseline ?? 0.0) - (actual ?? 0.0));
+      return (delta > 0 ? delta : 0.0) * items;
+    }
+
     return 0.0;
   }
 
-  // ===== التقاط الصورة بأمان =====
   Future<XFile?> _safeTakePicture() async {
     if (_controller == null || !_controller!.value.isInitialized) {
       _showInlineError('الكاميرا غير جاهزة.');
@@ -336,15 +386,14 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }
   }
 
-  // ===== رفع وإنشاء submission + تحديث userTasks =====
   Future<void> _createSubmissionAndMarkSubmitted({
     required String localPath,
     required int taskPoints,
     String? taskId,
     double? distanceKm,
     double? carbonSaved,
+    int? itemCount,
   }) async {
-    debugPrint('⏫ بدء رفع الصورة وإنشاء المستندات...');
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw Exception('يرجى تسجيل الدخول.');
@@ -364,34 +413,15 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final storageRef = storage.ref('$basePath/$name.jpg');
 
     Future<void> tryUpload() async {
-      try {
-        debugPrint('📤 putFile()...');
-        await storageRef
-            .putFile(
-              file,
-              SettableMetadata(
-                contentType: 'image/jpeg',
-                cacheControl: 'public,max-age=3600',
-              ),
-            )
-            .timeout(const Duration(seconds: 60));
-        debugPrint('✅ putFile() تم.');
-      } on TimeoutException {
-        _showInlineError('انتهى وقت رفع الصورة، جرّب لاحقًا.');
-        rethrow;
-      } on FirebaseException catch (e) {
-        _showInlineError(
-          e.code == 'permission-denied'
-              ? 'صلاحيات غير كافية'
-              : e.code == 'unauthorized'
-              ? 'غير مخوّل للرفع'
-              : 'فشل الرفع (${e.code})',
-        );
-        rethrow;
-      } catch (_) {
-        _showInlineError('تعذر رفع الصورة');
-        rethrow;
-      }
+      await storageRef
+          .putFile(
+            file,
+            SettableMetadata(
+              contentType: 'image/jpeg',
+              cacheControl: 'public,max-age=3600',
+            ),
+          )
+          .timeout(const Duration(seconds: 60));
     }
 
     try {
@@ -415,12 +445,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
     Future<String> getUrlWithRetry() async {
       try {
-        debugPrint('🔗 getDownloadURL()...');
-        final url = await storageRef.getDownloadURL().timeout(
+        return await storageRef.getDownloadURL().timeout(
           const Duration(seconds: 20),
         );
-        debugPrint('✅ getDownloadURL() تم.');
-        return url;
       } on TimeoutException {
         await Future.delayed(const Duration(milliseconds: 200));
         return await storageRef.getDownloadURL().timeout(
@@ -458,14 +485,13 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         .collection('userTasks')
         .doc(widget.userTaskDocId);
 
-    // اجمع إكستراز
     final extra = <String, dynamic>{};
     if (distanceKm != null) extra['distanceKm'] = distanceKm;
     if (carbonSaved != null) extra['carbonSaved'] = carbonSaved;
     if (_geoStart != null) extra['geoStart'] = _geoStart;
     if (_geoEnd != null) extra['geoEnd'] = _geoEnd;
+    if (itemCount != null) extra['itemCount'] = itemCount;
 
-    // مرجع عامل الانبعاث (اختياري)
     final efId =
         (widget.taskData['ef_ref'] ??
                 widget.taskData['efRef'] ??
@@ -473,7 +499,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                 widget.taskData['emission_factor_ref'])
             ?.toString();
     if (efId != null && efId.isNotEmpty) {
-      extra['emissionFactorRef'] = efId; // اسم موحّد
+      extra['emissionFactorRef'] = efId;
     }
 
     final calcMode = widget.taskData['calcMode']?.toString();
@@ -481,7 +507,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       extra['calcMode'] = calcMode;
     }
 
-    debugPrint('📝 كتابة submission...');
     await subRef.set({
       'userId': uid,
       'userTaskDocId': widget.userTaskDocId,
@@ -496,7 +521,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       ...extra,
     });
 
-    debugPrint('🛠️ تحديث userTasks (submitted)...');
     await utRef.set({
       'userId': uid,
       'status': 'submitted',
@@ -514,21 +538,31 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       if (carbonSaved != null) 'carbonSaved': carbonSaved,
       if (_geoStart != null) 'geoStart': _geoStart,
       if (_geoEnd != null) 'geoEnd': _geoEnd,
+      if (itemCount != null) 'itemCount': itemCount,
     }, SetOptions(merge: true));
-
-    debugPrint('✅ الإرسال اكتمل.');
   }
 
-  // ===== Camera controls =====
+  // ================= MOD: open camera safely after map =================
   Future<void> _openCamera({int? index}) async {
     if (_openingCamera) return;
-    if (mounted) {
-      setState(() {
-        _openingCamera = true;
-        _capturedPath = null;
-      });
-    }
+    if (!mounted) return;
+
+    setState(() {
+      _openingCamera = true;
+      _capturedPath = null;
+      _ready = false; // نبدأ من جديد
+    });
+
     try {
+      // تخلّص صريح من أي كنترولر سابق
+      try {
+        await _controller?.dispose();
+      } catch (_) {}
+      _controller = null;
+
+      // مهلة قصيرة قبل availableCameras (مهم بعد Google Map)
+      await Future.delayed(const Duration(milliseconds: 50));
+
       _cameras ??= await availableCameras();
       if (_cameras == null || _cameras!.isEmpty) {
         throw CameraException('NoCamera', 'لا توجد كاميرا متاحة.');
@@ -539,28 +573,40 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       }
 
       final description = _cameras![_currentCameraIndex];
-      await _controller?.dispose();
-      _controller = CameraController(
+      final controller = CameraController(
         description,
         ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
 
-      await _controller!.initialize();
+      await controller.initialize();
 
-      _minZoom = await _controller!.getMinZoomLevel();
-      _maxZoom = await _controller!.getMaxZoomLevel();
+      // جهزي القيم ثم عيّنيها
+      final minZoom = await controller.getMinZoomLevel();
+      final maxZoom = await controller.getMaxZoomLevel();
+      final minExposure = await controller.getMinExposureOffset();
+      final maxExposure = await controller.getMaxExposureOffset();
+
+      _minZoom = minZoom;
+      _maxZoom = maxZoom;
       _zoom = _zoom.clamp(_minZoom, _maxZoom);
-      _minExposure = await _controller!.getMinExposureOffset();
-      _maxExposure = await _controller!.getMaxExposureOffset();
+
+      _minExposure = minExposure;
+      _maxExposure = maxExposure;
       _exposure = _exposure.clamp(_minExposure, _maxExposure);
 
-      await _controller!.setFlashMode(_flashMode);
-      await _controller!.setZoomLevel(_zoom);
-      await _controller!.setExposureOffset(_exposure);
+      await controller.setFlashMode(_flashMode);
+      await controller.setZoomLevel(_zoom);
+      await controller.setExposureOffset(_exposure);
 
-      if (mounted) setState(() => _ready = true);
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+
+      _controller = controller;
+      setState(() => _ready = true);
     } catch (e) {
       _showInlineError(_friendlyError(e));
     } finally {
@@ -646,53 +692,267 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   @override
   void initState() {
     super.initState();
-    // لم نعد نستخدم تتبّع الخلفية. فقط نحفظ نقطة البداية كـ fallback للخط المستقيم.
     if (_autoDistance || _isTransportTask) {
       _captureStartIfNeeded();
     }
+
+    // ==== المعدلة: تهيئة عدد افتراضي مبكرًا عند الحاجة ====
+    Future.microtask(() {
+      if (!mounted) return;
+      if (_shouldAskCount && _itemCountCtrl.text.isEmpty) {
+        final def =
+            _asInt(
+              widget.taskData['defaultItemsOnSubmit'] ??
+                  widget.taskData['defaultItems'] ??
+                  _calcRequires['defaultItemsOnSubmit'] ??
+                  _calcRequires['defaultItems'],
+            ) ??
+            1;
+        _itemCountCtrl.text = def.toString();
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
     _controller?.dispose();
+    _itemCountCtrl.dispose();
     super.dispose();
   }
 
-  // ====== زر "ابدأ" لمهام النقل: يفتح الخريطة إجباري ثم الكاميرا ======
+  // ================= MOD: use rootNavigator + post-frame after map =================
   Future<void> _startFlowForTransportTask() async {
-    // 1) افتح صفحة الخريطة لاختيار البداية/النهاية
-    final MapRoutePickResult? res = await Navigator.push<MapRoutePickResult>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => MapPickRoutePage(
-          initialStart: _manualStart,
-          initialEnd: _manualEnd,
-          googleApiKey: kMapsApiKey, // ← مهم جدًا
-        ),
-      ),
-    );
+    final MapRoutePickResult? res =
+        await Navigator.of(
+          context,
+          rootNavigator: true,
+        ).push<MapRoutePickResult>(
+          MaterialPageRoute(
+            builder: (_) => MapPickRoutePage(
+              initialStart: _manualStart,
+              initialEnd: _manualEnd,
+              googleApiKey: kMapsApiKey,
+            ),
+            fullscreenDialog: true,
+          ),
+        );
 
     if (!mounted || res == null) return;
 
-    // 2) احفظ النقاط والمسافة
     setState(() {
       _manualStart = res.start;
       _manualEnd = res.end;
-
       _manualDistanceKm = _haversineKm(
         res.start.latitude,
         res.start.longitude,
         res.end.latitude,
         res.end.longitude,
       );
-
-      // جهّز geoStart/geoEnd من المسار اليدوي
       _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
       _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
     });
 
-    // 3) افتح الكاميرا مباشرة
-    await _openCamera();
+    // مهلة بسيطة ثم افتح الكاميرا في فريم لاحق — يحل تداخل سطح الخريطة مع Texture الكاميرا
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _openCamera();
+      }
+    });
+  }
+
+  // ====== Dialog that MUST appear above the camera (Root Navigator) ======
+  Future<void> _showPerItemPopup() async {
+    final minItems =
+        _asInt(widget.taskData['minItems'] ?? _calcRequires['minItems']) ?? 1;
+    final maxItems =
+        _asInt(widget.taskData['maxItems'] ?? _calcRequires['maxItems']) ??
+        1000;
+    final def =
+        _asInt(
+          widget.taskData['defaultItemsOnSubmit'] ??
+              widget.taskData['defaultItems'] ??
+              _calcRequires['defaultItemsOnSubmit'] ??
+              _calcRequires['defaultItems'],
+        ) ??
+        1;
+
+    if ((_itemCountCtrl.text).isEmpty) {
+      _itemCountCtrl.text = def.toString();
+    }
+
+    int clamp(int x) => x.clamp(minItems, maxItems);
+
+    await showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'items',
+      barrierColor: Colors.black54,
+      useRootNavigator: true,
+      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
+      transitionDuration: const Duration(milliseconds: 180),
+      transitionBuilder: (ctx, anim, _, __child) {
+        return Transform.scale(
+          scale: 0.95 + 0.05 * anim.value,
+          child: Opacity(
+            opacity: anim.value,
+            child: Center(
+              child: Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.format_list_numbered,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'عدد العناصر المنجزة',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            _counterButton(
+                              icon: Icons.remove_rounded,
+                              onTap: () {
+                                final cur = _asInt(_itemCountCtrl.text) ?? def;
+                                final next = clamp(cur - 1);
+                                _itemCountCtrl.text = next.toString();
+                                setState(() {});
+                              },
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: _itemCountCtrl,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(),
+                                textAlign: TextAlign.center,
+                                decoration: InputDecoration(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                    horizontal: 12,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  hintText: '$def',
+                                ),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            _counterButton(
+                              icon: Icons.add_rounded,
+                              onTap: () {
+                                final cur = _asInt(_itemCountCtrl.text) ?? def;
+                                final next = clamp(cur + 1);
+                                _itemCountCtrl.text = next.toString();
+                                setState(() {});
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'الحد الأدنى: $minItems  •  الأقصى: $maxItems',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 12.5,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.of(ctx).pop(),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                    color: AppColors.primary,
+                                    width: 2,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
+                                ),
+                                child: Text(
+                                  'إلغاء',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  final raw = _asInt(_itemCountCtrl.text);
+                                  if (raw == null || raw <= 0) {
+                                    _showInlineError('أدخل عددًا صحيحًا.');
+                                    return;
+                                  }
+                                  final safe = clamp(raw);
+                                  _itemCountCtrl.text = safe.toString();
+                                  _chosenItems = safe;
+                                  Navigator.of(ctx).pop();
+                                  setState(() {});
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                                child: Text(
+                                  'حفظ',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -701,14 +961,21 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final title = task['title'] ?? 'مهمة غير معروفة';
     final desc = task['description'] ?? '';
     final pts = (task['points'] ?? 0) as int;
-    final validation = (task['validationStrategy'] ?? 'غير محددة')
-        .toString()
-        .trim();
     final taskId = task['id'] as String?;
-    final requiresPhotoExact = validation == 'التحقق عبر معالجة الصور';
-
-    // شروطنا:
+    final requiresPhotoExact = true;
     final isTransport = (_autoDistance || _isTransportTask);
+
+    final defaultItems =
+        _asInt(
+          task['defaultItemsOnSubmit'] ??
+              task['defaultItems'] ??
+              _calcRequires['defaultItemsOnSubmit'] ??
+              _calcRequires['defaultItems'],
+        ) ??
+        1;
+    if (_shouldAskCount && _itemCountCtrl.text.isEmpty) {
+      _itemCountCtrl.text = defaultItems.toString();
+    }
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -784,215 +1051,263 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // ✅ دائمًا تظهر التعليمات أولاً
-                  _buildPhotoInstructions(),
-                  const SizedBox(height: 16),
-
-                  // ===== تدفّق الأزرار حسب نوع المهمة =====
-                  if (requiresPhotoExact && !isTransport) ...[
-                    // 🎯 مهام عادية: بعد التعليمات -> "ابدأ التصوير"
-                    if (!_ready)
-                      _gradientButton(
-                        label: 'ابدأ التصوير',
-                        icon: Icons.camera_alt,
-                        onTap: _openingCamera ? null : () => _openCamera(),
-                        loading: _openingCamera,
-                      ),
-                  ] else if (requiresPhotoExact && isTransport) ...[
-                    // 🚇 مهام نقل/autoDistance: بعد التعليمات -> "ابدأ" يفتح الخريطة ثم الكاميرا
-                    if (!_ready)
-                      _gradientButton(
-                        label: 'ابدأ',
-                        icon: Icons.play_arrow_rounded,
-                        onTap: () => _startFlowForTransportTask(),
-                      ),
-                    if (_manualDistanceKm != null && !_ready) ...[
+                  if (!_ready) _buildPhotoInstructions(),
+                  if (!_ready) const SizedBox(height: 16),
+                  if (requiresPhotoExact && !isTransport && !_ready)
+                    _gradientButton(
+                      label: 'ابدأ التصوير',
+                      icon: Icons.camera_alt,
+                      onTap: _openingCamera ? null : () => _openCamera(),
+                      loading: _openingCamera,
+                    ),
+                  if (requiresPhotoExact && isTransport && !_ready) ...[
+                    _gradientButton(
+                      label: 'ابدأ',
+                      icon: Icons.play_arrow_rounded,
+                      onTap: () => _startFlowForTransportTask(),
+                    ),
+                    if (_manualDistanceKm != null) ...[
                       const SizedBox(height: 10),
                       _hintCard(
                         'المسار المحدد: ${_manualDistanceKm!.toStringAsFixed(2)} كم\nاضغط "ابدأ" مرة أخرى لفتح الكاميرا إذا رغبت بتعديل المسار.',
                       ),
                     ],
                   ],
-
                   const SizedBox(height: 16),
-
-                  // ===== واجهة الكاميرا =====
-                  if (requiresPhotoExact)
+                  if (_ready)
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 250),
-                      child: !_ready
-                          ? const SizedBox.shrink()
-                          : SizedBox(
-                              height: 420,
-                              child: LayoutBuilder(
-                                builder: (context, cons) {
-                                  final w = cons.maxWidth;
-                                  final h = cons.maxHeight;
-                                  return Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      Positioned.fill(
-                                        child: _capturedPath != null
-                                            ? ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                child: Image.file(
-                                                  File(_capturedPath!),
-                                                  fit: BoxFit.cover,
-                                                ),
-                                              )
-                                            : ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                child: FittedBox(
-                                                  fit: BoxFit.cover,
-                                                  child: SizedBox(
-                                                    width:
-                                                        _controller!
-                                                            .value
-                                                            .previewSize
-                                                            ?.height ??
-                                                        w,
-                                                    height:
-                                                        _controller!
-                                                            .value
-                                                            .previewSize
-                                                            ?.width ??
-                                                        h,
-                                                    child: GestureDetector(
-                                                      behavior: HitTestBehavior
-                                                          .opaque,
-                                                      onTapDown: (d) =>
-                                                          _setFocusAndExposurePoint(
-                                                            d,
-                                                            Size(w, h),
-                                                          ),
-                                                      child: CameraPreview(
-                                                        _controller!,
-                                                      ),
+                      child: SizedBox(
+                        height: 420,
+                        child: LayoutBuilder(
+                          builder: (context, cons) {
+                            final w = cons.maxWidth;
+                            final h = cons.maxHeight;
+                            return Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Positioned.fill(
+                                  child: _capturedPath != null
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                          child: Image.file(
+                                            File(_capturedPath!),
+                                            fit: BoxFit.cover,
+                                          ),
+                                        )
+                                      : ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                          child: FittedBox(
+                                            fit: BoxFit.cover,
+                                            child: SizedBox(
+                                              width:
+                                                  _controller!
+                                                      .value
+                                                      .previewSize
+                                                      ?.height ??
+                                                  w,
+                                              height:
+                                                  _controller!
+                                                      .value
+                                                      .previewSize
+                                                      ?.width ??
+                                                  h,
+                                              child: GestureDetector(
+                                                behavior:
+                                                    HitTestBehavior.opaque,
+                                                onTapDown: (d) =>
+                                                    _setFocusAndExposurePoint(
+                                                      d,
+                                                      Size(w, h),
                                                     ),
-                                                  ),
+                                                child: CameraPreview(
+                                                  _controller!,
                                                 ),
                                               ),
-                                      ),
-                                      // Top controls
-                                      Positioned(
-                                        top: 10,
-                                        right: 10,
-                                        left: 10,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+
+                                // ==== المعدلة: شارة تعرض العدد (عندما الشرط متحقق) ====
+                                if (_capturedPath != null && _shouldAskCount)
+                                  Positioned(
+                                    top: 54,
+                                    right: 12,
+                                    child: _roundedGlass(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 8,
+                                        ),
                                         child: Row(
                                           children: [
-                                            _roundedGlass(
-                                              child: IconButton(
-                                                tooltip: 'تبديل الكاميرا',
-                                                icon: const Icon(
-                                                  Icons.cameraswitch_rounded,
-                                                  color: Colors.white,
-                                                ),
-                                                onPressed: _switchCamera,
-                                              ),
-                                            ),
-                                            const Spacer(),
-                                            _roundedGlass(
-                                              child: IconButton(
-                                                tooltip: 'وضع الفلاش',
-                                                onPressed: _cycleFlash,
-                                                icon: Icon(
-                                                  _flashMode == FlashMode.off
-                                                      ? Icons.flash_off_rounded
-                                                      : _flashMode ==
-                                                            FlashMode.auto
-                                                      ? Icons.flash_auto_rounded
-                                                      : _flashMode ==
-                                                            FlashMode.always
-                                                      ? Icons.flash_on_rounded
-                                                      : Icons.highlight_rounded,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      // Bottom sliders
-                                      Positioned(
-                                        bottom: 10,
-                                        left: 12,
-                                        right: 12,
-                                        child: Column(
-                                          children: [
-                                            _sliderCard(
-                                              label: 'التقريب',
-                                              value: _zoom,
-                                              min: _minZoom,
-                                              max: _maxZoom,
-                                              onChanged: (v) => _setZoom(v),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            _sliderCard(
-                                              label: 'التعريض',
-                                              value: _exposure,
-                                              min: _minExposure,
-                                              max: _maxExposure,
-                                              onChanged: (v) => _setExposure(v),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      if (_inlineError != null)
-                                        Positioned(
-                                          top: 12,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 14,
-                                              vertical: 10,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(
-                                                0.72,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              _inlineError!,
+                                            Text(
+                                              'عدد العناصر: ${_chosenItems ?? (_asInt(_itemCountCtrl.text) ?? 1)}',
                                               style:
                                                   GoogleFonts.ibmPlexSansArabic(
                                                     color: Colors.white,
-                                                    fontWeight: FontWeight.w600,
+                                                    fontWeight: FontWeight.w700,
                                                   ),
                                             ),
+                                            const SizedBox(width: 6),
+                                            InkWell(
+                                              onTap: _showPerItemPopup,
+                                              child: const Icon(
+                                                Icons.edit,
+                                                size: 18,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                // ==== الجديدة: زر عائم دائم لفتح عدّاد العناصر حتى لو الشرط false ====
+                                if (_capturedPath != null)
+                                  Positioned(
+                                    top: 54,
+                                    left: 12,
+                                    child: _roundedGlass(
+                                      child: InkWell(
+                                        onTap: _showPerItemPopup,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 8,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.format_list_numbered,
+                                                color: Colors.white,
+                                                size: 18,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                'عدد العناصر',
+                                                style:
+                                                    GoogleFonts.ibmPlexSansArabic(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                      IgnorePointer(
-                                        child: AnimatedOpacity(
-                                          opacity: _flashOpacity,
-                                          duration: const Duration(
-                                            milliseconds: 120,
+                                      ),
+                                    ),
+                                  ),
+
+                                Positioned(
+                                  top: 10,
+                                  right: 10,
+                                  left: 10,
+                                  child: Row(
+                                    children: [
+                                      _roundedGlass(
+                                        child: IconButton(
+                                          tooltip: 'تبديل الكاميرا',
+                                          icon: const Icon(
+                                            Icons.cameraswitch_rounded,
+                                            color: Colors.white,
                                           ),
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              color: Colors.white.withOpacity(
-                                                0.9,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(16),
-                                            ),
+                                          onPressed: _switchCamera,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      _roundedGlass(
+                                        child: IconButton(
+                                          tooltip: 'وضع الفلاش',
+                                          onPressed: _cycleFlash,
+                                          icon: Icon(
+                                            _flashMode == FlashMode.off
+                                                ? Icons.flash_off_rounded
+                                                : _flashMode == FlashMode.auto
+                                                ? Icons.flash_auto_rounded
+                                                : _flashMode == FlashMode.always
+                                                ? Icons.flash_on_rounded
+                                                : Icons.highlight_rounded,
+                                            color: Colors.white,
                                           ),
                                         ),
                                       ),
                                     ],
-                                  );
-                                },
-                              ),
-                            ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 10,
+                                  left: 12,
+                                  right: 12,
+                                  child: Column(
+                                    children: [
+                                      _sliderCard(
+                                        label: 'التقريب',
+                                        value: _zoom,
+                                        min: _minZoom,
+                                        max: _maxZoom,
+                                        onChanged: (v) => _setZoom(v),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      _sliderCard(
+                                        label: 'التعريض',
+                                        value: _exposure,
+                                        min: _minExposure,
+                                        max: _maxExposure,
+                                        onChanged: (v) => _setExposure(v),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_inlineError != null)
+                                  Positioned(
+                                    top: 12,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.72),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        _inlineError!,
+                                        style: GoogleFonts.ibmPlexSansArabic(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                IgnorePointer(
+                                  child: AnimatedOpacity(
+                                    opacity: _flashOpacity,
+                                    duration: const Duration(milliseconds: 120),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.9),
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
                     ),
-
-                  const SizedBox(height: 16),
-
-                  // ===== أزرار الإرسال/الالتقاط =====
-                  if (_ready && requiresPhotoExact) ...[
+                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
+                  if (_ready) ...[
                     if (_capturedPath == null)
                       _gradientButton(
                         label: _isCapturing
@@ -1013,11 +1328,20 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 if (mounted) {
                                   setState(() => _flashOpacity = 0.0);
                                 }
-
                                 final shot = await _safeTakePicture();
                                 if (!mounted) return;
                                 if (shot != null) {
                                   setState(() => _capturedPath = shot.path);
+
+                                  // ==== المعدلة: افتح حوار العدد بعد فريم وبـ await ====
+                                  if (_shouldAskCount) {
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) async {
+                                          if (mounted) {
+                                            await _showPerItemPopup();
+                                          }
+                                        });
+                                  }
                                 }
                                 if (mounted) {
                                   setState(() => _isCapturing = false);
@@ -1038,83 +1362,139 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 : () async {
                                     if (_capturedPath == null) return;
 
+                                    int? safeItems;
+                                    if (_shouldAskCount) {
+                                      var raw =
+                                          _asInt(_itemCountCtrl.text) ??
+                                          _chosenItems;
+                                      final minItems =
+                                          _asInt(
+                                            widget.taskData['minItems'] ??
+                                                _calcRequires['minItems'],
+                                          ) ??
+                                          1;
+                                      final maxItems =
+                                          _asInt(
+                                            widget.taskData['maxItems'] ??
+                                                _calcRequires['maxItems'],
+                                          ) ??
+                                          1000;
+
+                                      if (raw == null || raw <= 0) {
+                                        await showGeneralDialog(
+                                          context: context,
+                                          barrierDismissible: true,
+                                          barrierLabel: 'items',
+                                          barrierColor: Colors.black54,
+                                          useRootNavigator: true,
+                                          pageBuilder: (_, __, ___) =>
+                                              const SizedBox.shrink(),
+                                          transitionDuration: const Duration(
+                                            milliseconds: 120,
+                                          ),
+                                          transitionBuilder:
+                                              (ctx, anim, _, __child) {
+                                                WidgetsBinding.instance
+                                                    .addPostFrameCallback((_) {
+                                                      if (mounted) {
+                                                        Navigator.of(ctx).pop();
+                                                        _showPerItemPopup();
+                                                      }
+                                                    });
+                                                return const SizedBox.shrink();
+                                              },
+                                        );
+
+                                        raw =
+                                            _asInt(_itemCountCtrl.text) ??
+                                            _chosenItems;
+                                        if (raw == null || raw <= 0) {
+                                          _showInlineError(
+                                            'أدخل عدد العناصر بشكل صحيح.',
+                                          );
+                                          return;
+                                        }
+                                      }
+                                      safeItems = raw.clamp(minItems, maxItems);
+                                      _chosenItems = safeItems;
+                                      _itemCountCtrl.text = safeItems
+                                          .toString();
+                                    }
+
                                     if (!mounted || _isUploading) return;
                                     setState(() => _isUploading = true);
 
                                     try {
-                                      // 1) المسافة من المسار اليدوي (إن وُجد)
-                                      final manualKm = _manualDistanceKm;
-
-                                      // 2) الخط المستقيم كـ fallback عبر GPS
-                                      await _captureEndAndComputeDistance();
-                                      double? straightKm;
-                                      if (_autoDistanceKmComputed != null &&
-                                          _autoDistanceKmComputed!.isFinite &&
-                                          _autoDistanceKmComputed! > 0) {
-                                        straightKm = double.parse(
-                                          _autoDistanceKmComputed!
-                                              .toStringAsFixed(3),
-                                        );
-                                      }
-
-                                      // 3) اختر الأفضل: يدوي > مستقيم
+                                      final mode =
+                                          (widget.taskData['calcMode'] ?? '')
+                                              .toString()
+                                              .toLowerCase();
+                                      final isDistanceMode =
+                                          mode == 'perkm' ||
+                                          mode == 'deltaperkm';
                                       double? pickedKm;
-                                      if (manualKm != null && manualKm > 0) {
-                                        pickedKm = manualKm;
-                                      } else if (straightKm != null &&
-                                          straightKm > 0) {
-                                        pickedKm = straightKm;
+
+                                      if (isDistanceMode) {
+                                        final manualKm = _manualDistanceKm;
+                                        await _captureEndAndComputeDistance();
+                                        double? straightKm;
+                                        if (_autoDistanceKmComputed != null &&
+                                            _autoDistanceKmComputed!.isFinite &&
+                                            _autoDistanceKmComputed! > 0) {
+                                          straightKm = double.parse(
+                                            _autoDistanceKmComputed!
+                                                .toStringAsFixed(3),
+                                          );
+                                        }
+                                        if (manualKm != null && manualKm > 0) {
+                                          pickedKm = manualKm;
+                                        } else if (straightKm != null &&
+                                            straightKm > 0) {
+                                          pickedKm = straightKm;
+                                        }
+                                        final askDistanceKm =
+                                            widget.taskData['askDistanceKm'] ==
+                                            true;
+                                        final defaultKmOnSubmit =
+                                            (widget.taskData['defaultKmOnSubmit']
+                                                is num)
+                                            ? (widget.taskData['defaultKmOnSubmit']
+                                                      as num)
+                                                  .toDouble()
+                                            : null;
+                                        if (pickedKm == null &&
+                                            askDistanceKm &&
+                                            defaultKmOnSubmit != null) {
+                                          pickedKm = defaultKmOnSubmit;
+                                        }
+                                        double? minKm, maxKm;
+                                        final mk = widget.taskData['minKm'];
+                                        final xk = widget.taskData['maxKm'];
+                                        if (mk is num) minKm = mk.toDouble();
+                                        if (xk is num) maxKm = xk.toDouble();
+                                        if (pickedKm != null && pickedKm > 0) {
+                                          pickedKm = pickedKm.clamp(
+                                            minKm ?? 0.2,
+                                            maxKm ?? 50.0,
+                                          );
+                                          pickedKm = double.parse(
+                                            pickedKm.toStringAsFixed(3),
+                                          );
+                                        }
+
+                                        if (_manualStart != null &&
+                                            _manualEnd != null) {
+                                          _geoStart = GeoPoint(
+                                            _manualStart!.latitude,
+                                            _manualStart!.longitude,
+                                          );
+                                          _geoEnd = GeoPoint(
+                                            _manualEnd!.latitude,
+                                            _manualEnd!.longitude,
+                                          );
+                                        }
                                       }
 
-                                      // 3.1) fallback ثالث: defaultKmOnSubmit لو askDistanceKm=true
-                                      final askDistanceKm =
-                                          widget.taskData['askDistanceKm'] ==
-                                          true;
-                                      final defaultKmOnSubmit =
-                                          (widget.taskData['defaultKmOnSubmit']
-                                              is num)
-                                          ? (widget.taskData['defaultKmOnSubmit']
-                                                    as num)
-                                                .toDouble()
-                                          : null;
-                                      if (pickedKm == null &&
-                                          askDistanceKm &&
-                                          defaultKmOnSubmit != null) {
-                                        pickedKm = defaultKmOnSubmit;
-                                      }
-
-                                      // 4) Clamp حسب min/max من بيانات المهمة
-                                      double? minKm, maxKm;
-                                      final mk = widget.taskData['minKm'];
-                                      final xk = widget.taskData['maxKm'];
-                                      if (mk is num) minKm = mk.toDouble();
-                                      if (xk is num) maxKm = xk.toDouble();
-
-                                      double? safeDistanceKm;
-                                      if (pickedKm != null && pickedKm > 0) {
-                                        safeDistanceKm = pickedKm.clamp(
-                                          minKm ?? 0.2,
-                                          maxKm ?? 50.0,
-                                        );
-                                        safeDistanceKm = double.parse(
-                                          safeDistanceKm.toStringAsFixed(3),
-                                        );
-                                      }
-
-                                      // ✅ استخدم نقاط المسار اليدوي لو موجودة
-                                      if (_manualStart != null &&
-                                          _manualEnd != null) {
-                                        _geoStart = GeoPoint(
-                                          _manualStart!.latitude,
-                                          _manualStart!.longitude,
-                                        );
-                                        _geoEnd = GeoPoint(
-                                          _manualEnd!.latitude,
-                                          _manualEnd!.longitude,
-                                        );
-                                      }
-
-                                      // 5) حساب الكربون إن توفر ef_ref ومسافة صالحة
                                       double? carbonSaved;
                                       final efId =
                                           (widget.taskData['ef_ref'] ??
@@ -1124,42 +1504,41 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                   widget
                                                       .taskData['emission_factor_ref'])
                                               ?.toString();
+                                      final valueFieldFromTask =
+                                          (widget.taskData['ef_valueField'] ??
+                                                  widget.taskData['valueField'])
+                                              ?.toString();
 
-                                      const efValueField = 'ef_kgco2_per_unit';
-
-                                      if (efId != null &&
-                                          efId.isNotEmpty &&
-                                          safeDistanceKm != null) {
-                                        carbonSaved = await _computeCarbonSaved(
-                                          efIdFromTask: efId,
-                                          km: safeDistanceKm,
-                                          valueFieldFromTask: efValueField,
-                                        );
-                                        if (carbonSaved != null &&
-                                            carbonSaved.isFinite &&
-                                            !carbonSaved.isNaN &&
-                                            carbonSaved > 0) {
+                                      if (efId != null && efId.isNotEmpty) {
+                                        final saved =
+                                            await _computeCarbonSavedFlexible(
+                                              efIdFromTask: efId,
+                                              km: pickedKm,
+                                              items: safeItems,
+                                              valueFieldFromTask:
+                                                  valueFieldFromTask,
+                                            );
+                                        if (saved.isFinite && saved > 0) {
                                           carbonSaved = double.parse(
-                                            carbonSaved.toStringAsFixed(3),
+                                            saved.toStringAsFixed(3),
                                           );
-                                        } else {
-                                          carbonSaved = null;
                                         }
                                       }
 
-                                      // 6) إنشاء السجلّات
                                       await _createSubmissionAndMarkSubmitted(
                                         localPath: _capturedPath!,
                                         taskPoints: pts,
                                         taskId: taskId,
-                                        distanceKm: safeDistanceKm,
+                                        distanceKm: pickedKm,
                                         carbonSaved: carbonSaved,
+                                        itemCount: safeItems,
                                       );
 
                                       if (!mounted) return;
                                       await showDialog(
                                         context: context,
                                         barrierDismissible: false,
+                                        useRootNavigator: true,
                                         builder: (context) {
                                           return Dialog(
                                             shape: RoundedRectangleBorder(
@@ -1214,43 +1593,39 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                           ),
                                                     ),
                                                     const SizedBox(height: 24),
-                                                    Center(
-                                                      child: SizedBox(
-                                                        width: 140,
-                                                        child: ElevatedButton(
-                                                          style: ElevatedButton.styleFrom(
-                                                            backgroundColor:
-                                                                AppColors
-                                                                    .primary,
-                                                            shape: RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius.circular(
-                                                                    12,
-                                                                  ),
-                                                            ),
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  horizontal:
-                                                                      24,
-                                                                  vertical: 10,
+                                                    SizedBox(
+                                                      width: 140,
+                                                      child: ElevatedButton(
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor:
+                                                              AppColors.primary,
+                                                          shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  12,
                                                                 ),
                                                           ),
-                                                          onPressed: () =>
-                                                              Navigator.pop(
-                                                                context,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 24,
+                                                                vertical: 10,
                                                               ),
-                                                          child: Text(
-                                                            'تم',
-                                                            style:
-                                                                GoogleFonts.ibmPlexSansArabic(
-                                                                  color: Colors
-                                                                      .white,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w700,
-                                                                  fontSize: 16,
-                                                                ),
-                                                          ),
+                                                        ),
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                              context,
+                                                            ),
+                                                        child: Text(
+                                                          'تم',
+                                                          style:
+                                                              GoogleFonts.ibmPlexSansArabic(
+                                                                color: Colors
+                                                                    .white,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                fontSize: 16,
+                                                              ),
                                                         ),
                                                       ),
                                                     ),
@@ -1262,7 +1637,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         },
                                       );
 
-                                      // تنظيف الصورة + إغلاق
                                       try {
                                         if (_capturedPath != null) {
                                           final f = File(_capturedPath!);
@@ -1315,7 +1689,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 }
                               } catch (_) {}
                               if (mounted) {
-                                setState(() => _capturedPath = null);
+                                setState(() {
+                                  _capturedPath = null;
+                                });
                               }
                             },
                           ),
@@ -1327,68 +1703,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildPhotoInstructions() {
-    final bullets = [
-      'تأكد من أن الإضاءة جيدة والعنصر واضح.',
-      'التقط صورة تُظهر قيامك بالمهمة (مثل دخول بوابة المترو/التذكرة).',
-      'لا تستخدم صورًا من الإنترنت.',
-      'التقط من زاوية مناسبة وبدون فلاش إن أمكن.',
-    ];
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.mint.withOpacity(0.15),
-        border: Border.all(color: AppColors.mint, width: 1.5),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.camera_alt_outlined,
-                color: AppColors.primary,
-                size: 22,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'تعليمات التصوير',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.dark,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ...bullets.map(
-            (txt) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('•  ', style: TextStyle(height: 1.7)),
-                  Expanded(
-                    child: Text(
-                      txt,
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 13.8,
-                        height: 1.8,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1524,6 +1838,86 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             padding: const EdgeInsets.symmetric(vertical: 14),
             child: Center(child: child),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhotoInstructions() {
+    final bullets = [
+      'تأكد من أن الإضاءة جيدة والعنصر واضح.',
+      'التقط صورة تُظهر قيامك بالمهمة (مثل العناصر المجمعة).',
+      'لا تستخدم صورًا من الإنترنت.',
+      'التقط من زاوية مناسبة وبدون فلاش إن أمكن.',
+    ];
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.mint.withOpacity(0.15),
+        border: Border.all(color: AppColors.mint, width: 1.5),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.camera_alt_outlined,
+                color: AppColors.primary,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'تعليمات التصوير',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.dark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...bullets.map(
+            (txt) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('•  ', style: TextStyle(height: 1.7)),
+                  Expanded(
+                    child: Text(
+                      txt,
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 13.8,
+                        height: 1.8,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _counterButton({required IconData icon, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Ink(
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: SizedBox(
+          width: 46,
+          height: 44,
+          child: Icon(icon, color: Colors.white),
         ),
       ),
     );
