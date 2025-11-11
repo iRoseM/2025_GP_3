@@ -56,11 +56,9 @@ class _MyReportsPageState extends State<MyReportsPage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        // نمد الجسم خلف الهيدر ونخلي الخلفية شفافة
         extendBodyBehindAppBar: true,
         backgroundColor: AppColors.background,
 
-        // هيدر نمير العام (بدون عنوان داخله + مع زر رجوع)
         appBar: const NameerAppBar(
           showTitleInBar: false,
           showBack: true,
@@ -70,8 +68,8 @@ class _MyReportsPageState extends State<MyReportsPage> {
         body: Builder(
           builder: (context) {
             final statusBar = MediaQuery.of(context).padding.top;
-            const headerH = 20.0; // ارتفاع شريط الأدوات الفعلي
-            const gap = 12.0; // مسافة بسيطة بعد الهيدر
+            const headerH = 20.0;
+            const gap = 12.0;
             final topPadding = statusBar + headerH + gap;
 
             return Padding(
@@ -79,9 +77,8 @@ class _MyReportsPageState extends State<MyReportsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // العنوان تحت الهيدر مباشرة
                   Text(
-                    'بلاغاتي',
+                    'إشعاراتي',
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
@@ -90,7 +87,6 @@ class _MyReportsPageState extends State<MyReportsPage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // المحتوى
                   Expanded(
                     child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                       stream: FirebaseFirestore.instance
@@ -125,7 +121,7 @@ class _MyReportsPageState extends State<MyReportsPage> {
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'لا توجد بلاغات مسجّلة لك حالياً 🌿',
+                                  'لا توجد إشعارات مسجّلة لك حالياً 🌿',
                                   style: GoogleFonts.ibmPlexSansArabic(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
@@ -145,20 +141,100 @@ class _MyReportsPageState extends State<MyReportsPage> {
                             final data = docs[i].data();
                             final isRead = data['read'] == true;
 
-                            final title = data['title'] ?? '';
-                            final message = data['message'] ?? '';
+                            final title =
+                                (data['title'] ??
+                                        data['Title'] ??
+                                        data['header'] ??
+                                        '')
+                                    .toString();
+                            final message =
+                                (data['message'] ?? data['body'] ?? '')
+                                    .toString();
+                            final type = (data['type'] ?? '')
+                                .toString(); // مثال: submission_approved / submission_rejected
+                            final customIconName = (data['icon'] ?? '')
+                                .toString(); // مثلاً: check_circle
                             final ts = data['createdAt'] as Timestamp?;
                             final time = ts?.toDate();
 
+                            // ===== منطق تحديد الأيقونة واللون =====
                             IconData icon;
                             Color iconColor;
 
-                            if (title.contains('تم معالجة')) {
-                              icon = Icons.check_circle;
+                            // 1) أولوية حسب النوع (إن وُجد)
+                            if (type == 'submission_approved' ||
+                                type == 'task_approved') {
+                              icon = Icons.verified_rounded;
                               iconColor = Colors.green;
-                            } else {
-                              icon = Icons.cancel_outlined;
+                            } else if (type == 'submission_rejected' ||
+                                type == 'task_rejected') {
+                              icon = Icons.cancel_rounded;
                               iconColor = Colors.redAccent;
+                            } else {
+                              // 2) إن وُجد اسم أيقونة مخصصة داخل الوثيقة (اختياري)
+                              if (customIconName.isNotEmpty) {
+                                // خريطة بسيطة لأسماء شائعة -> أيقونات Flutter
+                                final map = <String, IconData>{
+                                  'check_circle': Icons.verified_rounded,
+                                  'done': Icons.verified_rounded,
+                                  'cancel': Icons.cancel_rounded,
+                                  'error': Icons.error_outline,
+                                  'info': Icons.info_outline,
+                                  'update': Icons.refresh_rounded,
+                                  'bell': Icons.notifications_active_outlined,
+                                };
+                                icon =
+                                    map[customIconName] ??
+                                    Icons.notifications_active_outlined;
+
+                                // لون افتراضي لطيف
+                                if (customIconName == 'check_circle' ||
+                                    customIconName == 'done') {
+                                  iconColor = Colors.green;
+                                } else if (customIconName == 'cancel') {
+                                  iconColor = Colors.redAccent;
+                                } else if (customIconName == 'error') {
+                                  iconColor = Colors.orange;
+                                } else {
+                                  iconColor = AppColors.sea;
+                                }
+                              } else {
+                                // 3) تحليل نصي للعنوان/الرسالة (توافق مع الإصدارات القديمة)
+                                final t = title.toLowerCase();
+                                final m = message.toLowerCase();
+
+                                final isApproved =
+                                    t.contains('تم الاعتماد') ||
+                                    t.contains('تمت الموافقة') ||
+                                    m.contains('تم الاعتماد') ||
+                                    m.contains('تمت الموافقة');
+
+                                final isRejected =
+                                    t.contains('تم الرفض') ||
+                                    t.contains('مرفوض') ||
+                                    m.contains('تم الرفض') ||
+                                    m.contains('مرفوض');
+
+                                final isProcessed =
+                                    t.contains('تم معالجة') ||
+                                    t.contains('تم المراجعة') ||
+                                    m.contains('تم معالجة') ||
+                                    m.contains('تم المراجعة');
+
+                                if (isApproved) {
+                                  icon = Icons.verified_rounded;
+                                  iconColor = Colors.green;
+                                } else if (isRejected) {
+                                  icon = Icons.cancel_rounded;
+                                  iconColor = Colors.redAccent;
+                                } else if (isProcessed) {
+                                  icon = Icons.refresh_rounded;
+                                  iconColor = AppColors.primary;
+                                } else {
+                                  icon = Icons.notifications_active_outlined;
+                                  iconColor = AppColors.sea;
+                                }
+                              }
                             }
 
                             return AnimatedContainer(
@@ -187,7 +263,7 @@ class _MyReportsPageState extends State<MyReportsPage> {
                                   child: Icon(icon, color: iconColor),
                                 ),
                                 title: Text(
-                                  title,
+                                  title.isEmpty ? 'إشعار' : title,
                                   style: GoogleFonts.ibmPlexSansArabic(
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.dark,
@@ -198,7 +274,7 @@ class _MyReportsPageState extends State<MyReportsPage> {
                                   children: [
                                     const SizedBox(height: 4),
                                     Text(
-                                      message,
+                                      message.isEmpty ? '—' : message,
                                       style: GoogleFonts.ibmPlexSansArabic(
                                         fontSize: 14,
                                         color: Colors.black87,
@@ -207,8 +283,7 @@ class _MyReportsPageState extends State<MyReportsPage> {
                                     if (time != null) ...[
                                       const SizedBox(height: 6),
                                       Text(
-                                        '${time.year}/${time.month}/${time.day} - '
-                                        '${time.hour}:${time.minute.toString().padLeft(2, '0')}',
+                                        '${time.year}/${time.month}/${time.day} - ${time.hour}:${time.minute.toString().padLeft(2, '0')}',
                                         style: GoogleFonts.ibmPlexSansArabic(
                                           fontSize: 12,
                                           color: Colors.grey,

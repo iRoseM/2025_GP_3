@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
-import 'services/admin_bottom_nav.dart';
-import 'admin_home.dart';
-import 'admin_task.dart';
-import 'admin_map.dart';
-import 'services/background_container.dart';
-import 'services/connection.dart';
-import 'services/title_header.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+
+import 'services/background_container.dart';
+import 'services/connection.dart';
+import 'services/title_header.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -35,14 +31,13 @@ class AdminRewardsPage extends StatefulWidget {
 }
 
 class _AdminRewardsPageState extends State<AdminRewardsPage> {
-  int _currentIndex = 0;
-
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _pointsCtrl = TextEditingController();
   final _imgCtrl = TextEditingController();
   bool _isActive = true;
-  // 🎨 المتغيرات الخاصة بزر الرفع
+
+  // 🎨 حالة زر رفع الصورة داخل الدايالوج
   Color _uploadBtnColor = AppColors.primary;
   String _uploadBtnText = 'اختيار الصورة';
   IconData _uploadBtnIcon = Icons.image_outlined;
@@ -56,32 +51,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
   Future<void> _checkConnection() async {
     if (!await hasInternetConnection()) {
       if (mounted) showNoInternetDialog(context);
-    }
-  }
-
-  void _onTap(int i) {
-    if (i == _currentIndex) return;
-    switch (i) {
-      case 0:
-        break;
-      case 1:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminMapPage()),
-        );
-        break;
-      case 2:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminTasksPage()),
-        );
-        break;
-      case 3:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminHomePage()),
-        );
-        break;
     }
   }
 
@@ -102,11 +71,9 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
 
     try {
       if (docId == null) {
-        // إضافة جديدة
         rewardData['createdAt'] = FieldValue.serverTimestamp();
         await FirebaseFirestore.instance.collection('rewards').add(rewardData);
       } else {
-        // تعديل مكافأة موجودة
         await FirebaseFirestore.instance
             .collection('rewards')
             .doc(docId)
@@ -119,31 +86,24 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
       _imgCtrl.clear();
       _isActive = true;
 
-      // ✅ نخزن نسخة من الـ context قبل ما نقفل الـ dialog
       final scaffoldContext = parentContext;
-
-      // ✅ نغلق الـ dialog بطريقة آمنة
       if (Navigator.of(parentContext, rootNavigator: true).canPop()) {
         Navigator.of(parentContext, rootNavigator: true).pop();
       }
 
-      // ✅ نعرض الرسالة بعد الإغلاق
       Future.microtask(() {
         final message = docId == null
             ? 'تمت إضافة المكافأة بنجاح 🎉'
             : 'تم تحديث المكافأة بنجاح ✏️';
-
         ScaffoldMessenger.of(
           scaffoldContext,
         ).showSnackBar(SnackBar(content: Text(message)));
       });
     } catch (e) {
       final scaffoldContext = parentContext;
-
       if (Navigator.of(parentContext, rootNavigator: true).canPop()) {
         Navigator.of(parentContext, rootNavigator: true).pop();
       }
-
       Future.microtask(() {
         ScaffoldMessenger.of(
           scaffoldContext,
@@ -156,7 +116,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
     try {
       String? filePath;
 
-      // 👇 نعرض خيارين (من الصور أو من الملفات)
       final choice = await showModalBottomSheet<String>(
         context: context,
         shape: const RoundedRectangleBorder(
@@ -184,54 +143,36 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
         ),
       );
 
-      if (choice == null) {
-        debugPrint('❌ المستخدم أغلق النافذة بدون اختيار');
-        return null;
-      }
+      if (choice == null) return null;
 
-      // ✅ نفتح حسب الاختيار
       if (choice == 'gallery') {
         final picker = ImagePicker();
         final picked = await picker.pickImage(source: ImageSource.gallery);
-        if (picked == null) {
-          debugPrint('❌ لم يتم اختيار صورة من المعرض');
-          return null;
-        }
+        if (picked == null) return null;
         filePath = picked.path;
       } else if (choice == 'files') {
         final result = await FilePicker.platform.pickFiles(
           type: FileType.image,
         );
-        if (result == null || result.files.isEmpty) {
-          debugPrint('❌ لم يتم اختيار ملف');
-          return null;
-        }
+        if (result == null || result.files.isEmpty) return null;
         filePath = result.files.single.path;
       }
 
-      if (filePath == null || !File(filePath).existsSync()) {
-        debugPrint('⚠️ المسار غير صالح أو الملف غير موجود');
-        return null;
-      }
+      if (filePath == null || !File(filePath).existsSync()) return null;
 
-      debugPrint('📸 رفع الصورة من: $filePath');
-
-      // 🟢 نرفع الصورة إلى Firebase Storage (المسار مطابق للرولز)
       final file = File(filePath);
       final ref = FirebaseStorage.instance.ref().child(
         'rewardImages/${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
 
-      final uploadTask = await ref.putFile(file);
+      await ref.putFile(file);
       final url = await ref.getDownloadURL();
-
-      debugPrint('✅ تم الرفع بنجاح: $url');
       return url;
     } on FirebaseException catch (e) {
-      debugPrint('❌ Firebase Storage error: ${e.code} - ${e.message}');
+      debugPrint('Firebase Storage error: ${e.code} - ${e.message}');
       return null;
     } catch (e) {
-      debugPrint('⚠️ خطأ أثناء رفع الصورة: $e');
+      debugPrint('Upload error: $e');
       return null;
     }
   }
@@ -240,14 +181,12 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
     Map<String, dynamic>? existingData,
     String? docId,
   }) {
-    // ✅ نرجّع الزر للوضع الافتراضي قبل ما نعرض الفورم
     setState(() {
       _uploadBtnColor = AppColors.primary;
       _uploadBtnText = 'اختيار الصورة';
       _uploadBtnIcon = Icons.image_outlined;
     });
 
-    // ✅ نعبّي الحقول لو كانت عملية تعديل
     if (existingData != null) {
       _titleCtrl.text = existingData['title'] ?? '';
       _descCtrl.text = existingData['description'] ?? '';
@@ -255,7 +194,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
       _imgCtrl.text = existingData['imageUrl'] ?? '';
       _isActive = existingData['isActive'] ?? true;
 
-      // الزر يتحول للون أخضر إذا فيه صورة
       _uploadBtnColor = _imgCtrl.text.isNotEmpty
           ? Colors.green
           : AppColors.primary;
@@ -266,7 +204,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
           ? Icons.check_circle_outline
           : Icons.image_outlined;
     } else {
-      // حالة الإضافة الجديدة
       _titleCtrl.clear();
       _descCtrl.clear();
       _pointsCtrl.clear();
@@ -305,7 +242,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // ===== العنوان + زر الإغلاق =====
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -318,7 +254,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-
                                 IconButton(
                                   icon: const Icon(
                                     Icons.close,
@@ -331,7 +266,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                             const Divider(height: 10),
                             const SizedBox(height: 10),
 
-                            // ===== اسم المكافأة =====
                             Row(
                               children: const [
                                 Text(
@@ -357,16 +291,12 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                   Icons.card_giftcard_outlined,
                                 ),
                               ),
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) {
-                                  return 'يرجى إدخال اسم الجهة المقدمة للمكافأة';
-                                }
-                                return null;
-                              },
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'يرجى إدخال اسم الجهة المقدمة للمكافأة'
+                                  : null,
                             ),
                             const SizedBox(height: 14),
 
-                            // ===== الوصف =====
                             Row(
                               children: const [
                                 Text(
@@ -393,16 +323,12 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                   Icons.description_outlined,
                                 ),
                               ),
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) {
-                                  return 'يرجى إدخال وصف المكافأة';
-                                }
-                                return null;
-                              },
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'يرجى إدخال وصف المكافأة'
+                                  : null,
                             ),
                             const SizedBox(height: 14),
 
-                            // ===== النقاط =====
                             Row(
                               children: const [
                                 Text(
@@ -440,7 +366,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                             ),
                             const SizedBox(height: 14),
 
-                            // ===== اختيار الصورة من الملفات =====
                             const Text(
                               'صورة المكافأة',
                               style: TextStyle(fontWeight: FontWeight.w700),
@@ -463,13 +388,13 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                 if (url != null) {
                                   setSt(() {
                                     _imgCtrl.text = url;
-                                    _uploadBtnColor = Colors.green; // ✅ زر أخضر
+                                    _uploadBtnColor = Colors.green;
                                     _uploadBtnText = 'تم رفع الصورة بنجاح';
                                     _uploadBtnIcon = Icons.check_circle_outline;
                                   });
                                 } else {
                                   setSt(() {
-                                    _uploadBtnColor = Colors.red; // ❌ زر أحمر
+                                    _uploadBtnColor = Colors.red;
                                     _uploadBtnText = 'لم يتم اختيار صورة';
                                     _uploadBtnIcon = Icons.error_outline;
                                   });
@@ -478,7 +403,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                             ),
                             const SizedBox(height: 14),
 
-                            // ===== الحالة =====
                             SwitchListTile(
                               title: Text(
                                 'الحالة: ${_isActive ? 'نشطة' : 'متوقفة'}',
@@ -489,7 +413,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                             ),
                             const SizedBox(height: 10),
 
-                            // ===== زر الحفظ =====
                             DecoratedBox(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(14),
@@ -535,9 +458,9 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                   minimumSize: const Size.fromHeight(42),
                                 ),
                                 onPressed: () async {
-                                  if (!_formKey.currentState!.validate())
+                                  if (!(_formKey.currentState?.validate() ??
+                                      false))
                                     return;
-
                                   await _saveReward(context, docId: docId);
                                 },
                               ),
@@ -556,7 +479,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
     );
   }
 
-  // 🧱 نفس تصميم الحقول المستخدم في صفحة الخريطة
   InputDecoration _inputDeco(String hint, {Widget? prefixIcon}) {
     return InputDecoration(
       hintText: hint,
@@ -579,49 +501,17 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
     );
   }
 
-  Widget _buildInputField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-    int maxLines = 1,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, color: AppColors.primary),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.light, width: 1.2),
-        ),
-        focusedBorder: const OutlineInputBorder(
-          borderSide: BorderSide(color: AppColors.primary, width: 1.8),
-        ),
-      ),
-    );
-  }
-
-  // ✅ زر الإضافة العائم (نفس اللي في المهام)
   Widget _buildAddFab() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 8), // يخليه يميل شوي يسار
-      child: FloatingActionButton(
-        onPressed: _showAddRewardDialog,
-        backgroundColor: AppColors.primary,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add, color: Colors.white, size: 32),
-      ),
+    return FloatingActionButton(
+      onPressed: _showAddRewardDialog,
+      backgroundColor: AppColors.primary,
+      shape: const CircleBorder(),
+      child: const Icon(Icons.add, color: Colors.white, size: 28),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final baseTheme = Theme.of(context);
     final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(
       baseTheme.textTheme,
@@ -643,13 +533,18 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
           extendBody: true,
           extendBodyBehindAppBar: true,
           backgroundColor: Colors.transparent,
-          appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
+
+          appBar: const NameerAppBar(
+            showTitleInBar: false,
+            showBack: true,
+            height: 80,
+          ),
 
           body: AnimatedBackgroundContainer(
             child: Builder(
               builder: (context) {
                 final statusBar = MediaQuery.of(context).padding.top;
-                const headerH = 20;
+                const headerH = 20.0;
                 const gap = 12.0;
                 final topPadding = statusBar + headerH + gap;
 
@@ -667,8 +562,6 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                         ),
                       ),
                       const SizedBox(height: 20),
-
-                      const SizedBox(height: 30),
 
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
@@ -693,381 +586,353 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                             final rewards = snapshot.data!.docs;
 
                             return ListView.builder(
-                              physics:
-                                  const BouncingScrollPhysics(), // يعطي سحب ناعم
+                              physics: const BouncingScrollPhysics(),
                               padding: const EdgeInsets.only(
-                                bottom:
-                                    180, // ✨ بس زدنا المسافة مثل صفحة المهام
+                                bottom: 100,
                                 top: 8,
                               ),
-
                               itemCount: rewards.length,
                               itemBuilder: (context, i) {
                                 final doc = rewards[i];
                                 final data =
                                     doc.data() as Map<String, dynamic>? ?? {};
 
-                                return Stack(
-                                  children: [
-                                    Card(
-                                      margin: const EdgeInsets.symmetric(
-                                        vertical: 8,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      elevation: 3,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
-                                        children: [
-                                          // ===== الصورة =====
-                                          if (data['imageUrl'] != null &&
-                                              data['imageUrl']
-                                                  .toString()
-                                                  .isNotEmpty)
-                                            ClipRRect(
-                                              borderRadius:
-                                                  const BorderRadius.only(
-                                                    topLeft: Radius.circular(
-                                                      16,
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  elevation: 3,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      if ((data['imageUrl'] ?? '')
+                                          .toString()
+                                          .isNotEmpty)
+                                        ClipRRect(
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(16),
+                                            topRight: Radius.circular(16),
+                                          ),
+                                          child: Image.network(
+                                            data['imageUrl'],
+                                            width: double.infinity,
+                                            height: 240,
+                                            fit: BoxFit.fitWidth,
+                                            alignment: Alignment.center,
+                                          ),
+                                        )
+                                      else
+                                        Container(
+                                          height: 160,
+                                          decoration: const BoxDecoration(
+                                            color: AppColors.primary33,
+                                            borderRadius: BorderRadius.only(
+                                              topLeft: Radius.circular(16),
+                                              topRight: Radius.circular(16),
+                                            ),
+                                          ),
+                                          child: const Icon(
+                                            Icons.card_giftcard,
+                                            color: AppColors.primary,
+                                            size: 50,
+                                          ),
+                                        ),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    data['title'] ?? '',
+                                                    style: const TextStyle(
+                                                      fontSize: 18,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: AppColors.dark,
                                                     ),
-                                                    topRight: Radius.circular(
-                                                      16,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Container(
+                                                  margin: const EdgeInsets.only(
+                                                    right: 50,
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 4,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        (data['isActive'] ==
+                                                                    true
+                                                                ? Colors.green
+                                                                : Colors.grey)
+                                                            .withOpacity(0.1),
+                                                    border: Border.all(
+                                                      color:
+                                                          data['isActive'] ==
+                                                              true
+                                                          ? Colors.green
+                                                          : Colors.grey,
+                                                      width: 1.4,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  child: Text(
+                                                    data['isActive'] == true
+                                                        ? 'نشطة'
+                                                        : 'متوقفة',
+                                                    style: TextStyle(
+                                                      color:
+                                                          data['isActive'] ==
+                                                              true
+                                                          ? Colors.green
+                                                          : Colors.grey,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      fontSize: 11,
                                                     ),
                                                   ),
-                                              child: Image.network(
-                                                data['imageUrl'],
-                                                width: double.infinity,
-                                                height: 240,
-                                                fit: BoxFit.fitWidth,
-                                                alignment: Alignment.center,
-                                              ),
-                                            )
-                                          else
-                                            Container(
-                                              height: 160,
-                                              decoration: const BoxDecoration(
-                                                color: AppColors.primary33,
-                                                borderRadius: BorderRadius.only(
-                                                  topLeft: Radius.circular(16),
-                                                  topRight: Radius.circular(16),
                                                 ),
-                                              ),
-                                              child: const Icon(
-                                                Icons.card_giftcard,
-                                                color: AppColors.primary,
-                                                size: 50,
-                                              ),
+                                              ],
                                             ),
-
-                                          // ===== النصوص =====
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 12,
-                                            ),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
                                               children: [
-                                                // السطر الأول: اسم الجهة + البادج
-                                                Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
-                                                  children: [
-                                                    Expanded(
-                                                      child: Text(
-                                                        data['title'] ?? '',
-                                                        style: const TextStyle(
-                                                          fontSize: 18,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color: AppColors.dark,
-                                                        ),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                    Container(
-                                                      margin:
-                                                          const EdgeInsets.only(
-                                                            right: 50,
-                                                          ),
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 10,
-                                                            vertical: 4,
-                                                          ),
-                                                      decoration: BoxDecoration(
-                                                        color:
-                                                            (data['isActive'] ==
-                                                                        true
-                                                                    ? Colors
-                                                                          .green
-                                                                    : Colors
-                                                                          .grey)
-                                                                .withOpacity(
-                                                                  0.1,
-                                                                ),
-                                                        border: Border.all(
-                                                          color:
-                                                              data['isActive'] ==
-                                                                  true
-                                                              ? Colors.green
-                                                              : Colors.grey,
-                                                          width: 1.4,
-                                                        ),
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              8,
-                                                            ),
-                                                      ),
-                                                      child: Text(
-                                                        data['isActive'] == true
-                                                            ? 'نشطة'
-                                                            : 'متوقفة',
-                                                        style: TextStyle(
-                                                          color:
-                                                              data['isActive'] ==
-                                                                  true
-                                                              ? Colors.green
-                                                              : Colors.grey,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          fontSize: 11,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
+                                                Text(
+                                                  'النقاط: ${data['costPoints'] ?? '-'}',
+                                                  style: const TextStyle(
+                                                    fontSize: 15,
+                                                    color: Color(0xFF3C3C3B),
+                                                  ),
                                                 ),
-
-                                                const SizedBox(height: 6),
-
-                                                // السطر الثاني: النقاط + أزرار التعديل والحذف (الأزرار أقرب لليسار)
                                                 Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
                                                   children: [
-                                                    Text(
-                                                      'النقاط: ${data['costPoints'] ?? '-'}',
-                                                      style: const TextStyle(
-                                                        fontSize: 15,
-                                                        color: Color(
-                                                          0xFF3C3C3B,
-                                                        ),
+                                                    IconButton(
+                                                      icon: const Icon(
+                                                        Icons.edit_outlined,
+                                                        color: Colors.grey,
                                                       ),
+                                                      onPressed: () {
+                                                        _showAddRewardDialog(
+                                                          existingData: data,
+                                                          docId: doc.id,
+                                                        );
+                                                      },
                                                     ),
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                            left: 0,
-                                                          ), // قرّبتهم لليسار
-                                                      child: Row(
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        children: [
-                                                          IconButton(
-                                                            icon: const Icon(
-                                                              Icons
-                                                                  .edit_outlined,
-                                                              color:
-                                                                  Colors.grey,
-                                                            ),
-                                                            onPressed: () {
-                                                              _showAddRewardDialog(
-                                                                existingData:
-                                                                    data,
-                                                                docId: doc.id,
-                                                              );
-                                                            },
-                                                          ),
-                                                          IconButton(
-                                                            icon: const Icon(
-                                                              Icons
-                                                                  .delete_outline_rounded,
-                                                              color: Colors.red,
-                                                            ),
-                                                            onPressed: () {
-                                                              showDialog(
-                                                                context:
-                                                                    context,
-                                                                builder: (ctx) {
-                                                                  final rewardName =
-                                                                      data['title'] ??
-                                                                      'هذه المكافأة';
-
-                                                                  return Dialog(
-                                                                    shape: RoundedRectangleBorder(
-                                                                      borderRadius:
-                                                                          BorderRadius.circular(
-                                                                            18,
-                                                                          ),
+                                                    IconButton(
+                                                      icon: const Icon(
+                                                        Icons
+                                                            .delete_outline_rounded,
+                                                        color: Colors.red,
+                                                      ),
+                                                      onPressed: () {
+                                                        showDialog(
+                                                          context: context,
+                                                          builder: (ctx) {
+                                                            final rewardName =
+                                                                data['title'] ??
+                                                                'هذه المكافأة';
+                                                            return Dialog(
+                                                              shape: RoundedRectangleBorder(
+                                                                borderRadius:
+                                                                    BorderRadius.circular(
+                                                                      18,
                                                                     ),
-                                                                    child: Padding(
-                                                                      padding:
-                                                                          const EdgeInsets.fromLTRB(
+                                                              ),
+                                                              child: Padding(
+                                                                padding:
+                                                                    const EdgeInsets.fromLTRB(
+                                                                      20,
+                                                                      20,
+                                                                      20,
+                                                                      12,
+                                                                    ),
+                                                                child: Column(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    const Icon(
+                                                                      Icons
+                                                                          .warning_amber_rounded,
+                                                                      size: 48,
+                                                                      color: Colors
+                                                                          .redAccent,
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      height: 8,
+                                                                    ),
+                                                                    const Text(
+                                                                      'تأكيد الحذف',
+                                                                      style: TextStyle(
+                                                                        fontSize:
                                                                             20,
-                                                                            20,
-                                                                            20,
-                                                                            12,
-                                                                          ),
-                                                                      child: Column(
-                                                                        mainAxisSize:
-                                                                            MainAxisSize.min,
-                                                                        children: [
-                                                                          const Icon(
-                                                                            Icons.warning_amber_rounded,
-                                                                            size:
-                                                                                48,
-                                                                            color:
-                                                                                Colors.redAccent,
-                                                                          ),
-                                                                          const SizedBox(
-                                                                            height:
-                                                                                8,
-                                                                          ),
-                                                                          const Text(
-                                                                            'تأكيد الحذف',
-                                                                            style: TextStyle(
-                                                                              fontSize: 20,
-                                                                              fontWeight: FontWeight.w800,
-                                                                            ),
-                                                                          ),
-                                                                          const SizedBox(
-                                                                            height:
-                                                                                8,
-                                                                          ),
-                                                                          Text(
-                                                                            'هل أنت متأكد من حذف "$rewardName"؟',
-                                                                            textAlign:
-                                                                                TextAlign.center,
-                                                                            style: const TextStyle(
-                                                                              color: Colors.black87,
-                                                                            ),
-                                                                          ),
-                                                                          const SizedBox(
-                                                                            height:
-                                                                                16,
-                                                                          ),
-                                                                          SizedBox(
-                                                                            width:
-                                                                                double.infinity,
-                                                                            child: FilledButton.icon(
-                                                                              icon: const Icon(
-                                                                                Icons.delete_outline_rounded,
-                                                                              ),
-                                                                              label: const Text(
-                                                                                'تأكيد الحذف',
-                                                                              ),
-                                                                              style: FilledButton.styleFrom(
-                                                                                backgroundColor: AppColors.primary,
-                                                                                padding: const EdgeInsets.symmetric(
-                                                                                  vertical: 14,
-                                                                                ),
-                                                                                shape: RoundedRectangleBorder(
-                                                                                  borderRadius: BorderRadius.circular(
-                                                                                    14,
-                                                                                  ),
-                                                                                ),
-                                                                              ),
-                                                                              onPressed: () async {
-                                                                                try {
-                                                                                  await FirebaseFirestore.instance
-                                                                                      .collection(
-                                                                                        'rewards',
-                                                                                      )
-                                                                                      .doc(
-                                                                                        doc.id,
-                                                                                      )
-                                                                                      .delete();
-
-                                                                                  if (ctx.mounted)
-                                                                                    Navigator.pop(
-                                                                                      ctx,
-                                                                                    );
-
-                                                                                  ScaffoldMessenger.of(
-                                                                                    context,
-                                                                                  ).showSnackBar(
-                                                                                    SnackBar(
-                                                                                      content: Text(
-                                                                                        'تم حذف "$rewardName" بنجاح 🗑️',
-                                                                                      ),
-                                                                                    ),
-                                                                                  );
-                                                                                } catch (
-                                                                                  e
-                                                                                ) {
-                                                                                  if (ctx.mounted)
-                                                                                    Navigator.pop(
-                                                                                      ctx,
-                                                                                    );
-                                                                                  ScaffoldMessenger.of(
-                                                                                    context,
-                                                                                  ).showSnackBar(
-                                                                                    const SnackBar(
-                                                                                      content: Text(
-                                                                                        'فشل حذف المكافأة ❌',
-                                                                                      ),
-                                                                                    ),
-                                                                                  );
-                                                                                }
-                                                                              },
-                                                                            ),
-                                                                          ),
-                                                                          const SizedBox(
-                                                                            height:
-                                                                                10,
-                                                                          ),
-                                                                          SizedBox(
-                                                                            width:
-                                                                                double.infinity,
-                                                                            child: OutlinedButton(
-                                                                              style: OutlinedButton.styleFrom(
-                                                                                foregroundColor: Colors.red,
-                                                                                side: const BorderSide(
-                                                                                  color: Colors.red,
-                                                                                ),
-                                                                                padding: const EdgeInsets.symmetric(
-                                                                                  vertical: 14,
-                                                                                ),
-                                                                                shape: RoundedRectangleBorder(
-                                                                                  borderRadius: BorderRadius.circular(
-                                                                                    14,
-                                                                                  ),
-                                                                                ),
-                                                                              ),
-                                                                              onPressed: () => Navigator.pop(
-                                                                                ctx,
-                                                                              ),
-                                                                              child: const Text(
-                                                                                'إلغاء',
-                                                                              ),
-                                                                            ),
-                                                                          ),
-                                                                        ],
+                                                                        fontWeight:
+                                                                            FontWeight.w800,
                                                                       ),
                                                                     ),
-                                                                  );
-                                                                },
-                                                              );
-                                                            },
-                                                          ),
-                                                        ],
-                                                      ),
+                                                                    const SizedBox(
+                                                                      height: 8,
+                                                                    ),
+                                                                    Text(
+                                                                      'هل أنت متأكد من حذف "$rewardName"؟',
+                                                                      textAlign:
+                                                                          TextAlign
+                                                                              .center,
+                                                                      style: const TextStyle(
+                                                                        color: Colors
+                                                                            .black87,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      height:
+                                                                          16,
+                                                                    ),
+                                                                    SizedBox(
+                                                                      width: double
+                                                                          .infinity,
+                                                                      child: FilledButton.icon(
+                                                                        icon: const Icon(
+                                                                          Icons
+                                                                              .delete_outline_rounded,
+                                                                        ),
+                                                                        label: const Text(
+                                                                          'تأكيد الحذف',
+                                                                        ),
+                                                                        style: FilledButton.styleFrom(
+                                                                          backgroundColor:
+                                                                              AppColors.primary,
+                                                                          padding: const EdgeInsets.symmetric(
+                                                                            vertical:
+                                                                                14,
+                                                                          ),
+                                                                          shape: RoundedRectangleBorder(
+                                                                            borderRadius: BorderRadius.circular(
+                                                                              14,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        onPressed: () async {
+                                                                          try {
+                                                                            await FirebaseFirestore.instance
+                                                                                .collection(
+                                                                                  'rewards',
+                                                                                )
+                                                                                .doc(
+                                                                                  doc.id,
+                                                                                )
+                                                                                .delete();
+                                                                            if (ctx.mounted) {
+                                                                              Navigator.pop(
+                                                                                ctx,
+                                                                              );
+                                                                            }
+                                                                            ScaffoldMessenger.of(
+                                                                              context,
+                                                                            ).showSnackBar(
+                                                                              SnackBar(
+                                                                                content: Text(
+                                                                                  'تم حذف "$rewardName" بنجاح 🗑️',
+                                                                                ),
+                                                                              ),
+                                                                            );
+                                                                          } catch (
+                                                                            e
+                                                                          ) {
+                                                                            if (ctx.mounted) {
+                                                                              Navigator.pop(
+                                                                                ctx,
+                                                                              );
+                                                                            }
+                                                                            ScaffoldMessenger.of(
+                                                                              context,
+                                                                            ).showSnackBar(
+                                                                              const SnackBar(
+                                                                                content: Text(
+                                                                                  'فشل حذف المكافأة ❌',
+                                                                                ),
+                                                                              ),
+                                                                            );
+                                                                          }
+                                                                        },
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      height:
+                                                                          10,
+                                                                    ),
+                                                                    SizedBox(
+                                                                      width: double
+                                                                          .infinity,
+                                                                      child: OutlinedButton(
+                                                                        style: OutlinedButton.styleFrom(
+                                                                          foregroundColor:
+                                                                              Colors.red,
+                                                                          side: const BorderSide(
+                                                                            color:
+                                                                                Colors.red,
+                                                                          ),
+                                                                          padding: const EdgeInsets.symmetric(
+                                                                            vertical:
+                                                                                14,
+                                                                          ),
+                                                                          shape: RoundedRectangleBorder(
+                                                                            borderRadius: BorderRadius.circular(
+                                                                              14,
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                        onPressed: () =>
+                                                                            Navigator.pop(
+                                                                              ctx,
+                                                                            ),
+                                                                        child: const Text(
+                                                                          'إلغاء',
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            );
+                                                          },
+                                                        );
+                                                      },
                                                     ),
                                                   ],
                                                 ),
                                               ],
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 );
                               },
                             );
@@ -1080,17 +945,15 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
               },
             ),
           ),
-          floatingActionButton: Align(
-            alignment: Alignment.bottomLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 16, bottom: 16),
+
+          // ✅ بدون BottomNavigationBar — فقط زر إضافة
+          floatingActionButton: Padding(
+            padding: const EdgeInsets.only(bottom: 8, left: 8),
+            child: Align(
+              alignment: Alignment.bottomLeft,
               child: _buildAddFab(),
             ),
           ),
-
-          bottomNavigationBar: isKeyboardOpen
-              ? null
-              : AdminBottomNav(currentIndex: _currentIndex, onTap: _onTap),
         ),
       ),
     );

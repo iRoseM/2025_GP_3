@@ -8,7 +8,7 @@ import 'home.dart';
 import 'main.dart';
 import 'services/background_container.dart';
 import 'services/bottom_nav.dart';
-import 'my_reports.dart';
+import 'notifications.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
 
@@ -417,7 +417,7 @@ class profilePage extends StatelessWidget {
 
                                               // تايل واحد دائمًا، والـ onTap شغّال بكل الحالات
                                               return _SettingTile(
-                                                title: 'بلاغاتي',
+                                                title: 'إشعاراتي',
                                                 icon: Icons
                                                     .notifications_outlined,
                                                 trailing: trailing,
