@@ -385,48 +385,139 @@ class _ArticlePageState extends State<ArticlePage> {
               right: 16,
               bottom: 20,
               child: Container(
-  decoration: BoxDecoration(
-    borderRadius: BorderRadius.circular(14),
-    gradient: const LinearGradient(
-      colors: [
-        AppColors.mint,
-        AppColors.tealSoft,
-        AppColors.primary,
-      ],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-    ),
-  ),
-  child: ElevatedButton(
-    onPressed: () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ShortTestVerificationPage(
-            articleId: widget.taskId ?? '', // أو articleId من المقال لو موجود
-          ),
-        ),
-      );
-    },
-    style: ElevatedButton.styleFrom(
-      backgroundColor: Colors.transparent,
-      shadowColor: Colors.transparent,
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
-    ),
-    child: Text(
-      "تمت القراءة",
-      style: GoogleFonts.ibmPlexSansArabic(
-        fontWeight: FontWeight.w700,
-        fontSize: 16,
-        color: Colors.white,
-      ),
-    ),
-  ),
-)
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  gradient: const LinearGradient(
+                    colors: [
+                      AppColors.mint,
+                      AppColors.tealSoft,
+                      AppColors.primary,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: ElevatedButton(
+                  onPressed: () async {
+                    try {
+                      final userTaskRef = FirebaseFirestore.instance
+                          .collection('userTasks')
+                          .doc(widget.userTaskDocId);
 
+                      final snap = await userTaskRef.get();
+                      if (!snap.exists) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('تعذر العثور على المهمة.')),
+                        );
+                        return;
+                      }
+
+                      // ✅ تحقق من حالة المهمة قبل التحديث 
+                      final data = snap.data()!;
+                      if (data['status'] == 'completed') {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('سبق وتم إتمام هذه المهمة ✅')),
+                        );
+                        return;
+                      }
+                      final userId = data['userId'];
+                      final taskPoints = data['taskPoints'] ?? 0;
+                      final taskTitle = data['taskTitle'] ?? 'مقال اليوم';
+
+                      final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
+                      final historyRef = FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(userId)
+                          .collection('history')
+                          .doc();
+                      final notifRef =
+                          FirebaseFirestore.instance.collection('notifications').doc();
+
+                      final batch = FirebaseFirestore.instance.batch();
+
+                      // ✅ تحديث حالة المهمة
+                      batch.update(userTaskRef, {
+                        'status': 'completed',
+                        'completedAt': FieldValue.serverTimestamp(),
+                        'canRetry': false,
+                      });
+
+                      // ✅ إضافة النقاط للمستخدم
+                      if (taskPoints > 0) {
+                        batch.set(userRef, {
+                          'points': FieldValue.increment(taskPoints),
+                          'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+                        }, SetOptions(merge: true));
+                      }
+
+                      // ✅ إضافة إلى history
+                      batch.set(historyRef, {
+                        'type': 'article_read',
+                        'taskType': 'article', // ✅ أضفناه هنا
+                        'userTaskDocId': widget.userTaskDocId,
+                        'points': taskPoints,
+                        'at': FieldValue.serverTimestamp(),
+                        'taskTitle': taskTitle,
+                      });
+
+
+                      // ✅ إنشاء إشعار للمستخدم
+                      batch.set(notifRef, {
+                        'type': 'article_completed',
+                        'taskType': 'article', // ✅ أضفناه هنا
+                        'userId': userId,
+                        'userTaskDocId': widget.userTaskDocId,
+                        'taskTitle': taskTitle,
+                        'points': taskPoints,
+                        'createdAt': FieldValue.serverTimestamp(),
+                        'seen': false,
+                        'title': 'مهمة القراءة ✅',
+                        'body': 'أحسنت! أكملت قراءة المقال وحصلت على $taskPoints نقطة 🌿',
+                      });
+
+                      print('🚀 trying to commit batch...');
+                      try {
+                        await batch.commit();
+                        print('✅ batch committed successfully');
+                      } catch (e) {
+                        print('❌ batch failed: $e');
+                      }
+
+                      // await batch.commit();
+
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('تم إتمام المهمة بنجاح ✅')),
+                        );
+                        Navigator.pop(context, true); // يرجع لصفحة المهام ويحدثها
+                      }
+                    } catch (e) {
+                      debugPrint('❌ خطأ أثناء إتمام المقال: $e');
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('حدث خطأ: $e')),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text(
+                    "تمت القراءة",
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              )
             ),
         ],
       ),

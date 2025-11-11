@@ -1402,40 +1402,64 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
                               _fieldLabel('تصنيف المهمة', required: true),
                               const SizedBox(height: 8),
+                              // DropdownButtonFormField<String>(
+                              //   value: _selectedCategory,
+                              //   alignment: Alignment.centerRight,
+                              //   isExpanded: true,
+                              //   decoration: InputDecoration(
+                              //     hintText: _catsLoading
+                              //         ? '...يتم تحميل الفئات'
+                              //         : 'اختر الفئة',
+                              //     prefixIcon: const Icon(
+                              //       Icons.category_outlined,
+                              //       color: AppColors.primary,
+                              //     ),
+                              //     border: OutlineInputBorder(
+                              //       borderRadius: BorderRadius.circular(12),
+                              //     ),
+                              //   ),
+                              //   items: _categories
+                              //       .map(
+                              //         (name) => DropdownMenuItem(
+                              //           value: name,
+                              //           child: Align(
+                              //             alignment: Alignment.centerRight,
+                              //             child: Text(name),
+                              //           ),
+                              //         ),
+                              //       )
+                              //       .toList(),
+                              //   onChanged: (v) {
+                              //     setState(() => _selectedCategory = v);
+                              //     _isDirty = true;
+                              //   },
+                              //   validator: (v) => (v == null || v.isEmpty)
+                              //       ? 'اختر تصنيف المهمة'
+                              //       : null,
+                              // ),
                               DropdownButtonFormField<String>(
-                                value: _selectedCategory,
+                                value: _categories.contains(_selectedCategory) ? _selectedCategory : null,
                                 alignment: Alignment.centerRight,
                                 isExpanded: true,
                                 decoration: InputDecoration(
-                                  hintText: _catsLoading
-                                      ? '...يتم تحميل الفئات'
-                                      : 'اختر الفئة',
-                                  prefixIcon: const Icon(
-                                    Icons.category_outlined,
-                                    color: AppColors.primary,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                                  hintText: _catsLoading ? '...يتم تحميل الفئات' : 'اختر الفئة',
+                                  prefixIcon: const Icon(Icons.category_outlined, color: AppColors.primary),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                                 ),
                                 items: _categories
-                                    .map(
-                                      (name) => DropdownMenuItem(
-                                        value: name,
-                                        child: Align(
-                                          alignment: Alignment.centerRight,
-                                          child: Text(name),
-                                        ),
-                                      ),
-                                    )
+                                    .map((name) => DropdownMenuItem(
+                                          value: name,
+                                          child: Align(
+                                            alignment: Alignment.centerRight,
+                                            child: Text(name),
+                                          ),
+                                        ))
                                     .toList(),
                                 onChanged: (v) {
                                   setState(() => _selectedCategory = v);
                                   _isDirty = true;
                                 },
-                                validator: (v) => (v == null || v.isEmpty)
-                                    ? 'اختر تصنيف المهمة'
-                                    : null,
+                                validator: (v) => (v == null || v.isEmpty) ? 'اختر تصنيف المهمة' : null,
                               ),
                               const SizedBox(height: 20),
 
@@ -1490,9 +1514,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   ),
                                   DropdownMenuItem(
                                     value:
-                                        'التحقق عبر اختبار قصير أو نظام القراءة',
+                                        'التحقق عبر اجراء اختبار قصير',
                                     child: Text(
-                                      'التحقق عبر اختبار قصير أو نظام القراءة',
+                                      'التحقق عبر اجراء اختبار قصير',
                                     ),
                                   ),
                                 ],
