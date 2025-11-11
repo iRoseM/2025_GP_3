@@ -8,10 +8,8 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'services/title_header.dart';
-
-import 'task.dart'; // فيه AppColors + NameerAppBar
 import 'services/background_container.dart';
-
+import 'short_test_verification_page.dart';
 class AppColors {
   static const primary = Color(0xFF4BAA98);
   static const dark = Color(0xFF3C3C3B);
@@ -52,6 +50,9 @@ class _ArticlePageState extends State<ArticlePage> {
   // ========== الخطوة 1: قراءة/جلب المقال وتثبيته ==========
   Future<void> _loadOrFetchArticle() async {
     try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
       final userTaskRef = FirebaseFirestore.instance
           .collection('userTasks')
           .doc(widget.userTaskDocId);
@@ -59,7 +60,7 @@ class _ArticlePageState extends State<ArticlePage> {
       final snap = await userTaskRef.get();
       final data = snap.data() ?? {};
 
-      // ✅ لو عنده articleId، نجيب المقال من articles مباشرة
+      // ✅ لو فيه مقال محفوظ نجيبه مباشرة
       if (data.containsKey('articleId') && data['articleId'] != null) {
         final artSnap = await FirebaseFirestore.instance
             .collection('articles')
@@ -75,47 +76,29 @@ class _ArticlePageState extends State<ArticlePage> {
         }
       }
 
-      // 🆕 أول مرة: نجلب مقال جديد ونخزّنه في Collection articles
-      final art = await _fetchRandomArticle();
-      // 🔍 جلب النص الكامل من المصدر (بديل عن الـ content المقطوع)
-      String fullText = '';
-      if ((art['url'] ?? '').toString().isNotEmpty) {
-        fullText = await _fetchFullText(art['url']);
-      }
+      // 🆕 مافيه مقال مرتبط، نجيب واحد جديد
+      final art = await _fetchRandomArabicArticle();
 
-      // إذا النص اللي رجع ناقص، نستخدم النص المدمج
-      if (fullText.isEmpty || fullText.length < 400) {
-        fullText = art['content'] ?? art['description'] ?? '';
-      }
-
-      // أضيفي هنا userId من FirebaseAuth لو متاح عندك
-      final auth = FirebaseAuth.instance;
-      User? user = auth.currentUser;
-      if (user == null) {
-        final cred = await auth.signInAnonymously();
-        user = cred.user;
-        debugPrint('👤 Signed in anonymously: ${user?.uid}');
-      }
+      // 🟢 نخزّنه في Collection articles
       final articleDoc = await FirebaseFirestore.instance
           .collection('articles')
           .add({
-            'taskId': widget.taskId,
-            'userId': user!.uid, // ✅ ضروري
-            'userTaskDocId': widget.userTaskDocId,
-            'title': art['title'],
-            'description': art['description'],
-            // 'content': art['content'],
-            'content': fullText,
-            'url': art['url'],
-            'urlToImage': art['urlToImage'],
-            'sourceName': art['sourceName'],
-            'publishedAt': art['publishedAt'],
-            'language': 'ar',
-            'category': 'environment',
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+        'taskId': widget.taskId,
+        'userId': user.uid,
+        'userTaskDocId': widget.userTaskDocId,
+        'title': art['title'],
+        'description': art['description'],
+        'content': art['content'],
+        'url': art['url'],
+        'urlToImage': art['urlToImage'],
+        'sourceName': art['sourceName'],
+        'publishedAt': art['publishedAt'],
+        'language': 'ar',
+        'category': 'news',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
-      // 🔗 نحفظ فقط الـ articleId في userTasks
+      // 🔗 نحفظ الـ articleId في userTasks
       await userTaskRef.update({'articleId': articleDoc.id});
 
       setState(() {
@@ -131,116 +114,86 @@ class _ArticlePageState extends State<ArticlePage> {
     }
   }
 
-  // ========== الخطوة 2: NewsAPI -> مقال عشوائي عربي ==========
-  // Future<Map<String, dynamic>> _fetchRandomArticle() async {
-  //   const apiKey = '2a2d935013454a568f3c8301982a275c';
-  //   // ✅ استخدم كلمات مفتاحية أوسع + ترميز صحيح
-  //   const query =
-  //       'البيئة OR الطبيعة OR إعادة التدوير OR الطاقة المتجددةOR الاستدامة';
-  //   final url = Uri.parse(
-  //     'https://newsapi.org/v2/everything?q=${Uri.encodeComponent(query)}&language=ar&pageSize=20&sortBy=publishedAt&apiKey=$apiKey',
-  //   );
+  // ========== الخطوة 2 (محدثة): جلب مقال بيئي عشوائي من NewsData.io ==========
+  Future<Map<String, dynamic>> _fetchRandomArabicArticle() async {
+    const apiKey = 'pub_1eff8ffbdb284bc7883f1d8b90bedbc0';
+    const query = 'البيئة OR المناخ OR الاستدامة OR الطاقة النظيفة OR تدوير';
 
-  //   debugPrint('🔍 Fetching from: $url');
-
-  //   final res = await http.get(url, headers: {'User-Agent': 'NameerApp/1.0'});
-  //   if (res.statusCode != 200) {
-  //     throw Exception('❌ NewsAPI returned ${res.statusCode}');
-  //   }
-
-  //   final jsonBody = json.decode(res.body);
-  //   final List arts = jsonBody['articles'] ?? [];
-
-  //   if (arts.isEmpty) {
-  //     debugPrint(
-  //       '⚠️ No Arabic articles returned. totalResults=${jsonBody['totalResults']}',
-  //     );
-  //     throw Exception('No articles');
-  //   }
-
-  //   final rnd = Random();
-  //   final art = arts[rnd.nextInt(arts.length)] as Map<String, dynamic>;
-
-  //   // ✅ تنظيف المحتوى
-  //   String content = (art['content'] ?? '').toString();
-  //   content = content
-  //       .replaceAll(RegExp(r'\[.*?\]'), '')
-  //       .replaceAll(RegExp(r'http\S+'), '')
-  //       .replaceAll(RegExp(r'pic\.twitter\.com/\S+'), '')
-  //       .replaceAll(RegExp(r'[@#]'), '')
-  //       .replaceAll(RegExp(r'[^\u0600-\u06FFa-zA-Z0-9\s،.!؟:؛-]'), ' ')
-  //       .replaceAll(RegExp(r'\s+'), ' ')
-  //       .trim();
-
-  //   if (content.isEmpty || content.length < 100) {
-  //     content = (art['description'] ?? '').toString();
-  //   }
-
-  //   return {
-  //     'title': art['title'] ?? '',
-  //     'description': art['description'] ?? '',
-  //     'content': content,
-  //     'url': art['url'] ?? '',
-  //     'urlToImage': art['urlToImage'] ?? '',
-  //     'sourceName': art['source']?['name'] ?? '',
-  //     'publishedAt': art['publishedAt'] ?? '',
-  //   };
-  // }
-
-  Future<Map<String, dynamic>> _fetchRandomArticle() async {
-    const apiKey = '2a2d935013454a568f3c8301982a275c';
-    // 🔓 مؤقتًا نفتح الشروط عشان نتاكد من الاتصال
-    const query = 'Saudi OR السعودية OR بيئة OR environment OR world';
     final url = Uri.parse(
-      'https://newsapi.org/v2/everything?q=${Uri.encodeComponent(query)}&pageSize=20&sortBy=publishedAt&apiKey=$apiKey',
-    );
+        'https://newsdata.io/api/1/news?apikey=$apiKey&q=$query&language=ar&category=environment');
 
-    debugPrint('🌍 Fetching from: $url');
+    debugPrint('🌿 Fetching from NewsData.io: $url');
 
-    final res = await http.get(url, headers: {'User-Agent': 'NameerApp/1.0'});
+    final res = await http.get(url);
     if (res.statusCode != 200) {
-      throw Exception('❌ NewsAPI returned ${res.statusCode}');
+      throw Exception('NewsData API returned ${res.statusCode}');
     }
 
-    final jsonBody = json.decode(res.body);
-    final List arts = jsonBody['articles'] ?? [];
+    final data = json.decode(res.body);
+    final List results = data['results'] ?? [];
+    if (results.isEmpty) throw Exception('No environmental articles found');
+    // بعد استلام النتائج:
+    final List filtered = results.where((art) {
+      final text = ((art['title'] ?? '') + ' ' + (art['full_content'] ?? '')).toLowerCase();
+      final keywords = [
+        'البيئة',
+        'استدامة',
+        'تدوير',
+        'إعادة تدوير',
+        'تلوث',
+        'احتباس حراري',
+        'كربون',
+        'طاقة متجددة',
+        'نفايات',
+        'تشجير',
+        'هواء نقي',
+        'مناخ',
+        'انبعاثات',
+        'محميات طبيعية',
+        'حفاظ على الطبيعة',
+        'تنوع بيولوجي',
+        'تغير المناخ',
+        'طاقة نظيفة',
+        'مصادر طبيعية' 
+      ];
 
-    if (arts.isEmpty) {
-      debugPrint(
-        '⚠️ No articles found at all (totalResults=${jsonBody['totalResults']})',
-      );
-      throw Exception('No articles');
+      // ✅ لازم يحتوي على أي من الكلمات المفتاحية
+      return keywords.any((k) => text.contains(k));
+    }).toList();
+
+    if (filtered.isEmpty) throw Exception('No relevant environmental articles found');
+
+    // نختار مقال عشوائي من المصفاة
+    final art = filtered[Random().nextInt(filtered.length)] as Map<String, dynamic>;
+
+    // نختار مقال عشوائي
+    // final art = results[Random().nextInt(results.length)] as Map<String, dynamic>;
+
+    // نجيب النص من الـ API
+    String content = (art['full_content'] ?? art['content'] ?? art['description'] ?? '').toString();
+
+
+    // ✅ دايمًا نحاول نقرأ النص الحقيقي من الموقع مباشرة (أدق وأوضح)
+    final urlStr = art['link'] ?? '';
+    if (urlStr.isNotEmpty) {
+      debugPrint('🔍 Always fetching full text from original link...');
+      final fullText = await _fetchFullText(urlStr);
+      if (fullText.isNotEmpty && fullText.length > 300) {
+        content = fullText;
+      }
     }
-
-    final rnd = Random();
-    final art = arts[rnd.nextInt(arts.length)] as Map<String, dynamic>;
-
-    String content = (art['content'] ?? '').toString();
-    content = content
-        .replaceAll(RegExp(r'\[.*?\]'), '')
-        .replaceAll(RegExp(r'http\S+'), '')
-        .replaceAll(RegExp(r'pic\.twitter\.com/\S+'), '')
-        .replaceAll(RegExp(r'[@#]'), '')
-        .replaceAll(RegExp(r'[^\u0600-\u06FFa-zA-Z0-9\s،.!؟:؛-]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-
-    if (content.isEmpty || content.length < 100) {
-      content = (art['description'] ?? '').toString();
-    }
-
     return {
       'title': art['title'] ?? '',
       'description': art['description'] ?? '',
       'content': content,
-      'url': art['url'] ?? '',
-      'urlToImage': art['urlToImage'] ?? '',
-      'sourceName': art['source']?['name'] ?? '',
-      'publishedAt': art['publishedAt'] ?? '',
+      'url': art['link'] ?? '',
+      'urlToImage': art['image_url'] ?? '',
+      'sourceName': art['source_id'] ?? (art['creator']?.join(', ') ?? ''),
+      'publishedAt': art['pubDate'] ?? '',
     };
   }
 
-  // ========== الخطوة 3: جلب النص الكامل من المصدر ==========
+  // ========== الخطوة 3 (محدّثة): جلب النص الكامل من المصدر ==========
   Future<String> _fetchFullText(String url) async {
     try {
       final resp = await http.get(
@@ -269,7 +222,7 @@ class _ArticlePageState extends State<ArticlePage> {
         doc.querySelectorAll(sel).forEach((e) => e.remove());
       }
 
-      // محاولات لعناصر شائعة
+      // نحاول إيجاد عنصر يحتوي النص الأساسي للمقال
       final candidates = [
         'article',
         "[itemprop='articleBody']",
@@ -281,6 +234,7 @@ class _ArticlePageState extends State<ArticlePage> {
         '.content',
         'main',
       ];
+
       for (final sel in candidates) {
         final el = doc.querySelector(sel);
         if (el != null) {
@@ -289,15 +243,34 @@ class _ArticlePageState extends State<ArticlePage> {
         }
       }
 
-      // Fallback: دمج كل الفقرات
+      // 🪄 Fallback محسّن: دمج الفقرات بدون تكرار وبترتيب جميل
       final ps = doc.getElementsByTagName('p');
-      final merged = ps
-          .map((e) => e.text.trim())
-          .where((t) => t.isNotEmpty)
-          .join('\n\n');
-      return _clean(merged);
+
+      final seen = <String>{};
+      final paragraphs = <String>[];
+
+      for (final e in ps) {
+        var text = _clean(e.text);
+        if (text.isEmpty || text.length < 30) continue;
+
+        // منع التكرار أو الفقرات شبه المتطابقة
+        final normalized = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+        if (seen.contains(normalized)) continue;
+        seen.add(normalized);
+
+        paragraphs.add(text);
+      }
+
+      // نرتب الفقرات ونضيف فواصل مرتبة
+      final merged = paragraphs.join('\n\n');
+      final cleaned = merged
+          .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+          .replaceAll(RegExp(r'\s{2,}'), ' ')
+          .trim();
+
+      return cleaned;
     } catch (e) {
-      debugPrint('⚠️ _fetchFullText error: $e');
+      debugPrint('❌ Full text fetch error: $e');
       return '';
     }
   }
@@ -313,49 +286,6 @@ class _ArticlePageState extends State<ArticlePage> {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     return s;
-  }
-
-  bool _isPartial(String? content) {
-    if (content == null) return true;
-    final c = content.trim();
-    if (c.isEmpty) return true;
-    if (c.contains(RegExp(r'\[\+\d+\s*chars\]'))) return true; // نمط NewsAPI
-    if (c.length < 400) return true; // قصير على مقال كامل
-    return false;
-  }
-
-  String _mergePreview(dynamic content, dynamic description) {
-    final c = (content ?? '').toString();
-    final d = (description ?? '').toString();
-    final merged = ('$d\n\n$c').trim();
-    return _clean(merged);
-  }
-
-  // ========== الخطوة 5: حفظ المقال في articles طبقًا لقواعدك ==========
-  Future<void> _saveArticleToCollection({
-    required String userId,
-    required String? taskId,
-    required Map<String, dynamic> art,
-    required String fullContent,
-  }) async {
-    try {
-      await FirebaseFirestore.instance.collection('articles').add({
-        'userId': userId,
-        'taskId': taskId ?? '',
-        'title': art['title'] ?? '',
-        'description': art['description'] ?? '',
-        'content': fullContent, // النص الكامل
-        'url': art['url'] ?? '',
-        'urlToImage': art['urlToImage'] ?? '',
-        'sourceName': art['sourceName'] ?? '',
-        'language': 'ar',
-        'category': 'environment', // مطابقة لقواعدك
-        'createdAt': FieldValue.serverTimestamp(), // مطابقة لقواعدك
-        // ملاحظـة: قواعدك لا تشترط publishedAt، لذا تركناه.
-      });
-    } catch (e) {
-      debugPrint('⚠️ save to articles error: $e');
-    }
   }
 
   // ========== UI ==========
@@ -425,16 +355,6 @@ class _ArticlePageState extends State<ArticlePage> {
                     color: AppColors.primary,
                   ),
                 ),
-                const SizedBox(height: 14),
-                if ((a['description'] ?? '').toString().isNotEmpty)
-                  Text(
-                    a['description'],
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 16,
-                      height: 1.6,
-                      color: AppColors.dark,
-                    ),
-                  ),
                 const SizedBox(height: 20),
                 Text(
                   a['content'] ?? '',
@@ -464,37 +384,49 @@ class _ArticlePageState extends State<ArticlePage> {
               left: 16,
               right: 16,
               bottom: 20,
-              child: ElevatedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        "تمت القراءة — قريبًا بنفتح صفحة الكويز 🎯",
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          color: Colors.white,
-                        ),
-                      ),
-                      backgroundColor: AppColors.primary,
-                    ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  "تمت القراءة",
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+              child: Container(
+  decoration: BoxDecoration(
+    borderRadius: BorderRadius.circular(14),
+    gradient: const LinearGradient(
+      colors: [
+        AppColors.mint,
+        AppColors.tealSoft,
+        AppColors.primary,
+      ],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+  ),
+  child: ElevatedButton(
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ShortTestVerificationPage(
+            articleId: widget.taskId ?? '', // أو articleId من المقال لو موجود
+          ),
+        ),
+      );
+    },
+    style: ElevatedButton.styleFrom(
+      backgroundColor: Colors.transparent,
+      shadowColor: Colors.transparent,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+    ),
+    child: Text(
+      "تمت القراءة",
+      style: GoogleFonts.ibmPlexSansArabic(
+        fontWeight: FontWeight.w700,
+        fontSize: 16,
+        color: Colors.white,
+      ),
+    ),
+  ),
+)
+
             ),
         ],
       ),

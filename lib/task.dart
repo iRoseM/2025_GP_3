@@ -1110,7 +1110,7 @@ class _taskPageState extends State<taskPage> {
             onPressed: (isCompleted || isSubmitted)
                 ? null
                 : () async {
-                    if (validation == "quiz") {
+                    if (validation == "التحقق عبر اجراء اختبار قصير") {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
