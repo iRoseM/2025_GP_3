@@ -623,7 +623,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                             return ListView.builder(
                               physics: const BouncingScrollPhysics(),
                               padding: const EdgeInsets.only(
-                                bottom: 100,
+                                bottom: 170,
                                 top: 8,
                               ),
                               itemCount: rewards.length,
