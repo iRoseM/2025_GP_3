@@ -9,6 +9,7 @@ import 'admin_reward.dart';
 import 'admin_map.dart';
 import 'services/background_container.dart';
 import 'services/title_header.dart';
+import 'admin_category.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -376,14 +377,29 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                     color: AppColors.dark,
                   ),
                 ),
-                subtitle: Text(
-                  task['category'] ?? '',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF666666),
-                    fontWeight: FontWeight.w600,
+                subtitle: GestureDetector(
+                  onTap: () {
+                    final catName = task['category']?.toString();
+                    if (catName == null || catName.isEmpty) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AdminCategoryPage(initialCategoryName: catName),
+                      ),
+                    );
+                  },
+                  child: Text(
+                    task['category'] ?? '',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.sea,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                    ),
                   ),
                 ),
+
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -1243,7 +1259,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
           backgroundColor: AppColors.background,
           appBar: const NameerAppBar(
             showTitleInBar: false,
-            showBack: true,
+            showBack: false,
             height: 80,
           ),
           body: Builder(
@@ -1366,28 +1382,41 @@ class _AddTaskPageState extends State<AddTaskPage> {
                               //       : null,
                               // ),
                               DropdownButtonFormField<String>(
-                                value: _categories.contains(_selectedCategory) ? _selectedCategory : null,
+                                value: _categories.contains(_selectedCategory)
+                                    ? _selectedCategory
+                                    : null,
                                 alignment: Alignment.centerRight,
                                 isExpanded: true,
                                 decoration: InputDecoration(
-                                  hintText: _catsLoading ? '...يتم تحميل الفئات' : 'اختر الفئة',
-                                  prefixIcon: const Icon(Icons.category_outlined, color: AppColors.primary),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                  hintText: _catsLoading
+                                      ? '...يتم تحميل الفئات'
+                                      : 'اختر الفئة',
+                                  prefixIcon: const Icon(
+                                    Icons.category_outlined,
+                                    color: AppColors.primary,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
                                 ),
                                 items: _categories
-                                    .map((name) => DropdownMenuItem(
-                                          value: name,
-                                          child: Align(
-                                            alignment: Alignment.centerRight,
-                                            child: Text(name),
-                                          ),
-                                        ))
+                                    .map(
+                                      (name) => DropdownMenuItem(
+                                        value: name,
+                                        child: Align(
+                                          alignment: Alignment.centerRight,
+                                          child: Text(name),
+                                        ),
+                                      ),
+                                    )
                                     .toList(),
                                 onChanged: (v) {
                                   setState(() => _selectedCategory = v);
                                   _isDirty = true;
                                 },
-                                validator: (v) => (v == null || v.isEmpty) ? 'اختر تصنيف المهمة' : null,
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'اختر تصنيف المهمة'
+                                    : null,
                               ),
                               const SizedBox(height: 20),
 
@@ -1441,11 +1470,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                     child: Text('التحقق عبر معالجة الصور'),
                                   ),
                                   DropdownMenuItem(
-                                    value:
-                                        'التحقق عبر اجراء اختبار قصير',
-                                    child: Text(
-                                      'التحقق عبر اجراء اختبار قصير',
-                                    ),
+                                    value: 'التحقق عبر اجراء اختبار قصير',
+                                    child: Text('التحقق عبر اجراء اختبار قصير'),
                                   ),
                                 ],
                                 onChanged: (v) {
@@ -2321,7 +2347,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
           backgroundColor: AppColors.background,
           appBar: NameerAppBar(
             showTitleInBar: false,
-            showBack: true,
+            showBack: false,
             height: 80,
           ),
           body: Builder(
