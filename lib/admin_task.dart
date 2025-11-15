@@ -367,6 +367,13 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                   top: 4,
                   bottom: 4,
                 ),
+
+                // 👇 أيقونة المهمة (نفس أيقونة الفورم لعنوان المهمة)
+                leading: const Icon(
+                  Icons.task_alt_outlined,
+                  color: AppColors.primary,
+                ),
+
                 title: Text(
                   task['title'] ?? '',
                   style: const TextStyle(
@@ -375,6 +382,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                     color: AppColors.dark,
                   ),
                 ),
+
+                // 👇 الفئة مع أيقونة Category
                 subtitle: GestureDetector(
                   onTap: () {
                     final catName = task['category']?.toString();
@@ -387,16 +396,28 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                       ),
                     );
                   },
-                  child: Text(
-                    task['category'] ?? '',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.sea,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.category_outlined,
+                        size: 18,
+                        color: AppColors.sea,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        task['category'] ?? '',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.sea,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -425,6 +446,8 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               if (isExpanded) _buildExpandedTaskContent(task),
             ],
           ),
+
+          // 👇 شارة الحالة (بدون تغيير)
           Positioned(
             top: 8,
             left: 16,
@@ -452,52 +475,100 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 
   Widget _buildExpandedTaskContent(Map<String, dynamic> task) {
     final statusText = _getTaskStatus(task);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            task['description'] ?? '',
-            style: const TextStyle(fontSize: 14, color: AppColors.dark),
+          // 🔹 وصف المهمة + أيقونة الوصف
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.description_outlined,
+                size: 20,
+                color: AppColors.dark,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  task['description'] ?? '',
+                  style: const TextStyle(fontSize: 14, color: AppColors.dark),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
 
-          // 🔹 طريقة التحقق
-          Text(
-            'طريقة التحقق: ${task['validationStrategy'] ?? 'غير محددة'}',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.sea,
-            ),
+          // 🔹 طريقة التحقق + أيقونة التحقق
+          Row(
+            children: [
+              const Icon(
+                Icons.verified_outlined,
+                size: 20,
+                color: AppColors.sea,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'طريقة التحقق: ${task['validationStrategy'] ?? 'غير محددة'}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.sea,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
 
-          // 🔹 النقاط
-          Text(
-            'النقاط: ${task['points'] ?? 0}',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-            ),
+          // 🔹 النقاط + أيقونة النجمة (نفس الفورم)
+          Row(
+            children: [
+              const Icon(
+                Icons.stars_rounded,
+                size: 20,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'النقاط: ${task['points'] ?? 0}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
           ),
 
-          // 🔹 تاريخ الانتهاء (فقط للمهام المنتهية)
+          // 🔹 تاريخ الانتهاء (للمهام المنتهية فقط) + أيقونة التقويم
           if (statusText == 'منتهية' && task['expiry_month'] != null) ...[
             const SizedBox(height: 6),
-            Text(
-              'تاريخ الانتهاء: ${task['expiry_month']}',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Colors.redAccent,
-              ),
+            Row(
+              children: [
+                const Icon(
+                  Icons.calendar_month,
+                  size: 20,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'تاريخ الانتهاء: ${task['expiry_month']}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.redAccent,
+                  ),
+                ),
+              ],
             ),
           ],
 
           const SizedBox(height: 12),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

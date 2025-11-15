@@ -45,14 +45,101 @@ class _AdminReportPageState extends State<AdminReportPage> {
   }
 
   final TextEditingController _searchCtrl = TextEditingController();
-  String selectedStatus = 'الكل';
 
-  final statusMap = {
-    'الكل': null,
+  /// 🔹 الآن ما فيه "الكل"؛ عندنا الحالات الثلاث فقط
+  final Map<String, String> statusMap = const {
     'قيد المراجعة': 'pending',
     'تمت المعالجة': 'approved',
     'البلاغ غير صحيح': 'rejected',
   };
+
+  /// 🔹 الحالات المختارة في الفلتر (Labels بالعربي)
+  final Set<String> _selectedStatusLabels = {};
+
+  // 🔹 BottomSheet لتصفية الحالات (متعدد الاختيار)
+  void _showStatusFilterSheet() {
+    final statuses = statusMap.keys.toList();
+    final localSelected = Set<String>.from(_selectedStatusLabels);
+
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setSt) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'تصفية البلاغات حسب الحالة',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 12),
+
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: statuses.map((label) {
+                      final selected = localSelected.contains(label);
+                      return FilterChip(
+                        label: Text(label),
+                        selected: selected,
+                        selectedColor: RColors.primary.withOpacity(.15),
+                        labelStyle: TextStyle(
+                          color: selected ? RColors.primary : Colors.black87,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        onSelected: (v) {
+                          setSt(() {
+                            if (v) {
+                              localSelected.add(label);
+                            } else {
+                              localSelected.remove(label);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: RColors.primary,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedStatusLabels
+                          ..clear()
+                          ..addAll(localSelected);
+                      });
+                    },
+                    child: const Text('تطبيق'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedStatusLabels.clear(); // لا شيء → يعرض الكل
+                      });
+                    },
+                    child: const Text('إلغاء الفلاتر'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +147,12 @@ class _AdminReportPageState extends State<AdminReportPage> {
     final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(
       baseTheme.textTheme,
     );
+
+    // نحول الـ labels المختارة إلى قيم decision الحقيقية
+    final selectedDecisionValues = _selectedStatusLabels
+        .map((label) => statusMap[label])
+        .whereType<String>()
+        .toList();
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -97,7 +190,7 @@ class _AdminReportPageState extends State<AdminReportPage> {
                       ),
                       const SizedBox(height: 15),
 
-                      // ✅ شريط البحث + الفلتر
+                      // ✅ شريط البحث + الفلتر (نفس نمط الصفحات الثانية)
                       Row(
                         children: [
                           // شريط البحث
@@ -110,11 +203,13 @@ class _AdminReportPageState extends State<AdminReportPage> {
                           ),
                           const SizedBox(width: 8),
 
-                          // زر الفلتر
-                          SizedBox(
-                            height: 48,
-                            width: 48,
-                            child: DecoratedBox(
+                          // زر الفلتر يفتح BottomSheet بالـ FilterChips
+                          InkWell(
+                            onTap: _showStatusFilterSheet,
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              height: 48,
+                              width: 48,
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(14),
@@ -126,34 +221,10 @@ class _AdminReportPageState extends State<AdminReportPage> {
                                   ),
                                 ],
                               ),
-                              child: PopupMenuButton<String>(
-                                icon: const Icon(
-                                  Icons.filter_list,
-                                  color: RColors.primary,
-                                  size: 24,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                itemBuilder: (context) {
-                                  return statusMap.keys.map((label) {
-                                    return PopupMenuItem<String>(
-                                      value: label,
-                                      child: Text(
-                                        label,
-                                        textDirection: TextDirection.rtl,
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          color: Colors.black,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    );
-                                  }).toList();
-                                },
-                                onSelected: (val) {
-                                  setState(() => selectedStatus = val);
-                                },
+                              child: const Icon(
+                                Icons.tune,
+                                color: RColors.primary,
+                                size: 24,
                               ),
                             ),
                           ),
@@ -165,7 +236,7 @@ class _AdminReportPageState extends State<AdminReportPage> {
                       // ✅ قائمة البلاغات
                       Expanded(
                         child: _ReportList(
-                          statusFilter: statusMap[selectedStatus],
+                          statusFilters: selectedDecisionValues,
                           searchText: _searchCtrl.text,
                         ),
                       ),
@@ -181,21 +252,18 @@ class _AdminReportPageState extends State<AdminReportPage> {
   }
 }
 
-/// قائمة التقارير مع فلترة الحالة والبحث
+/// قائمة التقارير مع فلترة الحالة والبحث (متعدد الحالات)
 class _ReportList extends StatelessWidget {
-  final String? statusFilter;
+  /// قائمة قيم decision المختارة: ['pending', 'approved', ...]
+  final List<String> statusFilters;
   final String searchText;
 
-  const _ReportList({required this.statusFilter, required this.searchText});
+  const _ReportList({required this.statusFilters, required this.searchText});
 
   Query<Map<String, dynamic>> _baseQuery() {
     final col = FirebaseFirestore.instance.collection('facilityReports');
-
-    if (statusFilter == null) {
-      return col.orderBy('createdAt', descending: true);
-    } else {
-      return col.where('decision', isEqualTo: statusFilter);
-    }
+    // 🔹 دائمًا نجيب الكل مرتّب بتاريخ الإنشاء (الأحدث أولًا)
+    return col.orderBy('createdAt', descending: true);
   }
 
   @override
@@ -211,30 +279,35 @@ class _ReportList extends StatelessWidget {
         }
 
         final docs = snap.data!.docs.toList();
-        if (statusFilter != null) {
-          docs.sort((a, b) {
-            final ta = (a.data()['createdAt'] as Timestamp?);
-            final tb = (b.data()['createdAt'] as Timestamp?);
-            final va = ta?.millisecondsSinceEpoch ?? 0;
-            final vb = tb?.millisecondsSinceEpoch ?? 0;
-            return vb.compareTo(va);
-          });
-        }
 
         final s = searchText.trim().toLowerCase();
-        final filtered = s.isEmpty
-            ? docs
-            : docs.where((d) {
-                final m = d.data();
-                final hay = [
-                  m['description'] ?? '',
-                  m['type'] ?? '',
-                  m['facilityID'] ?? '',
-                  m['reportedBy'] ?? '',
-                  m['managedBy'] ?? '',
-                ].join(' ').toLowerCase();
-                return hay.contains(s);
-              }).toList();
+        final hasStatusFilter = statusFilters.isNotEmpty;
+
+        final filtered = docs.where((d) {
+          final m = d.data();
+
+          // فلترة بالحالة (لو فيه حالات مختارة)
+          bool matchStatus = true;
+          if (hasStatusFilter) {
+            final decision = (m['decision'] ?? '').toString();
+            matchStatus = statusFilters.contains(decision);
+          }
+
+          // فلترة بالبحث
+          bool matchSearch = true;
+          if (s.isNotEmpty) {
+            final hay = [
+              m['description'] ?? '',
+              m['type'] ?? '',
+              m['facilityID'] ?? '',
+              m['reportedBy'] ?? '',
+              m['managedBy'] ?? '',
+            ].join(' ').toLowerCase();
+            matchSearch = hay.contains(s);
+          }
+
+          return matchStatus && matchSearch;
+        }).toList();
 
         if (filtered.isEmpty) {
           return Center(
@@ -868,7 +941,6 @@ class _Chip extends StatelessWidget {
           children: [
             Icon(icon, size: 18, color: RColors.dark),
             const SizedBox(width: 6),
-
             Expanded(
               child: Text(
                 label,

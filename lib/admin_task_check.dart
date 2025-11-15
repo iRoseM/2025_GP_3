@@ -36,12 +36,11 @@ const String _efCollection = 'emissionFactors';
 const String _efValueField = 'ef_kgco2_per_unit'; // الحقل الأساسي للقيمة
 
 /// ✅ baseline الافتراضي لوسائل النقل: سيارة بنزين لكل كيلومتر
-/// تأكدي إن هذا هو الـ docId الفعلي في emissionFactors
 const String kDefaultTransportBaselineRef = 'transportCarGasolinePerKm';
 
 class CarbonCalcResult {
   final double kgCO2;
-  final String direction; // "save" | "emit"
+  final String direction;
   final Map<String, dynamic> meta;
   CarbonCalcResult({
     required this.kgCO2,
@@ -87,7 +86,6 @@ double? _readEfValueFlexible(
     if (v != null) return v;
   }
 
-  // 3) قائمة أسماء محتملة (معدّلة لدعم perItem و deltaPerItem)
   final candidates = <String>[
     // قيم عامة
     'ef_kgco2_per_unit',
@@ -120,11 +118,9 @@ double? _readEfValueFlexible(
 double? _readEfValue(Map<String, dynamic> efDoc) =>
     _readEfValueFlexible(efDoc, preferField: _efValueField);
 
-// 🔍 محاولـة ربط عامل انبعاث لمهمة معيّنة
 Future<Map<String, dynamic>?> resolveEmissionFactorForTask(
   Map<String, dynamic> task,
 ) async {
-  // 1) إن كان فيه ref مباشر في المهمة
   final directRef = (task['emissionFactorRef'] ?? task['emission_factor_ref'])
       ?.toString()
       .trim();
@@ -815,6 +811,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                             ),
                                           ),
                                         const SizedBox(height: 8),
+
                                         if (images.isNotEmpty)
                                           Wrap(
                                             spacing: 8,
@@ -909,11 +906,27 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                               ],
                                             ),
                                           ),
+
                                         const SizedBox(height: 10),
+
+                                        // 🔘 أزرار الاعتماد / الرفض — أخضر / أحمر وتعطيل رمادي
                                         Row(
                                           children: [
                                             Expanded(
-                                              child: ElevatedButton.icon(
+                                              child: FilledButton.icon(
+                                                style: FilledButton.styleFrom(
+                                                  backgroundColor:
+                                                      Colors.green, // أخضر
+                                                  disabledBackgroundColor:
+                                                      Colors.grey[300],
+                                                  foregroundColor: Colors.white,
+                                                  disabledForegroundColor:
+                                                      Colors.grey[600],
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 12,
+                                                      ),
+                                                ),
                                                 onPressed: _isAdmin
                                                     ? () async {
                                                         await _approve(d);
@@ -923,12 +936,17 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                                   Icons.check_circle_outline,
                                                 ),
                                                 label: const Text('اعتماد'),
-                                                style: ElevatedButton.styleFrom(
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: FilledButton.icon(
+                                                style: FilledButton.styleFrom(
                                                   backgroundColor:
-                                                      AppColors.primary,
-                                                  foregroundColor: Colors.white,
+                                                      Colors.red, // أحمر
                                                   disabledBackgroundColor:
                                                       Colors.grey[300],
+                                                  foregroundColor: Colors.white,
                                                   disabledForegroundColor:
                                                       Colors.grey[600],
                                                   padding:
@@ -936,11 +954,6 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                                         vertical: 12,
                                                       ),
                                                 ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: OutlinedButton.icon(
                                                 onPressed: _isAdmin
                                                     ? () => _reject(d)
                                                     : null,
@@ -948,23 +961,11 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                                   Icons.cancel_outlined,
                                                 ),
                                                 label: const Text('رفض'),
-                                                style: OutlinedButton.styleFrom(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        vertical: 12,
-                                                      ),
-                                                  side: const BorderSide(
-                                                    color: AppColors.primary,
-                                                    width: 2,
-                                                  ),
-                                                  foregroundColor: _isAdmin
-                                                      ? AppColors.primary
-                                                      : Colors.grey[600],
-                                                ),
                                               ),
                                             ),
                                           ],
                                         ),
+
                                         if (!_isAdmin)
                                           Padding(
                                             padding: const EdgeInsets.only(

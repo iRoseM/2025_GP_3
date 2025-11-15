@@ -51,6 +51,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
   final Set<Polyline> _polylines = {};
   final Map<String, String> _statusById = {};
   Set<String> _allowedTypes = {};
+  Set<String> _allowedStatuses = {};
 
   bool _myLocationEnabled = false;
   bool _isLoadingLocation = false;
@@ -318,6 +319,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
           _isLoadingFacilities = false;
           if (!_didInitialLoad) _didInitialLoad = true;
           _allowedTypes.clear();
+          _allowedStatuses.clear();
           _applyCurrentFilters();
           // عرض رسالة "لا توجد حاويات" إذا لم توجد نتائج
           if (_markers.isEmpty) _flashEmptyMsg();
@@ -716,6 +718,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
   }
 
   // ===================== الفلاتر =====================
+  // ===================== الفلاتر =====================
   void _showFiltersBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -724,84 +727,157 @@ class _AdminMapPageState extends State<AdminMapPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (_) {
-        bool fClothes =
-            _allowedTypes.isEmpty ||
-            _allowedTypes.contains('حاوية إعادة تدوير الملابس');
-        bool fRvm =
-            _allowedTypes.isEmpty ||
-            _allowedTypes.contains('آلة إعادة التدوير (RVM)');
-        bool fPapers =
-            _allowedTypes.isEmpty ||
-            _allowedTypes.contains('حاوية إعادة تدوير الأوراق');
-        bool fFood =
-            _allowedTypes.isEmpty ||
-            _allowedTypes.contains('حاوية إعادة تدوير بقايا الطعام');
+        // نسخ محلي للفلاتر الحالية عشان نعدل بدون ما نتأثر إلا بعد "تطبيق"
+        final selectedTypes = Set<String>.from(_allowedTypes);
+        final selectedStatuses = Set<String>.from(_allowedStatuses);
+
+        // أنواع الحاويات
+        const typeOptions = [
+          'حاوية إعادة تدوير الملابس',
+          'حاوية إعادة تدوير الأوراق',
+          'آلة إعادة التدوير (RVM)',
+          'حاوية إعادة تدوير بقايا الطعام',
+        ];
+
+        // الحالة في الداتا: 'نشط' / 'متوقف'
+        // و في واجهة الفلتر: 'نشطة' / 'متوقفة'
+        const statusOptions = {'نشط': 'نشطة', 'متوقف': 'متوقفة'};
 
         return StatefulBuilder(
           builder: (context, setSt) {
             return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'فلاتر النقاط',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 12),
-                  FilterChip(
-                    label: const Text('حاوية إعادة تدوير الملابس'),
-                    selected: fClothes,
-                    onSelected: (v) => setSt(() => fClothes = v),
-                  ),
-                  const SizedBox(height: 6),
-                  FilterChip(
-                    label: const Text('حاوية إعادة تدوير الأوراق'),
-                    selected: fPapers,
-                    onSelected: (v) => setSt(() => fPapers = v),
-                  ),
-                  const SizedBox(height: 6),
-                  FilterChip(
-                    label: const Text('آلة إعادة التدوير (RVM)'),
-                    selected: fRvm,
-                    onSelected: (v) => setSt(() => fRvm = v),
-                  ),
-                  const SizedBox(height: 6),
-                  FilterChip(
-                    label: const Text('حاوية إعادة تدوير بقايا الطعام'),
-                    selected: fFood,
-                    onSelected: (v) => setSt(() => fFood = v),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
+              padding: const EdgeInsets.all(16),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'تصفية النقاط',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ===== حسب النوع =====
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        'حسب النوع',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: typeOptions.map((type) {
+                        final selected = selectedTypes.contains(type);
+                        return FilterChip(
+                          label: Text(type),
+                          selected: selected,
+                          selectedColor: AppColors.primary.withOpacity(.15),
+                          labelStyle: TextStyle(
+                            color: selected
+                                ? AppColors.primary
+                                : AppColors.dark,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          onSelected: (v) => setSt(() {
+                            if (v) {
+                              selectedTypes.add(type);
+                            } else {
+                              selectedTypes.remove(type);
+                            }
+                          }),
+                        );
+                      }).toList(),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // ===== حسب الحالة =====
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        'حسب الحالة',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: statusOptions.entries.map((e) {
+                        final String valueInData = e.key; // 'نشط' / 'متوقف'
+                        final String label = e.value; // 'نشطة' / 'متوقفة'
+                        final selected = selectedStatuses.contains(valueInData);
+
+                        return FilterChip(
+                          label: Text(label),
+                          selected: selected,
+                          selectedColor: AppColors.primary.withOpacity(.15),
+                          labelStyle: TextStyle(
+                            color: selected
+                                ? AppColors.primary
+                                : AppColors.dark,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          onSelected: (v) => setSt(() {
+                            if (v) {
+                              selectedStatuses.add(valueInData);
+                            } else {
+                              selectedStatuses.remove(valueInData);
+                            }
+                          }),
+                        );
+                      }).toList(),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // زر تطبيق
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                      ),
                       onPressed: () {
                         Navigator.pop(context);
-                        final allowed = <String>{};
-                        if (fClothes) allowed.add('حاوية إعادة تدوير الملابس');
-                        if (fPapers) allowed.add('حاوية إعادة تدوير الأوراق');
-                        if (fRvm) allowed.add('آلة إعادة التدوير (RVM)');
-                        if (fFood)
-                          allowed.add('حاوية إعادة تدوير بقايا الطعام');
-                        setState(() => _allowedTypes = allowed);
+                        setState(() {
+                          _allowedTypes = selectedTypes;
+                          _allowedStatuses = selectedStatuses;
+                        });
                         _applyCurrentFilters();
 
-                        // بعد تطبيق الفلاتر: لو ما فيه نتائج، أظهري الرسالة مؤقتًا
+                        // لو ما فيه ولا ماركر بعد الفلترة، نظهر رسالة مؤقتة
                         if (_didInitialLoad &&
                             !_isLoadingFacilities &&
                             _markers.isEmpty) {
                           _flashEmptyMsg();
                         }
                       },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: home.AppColors.primary,
-                      ),
                       child: const Text('تطبيق'),
                     ),
-                  ),
-                ],
+
+                    // زر إلغاء الفلاتر
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        setState(() {
+                          _allowedTypes.clear();
+                          _allowedStatuses.clear();
+                        });
+                        _applyCurrentFilters();
+                      },
+                      child: const Text('إلغاء الفلاتر'),
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -810,20 +886,31 @@ class _AdminMapPageState extends State<AdminMapPage> {
     );
   }
 
-  // ✅ فلترة الماركرات حسب الأنواع
+  // ✅ فلترة الماركرات حسب الأنواع + الحالة
   void _applyCurrentFilters() {
     setState(() {
       _markers
         ..clear()
         ..addAll(
           _allMarkers.where((m) {
-            final typeInSnippet = (m.infoWindow.snippet ?? '');
-            if (_allowedTypes.isEmpty) return true;
-            return _allowedTypes.any(
-              (t) =>
-                  typeInSnippet.contains(t) ||
-                  (m.infoWindow.title ?? '').contains(t),
-            );
+            final snippet = m.infoWindow.snippet ?? '';
+            final title = m.infoWindow.title ?? '';
+
+            // أولاً: فلتر النوع
+            final matchesType =
+                _allowedTypes.isEmpty ||
+                _allowedTypes.any(
+                  (t) => snippet.contains(t) || title.contains(t),
+                );
+
+            if (!matchesType) return false;
+
+            // ثانيًا: فلتر الحالة
+            if (_allowedStatuses.isEmpty) return true;
+
+            final id = m.markerId.value;
+            final st = _statusById[id] ?? 'نشط'; // default
+            return _allowedStatuses.contains(st);
           }),
         );
     });

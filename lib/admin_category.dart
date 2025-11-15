@@ -395,7 +395,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
     );
   }
 
-  // 🟥 كرت الفئة (مع الأزرار تحت)
+  // 🟥 كرت الفئة (مع الأزرار تحت) + الأيقونات الجديدة
   Widget _buildCategoryCard(Map<String, dynamic> cat) {
     final statusText = _getCategoryStatus(cat);
     final statusColor = _getStatusColor(statusText);
@@ -403,6 +403,9 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
     final isHighlighted =
         widget.initialCategoryName != null &&
         widget.initialCategoryName == (cat['name']?.toString() ?? '');
+
+    final parentText = (cat['parent'] ?? '').toString().trim();
+    final hasParent = parentText.isNotEmpty;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -434,29 +437,54 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // اسم الفئة
-                Text(
-                  cat['name']?.toString() ?? '',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.dark,
-                  ),
+                // 🔹 اسم الفئة مع أيقونة Category
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.category_outlined,
+                      size: 20,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        cat['name']?.toString() ?? '',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 4),
 
-                // الفئة الرئيسية
-                if (cat['parent'] != null &&
-                    (cat['parent'] as String).trim().isNotEmpty)
-                  Text(
-                    'الفئة الرئيسية: ${cat['parent']}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF666666),
-                      fontWeight: FontWeight.w600,
-                    ),
+                // 🔹 الفئة الرئيسية مع أيقونة Hub (لو موجودة)
+                if (hasParent)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.hub_outlined,
+                        size: 18,
+                        color: Color(0xFF666666),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'الفئة الرئيسية: $parentText',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF666666),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                const SizedBox(height: 6),
+                if (hasParent) const SizedBox(height: 6),
 
                 // الوصف
                 Text(
