@@ -363,6 +363,18 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
     return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
   }
 
+  // 👤 جلب اسم المستخدم من وثيقة users/{userId}
+  Future<String> _getUserName(String userId) async {
+    if (userId.isEmpty) return '';
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .get();
+    if (!snap.exists) return userId;
+    final data = snap.data() ?? {};
+    return data['name'] ?? data['username'] ?? userId;
+  }
+
   // =================== helpers لحساب الكربون ===================
 
   Future<Map<String, dynamic>?> _getFactorByRef(String refId) async {
@@ -626,18 +638,6 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _isAdmin
-                                  ? AppColors.primary33
-                                  : Colors.orange.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -748,12 +748,13 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                     (m['imageUrls'] as List?)?.cast<String>() ??
                                     [];
 
-                                // ✅ نقرأ العدد من itemCount أولاً ثم count (للخلفية)
                                 final countStr =
                                     (m['itemCount'] ?? m['count'])
                                         ?.toString() ??
                                     '';
                                 final km = (m['distanceKm']?.toString() ?? '');
+
+                                final userId = (m['userId'] ?? '').toString();
 
                                 return Card(
                                   key: ValueKey(d.id),
@@ -776,13 +777,23 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                           ),
                                         ),
                                         const SizedBox(height: 4),
-                                        Text(
-                                          'المستخدم: ${m['userId']} • النقاط: ${m['taskPoints'] ?? 0}',
-                                          style: GoogleFonts.ibmPlexSansArabic(
-                                            fontSize: 13,
-                                            color: Colors.grey[700],
-                                          ),
+
+                                        FutureBuilder<String>(
+                                          future: _getUserName(userId),
+                                          builder: (context, snapName) {
+                                            final userName =
+                                                snapName.data ?? userId;
+                                            return Text(
+                                              'المستخدم: $userName • النقاط: ${m['taskPoints'] ?? 0}',
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    fontSize: 13,
+                                                    color: Colors.grey[700],
+                                                  ),
+                                            );
+                                          },
                                         ),
+
                                         if (countStr.isNotEmpty ||
                                             km.isNotEmpty)
                                           Padding(

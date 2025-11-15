@@ -19,6 +19,11 @@ class RColors {
   static const bg = Color(0xFFFAFCFB);
 }
 
+// لو عندك تعريف AppColors في ملف آخر استورديه، هنا بس للتوافق مع العنوان:
+class AppColors {
+  static const dark = Color(0xFF3C3C3B);
+}
+
 class AdminReportPage extends StatefulWidget {
   const AdminReportPage({super.key});
 
@@ -248,7 +253,7 @@ class _ReportList extends StatelessWidget {
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: RColors.dark, // الأفضل تستخدم ألوان الصفحة نفسها
+                    color: RColors.dark,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -318,6 +323,46 @@ class _ReportCardState extends State<_ReportCard> {
     }
   }
 
+  /// 👤 جلب اسم المستخدم من users/{uid}
+  Future<String> _getUserName(String userId) async {
+    if (userId.isEmpty) return '';
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (!snap.exists) return userId;
+      final data = snap.data() ?? {};
+      return data['username'] ?? data['name'] ?? userId;
+    } catch (_) {
+      return userId;
+    }
+  }
+
+  /// 🗑️ جلب اسم/وصف الحاوية من facilities/{id}
+  Future<String> _getFacilityName(String facilityId) async {
+    if (facilityId.isEmpty) return '';
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('facilities')
+          .doc(facilityId)
+          .get();
+      if (!snap.exists) return facilityId;
+      final data = snap.data() ?? {};
+      final name = data['name'] ?? '';
+      final type = data['type'] ?? '';
+      if (name != null && (name as String).trim().isNotEmpty) {
+        return name;
+      }
+      if (type != null && (type as String).trim().isNotEmpty) {
+        return type;
+      }
+      return facilityId;
+    } catch (_) {
+      return facilityId;
+    }
+  }
+
   Future<void> _updateDecision(String decision, {String? reason}) async {
     if (!await hasInternetConnection()) {
       if (mounted) showNoInternetDialog(context);
@@ -347,7 +392,6 @@ class _ReportCardState extends State<_ReportCard> {
       String notifMsg = '';
 
       if (facilityID != null) {
-        // جلب بيانات الحاوية من مجموعة facilities
         final facilitySnap = await FirebaseFirestore.instance
             .collection('facilities')
             .doc(facilityID)
@@ -389,6 +433,7 @@ class _ReportCardState extends State<_ReportCard> {
           'sourceId': widget.doc.id,
           'decision': decision,
         });
+
         // 🔔 إرسال إشعار خارجي (Push Notification)
         final userSnap = await FirebaseFirestore.instance
             .collection('users')
@@ -396,8 +441,7 @@ class _ReportCardState extends State<_ReportCard> {
             .get();
 
         final userData = userSnap.data();
-        final fcmToken =
-            userData?['fcmToken']; // لازم يكون المستخدم خزّن توكنه سابقًا
+        final fcmToken = userData?['fcmToken'];
 
         if (fcmToken != null && fcmToken.isNotEmpty) {
           await FCMService.sendPushNotification(
@@ -409,7 +453,7 @@ class _ReportCardState extends State<_ReportCard> {
       }
 
       if (mounted) {
-        setState(() {}); // ✅ تجبر الكارد يعيد بناء نفسه
+        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('تم تحديث الحالة إلى ${_statusLabel(decision)}'),
@@ -432,7 +476,7 @@ class _ReportCardState extends State<_ReportCard> {
     showDialog(
       context: context,
       builder: (_) => Directionality(
-        textDirection: TextDirection.rtl, // ✅ يخلي النصوص يمين
+        textDirection: TextDirection.rtl,
         child: AlertDialog(
           title: const Text('رفض التقرير'),
           content: TextField(
@@ -447,11 +491,10 @@ class _ReportCardState extends State<_ReportCard> {
           ),
           actions: [
             Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.stretch, // يخلي الأزرار تاخذ عرض مناسب
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Align(
-                  alignment: Alignment.centerRight, // ✅ زر الإلغاء يمين
+                  alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text('إلغاء'),
@@ -493,7 +536,7 @@ class _ReportCardState extends State<_ReportCard> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Align(
-                  alignment: Alignment.centerRight, // ✅ زر الإلغاء على اليمين
+                  alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text('إلغاء'),
@@ -566,15 +609,21 @@ class _ReportCardState extends State<_ReportCard> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    name.isEmpty ? 'حاوية بدون اسم' : name,
+                    (name is String && name.isNotEmpty)
+                        ? name
+                        : 'حاوية بدون اسم',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Text(type, style: const TextStyle(color: Colors.black54)),
+                  Text(
+                    type.toString(),
+                    style: const TextStyle(color: Colors.black54),
+                  ),
                   const SizedBox(height: 8),
-                  if (address.isNotEmpty || city.isNotEmpty)
+                  if (address.toString().isNotEmpty ||
+                      city.toString().isNotEmpty)
                     Text('الموقع: $address، $city'),
                   const SizedBox(height: 8),
                   FilledButton.icon(
@@ -618,10 +667,10 @@ class _ReportCardState extends State<_ReportCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // الصف العلوي للأيقونات// الصف العلوي: العنوان + الأيقونات
+            // الصف العلوي: العنوان + الأيقونات
             Row(
               children: [
-                // العنوان "الموقع غير دقيق"
+                // العنوان "الموقع غير دقيق" أو نوع البلاغ
                 Expanded(
                   child: Text(
                     type,
@@ -653,63 +702,75 @@ class _ReportCardState extends State<_ReportCard> {
 
             const SizedBox(height: 4),
 
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // location + الوصف
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (description.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            description,
-                            style: const TextStyle(fontSize: 13),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
+            // ✅ حالة البلاغ في سطر مستقل أعلى الوصف
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: _statusColor(decision).withOpacity(.12),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(
+                  _statusLabel(decision),
+                  style: TextStyle(
+                    color: _statusColor(decision),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
                   ),
                 ),
-
-                // الحالة (مقبولة / مرفوضة)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _statusColor(decision).withOpacity(.12),
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: Text(
-                    _statusLabel(decision),
-                    style: TextStyle(
-                      color: _statusColor(decision),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
 
+            // ✅ الوصف تحت الحالة بعرض الكارد كامل
+            if (description.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                description,
+                style: const TextStyle(fontSize: 13),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+
             const SizedBox(height: 8),
+
             Wrap(
               spacing: 8,
               runSpacing: 6,
               children: [
-                _Chip(
-                  icon: Icons.pin_drop_outlined,
-                  label: 'Facility: $facilityID',
+                // اسم الحاوية بدل الـ ID
+                FutureBuilder<String>(
+                  future: _getFacilityName(facilityID.toString()),
+                  builder: (context, snap) {
+                    final facName = (snap.data != null && snap.data!.isNotEmpty)
+                        ? snap.data!
+                        : facilityID.toString();
+                    return _Chip(
+                      icon: Icons.pin_drop_outlined,
+                      label: 'الحاوية: $facName',
+                    );
+                  },
                 ),
-                _Chip(
-                  icon: Icons.person_outline,
-                  label: 'المبلِّغ: $reportedBy',
+
+                // اسم المستخدم بدل uid
+                FutureBuilder<String>(
+                  future: _getUserName(reportedBy.toString()),
+                  builder: (context, snap) {
+                    final userName =
+                        (snap.data != null && snap.data!.isNotEmpty)
+                        ? snap.data!
+                        : reportedBy.toString();
+                    return _Chip(
+                      icon: Icons.person_outline,
+                      label: 'المبلِّغ: $userName',
+                    );
+                  },
                 ),
+
                 if (createdAt != null)
                   _Chip(
                     icon: Icons.calendar_month_outlined,
@@ -718,6 +779,7 @@ class _ReportCardState extends State<_ReportCard> {
                   ),
               ],
             ),
+
             const SizedBox(height: 10),
             Row(
               children: [
@@ -750,7 +812,6 @@ class _ReportCardState extends State<_ReportCard> {
   }
 }
 
-/// عناصر واجهة صغيرة
 class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
@@ -792,19 +853,33 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F6F8),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: RColors.dark),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 12)),
-        ],
+    final maxWidth = MediaQuery.of(context).size.width * 0.8;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3F6F8),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 18, color: RColors.dark),
+            const SizedBox(width: 6),
+
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 12, height: 1.3),
+                softWrap: true,
+                overflow: TextOverflow.visible,
+                maxLines: 3,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
