@@ -637,16 +637,6 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                   : Colors.orange.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(999),
                             ),
-                            child: Text(
-                              _isAdmin ? 'أدمن' : 'حساب عادي',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: _isAdmin
-                                    ? AppColors.dark
-                                    : Colors.orange,
-                              ),
-                            ),
                           ),
                         ],
                       ),
