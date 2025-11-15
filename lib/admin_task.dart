@@ -76,7 +76,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Error loading tasks: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -104,7 +103,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
         _isCatsLoading = false;
       });
     } catch (e) {
-      debugPrint('خطأ في تحميل الفئات: $e');
       setState(() => _isCatsLoading = false);
     }
   }
@@ -399,7 +397,6 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                     ),
                   ),
                 ),
-
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -585,69 +582,61 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               ),
               onPressed: () async {
                 Navigator.pop(context);
+                final now = DateTime.now();
+                final nextMonthDate = DateTime(now.year, now.month + 1, 1);
+                final nextMonthKey =
+                    "${nextMonthDate.year}-${nextMonthDate.month.toString().padLeft(2, '0')}";
 
-                try {
-                  final now = DateTime.now();
-                  final nextMonthDate = DateTime(now.year, now.month + 1, 1);
-                  final nextMonthKey =
-                      "${nextMonthDate.year}-${nextMonthDate.month.toString().padLeft(2, '0')}";
+                await FirebaseFirestore.instance
+                    .collection('tasks')
+                    .doc(task['id'])
+                    .update({'status': 'hidden', 'expiry_month': nextMonthKey});
 
-                  await FirebaseFirestore.instance
-                      .collection('tasks')
-                      .doc(task['id'])
-                      .update({
-                        'status': 'hidden',
-                        'expiry_month': nextMonthKey,
-                      });
-
-                  if (mounted) {
-                    showDialog(
-                      context: context,
-                      builder: (context) => Directionality(
-                        textDirection: TextDirection.rtl,
-                        child: AlertDialog(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          title: Row(
-                            children: const [
-                              Icon(
-                                Icons.schedule_rounded,
-                                color: AppColors.primary,
-                                size: 28,
-                              ),
-                              SizedBox(width: 8),
-                              Text('تم جدولة الإخفاء'),
-                            ],
-                          ),
-                          content: Text(
-                            'سيتم تطبيق الإخفاء تلقائيًا في بداية الشهر القادم ($nextMonthKey).',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              color: AppColors.dark,
-                              fontWeight: FontWeight.w600,
+                if (mounted) {
+                  showDialog(
+                    context: context,
+                    builder: (context) => Directionality(
+                      textDirection: TextDirection.rtl,
+                      child: AlertDialog(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        title: Row(
+                          children: const [
+                            Icon(
+                              Icons.schedule_rounded,
+                              color: AppColors.primary,
+                              size: 28,
                             ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _fetchTasks();
-                              },
-                              child: Text(
-                                'تم',
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
+                            SizedBox(width: 8),
+                            Text('تم جدولة الإخفاء'),
                           ],
                         ),
+                        content: Text(
+                          'سيتم تطبيق الإخفاء تلقائيًا في بداية الشهر القادم ($nextMonthKey).',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: AppColors.dark,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _fetchTasks();
+                            },
+                            child: Text(
+                              'تم',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    );
-                  }
-                } catch (e) {
-                  debugPrint('Error hiding task: $e');
+                    ),
+                  );
                 }
               },
               child: Text(
@@ -999,6 +988,7 @@ class AddTaskPage extends StatefulWidget {
   final Map<String, dynamic>? task;
   final List<String> categories;
   const AddTaskPage({super.key, this.task, required this.categories});
+
   @override
   State<AddTaskPage> createState() => _AddTaskPageState();
 }
@@ -1071,7 +1061,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
         _catsLoading = false;
       });
     } catch (e) {
-      debugPrint('AddTaskPage - خطأ في تحميل الفئات: $e');
       setState(() => _catsLoading = false);
     }
   }
@@ -1101,17 +1090,15 @@ class _AddTaskPageState extends State<AddTaskPage> {
       s.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
 
   // ---------------------------------------------------------------------------
-  // ✅ الربط التلقائي EF بالاعتماد على (keywords) فقط
+  // ✅ الربط التلقائي EF:
   //
-  // الفكرة:
-  // 1) نقرأ emissionFactors حيث efStatus == 'active'
-  // 2) نحسب درجة تطابق بناءً على الكلمات المفتاحية لكل عامل مقابل نص المهمة (العنوان + الوصف)
-  // 3) نختار أعلى عامل مطابق (actual)
-  // 4) نبحث أيضًا عن baseline مناسب (سيارة/بنزين) عبر الكلمات المفتاحية الخاصة به
-  // 5) نقرر calcMode:
-  //    - إذا actual.unit == 'km' ولدينا baseline.unit == 'km' ⇒ deltaPerKm
-  //    - إذا actual.unit == 'km' فقط ⇒ perKm
-  //    - غير ذلك ⇒ perItem
+  // يعتمد على:
+  //  - keywords + name للتطابق مع نص المهمة
+  //  - calcMode / حقول km للتمييز بين km و items
+  //  - factorType في emissionFactors:
+  //      • baseline  → السيناريو المرجعي (Landfill / سيارة ...)
+  //      • actual    → السلوك الأفضل (إعادة التدوير / المترو ...)
+  //
   Future<Map<String, dynamic>?> _autoPickEfForTask({
     required String title,
     required String desc,
@@ -1125,116 +1112,222 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
     if (efSnap.docs.isEmpty) return null;
 
-    int scoreKeywords(List kws, String txt) {
+    int scoreFor(Map<String, dynamic> m) {
+      final kws = (m['keywords'] is List)
+          ? List.from(m['keywords'])
+          : <dynamic>[];
       int s = 0;
       for (final k in kws) {
         final kw = k.toString().trim().toLowerCase();
         if (kw.isEmpty) continue;
-        if (txt.contains(kw)) s += 2; // كل keyword تطابق = +2
+        if (text.contains(kw)) s += 2;
       }
+      final name = (m['name']?.toString().toLowerCase() ?? '');
+      if (name.isNotEmpty && text.contains(name)) s += 1;
       return s;
     }
 
-    // جهّز قائمة العوامل مع سكور المطابقة
+    bool isKmDoc(Map<String, dynamic> m) {
+      final calcMode = (m['calcMode'] ?? m['calc_mode'] ?? '')
+          .toString()
+          .toLowerCase();
+      if (calcMode == 'perkm' || calcMode == 'deltaperkm') return true;
+      final hasKmField =
+          m.containsKey('kgPerKm') ||
+          m.containsKey('perKm') ||
+          m.containsKey('co2PerKm') ||
+          m.containsKey('co2_per_km');
+      return hasKmField;
+    }
+
+    String factorTypeOf(Map<String, dynamic> m) =>
+        (m['factorType'] ?? '').toString().toLowerCase();
+
+    // جهّز كل العوامل مع بيانات الميتا
     final List<Map<String, dynamic>> factors = efSnap.docs.map((d) {
       final m = d.data() as Map<String, dynamic>;
-      final List kws = (m['keywords'] is List)
-          ? List.from(m['keywords'])
-          : <dynamic>[];
-      final s = scoreKeywords(kws, text);
+      final s = scoreFor(m);
+      final fType = factorTypeOf(m);
+      final isBaseline = fType == 'baseline';
+      final isActual = fType == 'actual';
+
       return {
         ...m,
         '__id': d.id,
         '__score': s,
-        '__unit': (m['unit']?.toString() ?? '').toLowerCase(),
+        '__isKm': isKmDoc(m),
+        '__isBaseline': isBaseline,
+        '__isActual': isActual,
       };
     }).toList();
 
-    // اختر الـ actual الأفضل (أعلى سكور)
+    // ترتيب العوامل بحسب درجة التطابق
     factors.sort(
       (a, b) => (b['__score'] as int).compareTo(a['__score'] as int),
     );
-    final Map<String, dynamic>? bestActual = factors.isNotEmpty
-        ? factors.first
-        : null;
-    if (bestActual == null || (bestActual['__score'] as int) <= 0) {
-      // لا يوجد تطابق مفيد
+
+    if (factors.isEmpty || (factors.first['__score'] as int) <= 0) {
+      // ما وجدنا شيء له علاقة بالنص
       return null;
     }
 
-    // حاول إيجاد baseline (سيارة/بنزين...) بواسطة كلمات مفتاحية baseline/car
-    bool looksBaseline(Map<String, dynamic> m) {
-      final kws = (m['keywords'] is List)
-          ? List.from(m['keywords'])
-          : <dynamic>[];
-      final joined = kws.map((e) => e.toString().toLowerCase()).join(' ');
-      return joined.contains('car') ||
-          joined.contains('سيارة') ||
-          joined.contains('gasoline') ||
-          joined.contains('petrol') ||
-          joined.contains('baseline') ||
-          joined.contains('unknown fuel');
+    // ------------------------------
+    // 1) حالة km (المسافات / المواصلات)
+    // ------------------------------
+    final kmFactors = factors
+        .where((m) => m['__isKm'] == true && (m['__score'] as int) > 0)
+        .toList();
+
+    if (kmFactors.isNotEmpty) {
+      kmFactors.sort(
+        (a, b) => (b['__score'] as int).compareTo(a['__score'] as int),
+      );
+
+      // ✅ actual: نأخذ أعلى عامل بدرجة تطابق ويكون factorType = actual إن وجد
+      List<Map<String, dynamic>> kmActualCandidates = kmFactors
+          .where((m) => m['__isActual'] == true)
+          .toList();
+      Map<String, dynamic> actualKm;
+      if (kmActualCandidates.isNotEmpty) {
+        actualKm = kmActualCandidates.first;
+      } else {
+        // لو ما فيه actual محدد، نأخذ أعلى عامل (أقرب واحد للنص)
+        actualKm = kmFactors.first;
+      }
+
+      // ✅ baseline: نأخذ أعلى عامل factorType = baseline ومختلف عن actual
+      Map<String, dynamic>? baselineKm;
+
+      // 1) نحاول نلاقي doc بالـ ID المحدد حتى لو ما طابقت الـ keywords
+      const String kDefaultKmBaselineId = 'transportCarGasolinePerKm';
+
+      for (final f in factors) {
+        if (f['__id'] == kDefaultKmBaselineId) {
+          // نتأكد إنه عامل km فعلاً
+          if (f['__isKm'] == true && f['__id'] != actualKm['__id']) {
+            baselineKm = f;
+          }
+          break;
+        }
+      }
+
+      // 2) لو ما لقينا هذا الـ ID أو ما كان km → نرجع للمنطق القديم
+      if (baselineKm == null) {
+        final baselineKmList = kmFactors
+            .where(
+              (m) => m['__isBaseline'] == true && m['__id'] != actualKm['__id'],
+            )
+            .toList();
+
+        if (baselineKmList.isNotEmpty) {
+          baselineKm = baselineKmList.first;
+        }
+      }
+
+      if (baselineKm != null) {
+        // ✅ deltaPerKm (baseline مقابل actual)
+        return {
+          'calcMode': 'deltaPerKm',
+          'direction': 'save',
+          'baselineFactorRef': baselineKm['__id'],
+          'actualFactorRef': actualKm['__id'],
+          'calc_requires': {
+            'askCount': false,
+            'askDistanceKm': true,
+            'autoDistance': true,
+          },
+          '__chosen_name':
+              'Baseline: ${baselineKm['name'] ?? baselineKm['__id']} / Actual: ${actualKm['name'] ?? actualKm['__id']}',
+        };
+      } else {
+        // ✅ perKm (عامل واحد فقط لكل كم)
+        return {
+          'calcMode': 'perKm',
+          'direction': 'save',
+          'ef_ref': actualKm['__id'],
+          'calc_requires': {
+            'askCount': false,
+            'askDistanceKm': true,
+            'autoDistance': true,
+          },
+          '__chosen_name': actualKm['name'] ?? actualKm['__id'],
+        };
+      }
     }
 
-    final kmOnly = (Map<String, dynamic> m) => (m['__unit'] == 'km');
+    // ------------------------------
+    // 2) حالة العناصر (per item / per piece)
+    // ------------------------------
+    final nonKmFactors = factors
+        .where((m) => m['__isKm'] != true && (m['__score'] as int) > 0)
+        .toList();
 
-    // فلترة baseline محتملة بوحدة كم
-    final baselineCandidates =
-        factors.where((m) => kmOnly(m) && looksBaseline(m)).toList()..sort(
-          (a, b) => (b['__score'] as int).compareTo(a['__score'] as int),
-        );
-    final Map<String, dynamic>? baseline = baselineCandidates.isNotEmpty
-        ? baselineCandidates.first
+    if (nonKmFactors.isEmpty) return null;
+
+    nonKmFactors.sort(
+      (a, b) => (b['__score'] as int).compareTo(a['__score'] as int),
+    );
+
+    // ✅ actual: نفضّل factorType = actual لو موجود
+    List<Map<String, dynamic>> itemActualCandidates = nonKmFactors
+        .where((m) => m['__isActual'] == true)
+        .toList();
+
+    Map<String, dynamic> actualItem;
+    if (itemActualCandidates.isNotEmpty) {
+      actualItem = itemActualCandidates.first;
+    } else {
+      // fallback: أي عامل ليس baseline
+      final nonBaseline = nonKmFactors
+          .where((m) => m['__isBaseline'] != true)
+          .toList();
+      if (nonBaseline.isNotEmpty) {
+        actualItem = nonBaseline.first;
+      } else {
+        // آخر حل: أول عامل
+        actualItem = nonKmFactors.first;
+      }
+    }
+
+    final baselineItemList = nonKmFactors
+        .where(
+          (m) => m['__isBaseline'] == true && m['__id'] != actualItem['__id'],
+        )
+        .toList();
+
+    final Map<String, dynamic>? baselineItem = baselineItemList.isNotEmpty
+        ? baselineItemList.first
         : null;
 
-    // تحديد الـ calcMode بحسب الوحدات
-    if (bestActual['__unit'] == 'km' &&
-        baseline != null &&
-        baseline['__unit'] == 'km') {
-      // deltaPerKm (سيارة مقابل وسيلة مستدامة)
+    if (baselineItem != null) {
+      // ✅ deltaPerItem (قطعة لبس landfill vs إعادة تدوير)
       return {
-        'calcMode': 'deltaPerKm',
+        'calcMode': 'deltaPerItem',
         'direction': 'save',
-        'baselineFactorRef': baseline['__id'],
-        'actualFactorRef': bestActual['__id'],
-        'calc_requires': {
-          'askCount': false,
-          'askDistanceKm': true,
-          'autoDistance': true,
-        },
-        '__chosen_name':
-            'Baseline: ${baseline['name'] ?? baseline['__id']} / Actual: ${bestActual['name'] ?? bestActual['__id']}',
-        '__unit': 'km',
-      };
-    } else if (bestActual['__unit'] == 'km') {
-      // perKm (عامل واحد فقط بالكم)
-      return {
-        'calcMode': 'perKm',
-        'direction': 'save',
-        'ef_ref': bestActual['__id'],
-        'calc_requires': {
-          'askCount': false,
-          'askDistanceKm': true,
-          'autoDistance': true,
-        },
-        '__chosen_name': bestActual['name'] ?? bestActual['__id'],
-        '__unit': 'km',
-      };
-    } else {
-      // perItem (أو أي وحدة غير كم) — نفضّل item
-      return {
-        'calcMode': 'perItem',
-        'direction': 'save',
-        'ef_ref': bestActual['__id'],
+        'baselineFactorRef': baselineItem['__id'],
+        'actualFactorRef': actualItem['__id'],
         'calc_requires': {
           'askCount': true,
           'askDistanceKm': false,
           'autoDistance': false,
         },
-        '__chosen_name': bestActual['name'] ?? bestActual['__id'],
-        '__unit': bestActual['__unit'],
+        '__chosen_name':
+            'Baseline: ${baselineItem['name'] ?? baselineItem['__id']} / Actual: ${actualItem['name'] ?? actualItem['__id']}',
       };
     }
+
+    // 🔁 fallback: perItem بعامل واحد (بدون baseline)
+    return {
+      'calcMode': 'perItem',
+      'direction': 'save',
+      'ef_ref': actualItem['__id'],
+      'calc_requires': {
+        'askCount': true,
+        'askDistanceKm': false,
+        'autoDistance': false,
+      },
+      '__chosen_name': actualItem['name'] ?? actualItem['__id'],
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -1337,8 +1430,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 onChanged: (_) => _isDirty = true,
                                 validator: (v) {
                                   final n = int.tryParse(v ?? '');
-                                  if (n == null || n <= 0)
+                                  if (n == null || n <= 0) {
                                     return 'أدخل عددًا صحيحًا موجبًا';
+                                  }
                                   return null;
                                 },
                               ),
@@ -1346,41 +1440,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
                               _fieldLabel('تصنيف المهمة', required: true),
                               const SizedBox(height: 8),
-                              // DropdownButtonFormField<String>(
-                              //   value: _selectedCategory,
-                              //   alignment: Alignment.centerRight,
-                              //   isExpanded: true,
-                              //   decoration: InputDecoration(
-                              //     hintText: _catsLoading
-                              //         ? '...يتم تحميل الفئات'
-                              //         : 'اختر الفئة',
-                              //     prefixIcon: const Icon(
-                              //       Icons.category_outlined,
-                              //       color: AppColors.primary,
-                              //     ),
-                              //     border: OutlineInputBorder(
-                              //       borderRadius: BorderRadius.circular(12),
-                              //     ),
-                              //   ),
-                              //   items: _categories
-                              //       .map(
-                              //         (name) => DropdownMenuItem(
-                              //           value: name,
-                              //           child: Align(
-                              //             alignment: Alignment.centerRight,
-                              //             child: Text(name),
-                              //           ),
-                              //         ),
-                              //       )
-                              //       .toList(),
-                              //   onChanged: (v) {
-                              //     setState(() => _selectedCategory = v);
-                              //     _isDirty = true;
-                              //   },
-                              //   validator: (v) => (v == null || v.isEmpty)
-                              //       ? 'اختر تصنيف المهمة'
-                              //       : null,
-                              // ),
                               DropdownButtonFormField<String>(
                                 value: _categories.contains(_selectedCategory)
                                     ? _selectedCategory
@@ -1479,8 +1538,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   _isDirty = true;
                                 },
                                 validator: (v) {
-                                  if (v == null || v.isEmpty)
+                                  if (v == null || v.isEmpty) {
                                     return 'اختر طريقة التحقق';
+                                  }
                                   return null;
                                 },
                               ),
@@ -1713,7 +1773,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 🧩 منطق الحفظ — يعتمد على mapping بالـ keywords + efStatus
+  // 🧩 منطق الحفظ — Auto EF mapping بالكامل
   Future<void> _saveTask() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
@@ -1750,7 +1810,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
       status = 'hidden';
     }
 
-    // ✅ الربط التلقائي EF (keywords-only)
+    // ✅ الربط التلقائي EF (km + items) باستخدام factorType للبداية / الفعلية
     final autoEf = await _autoPickEfForTask(title: title, desc: desc);
 
     // إعداد البيانات الأساسية
@@ -1778,7 +1838,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
         data['calc_requires'] = autoEf['calc_requires'];
       }
 
-      if (calcMode.toLowerCase() == 'deltaperkm') {
+      // label توضيحي للعامل المختار (للتصحيح لو حبيتي)
+      if (autoEf['__chosen_name'] != null) {
+        data['ef_debugLabel'] = autoEf['__chosen_name'];
+      }
+
+      final lowerMode = calcMode.toLowerCase();
+
+      if (lowerMode == 'deltaperkm' || lowerMode == 'deltaperitem') {
         if (autoEf['baselineFactorRef'] != null) {
           data['baselineFactorRef'] = autoEf['baselineFactorRef'];
         }
@@ -1787,41 +1854,37 @@ class _AddTaskPageState extends State<AddTaskPage> {
           data['emissionFactorRef'] = autoEf['actualFactorRef'];
         }
       } else {
+        // perKm أو perItem بعامل واحد
         if (autoEf['ef_ref'] != null) {
           data['emissionFactorRef'] = autoEf['ef_ref'];
         }
       }
     } else {
-      // fallback بسيط: لو ما في تطابق، نخلي perItem (بدون مراجع) — الواجهة تقدر تطلب إدخال يدوي لاحقًا
+      // fallback بسيط: لو ما في تطابق، نخلي perItem (بدون مراجع)
       data['calcMode'] = 'perItem';
       data['direction'] = 'save';
     }
+    if (widget.task == null) {
+      data['createdAt'] = FieldValue.serverTimestamp();
+      await _tasks.add(data);
+    } else {
+      await _tasks.doc(widget.task!['id']).update(data);
+    }
 
-    try {
-      if (widget.task == null) {
-        data['createdAt'] = FieldValue.serverTimestamp();
-        await _tasks.add(data);
-      } else {
-        await _tasks.doc(widget.task!['id']).update(data);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.green,
-            content: Text(
-              widget.task == null ? 'تم حفظ المهمة ✅' : 'تم تحديث المهمة ✅',
-              style: GoogleFonts.ibmPlexSansArabic(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.green,
+          content: Text(
+            widget.task == null ? 'تم حفظ المهمة ✅' : 'تم تحديث المهمة ✅',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
             ),
           ),
-        );
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      debugPrint('Error saving task: $e');
+        ),
+      );
+      Navigator.pop(context, true);
     }
   }
 
@@ -1961,8 +2024,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                         MaterialStateProperty.resolveWith<
                                           Color?
                                         >((states) {
-                                          if (disabled)
+                                          if (disabled) {
                                             return Colors.grey.shade200;
+                                          }
                                           return Colors.transparent;
                                         }),
                                   ),
@@ -2162,7 +2226,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 }
 
 // ---------------------------------------------------------------------------
-// 🟨 Add / Edit Category Page (بدون تغيير في المنطق)
+// 🟨 Add / Edit Category Page
 // ---------------------------------------------------------------------------
 
 class AddCategoryPage extends StatefulWidget {
@@ -2466,72 +2530,67 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
       setState(() {});
       return;
     }
+    final normalized = _nameCtrl.text
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .toLowerCase();
 
-    try {
-      final normalized = _nameCtrl.text
-          .trim()
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .toLowerCase();
+    if (widget.category == null) {
+      final dup = await _categoriesCol
+          .where('name_normalized', isEqualTo: normalized)
+          .limit(1)
+          .get();
 
-      if (widget.category == null) {
-        final dup = await _categoriesCol
-            .where('name_normalized', isEqualTo: normalized)
-            .limit(1)
-            .get();
-
-        if (dup.docs.isNotEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: Colors.redAccent,
-              content: Text(
-                '⚠️ اسم الفئة "${_nameCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          );
-          return;
-        }
-
-        await _categoriesCol.add({
-          'name': _nameCtrl.text.trim(),
-          'name_normalized': normalized,
-          'parent': _parent,
-          'description': _descCtrl.text.trim(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      } else {
-        await _categoriesCol.doc(widget.category!['id']).update({
-          'name': _nameCtrl.text.trim(),
-          'name_normalized': normalized,
-          'parent': _parent,
-          'description': _descCtrl.text.trim(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      if (mounted) {
+      if (dup.docs.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.green,
+            backgroundColor: Colors.redAccent,
             content: Text(
-              widget.category == null
-                  ? 'تمت إضافة الفئة بنجاح ✅'
-                  : 'تم تحديث الفئة بنجاح ✅',
+              '⚠️ اسم الفئة "${_nameCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
               style: GoogleFonts.ibmPlexSansArabic(
-                color: Colors.white,
                 fontWeight: FontWeight.w700,
+                color: Colors.white,
               ),
             ),
           ),
         );
-        _isDirty = false;
-        Navigator.pop(context, true);
+        return;
       }
-    } catch (e) {
-      debugPrint('Error saving category: $e');
+
+      await _categoriesCol.add({
+        'name': _nameCtrl.text.trim(),
+        'name_normalized': normalized,
+        'parent': _parent,
+        'description': _descCtrl.text.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      await _categoriesCol.doc(widget.category!['id']).update({
+        'name': _nameCtrl.text.trim(),
+        'name_normalized': normalized,
+        'parent': _parent,
+        'description': _descCtrl.text.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.green,
+          content: Text(
+            widget.category == null
+                ? 'تمت إضافة الفئة بنجاح ✅'
+                : 'تم تحديث الفئة بنجاح ✅',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
+      _isDirty = false;
+      Navigator.pop(context, true);
     }
   }
 

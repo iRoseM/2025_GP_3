@@ -72,7 +72,6 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Error loading categories: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -635,7 +634,6 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                     ),
                   );
                 } catch (e) {
-                  debugPrint('Error hiding category: $e');
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -700,29 +698,25 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
               ),
               onPressed: () async {
                 Navigator.pop(context);
-                try {
-                  await _categoriesCol.doc(cat['id']).update({
-                    'status': 'active',
-                    'updatedAt': FieldValue.serverTimestamp(),
-                  });
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: AppColors.primary,
-                        content: Text(
-                          'تم إعادة تفعيل الفئة ✅',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
+                await _categoriesCol.doc(cat['id']).update({
+                  'status': 'active',
+                  'updatedAt': FieldValue.serverTimestamp(),
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: AppColors.primary,
+                      content: Text(
+                        'تم إعادة تفعيل الفئة ✅',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    );
-                  }
-                  _fetchCategories();
-                } catch (e) {
-                  debugPrint('Error un-hiding category: $e');
+                    ),
+                  );
                 }
+                _fetchCategories();
               },
               child: Text(
                 'تأكيد',

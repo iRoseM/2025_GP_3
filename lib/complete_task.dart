@@ -243,19 +243,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   Future<double?> _getEfPerUnit(String id, {String? valueFieldFromTask}) async {
     final d = await _getEfDoc(id);
-    if (d == null) return null;
+    if (d == null) {
+      return null;
+    }
 
     if (valueFieldFromTask != null && valueFieldFromTask.isNotEmpty) {
       final v = _asDouble(d[valueFieldFromTask]);
-      if (v != null) return v;
+      if (v != null) {
+        return v;
+      }
     }
-
     final vfInDoc = d['valueField'] ?? d['efValueField'];
     if (vfInDoc is String && vfInDoc.isNotEmpty) {
       final v = _asDouble(d[vfInDoc]);
-      if (v != null) return v;
+      if (v != null) {
+        return v;
+      }
     }
-
     final candidates = [
       'ef_kgco2_per_unit',
       'ef_kgco2_per_item',
@@ -270,7 +274,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     ];
     for (final k in candidates) {
       final v = _asDouble(d[k]);
-      if (v != null) return v;
+      if (v != null) {
+        return v;
+      }
     }
     return null;
   }
@@ -284,8 +290,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final efDoc = await _getEfDoc(efIdFromTask) ?? {};
     final taskCalcMode = (widget.taskData['calcMode'] ?? '').toString().trim();
     final efCalcMode = (efDoc['calcMode'] ?? '').toString().trim();
-    final calcMode = (taskCalcMode.isNotEmpty ? taskCalcMode : efCalcMode)
-        .toLowerCase();
+    final rawMode = (taskCalcMode.isNotEmpty ? taskCalcMode : efCalcMode);
+    final calcMode = rawMode.toLowerCase();
 
     final baseRef =
         (widget.taskData['baselineFactorRef'] ?? efDoc['baselineFactorRef'])
@@ -298,16 +304,20 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         .toString()
         .toLowerCase();
     final isSave = (dir.isEmpty || dir == 'save');
-
+    // --------- 1) perKm مباشر ---------
     if (calcMode == 'perkm' && km != null && km > 0) {
       final perKmVal = await _getEfPerUnit(
         efIdFromTask,
         valueFieldFromTask: valueFieldFromTask,
       );
-      if (perKmVal == null) return 0.0;
-      return (isSave ? perKmVal : 0.0) * km;
+      if (perKmVal == null) {
+        return 0.0;
+      }
+      final res = (isSave ? perKmVal : 0.0) * km;
+      return res;
     }
 
+    // --------- 2) deltaPerKm ---------
     if (calcMode == 'deltaperkm' && km != null && km > 0) {
       final baseline = baseRef != null
           ? await _getEfPerUnit(baseRef, valueFieldFromTask: valueFieldFromTask)
@@ -323,39 +333,80 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         );
       }
       final delta = ((baseline ?? 0.0) - (actual ?? 0.0));
-      return (delta > 0 ? delta : 0.0) * km;
+      final res = (delta > 0 ? delta : 0.0) * km;
+      return res;
     }
 
+    // --------- 3) perItem مباشر ---------
     if (calcMode == 'peritem' && items != null && items > 0) {
       final perItemVal = await _getEfPerUnit(
         efIdFromTask,
-        valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_item',
+        valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
       );
-      if (perItemVal == null) return 0.0;
-      return (isSave ? perItemVal : 0.0) * items;
+      if (perItemVal == null) {
+        return 0.0;
+      }
+      final res = (isSave ? perItemVal : 0.0) * items;
+      return res;
     }
 
+    // --------- 4) deltaPerItem (المهم هنا) ---------
     if (calcMode == 'deltaperitem' && items != null && items > 0) {
+      const defaultField = 'ef_kgco2_per_unit'; // ✅ يطابق داتا emissionFactors
+
       final baseline = baseRef != null
           ? await _getEfPerUnit(
               baseRef,
-              valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_item',
+              valueFieldFromTask: valueFieldFromTask ?? defaultField,
             )
           : null;
+
       double? actual = await _getEfPerUnit(
         efIdFromTask,
-        valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_item',
+        valueFieldFromTask: valueFieldFromTask ?? defaultField,
       );
+
       if ((actual == null || actual == 0.0) && actRef != null) {
         actual = await _getEfPerUnit(
           actRef,
-          valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_item',
+          valueFieldFromTask: valueFieldFromTask ?? defaultField,
         );
       }
+
+      if (baseline == null && actual == null) {
+        return 0.0;
+      }
+
       final delta = ((baseline ?? 0.0) - (actual ?? 0.0));
-      return (delta > 0 ? delta : 0.0) * items;
+      final perItem = delta > 0 ? delta : 0.0;
+      final res = perItem * items;
+      return res;
     }
 
+    // --------- 5) ✅ fallback ذكي لو calcMode فاضي ---------
+    if ((calcMode.isEmpty || calcMode == 'auto') &&
+        items != null &&
+        items > 0) {
+      final perItemVal = await _getEfPerUnit(
+        efIdFromTask,
+        valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
+      );
+      if (perItemVal != null) {
+        final res = (isSave ? perItemVal : 0.0) * items;
+        return res;
+      }
+    }
+
+    if ((calcMode.isEmpty || calcMode == 'auto') && km != null && km > 0) {
+      final perKmVal = await _getEfPerUnit(
+        efIdFromTask,
+        valueFieldFromTask: valueFieldFromTask,
+      );
+      if (perKmVal != null) {
+        final res = (isSave ? perKmVal : 0.0) * km;
+        return res;
+      }
+    }
     return 0.0;
   }
 
@@ -486,12 +537,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         .doc(widget.userTaskDocId);
 
     final extra = <String, dynamic>{};
-    if (distanceKm != null) extra['distanceKm'] = distanceKm;
-    if (carbonSaved != null) extra['carbonSaved'] = carbonSaved;
+
+    if (distanceKm != null) {
+      extra['distanceKm'] = distanceKm;
+    }
+
+    final double carbonForStore = (carbonSaved != null && carbonSaved.isFinite)
+        ? double.parse(carbonSaved.toStringAsFixed(3))
+        : 0.0;
+
+    extra['carbonSaved'] = carbonForStore;
+
     if (_geoStart != null) extra['geoStart'] = _geoStart;
     if (_geoEnd != null) extra['geoEnd'] = _geoEnd;
-    if (itemCount != null) extra['itemCount'] = itemCount;
 
+    if (itemCount != null) {
+      extra['itemCount'] = itemCount;
+    }
     final efId =
         (widget.taskData['ef_ref'] ??
                 widget.taskData['efRef'] ??
@@ -506,7 +568,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     if (calcMode != null && calcMode.isNotEmpty) {
       extra['calcMode'] = calcMode;
     }
-
     await subRef.set({
       'userId': uid,
       'userTaskDocId': widget.userTaskDocId,
@@ -535,7 +596,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       'taskPoints': taskPoints,
       if (taskId != null) 'taskId': taskId,
       if (distanceKm != null) 'distanceKm': distanceKm,
-      if (carbonSaved != null) 'carbonSaved': carbonSaved,
+      // ✅ نفس القيمة المخزّنة في الـ submission
+      'carbonSaved': carbonForStore,
       if (_geoStart != null) 'geoStart': _geoStart,
       if (_geoEnd != null) 'geoEnd': _geoEnd,
       if (itemCount != null) 'itemCount': itemCount,
@@ -550,17 +612,15 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     setState(() {
       _openingCamera = true;
       _capturedPath = null;
-      _ready = false; // نبدأ من جديد
+      _ready = false;
     });
 
     try {
-      // تخلّص صريح من أي كنترولر سابق
       try {
         await _controller?.dispose();
       } catch (_) {}
       _controller = null;
 
-      // مهلة قصيرة قبل availableCameras (مهم بعد Google Map)
       await Future.delayed(const Duration(milliseconds: 50));
 
       _cameras ??= await availableCameras();
@@ -582,7 +642,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
       await controller.initialize();
 
-      // جهزي القيم ثم عيّنيها
       final minZoom = await controller.getMinZoomLevel();
       final maxZoom = await controller.getMaxZoomLevel();
       final minExposure = await controller.getMinExposureOffset();
@@ -591,7 +650,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       _minZoom = minZoom;
       _maxZoom = maxZoom;
       _zoom = _zoom.clamp(_minZoom, _maxZoom);
-
       _minExposure = minExposure;
       _maxExposure = maxExposure;
       _exposure = _exposure.clamp(_minExposure, _maxExposure);
@@ -696,7 +754,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       _captureStartIfNeeded();
     }
 
-    // ==== المعدلة: تهيئة عدد افتراضي مبكرًا عند الحاجة ====
     Future.microtask(() {
       if (!mounted) return;
       if (_shouldAskCount && _itemCountCtrl.text.isEmpty) {
@@ -752,8 +809,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
       _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
     });
-
-    // مهلة بسيطة ثم افتح الكاميرا في فريم لاحق — يحل تداخل سطح الخريطة مع Texture الكاميرا
     await Future.delayed(const Duration(milliseconds: 200));
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -763,7 +818,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
   }
 
-  // ====== Dialog that MUST appear above the camera (Root Navigator) ======
   Future<void> _showPerItemPopup() async {
     final minItems =
         _asInt(widget.taskData['minItems'] ?? _calcRequires['minItems']) ?? 1;
@@ -783,8 +837,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       _itemCountCtrl.text = def.toString();
     }
 
-    int clamp(int x) => x.clamp(minItems, maxItems);
-
+    int clamp(int x) => x.clamp(minItems, maxItems).toInt();
     await showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -1133,7 +1186,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         ),
                                 ),
 
-                                // ==== المعدلة: شارة تعرض العدد (عندما الشرط متحقق) ====
                                 if (_capturedPath != null && _shouldAskCount)
                                   Positioned(
                                     top: 54,
@@ -1169,7 +1221,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                     ),
                                   ),
 
-                                // ==== الجديدة: زر عائم دائم لفتح عدّاد العناصر حتى لو الشرط false ====
                                 if (_capturedPath != null)
                                   Positioned(
                                     top: 54,
@@ -1333,7 +1384,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 if (shot != null) {
                                   setState(() => _capturedPath = shot.path);
 
-                                  // ==== المعدلة: افتح حوار العدد بعد فريم وبـ await ====
                                   if (_shouldAskCount) {
                                     WidgetsBinding.instance
                                         .addPostFrameCallback((_) async {
@@ -1363,10 +1413,16 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                     if (_capturedPath == null) return;
 
                                     int? safeItems;
-                                    if (_shouldAskCount) {
+
+                                    // ✅ استخدم العدّاد إذا:
+                                    // - المهمة أصلاً perItem (_shouldAskCount)
+                                    // - أو المستخدم فتح popup واختار قيمة يدويًا (_chosenItems != null)
+                                    if (_shouldAskCount ||
+                                        _chosenItems != null) {
                                       var raw =
                                           _asInt(_itemCountCtrl.text) ??
                                           _chosenItems;
+
                                       final minItems =
                                           _asInt(
                                             widget.taskData['minItems'] ??
@@ -1415,7 +1471,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                           return;
                                         }
                                       }
-                                      safeItems = raw.clamp(minItems, maxItems);
+
+                                      safeItems = raw
+                                          .clamp(minItems, maxItems)
+                                          .toInt();
                                       _chosenItems = safeItems;
                                       _itemCountCtrl.text = safeItems
                                           .toString();
@@ -1470,15 +1529,21 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         double? minKm, maxKm;
                                         final mk = widget.taskData['minKm'];
                                         final xk = widget.taskData['maxKm'];
-                                        if (mk is num) minKm = mk.toDouble();
-                                        if (xk is num) maxKm = xk.toDouble();
+                                        if (mk is num) {
+                                          minKm = mk.toDouble();
+                                        }
+                                        if (xk is num) {
+                                          maxKm = xk.toDouble();
+                                        }
                                         if (pickedKm != null && pickedKm > 0) {
-                                          pickedKm = pickedKm.clamp(
-                                            minKm ?? 0.2,
-                                            maxKm ?? 50.0,
-                                          );
+                                          final clamped =
+                                              pickedKm.clamp(
+                                                    minKm ?? 0.2,
+                                                    maxKm ?? 50.0,
+                                                  )
+                                                  as num;
                                           pickedKm = double.parse(
-                                            pickedKm.toStringAsFixed(3),
+                                            clamped.toStringAsFixed(3),
                                           );
                                         }
 
@@ -1508,7 +1573,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                           (widget.taskData['ef_valueField'] ??
                                                   widget.taskData['valueField'])
                                               ?.toString();
-
                                       if (efId != null && efId.isNotEmpty) {
                                         final saved =
                                             await _computeCarbonSavedFlexible(
@@ -1518,7 +1582,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                               valueFieldFromTask:
                                                   valueFieldFromTask,
                                             );
-                                        if (saved.isFinite && saved > 0) {
+
+                                        if (saved.isFinite) {
                                           carbonSaved = double.parse(
                                             saved.toStringAsFixed(3),
                                           );
@@ -1764,7 +1829,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           ),
           Expanded(
             child: Slider(
-              value: value.clamp(min, max),
+              value: value.clamp(min, max).toDouble(),
               min: min,
               max: max == min ? min + 0.001 : max,
               onChanged: onChanged,
