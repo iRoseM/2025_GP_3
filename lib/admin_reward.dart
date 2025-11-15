@@ -5,6 +5,10 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'services/admin_bottom_nav.dart';
+import 'admin_home.dart';
+import 'admin_task.dart';
+import 'admin_map.dart';
 
 import 'services/background_container.dart';
 import 'services/connection.dart';
@@ -31,6 +35,37 @@ class AdminRewardsPage extends StatefulWidget {
 }
 
 class _AdminRewardsPageState extends State<AdminRewardsPage> {
+  int _currentIndex = 0;
+  void _onTap(int i) {
+    if (i == _currentIndex) return;
+
+    switch (i) {
+      case 0:
+        break;
+
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminMapPage()),
+        );
+        break;
+
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminTasksPage()),
+        );
+        break;
+
+      case 3:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminHomePage()),
+        );
+        break;
+    }
+  }
+
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _pointsCtrl = TextEditingController();
@@ -536,7 +571,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
 
           appBar: const NameerAppBar(
             showTitleInBar: false,
-            showBack: true,
+            showBack: false,
             height: 80,
           ),
 
@@ -588,7 +623,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                             return ListView.builder(
                               physics: const BouncingScrollPhysics(),
                               padding: const EdgeInsets.only(
-                                bottom: 100,
+                                bottom: 170,
                                 top: 8,
                               ),
                               itemCount: rewards.length,
@@ -953,6 +988,10 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
               alignment: Alignment.bottomLeft,
               child: _buildAddFab(),
             ),
+          ),
+          bottomNavigationBar: AdminBottomNav(
+            currentIndex: _currentIndex,
+            onTap: _onTap,
           ),
         ),
       ),
