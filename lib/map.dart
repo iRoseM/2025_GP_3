@@ -102,12 +102,13 @@ class _mapPageState extends State<mapPage> {
 
   static const _riyadh = LatLng(24.7136, 46.6753);
   static const _initZoom = 12.5;
-  static const double _nearbyKm = 7.0; // 👈 نصف قطر "القريب"
+  static const double _nearbyKm = 7.0;
 
   final Set<Marker> _markers = {};
   final Set<Marker> _allMarkers = {};
   final Set<Polyline> _polylines = {};
   final Map<String, Facility> _facilitiesByMarkerId = {};
+  Set<String> _allowedTypes = {}; // ✅ أنواع الحاويات المفعّلة في الفلتر
 
   bool _myLocationEnabled = false;
   bool _isLoadingLocation = false;
@@ -121,10 +122,10 @@ class _mapPageState extends State<mapPage> {
   BitmapDescriptor? _iconDefault;
 
   // === حالة التحميل/الرسالة المؤقتة ===
-  bool _isLoadingFacilities = false; // تحميل بيانات الحاويات
-  bool _didInitialLoad = false; // تمّ أول تحميل؟
-  bool _showEmptyOverlay = false; // إظهار "لا توجد حاويات" مؤقتًا
-  Timer? _emptyTimer; // مؤقّت الإخفاء
+  bool _isLoadingFacilities = false;
+  bool _didInitialLoad = false;
+  bool _showEmptyOverlay = false;
+  Timer? _emptyTimer;
 
   @override
   void initState() {
@@ -137,7 +138,7 @@ class _mapPageState extends State<mapPage> {
     await _loadMarkerIcons();
     await _loadFacilitiesFromFirestore();
 
-    // إن كانت صلاحية الموقع مفعّلة: تمركز + تصفية القريب
+    // إن كانت صلاحية الموقع مفعّلة: تمركز
     if (mounted && _myLocationEnabled) {
       await _centerOnUserOnly();
       _didAutoCenter = true;
@@ -213,7 +214,6 @@ class _mapPageState extends State<mapPage> {
     if (isFood) return 'حاوية إعادة تدوير بقايا الطعام';
 
     // أنواع أخرى شائعة
-
     if (lower.contains('قوارير') ||
         lower.contains('بلاستيك') ||
         lower.contains('علب') ||
@@ -306,8 +306,7 @@ class _mapPageState extends State<mapPage> {
         final String city = (m['city'] ?? '').toString();
         final String address = (m['address'] ?? '').toString();
 
-        final String status = (m['status'] ?? 'نشط')
-            .toString(); // 👈 قراءة الحالة
+        final String status = (m['status'] ?? 'نشط').toString(); // 👈 الحالة
 
         final pos = LatLng(lat, lng);
         final markerId = MarkerId(d.id);
@@ -338,11 +337,9 @@ class _mapPageState extends State<mapPage> {
                       if (provider.isNotEmpty) provider,
                       if (city.isNotEmpty) city,
                     ].join(' • '),
-
-              onTap: () =>
-                  _showFacilitySheet(facility), // 👈 فتح الورقة من البابل
+              onTap: () => _showFacilitySheet(facility),
             ),
-            onTap: () => _showFacilitySheet(facility), // 👈 فتح الورقة من البن
+            onTap: () => _showFacilitySheet(facility),
           ),
         );
 
@@ -361,6 +358,9 @@ class _mapPageState extends State<mapPage> {
           ..clear()
           ..addAll(markers);
       });
+
+      // ✅ تطبيق الفلاتر الحالية بعد كل تحميل/تحديث
+      _applyCurrentFilters();
 
       // لو المستخدم ما فعّل الموقع، نملأ الخريطة bounds لكل النقاط.
       if (!_myLocationEnabled && bounds != null && _markers.isNotEmpty) {
@@ -386,7 +386,7 @@ class _mapPageState extends State<mapPage> {
         });
       }
 
-      // إن كانت الصلاحية مفعلة ولم نتمركز تلقائياً بعد، نعمل تمركز + تصفية قريب
+      // إن كانت الصلاحية مفعلة ولم نتمركز تلقائياً بعد، نعمل تمركز فقط
       if (mounted && _myLocationEnabled && !_didAutoCenter) {
         await _centerOnUserOnly();
         _didAutoCenter = true;
@@ -396,12 +396,9 @@ class _mapPageState extends State<mapPage> {
 
   // ===== فتح الاتجاهات في Google Maps =====
   Future<void> _openInMaps(Facility f) async {
-    // نحاول أولًا مخطط comgooglemaps:// (يفتح التطبيق مباشرة على iOS/Android إن كان مثبت)
     final googleMapsUri = Uri.parse(
       'comgooglemaps://?daddr=${f.lat},${f.lng}&directionsmode=driving',
     );
-    // رابط ويب عام يفتح التطبيق إن كان مثبت أو المتصفح كخيار احتياطي
-
     final webUri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}&travelmode=driving',
     );
@@ -444,7 +441,6 @@ class _mapPageState extends State<mapPage> {
       );
       final userLatLng = LatLng(pos.latitude, pos.longitude);
 
-      // حرّك الكاميرا
       final controller = await _mapCtrl.future;
       await controller.animateCamera(
         CameraUpdate.newCameraPosition(
@@ -452,7 +448,6 @@ class _mapPageState extends State<mapPage> {
         ),
       );
 
-      // صفّي النقاط القريبة ضمن نصف القطر
       _filterMarkersByDistance(userLatLng, _nearbyKm);
     } catch (e) {
       debugPrint('❌ center/filter error: $e');
@@ -504,7 +499,6 @@ class _mapPageState extends State<mapPage> {
     });
 
     if (nearby.isEmpty) {
-      // لا توجد نقاط قريبة — نعرض الكل ونبلغ المستخدم
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('لا توجد نقاط قريبة ضمن النطاق — تم عرض جميع النقاط'),
@@ -527,8 +521,7 @@ class _mapPageState extends State<mapPage> {
         ),
       );
 
-      // كان هنا: _filterMarkersByDistance(user, _nearbyKm);
-      // تم الحذف حتى تظل كل الفاسيلتي ظاهرة
+      // لا نفلتر بالمسافة هنا حتى تظل كل الفاسيلتي ظاهرة
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -708,14 +701,12 @@ class _mapPageState extends State<mapPage> {
       if (areaMatch != null && areaMatch.groupCount >= 1) {
         possibleArea = normalizeArabic(areaMatch.group(1)!);
       } else {
-        // لو ما فيه كلمة "حي" أو "شارع"، ناخذ آخر كلمة (احتمال تكون اسم الحي)
         final words = queryNorm.split(' ');
         if (words.isNotEmpty) {
           possibleArea = words.last;
         }
       }
 
-      // 🔎 نتحقق فعلاً من وجودها في العنوان أو المدينة
       if (possibleArea != null &&
           (addressNorm.contains(possibleArea) ||
               cityNorm.contains(possibleArea))) {
@@ -744,19 +735,18 @@ class _mapPageState extends State<mapPage> {
       return;
     }
 
-    // 📏 نقرر كيف نعرض النتائج (أقرب أو الكل)
+    // 📏 نقرر كيف نعرض النتائج
     List<Map<String, dynamic>> top = [];
     if (isNearestSearch || (!isAreaSearch && searchCategory != null)) {
       matches.sort((a, b) => a['dist'].compareTo(b['dist']));
       top = matches.take(5).toList();
-    } else if (isAreaSearch) {
-      top = matches;
     } else {
       top = matches;
     }
 
     final nearest = top.first['facility'] as Facility;
-    final nearestDist = top.first['dist'] as double;
+    final nearestDist =
+        top.first['dist'] as double; // لو حبيتي تستخدمينها مستقبلاً
 
     // 🗺️ نعرض النتائج على الخريطة
     setState(() {
@@ -773,7 +763,7 @@ class _mapPageState extends State<mapPage> {
         );
     });
 
-    // 🎯 تقريب الكاميرا لتشمل كل النتائج (سواء أقرب أو حي/شارع)
+    // 🎯 تقريب الكاميرا لتشمل كل النتائج
     final ctrl = await _mapCtrl.future;
     LatLngBounds? bounds;
 
@@ -805,7 +795,6 @@ class _mapPageState extends State<mapPage> {
       }
     }
 
-    // إذا عندنا نتائج، نقرب الكاميرا لتشملها كلها
     if (bounds != null) {
       await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
     }
@@ -825,7 +814,6 @@ class _mapPageState extends State<mapPage> {
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
 
-    // 🕓 نعرض السناك بار أول، وبعدها بثانية نظهر تفاصيل الحاوية
     if (isNearestSearch || (!isAreaSearch && searchCategory != null)) {
       Future.delayed(const Duration(seconds: 1), () {
         _showFacilitySheet(nearest);
@@ -866,8 +854,6 @@ class _mapPageState extends State<mapPage> {
                         ),
                       ),
                     ),
-
-                    // 👇 نفس شكل المربع في كرت التاسك بدون أيقونة
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
@@ -890,7 +876,6 @@ class _mapPageState extends State<mapPage> {
                   ],
                 ),
                 const SizedBox(height: 6),
-
                 Row(
                   children: [
                     const Icon(
@@ -909,7 +894,6 @@ class _mapPageState extends State<mapPage> {
                   ],
                 ),
                 const SizedBox(height: 6),
-
                 if (f.address.isNotEmpty || f.city.isNotEmpty)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -928,7 +912,6 @@ class _mapPageState extends State<mapPage> {
                       ),
                     ],
                   ),
-
                 if (!isActive) ...[
                   const SizedBox(height: 10),
                   Container(
@@ -944,9 +927,7 @@ class _mapPageState extends State<mapPage> {
                     ),
                   ),
                 ],
-
                 const SizedBox(height: 12),
-
                 Row(
                   children: [
                     Expanded(
@@ -978,7 +959,6 @@ class _mapPageState extends State<mapPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 8),
               ],
             ),
@@ -993,7 +973,7 @@ class _mapPageState extends State<mapPage> {
     final descCtrl = TextEditingController();
     String? selectedType;
     final _formKey = GlobalKey<FormState>();
-    bool showValidation = false; // 👈 متغير للتحكم في ظهور اللون الأحمر
+    bool showValidation = false;
 
     final types = <String>[
       'الموقع غير دقيق',
@@ -1013,19 +993,16 @@ class _mapPageState extends State<mapPage> {
                 'إرسال بلاغ عن الحاويات',
                 textAlign: TextAlign.center,
               ),
-
               content: Form(
                 key: _formKey,
                 autovalidateMode: showValidation
-                    ? AutovalidateMode
-                          .always // 👈 يفعل التحقق فقط بعد الضغط على إرسال
+                    ? AutovalidateMode.always
                     : AutovalidateMode.disabled,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Directionality(
-                      textDirection:
-                          TextDirection.rtl, // يخلي السهم يسار والنص يمين
+                      textDirection: TextDirection.rtl,
                       child: DropdownButtonFormField<String>(
                         decoration: const InputDecoration(
                           labelText: 'نوع البلاغ',
@@ -1033,9 +1010,7 @@ class _mapPageState extends State<mapPage> {
                         ),
                         isExpanded: true,
                         alignment: Alignment.centerRight,
-                        icon: const Icon(
-                          Icons.arrow_drop_down,
-                        ), // السهم يروح يسار تلقائيًا
+                        icon: const Icon(Icons.arrow_drop_down),
                         items: types
                             .map(
                               (t) => DropdownMenuItem(
@@ -1058,14 +1033,13 @@ class _mapPageState extends State<mapPage> {
                         },
                       ),
                     ),
-
                     const SizedBox(height: 8),
                     Directionality(
-                      textDirection: TextDirection.rtl, // يخلي الحقل بالعربي
+                      textDirection: TextDirection.rtl,
                       child: TextFormField(
                         controller: descCtrl,
                         maxLines: 3,
-                        textAlign: TextAlign.right, // يخلي النص داخل الحقل يمين
+                        textAlign: TextAlign.right,
                         decoration: InputDecoration(
                           alignLabelWithHint: true,
                           label: Row(
@@ -1105,9 +1079,7 @@ class _mapPageState extends State<mapPage> {
                 ),
                 FilledButton(
                   onPressed: () async {
-                    // 👇 نفعل التحقق فقط عند الضغط على "إرسال"
                     setState(() => showValidation = true);
-
                     if (!_formKey.currentState!.validate()) return;
 
                     Navigator.pop(context);
@@ -1160,7 +1132,7 @@ class _mapPageState extends State<mapPage> {
             ),
             insetPadding: const EdgeInsets.symmetric(horizontal: 24),
             child: SizedBox(
-              width: 340, // 👈 عرض ثابت (ما يتغير حتى لو الزر صغير)
+              width: 340,
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -1192,7 +1164,6 @@ class _mapPageState extends State<mapPage> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    // 👇 الزر صغير، لكن المربع ثابت
                     Center(
                       child: SizedBox(
                         width: 140,
@@ -1317,7 +1288,6 @@ class _mapPageState extends State<mapPage> {
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                   child: Column(
                     children: [
-                      // ✅ الهيدر الآن من Firestore بدل القيم الثابتة
                       (_authUser == null)
                           ? const SizedBox.shrink()
                           : StreamBuilder<
@@ -1462,7 +1432,6 @@ class _mapPageState extends State<mapPage> {
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-
                     children: const [
                       _LegendIcon(
                         path: 'assets/img/clothPin.png',
@@ -1497,7 +1466,7 @@ class _mapPageState extends State<mapPage> {
     );
   }
 
-  // ===== Filters (اختياري) =====
+  // ===== فلاتر نوع الحاوية =====
   void _showFiltersBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -1506,92 +1475,128 @@ class _mapPageState extends State<mapPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (_) {
-        bool fClothes = true;
-        bool fRvm = true;
-        bool fPapers = true;
-        bool fFood = true;
+        // ننسخ الفلاتر الحالية إلى كائن محلي نلعب فيه
+        final selectedTypes = Set<String>.from(_allowedTypes);
+
+        const typeOptions = [
+          'حاوية إعادة تدوير الملابس',
+          'حاوية إعادة تدوير الأوراق',
+          'آلة إعادة التدوير (RVM)',
+          'حاوية إعادة تدوير بقايا الطعام',
+        ];
 
         return StatefulBuilder(
           builder: (context, setSt) {
             return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'فلاتر النقاط',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 12),
-                  FilterChip(
-                    label: const Text('حاوية إعادة تدوير الملابس'),
-                    selected: fClothes,
-                    onSelected: (v) => setSt(() => fClothes = v),
-                  ),
-                  const SizedBox(height: 6),
-                  FilterChip(
-                    label: const Text('حاوية إعادة تدوير الأوراق'),
-                    selected: fPapers,
-                    onSelected: (v) => setSt(() => fPapers = v),
-                  ),
-                  const SizedBox(height: 6),
-                  FilterChip(
-                    label: const Text('آلة إعادة التدوير (RVM)'),
-                    selected: fRvm,
-                    onSelected: (v) => setSt(() => fRvm = v),
-                  ),
-                  const SizedBox(height: 6),
-                  FilterChip(
-                    label: const Text('حاوية إعادة تدوير بقايا الطعام'),
-                    selected: fFood,
-                    onSelected: (v) => setSt(() => fFood = v),
-                  ),
-
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
+              padding: const EdgeInsets.all(16),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'تصفية النقاط',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        'حسب نوع الحاوية',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: typeOptions.map((type) {
+                        final selected = selectedTypes.contains(type);
+                        return FilterChip(
+                          label: Text(type),
+                          selected: selected,
+                          selectedColor: AppColors.primary.withOpacity(.15),
+                          labelStyle: TextStyle(
+                            color: selected
+                                ? AppColors.primary
+                                : AppColors.dark,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          onSelected: (v) => setSt(() {
+                            if (v) {
+                              selectedTypes.add(type);
+                            } else {
+                              selectedTypes.remove(type);
+                            }
+                          }),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                      ),
                       onPressed: () {
                         Navigator.pop(context);
-                        final allowed = <String>{};
-                        if (fClothes) allowed.add('حاوية إعادة تدوير الملابس');
-                        if (fPapers) allowed.add('حاوية إعادة تدوير الأوراق');
-                        if (fRvm) allowed.add('آلة إعادة التدوير (RVM)');
-                        if (fFood)
-                          allowed.add('حاوية إعادة تدوير بقايا الطعام');
-
                         setState(() {
-                          _markers
-                            ..clear()
-                            ..addAll(
-                              _allMarkers.where((m) {
-                                final t = m.infoWindow.title ?? '';
-                                return allowed.isEmpty || allowed.contains(t);
-                              }),
-                            );
+                          _allowedTypes = selectedTypes;
                         });
+                        _applyCurrentFilters();
 
-                        // بعد تطبيق الفلاتر: لو ما فيه نتائج وخلصنا التحميل، أظهري الرسالة مؤقتًا
                         if (_didInitialLoad &&
                             !_isLoadingFacilities &&
                             _markers.isEmpty) {
                           _flashEmptyMsg();
                         }
                       },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                      ),
                       child: const Text('تطبيق'),
                     ),
-                  ),
-                ],
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        setState(() {
+                          _allowedTypes.clear();
+                        });
+                        _applyCurrentFilters(); // يرجع يعرض كل النقاط
+                      },
+                      child: const Text('إلغاء الفلاتر'),
+                    ),
+                  ],
+                ),
               ),
             );
           },
         );
       },
     );
+  }
+
+  // ✅ فلترة الماركرات حسب نوع الحاوية فقط
+  void _applyCurrentFilters() {
+    setState(() {
+      if (_allowedTypes.isEmpty) {
+        _markers
+          ..clear()
+          ..addAll(_allMarkers);
+        return;
+      }
+
+      _markers
+        ..clear()
+        ..addAll(
+          _allMarkers.where((m) {
+            final fid = m.markerId.value;
+            final facility = _facilitiesByMarkerId[fid];
+            if (facility == null) return true; // احتياط
+            return _allowedTypes.contains(facility.type);
+          }),
+        );
+    });
   }
 }
 
@@ -1792,8 +1797,6 @@ class _HeaderUser extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-
-          // الترحيب بالاسم
           Expanded(
             child: Text(
               'مرحبًا، $name',
@@ -1801,8 +1804,6 @@ class _HeaderUser extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
           ),
-
-          // شارة النقاط - تم التعديل لتأخذ نفس ستايل الهوم بيج
           InkWell(
             borderRadius: BorderRadius.circular(100),
             onTap: onTap,
@@ -1822,9 +1823,9 @@ class _HeaderUser extends StatelessWidget {
                 borderRadius: BorderRadius.circular(100),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(.35), // نفس الهوم بيج
-                    blurRadius: 14, // نفس الهوم بيج
-                    offset: const Offset(0, 6), // نفس الهوم بيج
+                    color: AppColors.primary.withOpacity(.35),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
@@ -1834,7 +1835,7 @@ class _HeaderUser extends StatelessWidget {
                   const Icon(
                     Icons.stars_rounded,
                     color: Colors.white,
-                    size: 18, // نفس الهوم بيج
+                    size: 18,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -1842,7 +1843,7 @@ class _HeaderUser extends StatelessWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w900,
-                      fontSize: 14, // نفس الهوم بيج
+                      fontSize: 14,
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -1851,7 +1852,7 @@ class _HeaderUser extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
-                      fontSize: 12, // نفس الهوم بيج
+                      fontSize: 12,
                     ),
                   ),
                 ],

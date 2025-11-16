@@ -78,6 +78,15 @@ class _RewardsPageState extends State<RewardsPage> {
         .snapshots();
   }
 
+  String generateUniqueCode({int length = 8}) {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final random = DateTime.now().millisecondsSinceEpoch;
+    return List.generate(length, (index) {
+      final idx = (random + index * 37) % chars.length;
+      return chars[idx];
+    }).join();
+  }
+
   // 🧠 منطق استبدال المكافأة
   Future<void> _redeemReward(
     BuildContext context,
@@ -94,7 +103,7 @@ class _RewardsPageState extends State<RewardsPage> {
     final rewardID = data['id'] ?? '';
     final rewardTitle = data['title'] ?? 'مكافأة';
     final cost = data['costPoints'] ?? 0;
-    final couponCode = data['couponCode'] ?? 'NAMEER10';
+    final couponCode = generateUniqueCode();
 
     final userRef = FirebaseFirestore.instance
         .collection('users')

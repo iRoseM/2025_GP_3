@@ -33,11 +33,14 @@ final _fs = FirebaseFirestore.instance;
 
 // ——— إعدادات موحّدة لمجموعة العوامل ———
 const String _efCollection = 'emissionFactors';
-const String _efValueField = 'ef_kgco2_per_unit'; // حقلك الحالي
+const String _efValueField = 'ef_kgco2_per_unit'; // الحقل الأساسي للقيمة
+
+/// ✅ baseline الافتراضي لوسائل النقل: سيارة بنزين لكل كيلومتر
+const String kDefaultTransportBaselineRef = 'transportCarGasolinePerKm';
 
 class CarbonCalcResult {
   final double kgCO2;
-  final String direction; // "save" | "emit"
+  final String direction;
   final Map<String, dynamic> meta;
   CarbonCalcResult({
     required this.kgCO2,
@@ -59,7 +62,7 @@ Future<Map<String, dynamic>?> _getEfDoc(String id) async {
 double _numOr0(dynamic v) =>
     (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
 
-// ✅ قارئ مرن لقيمة العامل (يدعم أسماء متعددة + valueField داخل الوثيقة)
+// ✅ قارئ مرن لقيمة العامل (يدعم valueField داخلي وأسماء شائعة)
 double? _readEfValueFlexible(
   Map<String, dynamic> efDoc, {
   String? preferField,
@@ -70,11 +73,13 @@ double? _readEfValueFlexible(
     return null;
   }
 
+  // 1) الحقل المفضّل (لو محدد)
   if (preferField != null && preferField.isNotEmpty) {
     final v = _asDouble(efDoc[preferField]);
     if (v != null) return v;
   }
 
+  // 2) حقل valueField داخل الوثيقة (ديناميكي)
   final vfInDoc = efDoc['valueField'] ?? efDoc['efValueField'];
   if (vfInDoc is String && vfInDoc.isNotEmpty) {
     final v = _asDouble(efDoc[vfInDoc]);
@@ -82,14 +87,26 @@ double? _readEfValueFlexible(
   }
 
   final candidates = <String>[
+    // قيم عامة
     'ef_kgco2_per_unit',
+    'ef_kgco2_per_item',
+    'ef_kgco2',
+
+    // per item
     'value',
+    'kgPerItem',
+    'perItem',
+
+    // per km
     'kgPerKm',
     'perKm',
     'co2PerKm',
     'co2_per_km',
+
+    // fallback عام
     'factor',
   ];
+
   for (final k in candidates) {
     final v = _asDouble(efDoc[k]);
     if (v != null) return v;
@@ -113,6 +130,7 @@ Future<Map<String, dynamic>?> resolveEmissionFactorForTask(
     if (doc != null) return doc;
   }
 
+  // 2) محاولة by title/description/keywords
   String normalize(String? s) =>
       (s ?? '').toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
 
@@ -154,6 +172,7 @@ Future<Map<String, dynamic>?> resolveEmissionFactorForTask(
   return best;
 }
 
+// 🧮 دالة عامة (غير مستخدمة مباشرة في الاعتماد، لكن مفيدة لو احتجتها في أماكن أخرى)
 Future<CarbonCalcResult?> computeCarbonForTask({
   required Map<String, dynamic> task,
   required int count,
@@ -212,7 +231,33 @@ Future<CarbonCalcResult?> computeCarbonForTask({
       'actual_per_km': act,
       'delta_per_km': delta,
     });
+  } else if (calcMode == 'deltaperitem') {
+    // ✅ deltaPerItem في الدالة العامة أيضًا (baseline - actual لكل قطعة)
+    final baselineRef = (ef['baselineFactorRef'] ?? ef['baseline_factor_ref'])
+        ?.toString();
+    final actualRef = (ef['actualFactorRef'] ?? ef['actual_factor_ref'])
+        ?.toString();
+    if (baselineRef == null ||
+        baselineRef.isEmpty ||
+        actualRef == null ||
+        actualRef.isEmpty ||
+        count <= 0) {
+      return null;
+    }
+    final base = await _efValByRef(baselineRef) ?? 0.0;
+    final act = await _efValByRef(actualRef) ?? 0.0;
+    final delta = base - act;
+    kg = (delta > 0 ? delta : 0.0) * count.clamp(0, 1000000);
+    meta.addAll({
+      'count': count,
+      'ef_baseline_id': baselineRef,
+      'ef_actual_id': actualRef,
+      'baseline_per_item': base,
+      'actual_per_item': act,
+      'delta_per_item': delta,
+    });
   } else {
+    // fallback → perItem
     final perItem = _readEfValueFlexible(ef, preferField: _efValueField) ?? 0.0;
     kg = perItem * count.clamp(0, 1000000);
     meta.addAll({'count': count, 'ef': perItem, 'fallback': true});
@@ -224,6 +269,8 @@ Future<CarbonCalcResult?> computeCarbonForTask({
   return CarbonCalcResult(kgCO2: finalKg, direction: direction, meta: meta);
 }
 
+// =====================================================
+// 📄 صفحة مراجعة المهام (أدمن / حساب عادي)
 // =====================================================
 
 class AdminTaskCheckPage extends StatefulWidget {
@@ -285,9 +332,6 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
     final tok = await u.getIdTokenResult();
     final isAdm =
         (tok.claims?['admin'] == true) || (tok.claims?['role'] == 'admin');
-    debugPrint(
-      '[claims] admin=${tok.claims?['admin']} role=${tok.claims?['role']} uid=${u.uid}',
-    );
     if (mounted) {
       setState(() {
         _isAdmin = isAdm;
@@ -315,6 +359,18 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
     return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
   }
 
+  // 👤 جلب اسم المستخدم من وثيقة users/{userId}
+  Future<String> _getUserName(String userId) async {
+    if (userId.isEmpty) return '';
+    final snap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .get();
+    if (!snap.exists) return userId;
+    final data = snap.data() ?? {};
+    return data['name'] ?? data['username'] ?? userId;
+  }
+
   // =================== helpers لحساب الكربون ===================
 
   Future<Map<String, dynamic>?> _getFactorByRef(String refId) async {
@@ -324,11 +380,16 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         .doc(refId)
         .get();
     if (!snap.exists) return null;
-    return snap.data() as Map<String, dynamic>;
+    return snap.data() as Map<String, dynamic>?;
   }
 
   double _round2(double v) => (v * 100).roundToDouble() / 100.0;
 
+  /// 🧮 منطق حساب savedKgCO2 للمستخدم عند الاعتماد:
+  /// - perItem      → factor * count
+  /// - perKm        → (baseline - actual) * distanceKm (baseline افتراضي سيارة بنزين)
+  /// - deltaPerKm   → (baseline - actual) * distanceKm
+  /// - deltaPerItem → (baseline - actual) * count
   Future<double> _computeSavedKgCO2({
     String? calcMode,
     String? efRef,
@@ -344,8 +405,11 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
     direction = (taskSnapshotOrMinimal['direction'] as String?) ?? direction;
 
     final mode = (calcMode ?? 'perItem').toString().toLowerCase();
+
+    // نظامنا يحسب "توفير" فقط، فلو المهمة emit ما نضيف شيء للبصمة المحفوظة
     if (direction.toLowerCase() != 'save') return 0.0;
 
+    // perItem → يعتمد فقط على عدد الوحدات
     if (mode == 'peritem') {
       if ((efRef ?? '').isEmpty || count <= 0) return 0.0;
       final f = await _getFactorByRef(efRef!);
@@ -354,14 +418,45 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       return _round2(count * factor);
     }
 
+    // ✅ perKm → نحسب التوفير مقابل سيارة بنزين (transportCarGasolinePerKm)
     if (mode == 'perkm') {
-      if ((efRef ?? '').isEmpty || distanceKm <= 0) return 0.0;
-      final f = await _getFactorByRef(efRef!);
-      if (f == null) return 0.0;
-      final factor = _readEfValueFlexible(f, preferField: _efValueField) ?? 0.0;
-      return _round2(distanceKm * factor);
+      if (distanceKm <= 0) return 0.0;
+
+      // actual = العامل المستدام (حافلة/مترو/غيره)
+      String? actualRef =
+          efRef ?? taskSnapshotOrMinimal['emissionFactorRef'] as String?;
+      if (actualRef == null || actualRef.isEmpty) return 0.0;
+
+      // baseline = من المهمة لو محدد، وإلا القيمة الافتراضية transportCarGasolinePerKm
+      String baselineId =
+          baselineRef ??
+          (taskSnapshotOrMinimal['baselineFactorRef'] as String?) ??
+          kDefaultTransportBaselineRef;
+
+      if (baselineId.isEmpty) {
+        // لو حتى الافتراضي مو موجود لأي سبب → نرجع للسلوك القديم (perKm * factor)
+        final fAct = await _getFactorByRef(actualRef);
+        if (fAct == null) return 0.0;
+        final factor =
+            _readEfValueFlexible(fAct, preferField: _efValueField) ?? 0.0;
+        return _round2(distanceKm * factor);
+      }
+
+      final baseF = await _getFactorByRef(baselineId);
+      final actF = await _getFactorByRef(actualRef);
+
+      if (baseF == null || actF == null) return 0.0;
+
+      final base =
+          _readEfValueFlexible(baseF, preferField: _efValueField) ?? 0.0;
+      final act = _readEfValueFlexible(actF, preferField: _efValueField) ?? 0.0;
+      final delta = base - act;
+
+      if (delta <= 0) return 0.0;
+      return _round2(delta * distanceKm);
     }
 
+    // deltaPerKm → baseline-actual لكل كم
     if (mode == 'deltaperkm') {
       if ((baselineRef ?? '').isEmpty ||
           (efRef ?? '').isEmpty ||
@@ -379,6 +474,22 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       return _round2(delta * distanceKm);
     }
 
+    // ✅ deltaPerItem → (baseline - actual) لكل قطعة
+    if (mode == 'deltaperitem') {
+      if ((baselineRef ?? '').isEmpty || (efRef ?? '').isEmpty || count <= 0) {
+        return 0.0;
+      }
+      final baseF = await _getFactorByRef(baselineRef!);
+      final actF = await _getFactorByRef(efRef!);
+      if (baseF == null || actF == null) return 0.0;
+      final base =
+          _readEfValueFlexible(baseF, preferField: _efValueField) ?? 0.0;
+      final act = _readEfValueFlexible(actF, preferField: _efValueField) ?? 0.0;
+      final delta = base - act;
+      if (delta <= 0) return 0.0;
+      return _round2(delta * count);
+    }
+
     // fallback perItem
     if ((efRef ?? '').isEmpty || count <= 0) return 0.0;
     final f = await _getFactorByRef(efRef!);
@@ -388,12 +499,11 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
   }
 
   // =====================================================
-  // 🧮 deltaPerKm: تحسب + تحدث userTasks و users
+  // 🧮 deltaPerKm: تحسب الفرق فقط (baseline - actual) * km
+  //    بدون أي تحديث في Firestore (التحديث يتم في _approve)
   // =====================================================
-  Future<double> _computeAndPersistDeltaPerKm({
-    required Map<String, dynamic> task, // ممكن ما يحتوي baseline/actual
-    required String userTaskDocId,
-    required String uid,
+  Future<double> _computeDeltaPerKmValue({
+    required Map<String, dynamic> task,
     required double distanceKm,
   }) async {
     try {
@@ -401,7 +511,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         throw Exception('distanceKm يجب أن تكون أكبر من صفر');
       }
 
-      // 1) جرّب تقرا من المهمة
+      // 1) refs من المهمة لو موجودة
       String? baselineRef =
           (task['baselineFactorRef'] ?? task['baseline_factor_ref'])
               ?.toString();
@@ -411,7 +521,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                   task['emission_factor_ref'])
               ?.toString();
 
-      // 2) إن ما وُجدت بالمهمة، حاول تجيب وثيقة EF ثم استخرج منها
+      // 2) لو ناقصة نحاول نجيب وثيقة EF ونقرأ منها
       Future<Map<String, dynamic>?> _loadEfFromTaskOrResolve() async {
         final taskEfId =
             (task['emissionFactorRef'] ?? task['emission_factor_ref'])
@@ -462,37 +572,18 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       final base = await _getVal(baselineRef) ?? 0.0;
       final act = await _getVal(actualRef) ?? 0.0;
       final delta = base - act;
-      final savedKg = delta > 0 ? (delta * distanceKm) : 0.0;
+      if (delta <= 0) {
+        return 0.0;
+      }
 
-      final batch = FirebaseFirestore.instance.batch();
-      final utRef = FirebaseFirestore.instance
-          .collection('userTasks')
-          .doc(userTaskDocId);
-      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
-
-      batch.update(utRef, {
-        'savedKgCO2': savedKg,
-        'distanceKm': distanceKm,
-        'completedAt': FieldValue.serverTimestamp(),
-      });
-
-      batch.set(userRef, {
-        'totalCarbonSaved': FieldValue.increment(savedKg),
-        'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await batch.commit();
-      debugPrint(
-        '[deltaPerKm] ✅ saved=+$savedKg kgCO₂ @ $distanceKm km (base=$base, act=$act) [baseline=$baselineRef, actual=$actualRef]',
-      );
+      final savedKg = delta * distanceKm;
       return savedKg;
     } catch (e) {
-      debugPrint('❌ _computeAndPersistDeltaPerKm error: $e');
-      rethrow;
+      return 0.0;
     }
   }
 
-  // =================== الدالة الرئيسية (اعتماد) ===================
+  // =================== الدالة الرئيسية (UI + اعتماد/رفض) ===================
 
   @override
   Widget build(BuildContext context) {
@@ -543,36 +634,9 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _isAdmin
-                                  ? AppColors.primary33
-                                  : Colors.orange.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              _isAdmin ? 'أدمن' : 'حساب عادي',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: _isAdmin
-                                    ? AppColors.dark
-                                    : Colors.orange,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 6),
-                      // 🔎 Debug يظهر حالة الأدمن
-                      Text(
-                        'debug • isAdmin: $_isAdmin',
-                        style: TextStyle(fontSize: 11, color: Colors.grey[700]),
-                      ),
                       const SizedBox(height: 15),
 
                       Expanded(
@@ -660,8 +724,9 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                               final v =
                                   (d.data()
                                       as Map<String, dynamic>)['createdAt'];
-                              if (v is Timestamp)
+                              if (v is Timestamp) {
                                 return v.millisecondsSinceEpoch;
+                              }
                               return -1;
                             }
 
@@ -679,12 +744,13 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                     (m['imageUrls'] as List?)?.cast<String>() ??
                                     [];
 
-                                // ✅ نقرأ العدد من itemCount أولاً ثم count (للخلفية)
                                 final countStr =
                                     (m['itemCount'] ?? m['count'])
                                         ?.toString() ??
                                     '';
                                 final km = (m['distanceKm']?.toString() ?? '');
+
+                                final userId = (m['userId'] ?? '').toString();
 
                                 return Card(
                                   key: ValueKey(d.id),
@@ -707,13 +773,23 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                           ),
                                         ),
                                         const SizedBox(height: 4),
-                                        Text(
-                                          'المستخدم: ${m['userId']} • النقاط: ${m['taskPoints'] ?? 0}',
-                                          style: GoogleFonts.ibmPlexSansArabic(
-                                            fontSize: 13,
-                                            color: Colors.grey[700],
-                                          ),
+
+                                        FutureBuilder<String>(
+                                          future: _getUserName(userId),
+                                          builder: (context, snapName) {
+                                            final userName =
+                                                snapName.data ?? userId;
+                                            return Text(
+                                              'المستخدم: $userName • النقاط: ${m['taskPoints'] ?? 0}',
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    fontSize: 13,
+                                                    color: Colors.grey[700],
+                                                  ),
+                                            );
+                                          },
                                         ),
+
                                         if (countStr.isNotEmpty ||
                                             km.isNotEmpty)
                                           Padding(
@@ -735,6 +811,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                             ),
                                           ),
                                         const SizedBox(height: 8),
+
                                         if (images.isNotEmpty)
                                           Wrap(
                                             spacing: 8,
@@ -829,32 +906,20 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                               ],
                                             ),
                                           ),
+
                                         const SizedBox(height: 10),
+
+                                        // 🔘 أزرار الاعتماد / الرفض — أخضر / أحمر وتعطيل رمادي
                                         Row(
                                           children: [
                                             Expanded(
-                                              child: ElevatedButton.icon(
-                                                onPressed: _isAdmin
-                                                    ? () async {
-                                                        debugPrint(
-                                                          '[approve] tap ${d.id}',
-                                                        );
-                                                        await _approve(
-                                                          context,
-                                                          d,
-                                                        );
-                                                      }
-                                                    : null,
-                                                icon: const Icon(
-                                                  Icons.check_circle_outline,
-                                                ),
-                                                label: const Text('اعتماد'),
-                                                style: ElevatedButton.styleFrom(
+                                              child: FilledButton.icon(
+                                                style: FilledButton.styleFrom(
                                                   backgroundColor:
-                                                      AppColors.primary,
-                                                  foregroundColor: Colors.white,
+                                                      Colors.green, // أخضر
                                                   disabledBackgroundColor:
                                                       Colors.grey[300],
+                                                  foregroundColor: Colors.white,
                                                   disabledForegroundColor:
                                                       Colors.grey[600],
                                                   padding:
@@ -862,35 +927,45 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                                         vertical: 12,
                                                       ),
                                                 ),
+                                                onPressed: _isAdmin
+                                                    ? () async {
+                                                        await _approve(d);
+                                                      }
+                                                    : null,
+                                                icon: const Icon(
+                                                  Icons.check_circle_outline,
+                                                ),
+                                                label: const Text('اعتماد'),
                                               ),
                                             ),
                                             const SizedBox(width: 10),
                                             Expanded(
-                                              child: OutlinedButton.icon(
+                                              child: FilledButton.icon(
+                                                style: FilledButton.styleFrom(
+                                                  backgroundColor:
+                                                      Colors.red, // أحمر
+                                                  disabledBackgroundColor:
+                                                      Colors.grey[300],
+                                                  foregroundColor: Colors.white,
+                                                  disabledForegroundColor:
+                                                      Colors.grey[600],
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        vertical: 12,
+                                                      ),
+                                                ),
                                                 onPressed: _isAdmin
-                                                    ? () => _reject(context, d)
+                                                    ? () => _reject(d)
                                                     : null,
                                                 icon: const Icon(
                                                   Icons.cancel_outlined,
                                                 ),
                                                 label: const Text('رفض'),
-                                                style: OutlinedButton.styleFrom(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        vertical: 12,
-                                                      ),
-                                                  side: const BorderSide(
-                                                    color: AppColors.primary,
-                                                    width: 2,
-                                                  ),
-                                                  foregroundColor: _isAdmin
-                                                      ? AppColors.primary
-                                                      : Colors.grey[600],
-                                                ),
                                               ),
                                             ),
                                           ],
                                         ),
+
                                         if (!_isAdmin)
                                           Padding(
                                             padding: const EdgeInsets.only(
@@ -920,18 +995,20 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
               },
             ),
           ),
-          // لا يوجد BottomNav هنا حاليًا
+          // ممكن تضيفين BottomNav لو حبيتي بعدين
         ),
       ),
     );
   }
 
-  // ========= اعتماد/رفض (نقلتها تحت build لتكون أوضح) =========
-
-  Future<void> _approve(BuildContext context, DocumentSnapshot subDoc) async {
+  // ========= اعتماد/رفض =========
+  Future<void> _approve(DocumentSnapshot subDoc) async {
     await _ensureAdminClaims();
+
     if (!_isAdmin) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
         const SnackBar(content: Text('يحتاج صلاحية أدمن لاعتماد الطلب')),
       );
       return;
@@ -940,8 +1017,11 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
     final data = subDoc.data() as Map<String, dynamic>;
     final userTaskDocId = (data['userTaskDocId'] ?? '').toString();
     final userId = (data['userId'] ?? '').toString();
+
     if (userTaskDocId.isEmpty || userId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
         const SnackBar(content: Text('الطلب ناقص userId/userTaskDocId')),
       );
       return;
@@ -953,18 +1033,15 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         (data['taskTitle'] ?? data['task_title'] ?? '(بدون عنوان)').toString();
 
     int _asInt(dynamic v) => (v is int) ? v : int.tryParse('${v ?? ''}') ?? 0;
+    double _asDouble(dynamic v) =>
+        (v is num) ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0.0;
+
     int itemCount = _asInt(
       data['itemCount'] ?? data['count'] ?? data['evidence']?['itemCount'],
     );
 
-    final submittedDistanceKm = (data['distanceKm'] is num)
-        ? (data['distanceKm'] as num).toDouble()
-        : double.tryParse('${data['distanceKm'] ?? ''}') ?? 0.0;
-
-    String? calcMode = (data['calcMode'] as String?);
-    String? efRef = (data['emissionFactorRef'] as String?);
-    String? baselineRef = (data['baselineFactorRef'] as String?);
-    String direction = (data['direction'] as String?) ?? 'save';
+    final distanceKm = _asDouble(data['distanceKm']);
+    double savedKgCO2 = _asDouble(data['carbonSaved']);
 
     final usersRef = FirebaseFirestore.instance.collection('users').doc(userId);
     final utRef = FirebaseFirestore.instance
@@ -972,101 +1049,6 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         .doc(userTaskDocId);
     final subRef = subDoc.reference;
     final admin = FirebaseAuth.instance.currentUser;
-
-    Map<String, dynamic> taskMapForCarbon = {};
-    if (taskId.isNotEmpty) {
-      final t = await FirebaseFirestore.instance
-          .collection('tasks')
-          .doc(taskId)
-          .get();
-      if (t.exists && t.data() != null) {
-        taskMapForCarbon = {'id': t.id, ...t.data()!};
-      }
-    }
-    if (taskMapForCarbon.isEmpty) {
-      taskMapForCarbon = {
-        'id': taskId,
-        'title': taskTitle,
-        'title_normalized': taskTitle
-            .toLowerCase()
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim(),
-        'description': (data['taskDescription'] ?? data['task_desc'] ?? ''),
-        'category': (data['taskCategory'] ?? data['category'] ?? ''),
-        if (data['emissionFactorRef'] != null)
-          'emissionFactorRef': data['emissionFactorRef'],
-        if (data['baselineFactorRef'] != null)
-          'baselineFactorRef': data['baselineFactorRef'],
-        if (data['calcMode'] != null) 'calcMode': data['calcMode'],
-        if (data['direction'] != null) 'direction': data['direction'],
-        if (data['minItems'] != null) 'minItems': data['minItems'],
-        if (data['maxItems'] != null) 'maxItems': data['maxItems'],
-        if (data['defaultItemsOnSubmit'] != null)
-          'defaultItemsOnSubmit': data['defaultItemsOnSubmit'],
-        if (data['defaultItems'] != null) 'defaultItems': data['defaultItems'],
-      };
-    }
-
-    double _n(dynamic v) =>
-        (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
-    double effectiveDistanceKm = submittedDistanceKm;
-    if (effectiveDistanceKm <= 0) {
-      final defKm = _n(taskMapForCarbon['defaultKmOnSubmit']);
-      final minKm = _n(taskMapForCarbon['minKm']);
-      effectiveDistanceKm = defKm > 0 ? defKm : 0.0;
-      if (effectiveDistanceKm < minKm) effectiveDistanceKm = minKm;
-    }
-
-    final effectiveCalcMode =
-        (calcMode ?? taskMapForCarbon['calcMode'] ?? 'perItem')
-            .toString()
-            .toLowerCase();
-
-    if (effectiveCalcMode == 'peritem' && itemCount <= 0) {
-      try {
-        final utSnap = await utRef.get();
-        if (utSnap.exists) {
-          final ut = utSnap.data() as Map<String, dynamic>?;
-          final fromUt = ut?['itemCount'] ?? ut?['count'];
-          if (fromUt != null) itemCount = _asInt(fromUt);
-        }
-      } catch (_) {}
-      if (itemCount <= 0) {
-        final minItems = _asInt(taskMapForCarbon['minItems']);
-        final maxItems = _asInt(taskMapForCarbon['maxItems']);
-        final defItems = _asInt(taskMapForCarbon['defaultItemsOnSubmit']) > 0
-            ? _asInt(taskMapForCarbon['defaultItemsOnSubmit'])
-            : _asInt(taskMapForCarbon['defaultItems']);
-        int v = defItems > 0 ? defItems : 1;
-        if (minItems > 0 && v < minItems) v = minItems;
-        if (maxItems > 0 && v > maxItems) v = maxItems;
-        itemCount = v;
-      }
-    }
-
-    double savedKgCO2 = 0.0;
-    if (effectiveCalcMode == 'deltaperkm') {
-      savedKgCO2 = await _computeAndPersistDeltaPerKm(
-        task: {
-          ...taskMapForCarbon,
-          if (baselineRef != null) 'baselineFactorRef': baselineRef,
-          if (efRef != null) 'emissionFactorRef': efRef,
-        },
-        userTaskDocId: userTaskDocId,
-        uid: userId,
-        distanceKm: effectiveDistanceKm,
-      );
-    } else {
-      savedKgCO2 = await _computeSavedKgCO2(
-        calcMode: calcMode,
-        efRef: efRef,
-        baselineRef: baselineRef,
-        direction: direction,
-        count: itemCount,
-        distanceKm: effectiveDistanceKm,
-        taskSnapshotOrMinimal: taskMapForCarbon,
-      );
-    }
 
     String _fmtKgLocal(double kg) {
       final v = ((kg * 100).roundToDouble() / 100.0);
@@ -1085,7 +1067,9 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         final subSnap = await trx.get(subRef);
         if (!subSnap.exists) throw 'الطلب غير موجود.';
         final sub = subSnap.data() as Map<String, dynamic>;
-        if (sub['status'] != 'pending') throw 'تمت معالجة هذا الطلب مسبقاً.';
+        if (sub['status'] != 'pending') {
+          throw 'تمت معالجة هذا الطلب مسبقاً.';
+        }
 
         final utSnap = await trx.get(utRef);
         if (!utSnap.exists) throw 'userTask غير موجود.';
@@ -1093,14 +1077,54 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         final currentStatus = (ut['status'] as String?) ?? 'pending';
         final canComplete = currentStatus != 'completed';
 
+        // ⚙️ لو savedKgCO2 <= 0 نحاول نعيد حسابه من عوامل الكربون
+        if (savedKgCO2 <= 0) {
+          // 👇 عدّلي أسماء الفيلدز حسب تركيب الـ task عندك لو مختلفة
+          final baseKgCO2 = _asDouble(
+            ut['baseKgCO2'] ??
+                sub['baseKgCO2'] ??
+                ut['factors']?['baseKgCO2'] ??
+                sub['factors']?['baseKgCO2'],
+          );
+          final perItemKgCO2 = _asDouble(
+            ut['perItemKgCO2'] ??
+                sub['perItemKgCO2'] ??
+                ut['factors']?['perItemKgCO2'] ??
+                sub['factors']?['perItemKgCO2'],
+          );
+          final perKmKgCO2 = _asDouble(
+            ut['perKmKgCO2'] ??
+                sub['perKmKgCO2'] ??
+                ut['factors']?['perKmKgCO2'] ??
+                sub['factors']?['perKmKgCO2'],
+          );
+
+          final usedItemCount = itemCount > 0
+              ? itemCount
+              : _asInt(sub['itemCount'] ?? ut['itemCount']);
+
+          final usedDistanceKm = distanceKm > 0
+              ? distanceKm
+              : _asDouble(sub['distanceKm'] ?? ut['distanceKm']);
+
+          final recalculated =
+              baseKgCO2 +
+              perItemKgCO2 * usedItemCount +
+              perKmKgCO2 * usedDistanceKm;
+          if (recalculated > 0) {
+            savedKgCO2 = recalculated;
+          }
+        }
+
+        // 🔁 تحديث وثيقة submission
         final subUpdate = <String, dynamic>{
           'status': 'approved',
           'processedAt': FieldValue.serverTimestamp(),
           'processedBy': admin?.uid,
         };
         if (savedKgCO2 > 0) subUpdate['savedKgCO2'] = savedKgCO2;
-        if (effectiveDistanceKm > 0 && (submittedDistanceKm <= 0)) {
-          subUpdate['distanceKm'] = effectiveDistanceKm;
+        if (distanceKm > 0 && (sub['distanceKm'] == null)) {
+          subUpdate['distanceKm'] = distanceKm;
         }
         if ((sub['itemCount'] == null || (sub['itemCount'] == 0)) &&
             itemCount > 0) {
@@ -1108,24 +1132,25 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         }
         trx.update(subRef, subUpdate);
 
+        // 🔁 تحديث وثيقة userTask
         final utUpdate = <String, dynamic>{
           'status': 'completed',
           'completedAt': FieldValue.serverTimestamp(),
           'canRetry': false,
         };
-        if (effectiveCalcMode != 'deltaperkm') {
-          if (savedKgCO2 > 0) utUpdate['savedKgCO2'] = savedKgCO2;
-          if (effectiveDistanceKm > 0 && (submittedDistanceKm <= 0)) {
-            utUpdate['distanceKm'] = effectiveDistanceKm;
-          }
-          if (itemCount > 0) utUpdate['itemCount'] = itemCount;
+        if (savedKgCO2 > 0) utUpdate['savedKgCO2'] = savedKgCO2;
+        if (distanceKm > 0 && (ut['distanceKm'] == null)) {
+          utUpdate['distanceKm'] = distanceKm;
         }
+        if (itemCount > 0) utUpdate['itemCount'] = itemCount;
         trx.update(utRef, utUpdate);
 
+        // 🪙 إضافة النقاط للمستخدم مرة واحدة فقط
         if (canComplete && taskPoints > 0) {
           trx.update(usersRef, {'points': FieldValue.increment(taskPoints)});
         }
 
+        // 🕒 history log
         final historyRef = FirebaseFirestore.instance
             .collection('users')
             .doc(userId)
@@ -1143,23 +1168,20 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         if (itemCount > 0) histData['itemCount'] = itemCount;
         trx.set(historyRef, histData);
 
-        if (effectiveCalcMode != 'deltaperkm') {
-          trx.set(usersRef, {
-            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-            if (savedKgCO2 > 0)
-              'totalCarbonSaved': FieldValue.increment(savedKgCO2),
-          }, SetOptions(merge: true));
-        } else {
-          trx.set(usersRef, {
-            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-        }
+        // 🔁 تحديث totalCarbonSaved + lastCarbonUpdateAt
+        trx.set(usersRef, {
+          'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+          if (savedKgCO2 > 0)
+            'totalCarbonSaved': FieldValue.increment(savedKgCO2),
+        }, SetOptions(merge: true));
 
+        // 📅 dayMarks
         trx.set(dayMarkRef, {
           'count': FieldValue.increment(1),
           'lastAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
+        // 🔔 إشعار للمستخدم
         final notifRef = FirebaseFirestore.instance
             .collection('notifications')
             .doc();
@@ -1173,7 +1195,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
           'taskTitle': taskTitle,
           'points': taskPoints,
           'savedKgCO2': savedKgCO2.isFinite ? savedKgCO2 : 0.0,
-          if (effectiveDistanceKm > 0) 'distanceKm': effectiveDistanceKm,
+          if (distanceKm > 0) 'distanceKm': distanceKm,
           if (itemCount > 0) 'itemCount': itemCount,
           'createdAt': FieldValue.serverTimestamp(),
           'seen': false,
@@ -1186,18 +1208,26 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
           'accentColor': '#4BAA98',
         });
       });
+
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('تم اعتماد الطلب ✅')),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(SnackBar(content: Text('خطأ: $e')));
     }
   }
 
-  Future<void> _reject(BuildContext context, DocumentSnapshot subDoc) async {
+  Future<void> _reject(DocumentSnapshot subDoc) async {
     await _ensureAdminClaims();
+
     if (!_isAdmin) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
         const SnackBar(content: Text('يحتاج صلاحية أدمن لرفض الطلب')),
       );
       return;
@@ -1218,7 +1248,9 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         final subSnap = await trx.get(subRef);
         if (!subSnap.exists) throw 'الطلب غير موجود.';
         final sub = subSnap.data() as Map<String, dynamic>;
-        if (sub['status'] != 'pending') throw 'تمت معالجة هذا الطلب مسبقاً.';
+        if (sub['status'] != 'pending') {
+          throw 'تمت معالجة هذا الطلب مسبقاً.';
+        }
 
         trx.update(subRef, {
           'status': 'rejected',
@@ -1262,15 +1294,12 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('تم رفض الطلب ❌')));
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(const SnackBar(content: Text('تم رفض الطلب ❌')));
     } catch (e) {
-      debugPrint('❌ خطأ في الرفض: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(SnackBar(content: Text('خطأ: $e')));
     }
   }
 }

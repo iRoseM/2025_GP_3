@@ -73,10 +73,8 @@ Future<void> setupFlutterNotifications() async {
 // 🔔 استقبال الإشعارات في الخلفية
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // 🔔 تهيئة استقبال الإشعارات
   FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-  // طلب إذن المستخدم (مرة وحدة)
   NotificationSettings settings = await messaging.requestPermission(
     alert: true,
     badge: true,
@@ -625,7 +623,7 @@ class _RegisterPageState extends State<RegisterPage>
                                           Icons.lock_outline,
                                         ),
                                         hintText: '••••••••',
-                                        errorMaxLines: 2,
+                                        errorMaxLines: 3,
                                         suffixIcon: AnimatedRotation(
                                           turns: _obscure ? 0 : .25,
                                           duration: const Duration(
@@ -647,18 +645,23 @@ class _RegisterPageState extends State<RegisterPage>
                                         if (v == null || v.isEmpty) {
                                           return 'أدخل كلمة المرور';
                                         }
-                                        if (v.length < 8 ||
-                                            (!RegExp(r'[A-Z]').hasMatch(v) ||
-                                                !RegExp(
-                                                  r'[a-z]',
-                                                ).hasMatch(v))) {
-                                          return 'يجب أن تحتوي كلمة المرور على حرف كبير وحرف صغير على الأقل، وأن تكون مكونة من 8 أحرف على الأقل.';
-                                        } else if (!RegExp(
-                                              r'[A-Z]',
-                                            ).hasMatch(v) ||
-                                            !RegExp(r'[a-z]').hasMatch(v)) {
-                                          return 'يجب أن تحتوي كلمة المرور على حرف كبير وحرف صغير على الأقل.';
+
+                                        final hasUpper = RegExp(
+                                          r'[A-Z]',
+                                        ).hasMatch(v);
+                                        final hasLower = RegExp(
+                                          r'[a-z]',
+                                        ).hasMatch(v);
+                                        final longEnough = v.length >= 8;
+
+                                        if (!hasUpper ||
+                                            !hasLower ||
+                                            !longEnough) {
+                                          return 'يجب أن تحتوي كلمة المرور على:\n'
+                                              '• حرف كبير وحرف صغير على الأقل\n'
+                                              '• ٨ أحرف على الأقل';
                                         }
+
                                         return null;
                                       },
                                     ),
@@ -1690,15 +1693,15 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                         controller: _passCtrl,
                                         obscureText: _obscure,
                                         textInputAction: TextInputAction.next,
-                                        onFieldSubmitted: (_) =>
-                                            FocusScope.of(context).requestFocus(
-                                              _fnConfirm,
-                                            ), // ✅ إلى التأكيد
+                                        onFieldSubmitted: (_) => FocusScope.of(
+                                          context,
+                                        ).requestFocus(_fnConfirm),
                                         decoration: InputDecoration(
                                           prefixIcon: const Icon(
                                             Icons.lock_outline,
                                           ),
                                           hintText: '••••••••',
+                                          errorMaxLines: 3,
                                           suffixIcon: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [

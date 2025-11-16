@@ -197,7 +197,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
 
       final file = File(filePath);
       final ref = FirebaseStorage.instance.ref().child(
-        'rewardImages/${DateTime.now().millisecondsSinceEpoch}.jpg',
+        'rewards/${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
 
       await ref.putFile(file);

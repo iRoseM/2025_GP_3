@@ -19,6 +19,11 @@ class RColors {
   static const bg = Color(0xFFFAFCFB);
 }
 
+// لو عندك تعريف AppColors في ملف آخر استورديه، هنا بس للتوافق مع العنوان:
+class AppColors {
+  static const dark = Color(0xFF3C3C3B);
+}
+
 class AdminReportPage extends StatefulWidget {
   const AdminReportPage({super.key});
 
@@ -40,14 +45,101 @@ class _AdminReportPageState extends State<AdminReportPage> {
   }
 
   final TextEditingController _searchCtrl = TextEditingController();
-  String selectedStatus = 'الكل';
 
-  final statusMap = {
-    'الكل': null,
+  /// 🔹 الآن ما فيه "الكل"؛ عندنا الحالات الثلاث فقط
+  final Map<String, String> statusMap = const {
     'قيد المراجعة': 'pending',
     'تمت المعالجة': 'approved',
     'البلاغ غير صحيح': 'rejected',
   };
+
+  /// 🔹 الحالات المختارة في الفلتر (Labels بالعربي)
+  final Set<String> _selectedStatusLabels = {};
+
+  // 🔹 BottomSheet لتصفية الحالات (متعدد الاختيار)
+  void _showStatusFilterSheet() {
+    final statuses = statusMap.keys.toList();
+    final localSelected = Set<String>.from(_selectedStatusLabels);
+
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setSt) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'تصفية البلاغات حسب الحالة',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 12),
+
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: statuses.map((label) {
+                      final selected = localSelected.contains(label);
+                      return FilterChip(
+                        label: Text(label),
+                        selected: selected,
+                        selectedColor: RColors.primary.withOpacity(.15),
+                        labelStyle: TextStyle(
+                          color: selected ? RColors.primary : Colors.black87,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        onSelected: (v) {
+                          setSt(() {
+                            if (v) {
+                              localSelected.add(label);
+                            } else {
+                              localSelected.remove(label);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: RColors.primary,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedStatusLabels
+                          ..clear()
+                          ..addAll(localSelected);
+                      });
+                    },
+                    child: const Text('تطبيق'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedStatusLabels.clear(); // لا شيء → يعرض الكل
+                      });
+                    },
+                    child: const Text('إلغاء الفلاتر'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +147,12 @@ class _AdminReportPageState extends State<AdminReportPage> {
     final textTheme = GoogleFonts.ibmPlexSansArabicTextTheme(
       baseTheme.textTheme,
     );
+
+    // نحول الـ labels المختارة إلى قيم decision الحقيقية
+    final selectedDecisionValues = _selectedStatusLabels
+        .map((label) => statusMap[label])
+        .whereType<String>()
+        .toList();
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -92,7 +190,7 @@ class _AdminReportPageState extends State<AdminReportPage> {
                       ),
                       const SizedBox(height: 15),
 
-                      // ✅ شريط البحث + الفلتر
+                      // ✅ شريط البحث + الفلتر (نفس نمط الصفحات الثانية)
                       Row(
                         children: [
                           // شريط البحث
@@ -105,11 +203,13 @@ class _AdminReportPageState extends State<AdminReportPage> {
                           ),
                           const SizedBox(width: 8),
 
-                          // زر الفلتر
-                          SizedBox(
-                            height: 48,
-                            width: 48,
-                            child: DecoratedBox(
+                          // زر الفلتر يفتح BottomSheet بالـ FilterChips
+                          InkWell(
+                            onTap: _showStatusFilterSheet,
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              height: 48,
+                              width: 48,
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(14),
@@ -121,34 +221,10 @@ class _AdminReportPageState extends State<AdminReportPage> {
                                   ),
                                 ],
                               ),
-                              child: PopupMenuButton<String>(
-                                icon: const Icon(
-                                  Icons.filter_list,
-                                  color: RColors.primary,
-                                  size: 24,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                itemBuilder: (context) {
-                                  return statusMap.keys.map((label) {
-                                    return PopupMenuItem<String>(
-                                      value: label,
-                                      child: Text(
-                                        label,
-                                        textDirection: TextDirection.rtl,
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          color: Colors.black,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    );
-                                  }).toList();
-                                },
-                                onSelected: (val) {
-                                  setState(() => selectedStatus = val);
-                                },
+                              child: const Icon(
+                                Icons.tune,
+                                color: RColors.primary,
+                                size: 24,
                               ),
                             ),
                           ),
@@ -160,7 +236,7 @@ class _AdminReportPageState extends State<AdminReportPage> {
                       // ✅ قائمة البلاغات
                       Expanded(
                         child: _ReportList(
-                          statusFilter: statusMap[selectedStatus],
+                          statusFilters: selectedDecisionValues,
                           searchText: _searchCtrl.text,
                         ),
                       ),
@@ -176,21 +252,18 @@ class _AdminReportPageState extends State<AdminReportPage> {
   }
 }
 
-/// قائمة التقارير مع فلترة الحالة والبحث
+/// قائمة التقارير مع فلترة الحالة والبحث (متعدد الحالات)
 class _ReportList extends StatelessWidget {
-  final String? statusFilter;
+  /// قائمة قيم decision المختارة: ['pending', 'approved', ...]
+  final List<String> statusFilters;
   final String searchText;
 
-  const _ReportList({required this.statusFilter, required this.searchText});
+  const _ReportList({required this.statusFilters, required this.searchText});
 
   Query<Map<String, dynamic>> _baseQuery() {
     final col = FirebaseFirestore.instance.collection('facilityReports');
-
-    if (statusFilter == null) {
-      return col.orderBy('createdAt', descending: true);
-    } else {
-      return col.where('decision', isEqualTo: statusFilter);
-    }
+    // 🔹 دائمًا نجيب الكل مرتّب بتاريخ الإنشاء (الأحدث أولًا)
+    return col.orderBy('createdAt', descending: true);
   }
 
   @override
@@ -206,30 +279,35 @@ class _ReportList extends StatelessWidget {
         }
 
         final docs = snap.data!.docs.toList();
-        if (statusFilter != null) {
-          docs.sort((a, b) {
-            final ta = (a.data()['createdAt'] as Timestamp?);
-            final tb = (b.data()['createdAt'] as Timestamp?);
-            final va = ta?.millisecondsSinceEpoch ?? 0;
-            final vb = tb?.millisecondsSinceEpoch ?? 0;
-            return vb.compareTo(va);
-          });
-        }
 
         final s = searchText.trim().toLowerCase();
-        final filtered = s.isEmpty
-            ? docs
-            : docs.where((d) {
-                final m = d.data();
-                final hay = [
-                  m['description'] ?? '',
-                  m['type'] ?? '',
-                  m['facilityID'] ?? '',
-                  m['reportedBy'] ?? '',
-                  m['managedBy'] ?? '',
-                ].join(' ').toLowerCase();
-                return hay.contains(s);
-              }).toList();
+        final hasStatusFilter = statusFilters.isNotEmpty;
+
+        final filtered = docs.where((d) {
+          final m = d.data();
+
+          // فلترة بالحالة (لو فيه حالات مختارة)
+          bool matchStatus = true;
+          if (hasStatusFilter) {
+            final decision = (m['decision'] ?? '').toString();
+            matchStatus = statusFilters.contains(decision);
+          }
+
+          // فلترة بالبحث
+          bool matchSearch = true;
+          if (s.isNotEmpty) {
+            final hay = [
+              m['description'] ?? '',
+              m['type'] ?? '',
+              m['facilityID'] ?? '',
+              m['reportedBy'] ?? '',
+              m['managedBy'] ?? '',
+            ].join(' ').toLowerCase();
+            matchSearch = hay.contains(s);
+          }
+
+          return matchStatus && matchSearch;
+        }).toList();
 
         if (filtered.isEmpty) {
           return Center(
@@ -248,7 +326,7 @@ class _ReportList extends StatelessWidget {
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: RColors.dark, // الأفضل تستخدم ألوان الصفحة نفسها
+                    color: RColors.dark,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -318,6 +396,46 @@ class _ReportCardState extends State<_ReportCard> {
     }
   }
 
+  /// 👤 جلب اسم المستخدم من users/{uid}
+  Future<String> _getUserName(String userId) async {
+    if (userId.isEmpty) return '';
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+      if (!snap.exists) return userId;
+      final data = snap.data() ?? {};
+      return data['username'] ?? data['name'] ?? userId;
+    } catch (_) {
+      return userId;
+    }
+  }
+
+  /// 🗑️ جلب اسم/وصف الحاوية من facilities/{id}
+  Future<String> _getFacilityName(String facilityId) async {
+    if (facilityId.isEmpty) return '';
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('facilities')
+          .doc(facilityId)
+          .get();
+      if (!snap.exists) return facilityId;
+      final data = snap.data() ?? {};
+      final name = data['name'] ?? '';
+      final type = data['type'] ?? '';
+      if (name != null && (name as String).trim().isNotEmpty) {
+        return name;
+      }
+      if (type != null && (type as String).trim().isNotEmpty) {
+        return type;
+      }
+      return facilityId;
+    } catch (_) {
+      return facilityId;
+    }
+  }
+
   Future<void> _updateDecision(String decision, {String? reason}) async {
     if (!await hasInternetConnection()) {
       if (mounted) showNoInternetDialog(context);
@@ -347,7 +465,6 @@ class _ReportCardState extends State<_ReportCard> {
       String notifMsg = '';
 
       if (facilityID != null) {
-        // جلب بيانات الحاوية من مجموعة facilities
         final facilitySnap = await FirebaseFirestore.instance
             .collection('facilities')
             .doc(facilityID)
@@ -389,6 +506,7 @@ class _ReportCardState extends State<_ReportCard> {
           'sourceId': widget.doc.id,
           'decision': decision,
         });
+
         // 🔔 إرسال إشعار خارجي (Push Notification)
         final userSnap = await FirebaseFirestore.instance
             .collection('users')
@@ -396,8 +514,7 @@ class _ReportCardState extends State<_ReportCard> {
             .get();
 
         final userData = userSnap.data();
-        final fcmToken =
-            userData?['fcmToken']; // لازم يكون المستخدم خزّن توكنه سابقًا
+        final fcmToken = userData?['fcmToken'];
 
         if (fcmToken != null && fcmToken.isNotEmpty) {
           await FCMService.sendPushNotification(
@@ -409,7 +526,7 @@ class _ReportCardState extends State<_ReportCard> {
       }
 
       if (mounted) {
-        setState(() {}); // ✅ تجبر الكارد يعيد بناء نفسه
+        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('تم تحديث الحالة إلى ${_statusLabel(decision)}'),
@@ -432,7 +549,7 @@ class _ReportCardState extends State<_ReportCard> {
     showDialog(
       context: context,
       builder: (_) => Directionality(
-        textDirection: TextDirection.rtl, // ✅ يخلي النصوص يمين
+        textDirection: TextDirection.rtl,
         child: AlertDialog(
           title: const Text('رفض التقرير'),
           content: TextField(
@@ -447,11 +564,10 @@ class _ReportCardState extends State<_ReportCard> {
           ),
           actions: [
             Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.stretch, // يخلي الأزرار تاخذ عرض مناسب
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Align(
-                  alignment: Alignment.centerRight, // ✅ زر الإلغاء يمين
+                  alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text('إلغاء'),
@@ -493,7 +609,7 @@ class _ReportCardState extends State<_ReportCard> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Align(
-                  alignment: Alignment.centerRight, // ✅ زر الإلغاء على اليمين
+                  alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text('إلغاء'),
@@ -566,15 +682,21 @@ class _ReportCardState extends State<_ReportCard> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    name.isEmpty ? 'حاوية بدون اسم' : name,
+                    (name is String && name.isNotEmpty)
+                        ? name
+                        : 'حاوية بدون اسم',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Text(type, style: const TextStyle(color: Colors.black54)),
+                  Text(
+                    type.toString(),
+                    style: const TextStyle(color: Colors.black54),
+                  ),
                   const SizedBox(height: 8),
-                  if (address.isNotEmpty || city.isNotEmpty)
+                  if (address.toString().isNotEmpty ||
+                      city.toString().isNotEmpty)
                     Text('الموقع: $address، $city'),
                   const SizedBox(height: 8),
                   FilledButton.icon(
@@ -618,10 +740,10 @@ class _ReportCardState extends State<_ReportCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // الصف العلوي للأيقونات// الصف العلوي: العنوان + الأيقونات
+            // الصف العلوي: العنوان + الأيقونات
             Row(
               children: [
-                // العنوان "الموقع غير دقيق"
+                // العنوان "الموقع غير دقيق" أو نوع البلاغ
                 Expanded(
                   child: Text(
                     type,
@@ -653,63 +775,75 @@ class _ReportCardState extends State<_ReportCard> {
 
             const SizedBox(height: 4),
 
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // location + الوصف
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (description.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            description,
-                            style: const TextStyle(fontSize: 13),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
+            // ✅ حالة البلاغ في سطر مستقل أعلى الوصف
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: _statusColor(decision).withOpacity(.12),
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Text(
+                  _statusLabel(decision),
+                  style: TextStyle(
+                    color: _statusColor(decision),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
                   ),
                 ),
-
-                // الحالة (مقبولة / مرفوضة)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _statusColor(decision).withOpacity(.12),
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: Text(
-                    _statusLabel(decision),
-                    style: TextStyle(
-                      color: _statusColor(decision),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
 
+            // ✅ الوصف تحت الحالة بعرض الكارد كامل
+            if (description.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                description,
+                style: const TextStyle(fontSize: 13),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+
             const SizedBox(height: 8),
+
             Wrap(
               spacing: 8,
               runSpacing: 6,
               children: [
-                _Chip(
-                  icon: Icons.pin_drop_outlined,
-                  label: 'Facility: $facilityID',
+                // اسم الحاوية بدل الـ ID
+                FutureBuilder<String>(
+                  future: _getFacilityName(facilityID.toString()),
+                  builder: (context, snap) {
+                    final facName = (snap.data != null && snap.data!.isNotEmpty)
+                        ? snap.data!
+                        : facilityID.toString();
+                    return _Chip(
+                      icon: Icons.pin_drop_outlined,
+                      label: 'الحاوية: $facName',
+                    );
+                  },
                 ),
-                _Chip(
-                  icon: Icons.person_outline,
-                  label: 'المبلِّغ: $reportedBy',
+
+                // اسم المستخدم بدل uid
+                FutureBuilder<String>(
+                  future: _getUserName(reportedBy.toString()),
+                  builder: (context, snap) {
+                    final userName =
+                        (snap.data != null && snap.data!.isNotEmpty)
+                        ? snap.data!
+                        : reportedBy.toString();
+                    return _Chip(
+                      icon: Icons.person_outline,
+                      label: 'المبلِّغ: $userName',
+                    );
+                  },
                 ),
+
                 if (createdAt != null)
                   _Chip(
                     icon: Icons.calendar_month_outlined,
@@ -718,6 +852,7 @@ class _ReportCardState extends State<_ReportCard> {
                   ),
               ],
             ),
+
             const SizedBox(height: 10),
             Row(
               children: [
@@ -750,7 +885,6 @@ class _ReportCardState extends State<_ReportCard> {
   }
 }
 
-/// عناصر واجهة صغيرة
 class _SearchBar extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
@@ -792,19 +926,32 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3F6F8),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: RColors.dark),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 12)),
-        ],
+    final maxWidth = MediaQuery.of(context).size.width * 0.8;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3F6F8),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 18, color: RColors.dark),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 12, height: 1.3),
+                softWrap: true,
+                overflow: TextOverflow.visible,
+                maxLines: 3,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

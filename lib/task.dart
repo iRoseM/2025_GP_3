@@ -399,7 +399,10 @@ class _taskPageState extends State<taskPage> {
     if (ySnap.exists) yTaskId = ySnap.data()?['taskId'] as String?;
     if (tSnap.exists) tTaskId = tSnap.data()?['taskId'] as String?;
 
-    final excluded = <String?>{currentTask['id'] as String?, yTaskId, tTaskId}
+    // 🔁 استخدم taskId أو id
+    final currentTaskId =
+        (currentTask['taskId'] ?? currentTask['id']) as String?;
+    final excluded = <String?>{currentTaskId, yTaskId, tTaskId}
       ..removeWhere((e) => e == null);
     final pool = validTasks.where((doc) => !excluded.contains(doc.id)).toList();
     final finalPool = pool.isEmpty ? validTasks : pool;
@@ -698,7 +701,9 @@ class _taskPageState extends State<taskPage> {
                                 );
                               }
 
+                              // ✅ نمرّر taskId + id (نفس القيمة) + باقي الحقول
                               final data = <String, dynamic>{
+                                'taskId': ut['taskId'] ?? '',
                                 'title': ut['taskTitle'] ?? '(بدون عنوان)',
                                 'description': ut['taskDescription'] ?? '',
                                 'points': ut['taskPoints'] ?? 0,
@@ -747,6 +752,7 @@ class _taskPageState extends State<taskPage> {
                                         tSnap.data!.data()
                                             as Map<String, dynamic>;
                                     final fData = {
+                                      'taskId': ut['taskId'],
                                       'title': td['title'] ?? '(بدون عنوان)',
                                       'description': td['description'] ?? '',
                                       'points': td['points'] ?? 0,
@@ -1263,21 +1269,42 @@ class _taskPageState extends State<taskPage> {
 }
 
 // -------------------------------------------------------------
-// ✅ دالة الفتح (تمرير selectedDay / userTaskDocId)
+// ✅ دالة الفتح (تمرير selectedDay / userTaskDocId) + دمج بيانات tasks
 // -------------------------------------------------------------
 Future<bool?> showCompleteTaskSheet(
   BuildContext context,
-  Map<String, dynamic> taskData, {
-  required DateTime selectedDay, // يوم الكالندر
-  required String userTaskDocId, // DocId لليوم
-}) {
+  Map<String, dynamic> userTaskData, {
+  required DateTime selectedDay,
+  required String userTaskDocId,
+}) async {
+  // 1) taskId من userTasks أو من id
+  final taskId = (userTaskData['taskId'] ?? userTaskData['id'])?.toString();
+
+  Map<String, dynamic> mergedTask = {...userTaskData};
+
+  if (taskId != null && taskId.isNotEmpty) {
+    final tSnap = await FirebaseFirestore.instance
+        .collection('tasks')
+        .doc(taskId)
+        .get();
+
+    if (tSnap.exists && tSnap.data() != null) {
+      final base = tSnap.data()!;
+      mergedTask.addAll(
+        base,
+      ); // ← يضيف: emissionFactorRef, baselineFactorRef, calcMode, calc_requires, direction...
+      mergedTask['id'] ??= tSnap.id;
+      mergedTask['taskId'] ??= tSnap.id;
+    }
+  }
+
   return showModalBottomSheet<bool?>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     builder: (_) => CompleteTaskSheet(
-      taskData: taskData,
+      taskData: mergedTask, // ← نرسل الميرج، مو userTaskData الخام
       selectedDay: selectedDay,
       userTaskDocId: userTaskDocId,
     ),
