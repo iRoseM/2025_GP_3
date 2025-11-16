@@ -503,7 +503,12 @@ class _taskPageState extends State<taskPage> {
     final pickedTitle = pickedData['title'] ?? '(بدون عنوان)';
     final pickedDesc = pickedData['description'] ?? '';
     final pickedPoints = pickedData['points'] ?? 0;
-    final pickedValidation = pickedData['validationStrategy'] ?? 'غير محددة';
+    // final pickedValidation = pickedData['validationStrategy'] ?? 'غير محددة';
+    final pickedValidation =
+    pickedData['validationStrategy'] ??
+    pickedData['validation'] ?? 
+    pickedData['taskValidation'] ??
+    'غير محددة';
 
     final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
     final start = _dayStart(day);
@@ -704,9 +709,11 @@ class _taskPageState extends State<taskPage> {
                               };
 
                               // ✅ السماح بالإكمال لليوم والماضي فقط
-                              final canPerformDay = !sel.isAfter(
-                                today,
-                              ); // <= اليوم
+                              // final canPerformDay = !sel.isAfter(
+                              //   today,
+                              // ); // <= اليوم
+                              final canPerformDay = true; // temporary allow future
+
 
                               if ((ut['taskTitle'] == null ||
                                       ut['taskDescription'] == null) &&

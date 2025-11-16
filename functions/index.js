@@ -3,6 +3,7 @@
  * - createUserDoc: 1st gen Auth trigger (auth.user().onCreate)
  * - reserveUsername, markVerified, generateShortTestVerification: 2nd gen HTTPS callable
  */
+console.log("🔥 Current GEMINI_API_KEY:", process.env.GEMINI_API_KEY);
 
 const functions = require("firebase-functions/v1"); // ✅ v1 (عشان auth.user().onCreate & region)
 const { onCall, HttpsError } = require("firebase-functions/v2/https"); // ✅ v2 callable
@@ -152,69 +153,70 @@ exports.generateShortTestVerification = onCall(async (request) => {
   }
 
   const articleText = request.data?.articleText;
-  const apiType = request.data?.apiType || "gemini";
 
   if (!articleText || articleText.length < 80) {
     throw new HttpsError("invalid-argument", "ARTICLE_TEXT_TOO_SHORT");
   }
 
   const prompt = `
-اقرأ النص التالي وصِغ "تحققًا عبر اختبار قصير" مكونًا من سؤال واحد مع أربع اختيارات.
-اجعل السؤال متعلقًا بمضمون النص فقط.
-أرجع النتيجة بصيغة JSON واضحة كالتالي:
+اقرأ النص التالي وصِغ سؤال تحقق واحد فقط مع أربع خيارات.
+أرجع الإجابة بصيغة JSON فقط بدون أي نص إضافي:
 {
   "question": "...",
   "options": ["...", "...", "...", "..."],
   "answer": "..."
 }
----
+
 النص:
 ${articleText}
 `;
 
-  try {
-    // ✅ نستخدم fetch المدمج في Node 20 (ما نحتاج node-fetch)
-    let response;
-    let jsonText;
+try {
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
-    if (apiType === "gemini") {
-      // ✅ Gemini API
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-          }),
-        }
-      );
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+    }),
+  });
 
-      const result = await response.json();
-      jsonText =
-        result?.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
-    } else {
-      // ✅ OpenAI API
-      response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
+  const result = await response.json();
 
-      const result = await response.json();
-      jsonText = result?.choices?.[0]?.message?.content || "{}";
-    }
+  console.log("🔥 Gemini Raw:", JSON.stringify(result, null, 2));
 
-    // نرجع النص كما هو (وتقدرين بالعميل تسوين JSON.parse إذا حابة)
-    return jsonText;
-  } catch (err) {
-    console.error("❌ AI Function Error:", err);
-    throw new HttpsError("internal", "AI_GENERATION_FAILED");
+  let text = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+  // 🧹 تنظيف Markdown
+  text = text.replace(/```json/g, "")
+             .replace(/```/g, "")
+             .trim();
+
+  // 🧹 استخراج JSON فقط
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first === -1 || last === -1 || last <= first) {
+    throw new Error("NO_VALID_JSON_RETURNED");
   }
+
+  const jsonBlock = text.substring(first, last + 1).trim();
+
+  // 🧪 تأكيد أن JSON صالح
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonBlock);
+  } catch (e) {
+    console.error("❌ Failed to parse:", jsonBlock);
+    throw new Error("INVALID_JSON_FROM_AI");
+  }
+
+  // 🎯 أهم شيء: نرجع JSON مباشر، نظيف
+  return parsed;
+
+} catch (err) {
+  console.error("❌ Gemini Error:", err);
+  throw new HttpsError("internal", "AI_GENERATION_FAILED");
+}
+
 });

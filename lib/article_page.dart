@@ -10,6 +10,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'services/title_header.dart';
 import 'services/background_container.dart';
 import 'short_test_verification_page.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+
 class AppColors {
   static const primary = Color(0xFF4BAA98);
   static const dark = Color(0xFF3C3C3B);
@@ -40,6 +42,7 @@ class _ArticlePageState extends State<ArticlePage> {
   bool _loading = true;
   bool _error = false;
   bool _showReadButton = false; // يظهر فقط عند نهاية الصفحة
+  bool _generatingTest = false;
 
   @override
   void initState() {
@@ -288,35 +291,173 @@ class _ArticlePageState extends State<ArticlePage> {
     return s;
   }
 
+  Future<void> _startShortTest() async {
+    final content = (_article?['content'] ?? '').toString();
+
+    if (content.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "لا يمكن إنشاء اختبار قصير لأن نص المقال غير متوفر.",
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+          ),
+          backgroundColor: AppColors.accent,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _generatingTest = true;
+    });
+
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'generateShortTestVerification',
+      );
+
+      final result = await callable.call({
+        'articleText': content,
+        'apiType': 'gemini', // أو openai
+      });
+
+      debugPrint("RAW RESPONSE: ${result.data}");
+
+      // ============================
+      // 🔥 تنظيف واستخرج JSON بأمان
+      // ============================
+
+      String raw = result.data.toString();
+      debugPrint("RAW BEFORE CLEAN = $raw");
+
+      // إذا كانت البيانات أصلاً Map (من الـ Cloud Function)
+      if (result.data is Map) {
+        debugPrint("🔥 Parsed directly as MAP");
+        final data = result.data as Map;
+
+        final quiz = {
+          'question': data['question'] ?? '',
+          'options': List<String>.from(data['options'] ?? const []),
+          'answer': data['answer'] ?? '',
+        };
+
+        setState(() => _generatingTest = false);
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ShortTestVerificationPage(
+              userTaskDocId: widget.userTaskDocId,
+              quiz: quiz,
+            ),
+          ),
+        );
+        return;
+      }
+
+      // إذا كانت String فيها JSON → نكمّل التنظيف
+      // 1) Remove Markdown
+      raw = raw.replaceAll("```json", "").replaceAll("```", "").trim();
+
+      // 2) Extract only JSON
+      int first = raw.indexOf('{');
+      int last = raw.lastIndexOf('}');
+      if (first == -1 || last == -1 || last <= first) {
+        throw FormatException("NO_VALID_JSON_FOUND");
+      }
+
+      raw = raw.substring(first, last + 1).trim();
+      debugPrint("RAW AFTER CLEAN = $raw");
+
+      // 3) Decode
+      final data = jsonDecode(raw);
+
+      final quiz = {
+        'question': data['question'] ?? '',
+        'options': List<String>.from(data['options'] ?? const []),
+        'answer': data['answer'] ?? '',
+      };
+
+      if (!mounted) return;
+      setState(() => _generatingTest = false);
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ShortTestVerificationPage(
+            userTaskDocId: widget.userTaskDocId,
+            quiz: quiz,
+          ),
+        ),
+      );
+
+    } catch (e) {
+      debugPrint("❌ generateShortTestVerification error: $e");
+
+      if (!mounted) return;
+      setState(() => _generatingTest = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "حدث خطأ أثناء إنشاء الاختبار القصير. حاول مرة أخرى لاحقًا.",
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
   // ========== UI ==========
   @override
   Widget build(BuildContext context) {
+    final statusBar = MediaQuery.of(context).padding.top;
+    final topPadding = statusBar + 20; // نفس AdminTasksPage بالضبط
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         extendBodyBehindAppBar: true,
         backgroundColor: Colors.transparent,
         appBar: const NameerAppBar(
-          title: "مقال اليوم",
           showBack: true,
-          showTitleInBar: true,
+          showTitleInBar: false,
         ),
         body: AnimatedBackgroundContainer(
-          child: _loading
+          child: (_loading)
               ? const Center(
                   child: CircularProgressIndicator(color: AppColors.primary),
                 )
               : _error
-              ? Center(
-                  child: Text(
-                    "حدث خطأ أثناء جلب المقال. حاول لاحقًا.",
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      color: AppColors.dark,
-                      fontSize: 16,
+                  ? Center(
+                      child: Text(
+                        "حدث خطأ أثناء جلب المقال. حاول لاحقًا.",
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: AppColors.dark,
+                          fontSize: 16,
+                        ),
+                      ),
+                    )
+                  : Padding(
+                      padding: EdgeInsets.fromLTRB(16, topPadding - 55, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "مقال اليوم",
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          Expanded(child: _buildBodyWithRevealButton()),
+                        ],
+                      ),
                     ),
-                  ),
-                )
-              : _buildBodyWithRevealButton(),
         ),
       ),
     );
@@ -325,10 +466,12 @@ class _ArticlePageState extends State<ArticlePage> {
   // زر "تمت القراءة" ما يظهر إلا عند نهاية السكول
   Widget _buildBodyWithRevealButton() {
     final a = _article!;
+
     return NotificationListener<ScrollNotification>(
       onNotification: (scroll) {
         final atEnd =
             scroll.metrics.pixels >= scroll.metrics.maxScrollExtent - 60;
+
         if (atEnd && !_showReadButton) {
           setState(() => _showReadButton = true);
         }
@@ -337,16 +480,21 @@ class _ArticlePageState extends State<ArticlePage> {
       child: Stack(
         children: [
           SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 110, 16, 120),
+padding: const EdgeInsets.only(top: 16, bottom: 120),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                
+                // الصورة
                 if ((a['urlToImage'] ?? '').toString().isNotEmpty)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(18),
                     child: Image.network(a['urlToImage'], fit: BoxFit.cover),
                   ),
+
                 const SizedBox(height: 20),
+
+                // العنوان
                 Text(
                   a['title'] ?? '',
                   style: GoogleFonts.ibmPlexSansArabic(
@@ -355,7 +503,10 @@ class _ArticlePageState extends State<ArticlePage> {
                     color: AppColors.primary,
                   ),
                 ),
+
                 const SizedBox(height: 20),
+
+                // النص
                 Text(
                   a['content'] ?? '',
                   style: GoogleFonts.ibmPlexSansArabic(
@@ -364,7 +515,9 @@ class _ArticlePageState extends State<ArticlePage> {
                     color: Colors.black87,
                   ),
                 ),
+
                 const SizedBox(height: 24),
+
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
@@ -384,143 +537,55 @@ class _ArticlePageState extends State<ArticlePage> {
               left: 16,
               right: 16,
               bottom: 20,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  gradient: const LinearGradient(
-                    colors: [
-                      AppColors.mint,
-                      AppColors.tealSoft,
-                      AppColors.primary,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+              child: ElevatedButton(
+                onPressed: _generatingTest ? null : _startShortTest,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
+                  elevation: 0,
+                  backgroundColor: Colors.transparent,
                 ),
-                child: ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      final userTaskRef = FirebaseFirestore.instance
-                          .collection('userTasks')
-                          .doc(widget.userTaskDocId);
-
-                      final snap = await userTaskRef.get();
-                      if (!snap.exists) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تعذر العثور على المهمة.')),
-                        );
-                        return;
-                      }
-
-                      // ✅ تحقق من حالة المهمة قبل التحديث 
-                      final data = snap.data()!;
-                      if (data['status'] == 'completed') {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('سبق وتم إتمام هذه المهمة ✅')),
-                        );
-                        return;
-                      }
-                      final userId = data['userId'];
-                      final taskPoints = data['taskPoints'] ?? 0;
-                      final taskTitle = data['taskTitle'] ?? 'مقال اليوم';
-
-                      final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
-                      final historyRef = FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(userId)
-                          .collection('history')
-                          .doc();
-                      final notifRef =
-                          FirebaseFirestore.instance.collection('notifications').doc();
-
-                      final batch = FirebaseFirestore.instance.batch();
-
-                      // ✅ تحديث حالة المهمة
-                      batch.update(userTaskRef, {
-                        'status': 'completed',
-                        'completedAt': FieldValue.serverTimestamp(),
-                        'canRetry': false,
-                      });
-
-                      // ✅ إضافة النقاط للمستخدم
-                      if (taskPoints > 0) {
-                        batch.set(userRef, {
-                          'points': FieldValue.increment(taskPoints),
-                          'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-                        }, SetOptions(merge: true));
-                      }
-
-                      // ✅ إضافة إلى history
-                      batch.set(historyRef, {
-                        'type': 'article_read',
-                        'taskType': 'article', // ✅ أضفناه هنا
-                        'userTaskDocId': widget.userTaskDocId,
-                        'points': taskPoints,
-                        'at': FieldValue.serverTimestamp(),
-                        'taskTitle': taskTitle,
-                      });
-
-
-                      // ✅ إنشاء إشعار للمستخدم
-                      batch.set(notifRef, {
-                        'type': 'article_completed',
-                        'taskType': 'article', // ✅ أضفناه هنا
-                        'userId': userId,
-                        'userTaskDocId': widget.userTaskDocId,
-                        'taskTitle': taskTitle,
-                        'points': taskPoints,
-                        'createdAt': FieldValue.serverTimestamp(),
-                        'seen': false,
-                        'title': 'مهمة القراءة ✅',
-                        'body': 'أحسنت! أكملت قراءة المقال وحصلت على $taskPoints نقطة 🌿',
-                      });
-
-                      print('🚀 trying to commit batch...');
-                      try {
-                        await batch.commit();
-                        print('✅ batch committed successfully');
-                      } catch (e) {
-                        print('❌ batch failed: $e');
-                      }
-
-                      // await batch.commit();
-
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تم إتمام المهمة بنجاح ✅')),
-                        );
-                        Navigator.pop(context, true); // يرجع لصفحة المهام ويحدثها
-                      }
-                    } catch (e) {
-                      debugPrint('❌ خطأ أثناء إتمام المقال: $e');
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('حدث خطأ: $e')),
-                        );
-                      }
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: const LinearGradient(
+                      colors: [
+                        AppColors.primary,
+                        AppColors.tealSoft,
+                      ],
+                      begin: Alignment.centerRight,
+                      end: Alignment.centerLeft,
                     ),
                   ),
-                  child: Text(
-                    "تمت القراءة",
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      color: Colors.white,
-                    ),
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: _generatingTest
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            "تمت القراءة - ابدأ الاختبار القصير",
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                 ),
-              )
+              ),
             ),
         ],
       ),
     );
   }
+
 }
