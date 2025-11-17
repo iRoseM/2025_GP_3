@@ -1072,7 +1072,7 @@ class _mapPageState extends State<mapPage> {
     );
   }
 
-  // ===== Dialog لإرسال بلاغ =====
+  // ===== BottomSheet لإرسال بلاغ =====
   void _openReportDialog(Facility f) {
     final descCtrl = TextEditingController();
     String? selectedType;
@@ -1087,115 +1087,153 @@ class _mapPageState extends State<mapPage> {
       'أخرى',
     ];
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (_) {
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
         return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text(
-                'إرسال بلاغ عن الحاويات',
-                textAlign: TextAlign.center,
+          builder: (context, setSt) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 8,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 16,
               ),
-              content: Form(
-                key: _formKey,
-                autovalidateMode: showValidation
-                    ? AutovalidateMode.always
-                    : AutovalidateMode.disabled,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Directionality(
-                      textDirection: TextDirection.rtl,
-                      child: DropdownButtonFormField<String>(
-                        decoration: const InputDecoration(
-                          labelText: 'نوع البلاغ',
-                          alignLabelWithHint: true,
+              child: Directionality(
+                textDirection: TextDirection.rtl,
+                child: Form(
+                  key: _formKey,
+                  autovalidateMode: showValidation
+                      ? AutovalidateMode.always
+                      : AutovalidateMode.disabled,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 4),
+                        const Text(
+                          'إرسال بلاغ عن الحاويات',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                        isExpanded: true,
-                        alignment: Alignment.centerRight,
-                        icon: const Icon(Icons.arrow_drop_down),
-                        items: types
-                            .map(
-                              (t) => DropdownMenuItem(
-                                value: t,
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Text(t),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) {
-                          setState(() => selectedType = v);
-                        },
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'اختر نوع البلاغ';
-                          }
-                          return null;
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Directionality(
-                      textDirection: TextDirection.rtl,
-                      child: TextFormField(
-                        controller: descCtrl,
-                        maxLines: 3,
-                        textAlign: TextAlign.right,
-                        decoration: InputDecoration(
-                          alignLabelWithHint: true,
-                          label: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('وصف المشكلة'),
-                              if (selectedType == 'أخرى')
-                                const Text(
-                                  ' *',
-                                  style: TextStyle(
-                                    color: Colors.redAccent,
-                                    fontWeight: FontWeight.bold,
+                        const SizedBox(height: 16),
+
+                        // نوع البلاغ
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(
+                            labelText: 'نوع البلاغ',
+                            alignLabelWithHint: true,
+                            border: OutlineInputBorder(),
+                          ),
+                          isExpanded: true,
+                          alignment: Alignment.centerRight,
+                          icon: const Icon(Icons.arrow_drop_down),
+                          items: types
+                              .map(
+                                (t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(t),
                                   ),
                                 ),
-                            ],
-                          ),
-                          hintText: selectedType == 'أخرى'
-                              ? 'يجب كتابة وصف عند اختيار "أخرى"'
-                              : 'اكتب وصفًا مختصرًا للمشكلة',
+                              )
+                              .toList(),
+                          onChanged: (v) {
+                            setSt(() => selectedType = v);
+                          },
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) {
+                              return 'اختر نوع البلاغ';
+                            }
+                            return null;
+                          },
                         ),
-                        validator: (v) {
-                          if (selectedType == 'أخرى' &&
-                              (v == null || v.trim().isEmpty)) {
-                            return 'يرجى كتابة وصف للمشكلة';
-                          }
-                          return null;
-                        },
-                      ),
+                        const SizedBox(height: 10),
+
+                        // وصف المشكلة
+                        TextFormField(
+                          controller: descCtrl,
+                          maxLines: 3,
+                          textAlign: TextAlign.right,
+                          decoration: InputDecoration(
+                            alignLabelWithHint: true,
+                            border: const OutlineInputBorder(),
+                            label: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('وصف المشكلة'),
+                                if (selectedType == 'أخرى')
+                                  const Text(
+                                    ' *',
+                                    style: TextStyle(
+                                      color: Colors.redAccent,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            hintText: selectedType == 'أخرى'
+                                ? 'يجب كتابة وصف عند اختيار "أخرى"'
+                                : 'اكتب وصفًا مختصرًا للمشكلة (اختياري لباقي الأنواع)',
+                          ),
+                          validator: (v) {
+                            if (selectedType == 'أخرى' &&
+                                (v == null || v.trim().isEmpty)) {
+                              return 'يرجى كتابة وصف للمشكلة';
+                            }
+                            return null;
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () => Navigator.pop(sheetContext),
+                                child: const Text('إلغاء'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                ),
+                                onPressed: () async {
+                                  setSt(() => showValidation = true);
+                                  if (!_formKey.currentState!.validate()) {
+                                    return;
+                                  }
+
+                                  Navigator.pop(sheetContext);
+                                  await _submitFacilityReport(
+                                    facility: f,
+                                    type: selectedType!.trim(),
+                                    description: descCtrl.text.trim(),
+                                  );
+                                },
+                                child: const Text('إرسال'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    setState(() => showValidation = true);
-                    if (!_formKey.currentState!.validate()) return;
-
-                    Navigator.pop(context);
-                    await _submitFacilityReport(
-                      facility: f,
-                      type: selectedType!.trim(),
-                      description: descCtrl.text.trim(),
-                    );
-                  },
-                  child: const Text('إرسال'),
-                ),
-              ],
             );
           },
         );
