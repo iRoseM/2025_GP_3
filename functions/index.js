@@ -1,10 +1,8 @@
-/**
- * Firebase Functions (mixed 1st + 2nd gen)
- * - createUserDoc: 1st gen Auth trigger (auth.user().onCreate)
- * - reserveUsername, markVerified, generateShortTestVerification: 2nd gen HTTPS callable
- */
+// ================== تحميل المتغيرات من ملف .env ==================
+require("dotenv").config();
 console.log("🔥 Current GEMINI_API_KEY:", process.env.GEMINI_API_KEY);
 
+// ================== إعداد Firebase Functions & Admin ==================
 const functions = require("firebase-functions/v1"); // ✅ v1 (عشان auth.user().onCreate & region)
 const { onCall, HttpsError } = require("firebase-functions/v2/https"); // ✅ v2 callable
 const { setGlobalOptions } = require("firebase-functions/v2/options");
@@ -164,59 +162,96 @@ exports.generateShortTestVerification = onCall(async (request) => {
 {
   "question": "...",
   "options": ["...", "...", "...", "..."],
-  "answer": "..."
+  "answer": "...",
+  "explanation": "..."
 }
 
 النص:
 ${articleText}
 `;
 
-try {
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-    }),
-  });
-
-  const result = await response.json();
-
-  console.log("🔥 Gemini Raw:", JSON.stringify(result, null, 2));
-
-  let text = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-  // 🧹 تنظيف Markdown
-  text = text.replace(/```json/g, "")
-             .replace(/```/g, "")
-             .trim();
-
-  // 🧹 استخراج JSON فقط
-  const first = text.indexOf("{");
-  const last = text.lastIndexOf("}");
-  if (first === -1 || last === -1 || last <= first) {
-    throw new Error("NO_VALID_JSON_RETURNED");
-  }
-
-  const jsonBlock = text.substring(first, last + 1).trim();
-
-  // 🧪 تأكيد أن JSON صالح
-  let parsed;
   try {
-    parsed = JSON.parse(jsonBlock);
-  } catch (e) {
-    console.error("❌ Failed to parse:", jsonBlock);
-    throw new Error("INVALID_JSON_FROM_AI");
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    // 🔎 لو وده ناقص نرمي خطأ واضح
+    if (!apiKey) {
+      console.error("❌ GEMINI_API_KEY is missing in env!");
+      throw new HttpsError("failed-precondition", "GEMINI_API_KEY_MISSING");
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+      }),
+    });
+
+    const result = await response.json();
+
+    console.log("🔥 Gemini Raw:", JSON.stringify(result, null, 2));
+
+    // ✅ لو الـ API رجع error واضح من Google
+    if (result.error) {
+      console.error("❌ Gemini API error:", result.error);
+      throw new HttpsError(
+        "internal",
+        `GEMINI_API_ERROR: ${result.error.message || result.error.status || "UNKNOWN_ERROR"}`
+      );
+    }
+
+    let text = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    // 🧹 تنظيف Markdown
+    text = text.replace(/```json/g, "")
+               .replace(/```/g, "")
+               .trim();
+
+    // 🧹 استخراج JSON فقط
+    const first = text.indexOf("{");
+    const last = text.lastIndexOf("}");
+    if (first === -1 || last === -1 || last <= first) {
+      console.error("❌ No valid JSON in Gemini response text:", text);
+      throw new HttpsError("internal", "NO_VALID_JSON_RETURNED");
+    }
+
+    const jsonBlock = text.substring(first, last + 1).trim();
+
+    // 🧪 تأكيد أن JSON صالح
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonBlock);
+    } catch (e) {
+      console.error("❌ Failed to parse JSON from Gemini:", jsonBlock, e);
+      throw new HttpsError("internal", "INVALID_JSON_FROM_AI");
+    }
+
+    // تأكد من وجود الحقول الأساسية
+    if (
+      !parsed.question ||
+      !Array.isArray(parsed.options) ||
+      parsed.options.length < 2 ||
+      !parsed.answer
+    ) {
+      console.error("❌ Parsed JSON missing required fields:", parsed);
+      throw new HttpsError("internal", "MALFORMED_AI_RESPONSE");
+    }
+
+    // 🎯 نرجع JSON نظيف للكلينت
+    return parsed;
+
+  } catch (err) {
+    console.error("❌ Gemini Error (outer catch):", err);
+
+    if (err instanceof HttpsError) {
+      throw err;
+    }
+
+    throw new HttpsError(
+      "internal",
+      `AI_GENERATION_FAILED: ${err.message || err.toString()}`
+    );
   }
-
-  // 🎯 أهم شيء: نرجع JSON مباشر، نظيف
-  return parsed;
-
-} catch (err) {
-  console.error("❌ Gemini Error:", err);
-  throw new HttpsError("internal", "AI_GENERATION_FAILED");
-}
-
 });
