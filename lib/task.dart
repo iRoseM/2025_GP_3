@@ -10,7 +10,7 @@ import 'home.dart';
 import 'map.dart';
 import 'levels.dart';
 import 'community.dart';
-import 'article_page.dart';
+import 'article.dart';
 import 'services/bottom_nav.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';

@@ -4,8 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 import 'services/fcm_service.dart';
 import 'services/connection.dart';
@@ -424,10 +422,10 @@ class _ReportCardState extends State<_ReportCard> {
       final data = snap.data() ?? {};
       final name = data['name'] ?? '';
       final type = data['type'] ?? '';
-      if (name != null && (name as String).trim().isNotEmpty) {
+      if ((name as String).trim().isNotEmpty) {
         return name;
       }
-      if (type != null && (type as String).trim().isNotEmpty) {
+      if ((type as String).trim().isNotEmpty) {
         return type;
       }
       return facilityId;
