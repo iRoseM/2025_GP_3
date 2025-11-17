@@ -46,6 +46,9 @@ class _taskPageState extends State<taskPage> {
   bool _precheckDone = false;
   String? _precheckError;
 
+  // ✅ تحميل الشهر المعروض (lazy)
+  bool _isMonthLoading = false;
+
   void _onTap(int i) {
     if (i == _currentIndex) return;
     switch (i) {
@@ -143,15 +146,12 @@ class _taskPageState extends State<taskPage> {
       for (var doc in snap.docs) {
         final data = doc.data();
         if (!seenUrls.contains(data['url'])) {
-          return {
-            'docId': doc.id,
-            ...data,
-          };
+          return {'docId': doc.id, ...data};
         }
       }
       return null;
     } catch (e) {
-      print("❌ getFreshNewsForUser ERROR: $e");
+      debugPrint("❌ getFreshNewsForUser ERROR: $e");
       return null;
     }
   }
@@ -162,25 +162,36 @@ class _taskPageState extends State<taskPage> {
     _initializeApp();
   }
 
+  // =======================
+  // ✅ تهيئة خفيفة: اليوم فقط + حالة الشهر الحالي
+  // =======================
   Future<void> _initializeApp() async {
-    final user = _auth.currentUser;
-    _uid = user?.uid;
-    _selectedDay = _dayStart(DateTime.now());
-    _focusedDay = _selectedDay!;
+    try {
+      final user = _auth.currentUser;
+      _uid = user?.uid;
+      _selectedDay = _dayStart(DateTime.now());
+      _focusedDay = _selectedDay!;
 
-    if (!await hasInternetConnection()) {
-      if (mounted) showNoInternetDialog(context);
-    }
+      if (!await hasInternetConnection()) {
+        if (mounted) showNoInternetDialog(context);
+      }
 
-    await _bootstrapTodayOnly();
-    // ✅ backfill للشهر الحالي + السابق لتظهر كل الأيام
-    await _ensureMonthBackfill(DateTime.now());
-    await _precheckTodayDoc();
-
-    if (mounted) {
-      setState(() {
-        _isInitializing = false;
-      });
+      await _bootstrapTodayOnly();
+      await _precheckTodayDoc();
+    } catch (e, st) {
+      debugPrint('❌ _initializeApp error: $e\n$st');
+      if (mounted) {
+        setState(() {
+          _precheckError = e.toString();
+          _precheckDone = true;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
     }
   }
 
@@ -291,30 +302,48 @@ class _taskPageState extends State<taskPage> {
     _joinDate = _dayStart(resolvedJoin);
   }
 
+  // =======================
+  // ✅ backfill لشهر واحد فقط (يُستدعى عند تغيير الشهر)
+  // =======================
   Future<void> _ensureMonthBackfill(DateTime anyDayInMonth) async {
     if (_uid == null) return;
     final ms = _monthStart(anyDayInMonth);
     final me = _monthEnd(anyDayInMonth);
 
-    final prevMonthStart = DateTime(ms.year, ms.month - 1, 1);
-    final prevMonthEnd = DateTime(ms.year, ms.month, 0);
-
-    for (
-      DateTime d = prevMonthStart;
-      !d.isAfter(prevMonthEnd);
-      d = d.add(const Duration(days: 1))
-    ) {
-      if (_joinDate != null && d.isBefore(_joinDate!)) continue;
-      await _ensureUserTaskForDate(d);
-    }
-    final today = _dayStart(DateTime.now());
     for (DateTime d = ms; !d.isAfter(me); d = d.add(const Duration(days: 1))) {
       if (_joinDate != null && d.isBefore(_joinDate!)) continue;
       await _ensureUserTaskForDate(d);
     }
 
+    final today = _dayStart(DateTime.now());
     _attachUserTaskStreamFor(_selectedDay ?? today);
-    if (mounted) setState(() {});
+  }
+
+  // ✅ دالة خاصة لتحميل شهر معيّن بشكل جزئي/كسول
+  Future<void> _loadMonth(DateTime month) async {
+    if (_uid == null) return;
+    setState(() {
+      _isMonthLoading = true;
+    });
+
+    try {
+      // إنشاء مهام الشهر (بدون الشهر السابق)
+      await _ensureMonthBackfill(month);
+
+      final statuses = await _getTaskStatusesForMonth(month);
+      if (!mounted) return;
+      setState(() {
+        _monthStatuses = statuses;
+      });
+    } catch (e, st) {
+      debugPrint('❌ _loadMonth error: $e\n$st');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isMonthLoading = false;
+        });
+      }
+    }
   }
 
   Future<Map<DateTime, String>> _getTaskStatusesForMonth(DateTime month) async {
@@ -372,8 +401,7 @@ class _taskPageState extends State<taskPage> {
         "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
 
     final utKey = '${_uid!}_${_yyyyMMdd(selected)}';
-    final utRef =
-        FirebaseFirestore.instance.collection('userTasks').doc(utKey);
+    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(utKey);
 
     // 1) مهام الشهر المتاحة
     final tasksSnap = await FirebaseFirestore.instance
@@ -428,10 +456,14 @@ class _taskPageState extends State<taskPage> {
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
     final tKey = '${_uid!}_${_yyyyMMdd(tomorrow)}';
 
-    final ySnap =
-        await FirebaseFirestore.instance.collection('userTasks').doc(yKey).get();
-    final tSnap =
-        await FirebaseFirestore.instance.collection('userTasks').doc(tKey).get();
+    final ySnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(yKey)
+        .get();
+    final tSnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(tKey)
+        .get();
 
     if (ySnap.exists) yTaskId = ySnap.data()?['taskId'] as String?;
     if (tSnap.exists) tTaskId = tSnap.data()?['taskId'] as String?;
@@ -442,14 +474,13 @@ class _taskPageState extends State<taskPage> {
     final excluded = <String?>{currentTaskId, yTaskId, tTaskId}
       ..removeWhere((e) => e == null);
 
-    final pool =
-        validTasks.where((doc) => !excluded.contains(doc.id)).toList();
+    final pool = validTasks.where((doc) => !excluded.contains(doc.id)).toList();
 
     // لو pool فاضي نرجع للـ validTasks
     final finalPool = pool.isEmpty ? validTasks : pool;
 
     // ===========================
-    // إضافة مهمة الخبر إذا موجود خبر جديد
+    // إضافة مهمة الخبر إذا موجود خبر جديد (للـ refresh فقط)
     // ===========================
     final freshNews = await getFreshNewsForUser(_uid!);
     bool hasFreshNews = freshNews != null;
@@ -469,7 +500,7 @@ class _taskPageState extends State<taskPage> {
     // ===========================
     // اختيار مهمة "خبر جديد"
     // ===========================
-    if (picked == null) {
+    if (picked == null && hasFreshNews) {
       final news = freshNews!;
 
       await utRef.update({
@@ -509,19 +540,15 @@ class _taskPageState extends State<taskPage> {
     _attachUserTaskStreamFor(selected);
   }
 
-
   /// إنشاء مهمة اليوم للمستخدم عند عدم وجود مهمة مسبقة.
   ///
   /// المنطق:
   /// - التحقق من صلاحية المهام حسب شهر الظهور والانتهاء.
   /// - منع تكرار مهمة الأمس.
-  /// - محاولة جلب "خبر جديد" غير مقروء للمستخدم:
+  /// - محاولة جلب "خبر جديد" غير مقروء للمستخدم **لليوم الحالي فقط**:
   ///     • إن وجد → يتم إدراج مهمة خبر، وتخزين كامل بيانات المقال داخل userTasks.
   ///     • إن لم يوجد → يتم اختيار مهمة عادية من مهام الشهر.
   /// - حفظ جميع حقول المهمة داخل userTasks لتسهيل عرضها لاحقاً بدون API.
-  ///
-  /// الهدف:
-  /// ضمان عدم تكرار الأخبار، ومنع ظهور GAP، وجعل مهمة الخبر تُنشأ فقط عند توفر جديد.
   Future<void> _ensureUserTaskForDate(DateTime day) async {
     if (_uid == null) return;
 
@@ -583,18 +610,22 @@ class _taskPageState extends State<taskPage> {
     String? yTaskId;
     final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
-    final ySnap =
-        await FirebaseFirestore.instance.collection('userTasks').doc(yKey).get();
+    final ySnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(yKey)
+        .get();
     if (ySnap.exists) yTaskId = ySnap.data()?['taskId'] as String?;
 
     final excludedIds = {yTaskId}..removeWhere((id) => id == null);
-    final candidates =
-        validTasks.where((doc) => !excludedIds.contains(doc.id)).toList();
+    final candidates = validTasks
+        .where((doc) => !excludedIds.contains(doc.id))
+        .toList();
 
     final filteredTasks = candidates.isEmpty ? validTasks : candidates;
 
-    // 3) محاولة جلب خبر جديد
-    final freshNews = await getFreshNewsForUser(_uid!);
+    // 3) محاولة جلب خبر جديد **فقط إذا اليوم = اليوم الحالي**
+    final bool isToday = _dayStart(day) == today;
+    final freshNews = isToday ? await getFreshNewsForUser(_uid!) : null;
     bool canShowNews = freshNews != null;
 
     // 4) بناء pool شامل (خبر + مهام)
@@ -617,9 +648,9 @@ class _taskPageState extends State<taskPage> {
     final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
 
     // ==========================
-    // 6) إذا كانت المهمة خبر
+    // 6) إذا كانت المهمة خبر (واليوم فعلاً اليوم الحالي)
     // ==========================
-    if (picked == null) {
+    if (picked == null && canShowNews) {
       final news = freshNews!;
 
       await ref.set({
@@ -655,7 +686,8 @@ class _taskPageState extends State<taskPage> {
     final pickedTitle = pickedData['title'] ?? '(بدون عنوان)';
     final pickedDesc = pickedData['description'] ?? '';
     final pickedPoints = pickedData['points'] ?? 0;
-    final pickedValidation = pickedData['validationStrategy'] ??
+    final pickedValidation =
+        pickedData['validationStrategy'] ??
         pickedData['validation'] ??
         pickedData['taskValidation'] ??
         'غير محددة';
@@ -855,11 +887,7 @@ class _taskPageState extends State<taskPage> {
                               };
 
                               // ✅ السماح بالإكمال لليوم والماضي فقط
-                              final canPerformDay = !sel.isAfter(
-                                today,
-                              ); // <= اليوم
-                              // final canPerformDay = true; // temporary allow future
-
+                              final canPerformDay = !sel.isAfter(today);
 
                               if ((ut['taskTitle'] == null ||
                                       ut['taskDescription'] == null) &&
@@ -970,7 +998,7 @@ class _taskPageState extends State<taskPage> {
                 '$tasksPerDay مهمة يوميًا',
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 12.5,
-                  color: Color(0xFF4BAA98),
+                  color: const Color(0xFF4BAA98),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1025,117 +1053,141 @@ class _taskPageState extends State<taskPage> {
   // 🟩 Calendar & Card Builders
   // -------------------------------------------------------------
   Widget _buildCalendar() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary, width: 2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x11000000),
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: TableCalendar(
-        onPageChanged: (focused) async {
-          _focusedDay = focused;
-          // ✅ backfill للشهر المعروض
-          await _ensureMonthBackfill(focused);
-          _monthStatuses = await _getTaskStatusesForMonth(focused);
-          if (mounted) setState(() {});
-        },
-        focusedDay: _focusedDay,
-        firstDay: DateTime.utc(2020),
-        lastDay: DateTime.utc(2030),
-        calendarFormat: CalendarFormat.month,
-        headerStyle: HeaderStyle(
-          formatButtonVisible: false,
-          titleCentered: true,
-          titleTextStyle: GoogleFonts.ibmPlexSansArabic(
-            color: AppColors.dark,
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-          ),
-          leftChevronIcon: const Icon(
-            Icons.chevron_left,
-            color: AppColors.primary,
-          ),
-          rightChevronIcon: const Icon(
-            Icons.chevron_right,
-            color: AppColors.primary,
-          ),
-        ),
-        selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-        onDaySelected: (selected, focused) async {
-          setState(() {
-            _selectedDay = selected;
-            _focusedDay = focused;
-          });
-          await _ensureUserTaskForDate(_dayStart(selected));
-          _precheckDone = false;
-          _precheckError = null;
-          setState(() {});
-          await _precheckTodayDoc();
-        },
-        calendarStyle: CalendarStyle(
-          todayDecoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.08),
-            shape: BoxShape.circle,
-          ),
-          selectedDecoration: const BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
-          ),
-          selectedTextStyle: GoogleFonts.ibmPlexSansArabic(
+    return Stack(
+      children: [
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
             color: Colors.white,
-            fontWeight: FontWeight.w700,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.primary, width: 2),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x11000000),
+                blurRadius: 8,
+                offset: Offset(0, 3),
+              ),
+            ],
           ),
-          todayTextStyle: GoogleFonts.ibmPlexSansArabic(
-            color: AppColors.dark,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        calendarBuilders: CalendarBuilders(
-          defaultBuilder: (context, day, focusedDay) {
-            final bool isSel = isSameDay(day, _selectedDay);
-            final bool isToday = isSameDay(day, _dayStart(DateTime.now()));
-            final bool showCompleted =
-                _isCompletedDay(day) && !isSel && !isToday;
+          child: TableCalendar(
+            onPageChanged: (focused) {
+              _focusedDay = focused;
+              // ✅ تحميل الشهر المعروض فقط
+              _loadMonth(focused);
+            },
+            focusedDay: _focusedDay,
+            firstDay: DateTime.utc(2020),
+            lastDay: DateTime.utc(2030),
+            calendarFormat: CalendarFormat.month,
+            headerStyle: HeaderStyle(
+              formatButtonVisible: false,
+              titleCentered: true,
+              titleTextStyle: GoogleFonts.ibmPlexSansArabic(
+                color: AppColors.dark,
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+              ),
+              leftChevronIcon: const Icon(
+                Icons.chevron_left,
+                color: AppColors.primary,
+              ),
+              rightChevronIcon: const Icon(
+                Icons.chevron_right,
+                color: AppColors.primary,
+              ),
+            ),
+            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+            onDaySelected: (selected, focused) async {
+              setState(() {
+                _selectedDay = selected;
+                _focusedDay = focused;
+              });
+              await _ensureUserTaskForDate(_dayStart(selected));
+              _precheckDone = false;
+              _precheckError = null;
+              setState(() {});
+              await _precheckTodayDoc();
+            },
+            calendarStyle: CalendarStyle(
+              todayDecoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              selectedDecoration: const BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
+              selectedTextStyle: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+              todayTextStyle: GoogleFonts.ibmPlexSansArabic(
+                color: AppColors.dark,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            calendarBuilders: CalendarBuilders(
+              defaultBuilder: (context, day, focusedDay) {
+                final bool isSel = isSameDay(day, _selectedDay);
+                final bool isToday = isSameDay(day, _dayStart(DateTime.now()));
+                final bool showCompleted =
+                    _isCompletedDay(day) && !isSel && !isToday;
 
-            return SizedBox.expand(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (showCompleted)
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary33,
-                          shape: BoxShape.circle,
+                return SizedBox.expand(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (showCompleted)
+                        Center(
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: const BoxDecoration(
+                              color: AppColors.primary33,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      Center(
+                        child: Text(
+                          '${day.day}',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: AppColors.dark,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13.5,
+                          ),
                         ),
                       ),
-                    ),
-                  Center(
-                    child: Text(
-                      '${day.day}',
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        color: AppColors.dark,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13.5,
-                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+
+        // مؤشر تحميل بسيط أعلى الكالندر عند تغيير الشهر
+        if (_isMonthLoading)
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: true,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
                     ),
                   ),
-                ],
+                ),
               ),
-            );
-          },
-        ),
-      ),
+            ),
+          ),
+      ],
     );
   }
 
