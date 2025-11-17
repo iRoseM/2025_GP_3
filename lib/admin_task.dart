@@ -222,7 +222,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               },
             ),
           ),
-          floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
           floatingActionButton: _buildAddFab(),
           bottomNavigationBar: isKeyboardOpen
               ? null
@@ -904,14 +904,11 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   // ---------------------------------------------------------------------------
   // 🔹 FAB
   Widget _buildAddFab() {
-    return Padding(
-      padding: const EdgeInsets.only(right: 300, bottom: 10),
-      child: FloatingActionButton(
-        backgroundColor: AppColors.primary,
-        shape: const CircleBorder(),
-        onPressed: _showAddOptionsSheet,
-        child: const Icon(Icons.add, color: Colors.white, size: 28),
-      ),
+    return FloatingActionButton(
+      onPressed: _showAddOptionsSheet,
+      backgroundColor: AppColors.primary,
+      shape: const CircleBorder(),
+      child: const Icon(Icons.add, color: Colors.white, size: 28),
     );
   }
 
