@@ -1268,6 +1268,66 @@ class _taskPageState extends State<taskPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 🔁 زر تحديث صغير أعلى يسار الكرت
+          if (canPerform && !isCompleted && !isSubmitted) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                icon: const Icon(
+                  Icons.refresh,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+                label: Text(
+                  'تغيير المهمة',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: AppColors.primary,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.primary, width: 1.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  minimumSize: Size.zero,
+                ),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('تأكيد التحديث'),
+                      content: const Text(
+                        'هل أنت متأكد من رغبتك في تغيير هذه المهمة؟',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('إلغاء'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('تأكيد'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await _refreshUserTask(taskData);
+                    _attachUserTaskStreamFor(sel);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+
           Text(
             'مهمة اليوم',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1367,13 +1427,8 @@ class _taskPageState extends State<taskPage> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   color: (isSubmitted || !canPerform)
-                      ? Colors
-                            .grey
-                            .shade300 // ✅ رمادي في انتظار المراجعة أو لم يحن الوقت
-                      : (isCompleted
-                            ? AppColors
-                                  .primary33 // خفيف بعد الإنجاز
-                            : null),
+                      ? Colors.grey.shade300
+                      : (isCompleted ? AppColors.primary33 : null),
                   gradient: (!isCompleted && !isSubmitted && canPerform)
                       ? const LinearGradient(
                           colors: [AppColors.primary, AppColors.mint],
@@ -1391,7 +1446,7 @@ class _taskPageState extends State<taskPage> {
                         : (isSubmitted
                               ? 'بانتظار المراجعة ⏳'
                               : (canPerform
-                                    ? 'تمم المهمة'
+                                    ? 'بدء المهمة'
                                     : 'يومها لم يحن بعد 🌞')),
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontWeight: FontWeight.w700,
@@ -1405,56 +1460,6 @@ class _taskPageState extends State<taskPage> {
               ),
             ),
           ),
-
-          if (canPerform && !isCompleted && !isSubmitted) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.refresh, color: AppColors.primary),
-                label: Text(
-                  'تحديث المهمة',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: AppColors.primary,
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.primary, width: 2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                onPressed: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('تأكيد التحديث'),
-                      content: const Text(
-                        'هل أنت متأكد من رغبتك في تغيير هذه المهمة؟',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('إلغاء'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('تأكيد'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirm == true) {
-                    await _refreshUserTask(taskData);
-                    _attachUserTaskStreamFor(sel);
-                  }
-                },
-              ),
-            ),
-          ],
         ],
       ),
     );
