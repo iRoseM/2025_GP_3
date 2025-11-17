@@ -9,6 +9,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:open_location_code/open_location_code.dart' as olc;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 // استيراد صفحات
 import 'admin_home.dart' as home;
@@ -18,6 +20,7 @@ import 'services/admin_bottom_nav.dart';
 import 'admin_reports.dart' as report;
 import 'profile.dart';
 import 'services/connection.dart';
+import 'package:Nameer/secret/api.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -427,20 +430,48 @@ class _AdminMapPageState extends State<AdminMapPage> {
   void _onSearchSubmitted(String query) async {
     query = query.trim();
     if (query.isEmpty) {
+      // عرض كل النقاط + زووم آوت
+      if (_allMarkers.isEmpty) return;
+
       setState(() {
         _markers
           ..clear()
           ..addAll(_allMarkers);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تم عرض جميع المواقع على الخريطة 📍'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+
+      final ctrl = await _mapCtrl.future;
+      LatLngBounds? bounds;
+      for (final m in _markers) {
+        final p = m.position;
+        bounds = bounds == null
+            ? LatLngBounds(southwest: p, northeast: p)
+            : LatLngBounds(
+                southwest: LatLng(
+                  p.latitude < bounds!.southwest.latitude
+                      ? p.latitude
+                      : bounds!.southwest.latitude,
+                  p.longitude < bounds!.southwest.longitude
+                      ? p.longitude
+                      : bounds!.southwest.longitude,
+                ),
+                northeast: LatLng(
+                  p.latitude > bounds!.northeast.latitude
+                      ? p.latitude
+                      : bounds!.northeast.latitude,
+                  p.longitude > bounds!.northeast.longitude
+                      ? p.longitude
+                      : bounds!.northeast.longitude,
+                ),
+              );
+      }
+
+      if (bounds != null) {
+        await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+      }
       return;
     }
 
+    // ================= Normalization =================
     String normalize(String text) {
       return text
           .toLowerCase()
@@ -452,98 +483,181 @@ class _AdminMapPageState extends State<AdminMapPage> {
     }
 
     final normalizedQuery = normalize(query);
-    final matchedMarkers = <Marker>{};
 
-    for (final m in _allMarkers) {
-      final textData =
-          '''
-      ${(m.infoWindow.title ?? '').toLowerCase()}
-      ${(m.infoWindow.snippet ?? '').toLowerCase()}
-    ''';
+    // كلمات عامة → عرض كل الحاويات
+    final generic = {'حاويه', 'حاويات', 'سله', 'سلة', 'سلات', 'نقطه', 'نقطة'};
 
-      final normalizedData = normalize(textData);
+    final parts = normalizedQuery
+        .split(' ')
+        .where((x) => x.isNotEmpty)
+        .toList();
+    final nonGenericParts = parts
+        .where((p) => !generic.contains(p) && p != 'حي')
+        .toList();
 
-      if (normalizedData.contains(normalizedQuery)) {
-        matchedMarkers.add(m);
-        continue;
+    // إذا كل الكلمات عامة → عرض كل الحاويات فقط
+    if (nonGenericParts.isEmpty) {
+      if (_allMarkers.isEmpty) return;
+
+      setState(() {
+        _markers
+          ..clear()
+          ..addAll(_allMarkers);
+      });
+
+      final ctrl = await _mapCtrl.future;
+      LatLngBounds? bounds;
+      for (final m in _markers) {
+        final p = m.position;
+        bounds = bounds == null
+            ? LatLngBounds(southwest: p, northeast: p)
+            : LatLngBounds(
+                southwest: LatLng(
+                  p.latitude < bounds!.southwest.latitude
+                      ? p.latitude
+                      : bounds!.southwest.latitude,
+                  p.longitude < bounds!.southwest.longitude
+                      ? p.longitude
+                      : bounds!.southwest.longitude,
+                ),
+                northeast: LatLng(
+                  p.latitude > bounds!.northeast.latitude
+                      ? p.latitude
+                      : bounds!.northeast.latitude,
+                  p.longitude > bounds!.northeast.longitude
+                      ? p.longitude
+                      : bounds!.northeast.longitude,
+                ),
+              );
       }
 
-      final queryParts = normalizedQuery.split(' ');
-      for (int i = 0; i < queryParts.length; i++) {
-        final part = queryParts[i];
-        if (part.isEmpty) continue;
-
-        if (part == 'حي') {
-          if (i + 1 < queryParts.length) {
-            final next = queryParts[i + 1];
-            if (normalizedData.contains(next)) {
-              matchedMarkers.add(m);
-              break;
-            }
-          }
-        } else if (normalizedData.contains(part)) {
-          matchedMarkers.add(m);
-          break;
-        }
+      if (bounds != null) {
+        final ctrl = await _mapCtrl.future;
+        await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
       }
-    }
-
-    if (matchedMarkers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('لم يتم العثور على نتائج لعبارة "$query".'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
       return;
     }
 
-    setState(() {
-      _markers
-        ..clear()
-        ..addAll(matchedMarkers);
-    });
+    // ================= 1) بحث تطابق كامل على الماركرات =================
+    final matched = <Marker>{};
 
-    final ctrl = await _mapCtrl.future;
-    LatLngBounds? bounds;
-    for (final m in matchedMarkers) {
-      final p = m.position;
-      if (bounds == null) {
-        bounds = LatLngBounds(southwest: p, northeast: p);
-      } else {
-        bounds = LatLngBounds(
-          southwest: LatLng(
-            p.latitude < bounds.southwest.latitude
-                ? p.latitude
-                : bounds.southwest.latitude,
-            p.longitude < bounds.southwest.longitude
-                ? p.longitude
-                : bounds.southwest.longitude,
-          ),
-          northeast: LatLng(
-            p.latitude > bounds.northeast.latitude
-                ? p.latitude
-                : bounds.northeast.latitude,
-            p.longitude > bounds.northeast.longitude
-                ? p.longitude
-                : bounds.northeast.longitude,
-          ),
-        );
+    for (final m in _allMarkers) {
+      final text = normalize(
+        '${m.infoWindow.title ?? ""} ${m.infoWindow.snippet ?? ""}',
+      );
+      if (text.contains(normalizedQuery)) {
+        matched.add(m);
       }
     }
 
-    if (bounds != null) {
-      await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+    if (matched.isNotEmpty) {
+      setState(() {
+        _markers
+          ..clear()
+          ..addAll(matched);
+      });
+
+      final ctrl = await _mapCtrl.future;
+
+      LatLngBounds? bounds;
+      for (final m in matched) {
+        final p = m.position;
+        bounds = bounds == null
+            ? LatLngBounds(southwest: p, northeast: p)
+            : LatLngBounds(
+                southwest: LatLng(
+                  p.latitude < bounds!.southwest.latitude
+                      ? p.latitude
+                      : bounds!.southwest.latitude,
+                  p.longitude < bounds!.southwest.longitude
+                      ? p.longitude
+                      : bounds!.southwest.longitude,
+                ),
+                northeast: LatLng(
+                  p.latitude > bounds!.northeast.latitude
+                      ? p.latitude
+                      : bounds!.northeast.latitude,
+                  p.longitude > bounds!.northeast.longitude
+                      ? p.longitude
+                      : bounds!.northeast.longitude,
+                ),
+              );
+      }
+
+      if (bounds != null) {
+        await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+      }
+      return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'تم العثور على ${matchedMarkers.length} موقعًا مطابقًا ✅',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    // ================= 2) Google Places → أقرب حاوية للحي/الموقع =================
+    try {
+      final url = Uri.parse(
+        "https://maps.googleapis.com/maps/api/place/autocomplete/json"
+        "?input=$query&language=ar&components=country:sa&key=$kMapsApiKey",
+      );
+
+      final response = await http.get(url);
+      final data = json.decode(response.body);
+
+      if (data["status"] == "OK" && data["predictions"].isNotEmpty) {
+        final placeId = data['predictions'][0]['place_id'];
+
+        final detailsUrl = Uri.parse(
+          "https://maps.googleapis.com/maps/api/place/details/json"
+          "?place_id=$placeId&key=$kMapsApiKey",
+        );
+
+        final detailsRes = await http.get(detailsUrl);
+        final details = json.decode(detailsRes.body);
+
+        final loc = details['result']['geometry']['location'];
+        final lat = (loc['lat'] as num).toDouble();
+        final lng = (loc['lng'] as num).toDouble();
+
+        // 🔍 أقرب ماركر للموقع
+        if (_allMarkers.isNotEmpty) {
+          Marker? nearest;
+          double? minDist;
+
+          for (final m in _allMarkers) {
+            final d = Geolocator.distanceBetween(
+              lat,
+              lng,
+              m.position.latitude,
+              m.position.longitude,
+            );
+            if (minDist == null || d < minDist) {
+              minDist = d;
+              nearest = m;
+            }
+          }
+
+          if (nearest != null) {
+            setState(() {
+              _markers
+                ..clear()
+                ..add(nearest!);
+            });
+
+            final ctrl = await _mapCtrl.future;
+            await ctrl.animateCamera(
+              CameraUpdate.newLatLngZoom(nearest.position, 15),
+            );
+            return;
+          }
+        }
+
+        // لو ما فيه حاويات → بس نروح للموقع نفسه
+        final ctrl = await _mapCtrl.future;
+        await ctrl.animateCamera(
+          CameraUpdate.newLatLngZoom(LatLng(lat, lng), 15),
+        );
+        return;
+      }
+    } catch (_) {}
+
+    // لو ما لقينا شيء → ولا شي يصير (ما فيه SnackBar)
   }
 
   @override

@@ -10,6 +10,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart'; // 👈 فتح الخرائط
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 // صفحات أخرى
 import 'home.dart';
@@ -19,6 +21,7 @@ import 'levels.dart';
 import 'profile.dart';
 import 'services/bottom_nav.dart';
 import 'services/connection.dart';
+import 'package:Nameer/secret/api.dart';
 
 /// ================== ألوان الواجهة ==================
 class AppColors {
@@ -540,18 +543,16 @@ class _mapPageState extends State<mapPage> {
       if (context.mounted) showNoInternetDialog(context);
       return;
     }
+
     query = query.trim();
     if (query.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('يرجى إدخال نص البحث أولاً.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('يرجى إدخال نص البحث')));
       return;
     }
 
-    // 🔤 توحيد الحروف العربية
+    // ===== توحيد / تنظيف النص =====
     String normalizeArabic(String input) {
       return input
           .replaceAll(RegExp(r'[إأآا]'), 'ا')
@@ -600,6 +601,111 @@ class _mapPageState extends State<mapPage> {
     }
 
     final normalizedQuery = normalizeArabic(cleanInput(query.toLowerCase()));
+
+    // ===== كلمات عامة نعتبرها "عرض كل الحاويات" =====
+    final Set<String> genericQueryTokens = {
+      normalizeArabic('حاوية'),
+      normalizeArabic('حاويات'),
+      normalizeArabic('سلة'),
+      normalizeArabic('سله'),
+      normalizeArabic('سلات'),
+    };
+
+    // لو بعد التنظيف صار فاضي أو مجرد كلمة عامة
+    if (normalizedQuery.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('اكتب نوع الحاوية أو كلمة توضح الشي اللي تدوره 🙂'),
+        ),
+      );
+      return;
+    }
+
+    // ✅ لو كتب كلمة عامة فقط (حاوية / حاويات / سلة / سلات ...) → نعرض كل الحاويات مع zoom out
+    if (genericQueryTokens.contains(normalizedQuery)) {
+      if (_allMarkers.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لا توجد حاويات متاحة حاليًا')),
+        );
+        return;
+      }
+
+      setState(() {
+        _markers
+          ..clear()
+          ..addAll(_allMarkers);
+      });
+
+      // نحسب bounds لكل الماركرات ونسوي zoom out عليهم
+      LatLngBounds? bounds;
+      for (final m in _markers) {
+        if (bounds == null) {
+          bounds = LatLngBounds(southwest: m.position, northeast: m.position);
+        } else {
+          bounds = LatLngBounds(
+            southwest: LatLng(
+              m.position.latitude < bounds.southwest.latitude
+                  ? m.position.latitude
+                  : bounds.southwest.latitude,
+              m.position.longitude < bounds.southwest.longitude
+                  ? m.position.longitude
+                  : bounds.southwest.longitude,
+            ),
+            northeast: LatLng(
+              m.position.latitude > bounds.northeast.latitude
+                  ? m.position.latitude
+                  : bounds.northeast.latitude,
+              m.position.longitude > bounds.northeast.longitude
+                  ? m.position.longitude
+                  : bounds.northeast.longitude,
+            ),
+          );
+        }
+      }
+
+      if (bounds != null) {
+        final ctrl = await _mapCtrl.future;
+        await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+      }
+
+      return; // نوقف هنا، ما نروح لا Google Places ولا Firestore
+    }
+
+    // ===== المرحلة 1 — استخدام Google Places أولاً (أحياء، شوارع، معالم...) =====
+    final url = Uri.parse(
+      "https://maps.googleapis.com/maps/api/place/autocomplete/json"
+      "?input=$query&language=ar&components=country:sa&key=$kMapsApiKey",
+    );
+
+    final response = await http.get(url);
+    final data = json.decode(response.body);
+
+    if (data['status'] == "OK" && data['predictions'].isNotEmpty) {
+      final placeId = data['predictions'][0]['place_id'];
+
+      // الحصول على الإحداثيات
+      final detailsUrl = Uri.parse(
+        "https://maps.googleapis.com/maps/api/place/details/json"
+        "?place_id=$placeId&key=$kMapsApiKey",
+      );
+
+      final detailsRes = await http.get(detailsUrl);
+      final detailsData = json.decode(detailsRes.body);
+
+      final loc = detailsData['result']['geometry']['location'];
+      final lat = (loc['lat'] as num).toDouble();
+      final lng = (loc['lng'] as num).toDouble();
+
+      final ctrl = await _mapCtrl.future;
+      await ctrl.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(lat, lng), 15),
+      );
+
+      // نوقف هنا ونرجع (بدون البحث في Firestore في هذا السيناريو)
+      return;
+    }
+
+    // ===== المرحلة 2 — البحث في حاويات Firestore إذا Google ما عطانا شيء مفيد =====
 
     // 🧠 نحدد نية المستخدم (نوع البحث)
     final isNearestSearch = query.contains('اقرب');
@@ -745,8 +851,6 @@ class _mapPageState extends State<mapPage> {
     }
 
     final nearest = top.first['facility'] as Facility;
-    final nearestDist =
-        top.first['dist'] as double; // لو حبيتي تستخدمينها مستقبلاً
 
     // 🗺️ نعرض النتائج على الخريطة
     setState(() {

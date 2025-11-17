@@ -70,8 +70,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   LatLng? _manualEnd;
   double? _manualDistanceKm;
 
-  final TextEditingController _itemCountCtrl = TextEditingController();
-  int? _chosenItems;
+  // 🚫 ما عاد بنستخدم خانة عدد العناصر في الواجهة، بس نخلي باقي المنطق الموجود للمرونة
+  // (ما في TextEditingController ولا _chosenItems مستخدمين في الـ UI الآن).
 
   Map<String, dynamic> get _calcRequires {
     final v = widget.taskData['calc_requires'];
@@ -103,7 +103,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return kws.any((k) => s.contains(k));
   }
 
-  // ==== المعدلة: قراءة calcMode من calc_requires أو الجذر ====
   bool get _isPerItemMode {
     final raw = (_calcRequires['calcMode'] ?? widget.taskData['calcMode'] ?? '')
         .toString()
@@ -112,14 +111,14 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return raw == 'peritem' || raw == 'deltaperitem';
   }
 
-  // ==== المعدلة: دعم حقول بديلة + calc_requires.askCount ====
   bool get _askCountFlag =>
       (_calcRequires['askCount'] == true) ||
       (widget.taskData['askCount'] == true) ||
       (widget.taskData['itemsEnabled'] == true) ||
       (widget.taskData['perItem'] == true);
 
-  bool get _shouldAskCount => _isPerItemMode || _askCountFlag;
+  // ✅ تعطيل خانة "عدد العناصر" بالكامل من الواجهة
+  bool get _shouldAskCount => false;
 
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
@@ -304,7 +303,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         .toString()
         .toLowerCase();
     final isSave = (dir.isEmpty || dir == 'save');
-    // --------- 1) perKm مباشر ---------
+
     if (calcMode == 'perkm' && km != null && km > 0) {
       final perKmVal = await _getEfPerUnit(
         efIdFromTask,
@@ -317,7 +316,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return res;
     }
 
-    // --------- 2) deltaPerKm ---------
     if (calcMode == 'deltaperkm' && km != null && km > 0) {
       final baseline = baseRef != null
           ? await _getEfPerUnit(baseRef, valueFieldFromTask: valueFieldFromTask)
@@ -337,7 +335,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return res;
     }
 
-    // --------- 3) perItem مباشر ---------
     if (calcMode == 'peritem' && items != null && items > 0) {
       final perItemVal = await _getEfPerUnit(
         efIdFromTask,
@@ -350,9 +347,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return res;
     }
 
-    // --------- 4) deltaPerItem (المهم هنا) ---------
     if (calcMode == 'deltaperitem' && items != null && items > 0) {
-      const defaultField = 'ef_kgco2_per_unit'; // ✅ يطابق داتا emissionFactors
+      const defaultField = 'ef_kgco2_per_unit';
 
       final baseline = baseRef != null
           ? await _getEfPerUnit(
@@ -383,7 +379,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return res;
     }
 
-    // --------- 5) ✅ fallback ذكي لو calcMode فاضي ---------
     if ((calcMode.isEmpty || calcMode == 'auto') &&
         items != null &&
         items > 0) {
@@ -596,7 +591,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       'taskPoints': taskPoints,
       if (taskId != null) 'taskId': taskId,
       if (distanceKm != null) 'distanceKm': distanceKm,
-      // ✅ نفس القيمة المخزّنة في الـ submission
       'carbonSaved': carbonForStore,
       if (_geoStart != null) 'geoStart': _geoStart,
       if (_geoEnd != null) 'geoEnd': _geoEnd,
@@ -604,7 +598,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }, SetOptions(merge: true));
   }
 
-  // ================= MOD: open camera safely after map =================
   Future<void> _openCamera({int? index}) async {
     if (_openingCamera) return;
     if (!mounted) return;
@@ -753,32 +746,14 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     if (_autoDistance || _isTransportTask) {
       _captureStartIfNeeded();
     }
-
-    Future.microtask(() {
-      if (!mounted) return;
-      if (_shouldAskCount && _itemCountCtrl.text.isEmpty) {
-        final def =
-            _asInt(
-              widget.taskData['defaultItemsOnSubmit'] ??
-                  widget.taskData['defaultItems'] ??
-                  _calcRequires['defaultItemsOnSubmit'] ??
-                  _calcRequires['defaultItems'],
-            ) ??
-            1;
-        _itemCountCtrl.text = def.toString();
-        setState(() {});
-      }
-    });
   }
 
   @override
   void dispose() {
     _controller?.dispose();
-    _itemCountCtrl.dispose();
     super.dispose();
   }
 
-  // ================= MOD: use rootNavigator + post-frame after map =================
   Future<void> _startFlowForTransportTask() async {
     final MapRoutePickResult? res =
         await Navigator.of(
@@ -789,7 +764,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             builder: (_) => MapPickRoutePage(
               initialStart: _manualStart,
               initialEnd: _manualEnd,
-              googleApiKey: kMapsApiKey,
             ),
             fullscreenDialog: true,
           ),
@@ -818,196 +792,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
   }
 
-  Future<void> _showPerItemPopup() async {
-    final minItems =
-        _asInt(widget.taskData['minItems'] ?? _calcRequires['minItems']) ?? 1;
-    final maxItems =
-        _asInt(widget.taskData['maxItems'] ?? _calcRequires['maxItems']) ??
-        1000;
-    final def =
-        _asInt(
-          widget.taskData['defaultItemsOnSubmit'] ??
-              widget.taskData['defaultItems'] ??
-              _calcRequires['defaultItemsOnSubmit'] ??
-              _calcRequires['defaultItems'],
-        ) ??
-        1;
-
-    if ((_itemCountCtrl.text).isEmpty) {
-      _itemCountCtrl.text = def.toString();
-    }
-
-    int clamp(int x) => x.clamp(minItems, maxItems).toInt();
-    await showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'items',
-      barrierColor: Colors.black54,
-      useRootNavigator: true,
-      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
-      transitionDuration: const Duration(milliseconds: 180),
-      transitionBuilder: (ctx, anim, _, __child) {
-        return Transform.scale(
-          scale: 0.95 + 0.05 * anim.value,
-          child: Opacity(
-            opacity: anim.value,
-            child: Center(
-              child: Material(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 360),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.format_list_numbered,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'عدد العناصر المنجزة',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.dark,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            _counterButton(
-                              icon: Icons.remove_rounded,
-                              onTap: () {
-                                final cur = _asInt(_itemCountCtrl.text) ?? def;
-                                final next = clamp(cur - 1);
-                                _itemCountCtrl.text = next.toString();
-                                setState(() {});
-                              },
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextField(
-                                controller: _itemCountCtrl,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(),
-                                textAlign: TextAlign.center,
-                                decoration: InputDecoration(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                    horizontal: 12,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  hintText: '$def',
-                                ),
-                                onChanged: (_) => setState(() {}),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            _counterButton(
-                              icon: Icons.add_rounded,
-                              onTap: () {
-                                final cur = _asInt(_itemCountCtrl.text) ?? def;
-                                final next = clamp(cur + 1);
-                                _itemCountCtrl.text = next.toString();
-                                setState(() {});
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'الحد الأدنى: $minItems  •  الأقصى: $maxItems',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 12.5,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => Navigator.of(ctx).pop(),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                    color: AppColors.primary,
-                                    width: 2,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                  ),
-                                ),
-                                child: Text(
-                                  'إلغاء',
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () {
-                                  final raw = _asInt(_itemCountCtrl.text);
-                                  if (raw == null || raw <= 0) {
-                                    _showInlineError('أدخل عددًا صحيحًا.');
-                                    return;
-                                  }
-                                  final safe = clamp(raw);
-                                  _itemCountCtrl.text = safe.toString();
-                                  _chosenItems = safe;
-                                  Navigator.of(ctx).pop();
-                                  setState(() {});
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                ),
-                                child: Text(
-                                  'حفظ',
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final task = widget.taskData;
@@ -1017,18 +801,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final taskId = task['id'] as String?;
     final requiresPhotoExact = true;
     final isTransport = (_autoDistance || _isTransportTask);
-
-    final defaultItems =
-        _asInt(
-          task['defaultItemsOnSubmit'] ??
-              task['defaultItems'] ??
-              _calcRequires['defaultItemsOnSubmit'] ??
-              _calcRequires['defaultItems'],
-        ) ??
-        1;
-    if (_shouldAskCount && _itemCountCtrl.text.isEmpty) {
-      _itemCountCtrl.text = defaultItems.toString();
-    }
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -1186,77 +958,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         ),
                                 ),
 
-                                if (_capturedPath != null && _shouldAskCount)
-                                  Positioned(
-                                    top: 54,
-                                    right: 12,
-                                    child: _roundedGlass(
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 8,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Text(
-                                              'عدد العناصر: ${_chosenItems ?? (_asInt(_itemCountCtrl.text) ?? 1)}',
-                                              style:
-                                                  GoogleFonts.ibmPlexSansArabic(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            InkWell(
-                                              onTap: _showPerItemPopup,
-                                              child: const Icon(
-                                                Icons.edit,
-                                                size: 18,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                if (_capturedPath != null)
-                                  Positioned(
-                                    top: 54,
-                                    left: 12,
-                                    child: _roundedGlass(
-                                      child: InkWell(
-                                        onTap: _showPerItemPopup,
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 8,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              const Icon(
-                                                Icons.format_list_numbered,
-                                                color: Colors.white,
-                                                size: 18,
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                'عدد العناصر',
-                                                style:
-                                                    GoogleFonts.ibmPlexSansArabic(
-                                                      color: Colors.white,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                    ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
+                                // 🧹 تمت إزالة كل ما يخص "عدد العناصر" من فوق الصورة
                                 Positioned(
                                   top: 10,
                                   right: 10,
@@ -1383,15 +1085,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 if (!mounted) return;
                                 if (shot != null) {
                                   setState(() => _capturedPath = shot.path);
-
-                                  if (_shouldAskCount) {
-                                    WidgetsBinding.instance
-                                        .addPostFrameCallback((_) async {
-                                          if (mounted) {
-                                            await _showPerItemPopup();
-                                          }
-                                        });
-                                  }
                                 }
                                 if (mounted) {
                                   setState(() => _isCapturing = false);
@@ -1412,73 +1105,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 : () async {
                                     if (_capturedPath == null) return;
 
+                                    // ما عاد نستخدم عدد العناصر من الواجهة
                                     int? safeItems;
-
-                                    // ✅ استخدم العدّاد إذا:
-                                    // - المهمة أصلاً perItem (_shouldAskCount)
-                                    // - أو المستخدم فتح popup واختار قيمة يدويًا (_chosenItems != null)
-                                    if (_shouldAskCount ||
-                                        _chosenItems != null) {
-                                      var raw =
-                                          _asInt(_itemCountCtrl.text) ??
-                                          _chosenItems;
-
-                                      final minItems =
-                                          _asInt(
-                                            widget.taskData['minItems'] ??
-                                                _calcRequires['minItems'],
-                                          ) ??
-                                          1;
-                                      final maxItems =
-                                          _asInt(
-                                            widget.taskData['maxItems'] ??
-                                                _calcRequires['maxItems'],
-                                          ) ??
-                                          1000;
-
-                                      if (raw == null || raw <= 0) {
-                                        await showGeneralDialog(
-                                          context: context,
-                                          barrierDismissible: true,
-                                          barrierLabel: 'items',
-                                          barrierColor: Colors.black54,
-                                          useRootNavigator: true,
-                                          pageBuilder: (_, __, ___) =>
-                                              const SizedBox.shrink(),
-                                          transitionDuration: const Duration(
-                                            milliseconds: 120,
-                                          ),
-                                          transitionBuilder:
-                                              (ctx, anim, _, __child) {
-                                                WidgetsBinding.instance
-                                                    .addPostFrameCallback((_) {
-                                                      if (mounted) {
-                                                        Navigator.of(ctx).pop();
-                                                        _showPerItemPopup();
-                                                      }
-                                                    });
-                                                return const SizedBox.shrink();
-                                              },
-                                        );
-
-                                        raw =
-                                            _asInt(_itemCountCtrl.text) ??
-                                            _chosenItems;
-                                        if (raw == null || raw <= 0) {
-                                          _showInlineError(
-                                            'أدخل عدد العناصر بشكل صحيح.',
-                                          );
-                                          return;
-                                        }
-                                      }
-
-                                      safeItems = raw
-                                          .clamp(minItems, maxItems)
-                                          .toInt();
-                                      _chosenItems = safeItems;
-                                      _itemCountCtrl.text = safeItems
-                                          .toString();
-                                    }
 
                                     if (!mounted || _isUploading) return;
                                     setState(() => _isUploading = true);
@@ -1966,24 +1594,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _counterButton({required IconData icon, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Ink(
-        decoration: BoxDecoration(
-          color: AppColors.primary,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: SizedBox(
-          width: 46,
-          height: 44,
-          child: Icon(icon, color: Colors.white),
-        ),
       ),
     );
   }

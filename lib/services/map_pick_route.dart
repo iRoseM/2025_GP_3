@@ -6,6 +6,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_place_plus/google_place_plus.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'package:Nameer/secret/api.dart';
+
 class MapRoutePickResult {
   final LatLng start;
   final LatLng end;
@@ -15,14 +17,8 @@ class MapRoutePickResult {
 class MapPickRoutePage extends StatefulWidget {
   final LatLng? initialStart;
   final LatLng? initialEnd;
-  final String googleApiKey; // ✅ مفتاح Places
 
-  const MapPickRoutePage({
-    super.key,
-    this.initialStart,
-    this.initialEnd,
-    required this.googleApiKey,
-  });
+  const MapPickRoutePage({super.key, this.initialStart, this.initialEnd});
 
   @override
   State<MapPickRoutePage> createState() => _MapPickRoutePageState();
@@ -33,8 +29,6 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
   static const _riyadhCenter = LatLng(24.7136, 46.6753);
 
   GoogleMapController? _controller;
-
-  // نقاط المسار
   LatLng? _start;
   LatLng? _end;
 
@@ -50,7 +44,6 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
   String? _sessionStart;
   String? _sessionEnd;
 
-  // مركز التحيّز للبحث (location bias)
   LatLng _biasCenter = _riyadhCenter;
   static const int _biasRadiusMeters = 5000;
 
@@ -58,10 +51,15 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
   LatLng _cameraStart = _riyadhCenter;
   bool _gotGpsOnce = false;
 
+  // لودينق بسيط لما نجيب تفاصيل مكان من الاقتراحات
+  bool _isLoadingPlace = false;
+
   @override
   void initState() {
     super.initState();
-    _places = GooglePlace(widget.googleApiKey);
+
+    _places = GooglePlace(kMapsApiKey);
+
     _start = widget.initialStart;
     _end = widget.initialEnd;
     _sessionStart = _newSessionToken();
@@ -76,6 +74,14 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     _endController.dispose();
     _debounce.dispose();
     super.dispose();
+  }
+
+  // ===== Helper لعرض الأخطاء لليوزر =====
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg, textDirection: TextDirection.rtl)),
+    );
   }
 
   // ===== GPS & تمركز أولي =====
@@ -93,15 +99,27 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         );
         final here = LatLng(pos.latitude, pos.longitude);
         _gotGpsOnce = true;
+
+        //  لو ما عندنا initialStart، خلّي البداية هي موقعي الحالي
+        final label = await _nameForLatLng(here);
+
         setState(() {
           _cameraStart = here;
           _biasCenter = here;
+
+          if (_start == null) {
+            _start = here;
+            _startController.text = label;
+          }
         });
+
         if (_controller != null) {
-          unawaited(_moveCameraTo(here, zoom: 16.5));
+          await _moveCameraTo(here, zoom: 16.5);
         }
       }
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('GPS error: $e\n$st');
+    }
   }
 
   // ===== Helpers =====
@@ -111,6 +129,7 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
   }
 
   double _deg2rad(double deg) => deg * math.pi / 180.0;
+
   double _haversineKm(LatLng a, LatLng b) {
     const R = 6371.0;
     final dLat = _deg2rad(b.latitude - a.latitude);
@@ -163,20 +182,19 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
       _biasCenter = pos;
     });
 
-    // زوم قوي مباشرة (ونعرض InfoWindow)
     await _moveCameraTo(pos, zoom: 17.8);
     await Future.delayed(const Duration(milliseconds: 90));
     _controller?.showMarkerInfoWindow(MarkerId(which));
   }
 
-  // 🔎 بحث نصّي مباشر لو ما اخترت من الاقتراحات
-  // 🔎 بحث نصّي مباشر بالاعتماد على Autocomplete + Details (بدون TextSearchRequest)
+  // 🔎 بحث نصّي مباشر بالاعتماد على Autocomplete + Details
   Future<void> _searchByTextAndGo({
     required String query,
-    required String which, // 'start' أو 'end'
+    required String which,
   }) async {
     if (query.trim().isEmpty) return;
 
+    setState(() => _isLoadingPlace = true);
     try {
       final ac = await _places.autocomplete.get(
         query,
@@ -187,10 +205,25 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         sessionToken: (which == 'start') ? _sessionStart : _sessionEnd,
       );
 
-      final preds = ac?.predictions ?? const <AutocompletePrediction>[];
-      if (preds.isEmpty) return;
+      final status = ac?.status;
+      debugPrint(
+        'Autocomplete status: $status, preds: ${ac?.predictions?.length ?? 0}',
+      );
 
-      final first = preds.first;
+      if (status != 'OK' ||
+          ac?.predictions == null ||
+          ac!.predictions!.isEmpty) {
+        if (!mounted) return;
+        final msg = (status == 'REQUEST_DENIED')
+            ? 'في مشكلة في إعدادات Google Places API key (REQUEST_DENIED).\nتأكدي من تفعيل Places + Billing وضبط القيود في Google Cloud.'
+            : 'ما قدرنا نحدد موقع للمكان المطلوب. (status: $status)';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
+        return;
+      }
+
+      final first = ac.predictions!.first;
       final det = await _places.details.get(
         first.placeId!,
         language: 'ar',
@@ -216,7 +249,21 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
       if (_start != null && _end != null) {
         await _fitBoth();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Places error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'حدث خطأ أثناء البحث عن المكان. تحقق من الاتصال أو إعدادات Google API.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingPlace = false);
+      }
+    }
   }
 
   // اسم ودّي لموقع (lat,lng) بدون إحداثيات صِرفة
@@ -235,7 +282,9 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
       );
       final name = first?.name ?? first?.vicinity;
       if (name != null && name.trim().isNotEmpty) return name;
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('nameForLatLng error: $e\n$st');
+    }
     return 'الموقع على الخريطة';
   }
 
@@ -246,15 +295,19 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         setState(() => _startPreds = []);
         return;
       }
-      final res = await _places.autocomplete.get(
-        value,
-        language: 'ar',
-        components: [Component('country', 'sa')],
-        sessionToken: _sessionStart,
-        location: LatLon(_biasCenter.latitude, _biasCenter.longitude),
-        radius: _biasRadiusMeters,
-      );
-      setState(() => _startPreds = res?.predictions ?? []);
+      try {
+        final res = await _places.autocomplete.get(
+          value,
+          language: 'ar',
+          components: [Component('country', 'sa')],
+          sessionToken: _sessionStart,
+          location: LatLon(_biasCenter.latitude, _biasCenter.longitude),
+          radius: _biasRadiusMeters,
+        );
+        setState(() => _startPreds = res?.predictions ?? []);
+      } catch (e, st) {
+        debugPrint('onStartChanged autocomplete error: $e\n$st');
+      }
     });
   }
 
@@ -264,78 +317,99 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         setState(() => _endPreds = []);
         return;
       }
-      final res = await _places.autocomplete.get(
-        value,
-        language: 'ar',
-        components: [Component('country', 'sa')],
-        sessionToken: _sessionEnd,
-        location: LatLon(_biasCenter.latitude, _biasCenter.longitude),
-        radius: _biasRadiusMeters,
-      );
-      setState(() => _endPreds = res?.predictions ?? []);
+      try {
+        final res = await _places.autocomplete.get(
+          value,
+          language: 'ar',
+          components: [Component('country', 'sa')],
+          sessionToken: _sessionEnd,
+          location: LatLon(_biasCenter.latitude, _biasCenter.longitude),
+          radius: _biasRadiusMeters,
+        );
+        setState(() => _endPreds = res?.predictions ?? []);
+      } catch (e, st) {
+        debugPrint('onEndChanged autocomplete error: $e\n$st');
+      }
     });
   }
 
   Future<void> _pickStartFromPrediction(AutocompletePrediction p) async {
-    final det = await _places.details.get(
-      p.placeId!,
-      language: 'ar',
-      sessionToken: _sessionStart,
-    );
-    final loc = det?.result?.geometry?.location;
-    if (loc == null) return;
-    final pos = LatLng(loc.lat!, loc.lng!);
-
-    // نستخدم اسم المكان (أسهل لليوزر)
-    final label = det?.result?.name ?? p.description ?? 'موقع مختار';
-    _sessionStart = _newSessionToken();
-    setState(() => _startPreds = []);
-
-    // viewport لو موجود بيستعمله Google، لكن نجبر بعدها على موقع دقيق وزوم قوي
-    final vp = det?.result?.geometry?.viewport;
-    if (vp != null && _controller != null) {
-      final bounds = LatLngBounds(
-        southwest: LatLng(vp.southwest!.lat!, vp.southwest!.lng!),
-        northeast: LatLng(vp.northeast!.lat!, vp.northeast!.lng!),
+    setState(() => _isLoadingPlace = true);
+    try {
+      final det = await _places.details.get(
+        p.placeId!,
+        language: 'ar',
+        sessionToken: _sessionStart,
       );
-      await _controller!.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 50),
+      final loc = det?.result?.geometry?.location;
+
+      if (loc == null) {
+        _showError(
+          'ما قدرنا نحدد موقع دقيق لهذا الاسم.\n'
+          'جرّبي اختيار الموقع من الخريطة مباشرة.',
+        );
+        return;
+      }
+
+      final pos = LatLng(loc.lat!, loc.lng!);
+      final label = det?.result?.name ?? p.description ?? 'موقع مختار';
+
+      _sessionStart = _newSessionToken();
+      setState(() => _startPreds = []);
+
+      await _goToExact(pos: pos, which: 'start', labelForTextField: label);
+
+      if (_end != null) {
+        await _fitBoth();
+      }
+    } catch (e, st) {
+      debugPrint('pickStartFromPrediction error: $e\n$st');
+      _showError(
+        'حدث خطأ أثناء تحديد نقطة البداية.\nحاولي مرة أخرى أو حددي الموقع من الخريطة.',
       );
-      await Future.delayed(const Duration(milliseconds: 60));
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingPlace = false);
+      }
     }
-    await _goToExact(pos: pos, which: 'start', labelForTextField: label);
-
-    if (_end != null) _fitBoth();
   }
 
   Future<void> _pickEndFromPrediction(AutocompletePrediction p) async {
-    final det = await _places.details.get(
-      p.placeId!,
-      language: 'ar',
-      sessionToken: _sessionEnd,
-    );
-    final loc = det?.result?.geometry?.location;
-    if (loc == null) return;
-    final pos = LatLng(loc.lat!, loc.lng!);
-
-    final label = det?.result?.name ?? p.description ?? 'موقع مختار';
-    _sessionEnd = _newSessionToken();
-    setState(() => _endPreds = []);
-
-    final vp = det?.result?.geometry?.viewport;
-    if (vp != null && _controller != null) {
-      final bounds = LatLngBounds(
-        southwest: LatLng(vp.southwest!.lat!, vp.southwest!.lng!),
-        northeast: LatLng(vp.northeast!.lat!, vp.northeast!.lng!),
+    setState(() => _isLoadingPlace = true);
+    try {
+      final det = await _places.details.get(
+        p.placeId!,
+        language: 'ar',
+        sessionToken: _sessionEnd,
       );
-      await _controller!.animateCamera(
-        CameraUpdate.newLatLngBounds(bounds, 50),
+      final loc = det?.result?.geometry?.location;
+
+      if (loc == null) {
+        _showError('تعذر البحث عن الموقع');
+        return;
+      }
+
+      final pos = LatLng(loc.lat!, loc.lng!);
+      final label = det?.result?.name ?? p.description ?? 'موقع مختار';
+
+      _sessionEnd = _newSessionToken();
+      setState(() => _endPreds = []);
+
+      await _goToExact(pos: pos, which: 'end', labelForTextField: label);
+
+      if (_start != null) {
+        await _fitBoth();
+      }
+    } catch (e, st) {
+      debugPrint('pickEndFromPrediction error: $e\n$st');
+      _showError(
+        'حدث خطأ أثناء تحديد نقطة النهاية.\nحاولي مرة أخرى أو حددي الموقع من الخريطة.',
       );
-      await Future.delayed(const Duration(milliseconds: 60));
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingPlace = false);
+      }
     }
-    await _goToExact(pos: pos, which: 'end', labelForTextField: label);
-
-    if (_start != null) _fitBoth();
   }
 
   // ===== واجهة =====
@@ -347,7 +421,11 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         Marker(
           markerId: const MarkerId('start'),
           position: _start!,
-          infoWindow: const InfoWindow(title: 'نقطة البداية'),
+          infoWindow: InfoWindow(
+            title: _startController.text.isNotEmpty
+                ? _startController.text
+                : 'نقطة البداية',
+          ),
           icon: BitmapDescriptor.defaultMarkerWithHue(
             BitmapDescriptor.hueGreen,
           ),
@@ -369,7 +447,11 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         Marker(
           markerId: const MarkerId('end'),
           position: _end!,
-          infoWindow: const InfoWindow(title: 'نقطة النهاية'),
+          infoWindow: InfoWindow(
+            title: _endController.text.isNotEmpty
+                ? _endController.text
+                : 'نقطة النهاية',
+          ),
           icon: BitmapDescriptor.defaultMarkerWithHue(
             BitmapDescriptor.hueAzure,
           ),
@@ -401,7 +483,7 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
             onMapCreated: (c) {
               _controller = c;
               if (_gotGpsOnce) {
-                unawaited(_moveCameraTo(_cameraStart, zoom: 16.5));
+                _moveCameraTo(_cameraStart, zoom: 16.5);
               }
             },
             myLocationEnabled: true,
@@ -454,7 +536,9 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
                   );
                   _biasCenter = center;
                 }
-              } catch (_) {}
+              } catch (e, st) {
+                debugPrint('getVisibleRegion error: $e\n$st');
+              }
             },
           ),
 
@@ -520,7 +604,6 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
                     if (_startPreds.isNotEmpty) {
                       await _pickStartFromPrediction(_startPreds.first);
                     } else {
-                      // 🔁 ما في اقتراحات؟ جرّب Text Search مباشرة
                       await _searchByTextAndGo(query: txt, which: 'start');
                     }
                   },
@@ -570,6 +653,15 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
               ),
             ),
 
+          // 🔹 Overlay لودينق لما نختار مكان من الاقتراحات / نبحث بالاسم
+          if (_isLoadingPlace)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.12),
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+            ),
+
           // 🔹 زر اعتماد
           Positioned(
             bottom: 20,
@@ -597,7 +689,7 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         ],
       ),
 
-      // 🔹 أزرار عائمة (مرفوعة شوي وتصغير Reset)
+      // 🔹 أزرار عائمة
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: 72),
         child: Column(
@@ -619,8 +711,11 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
                   setState(() {
                     _biasCenter = here;
                   });
-                  unawaited(_moveCameraTo(here, zoom: 16.5));
-                } catch (_) {}
+                  await _moveCameraTo(here, zoom: 16.5);
+                } catch (e, st) {
+                  debugPrint('center_me error: $e\n$st');
+                  _showError('تعذر جلب موقعك الحالي.');
+                }
               },
               tooltip: 'موقعي الحالي',
               child: const Icon(Icons.my_location),
