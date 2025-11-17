@@ -117,6 +117,45 @@ class _taskPageState extends State<taskPage> {
   DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
   DateTime _monthEnd(DateTime d) => DateTime(d.year, d.month + 1, 0);
 
+  // ====================
+  // جلب خبر جديد للمستخدم
+  // ====================
+  Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
+    try {
+      // نجلب آخر 20 مقال من كولكشن المقالات
+      final snap = await FirebaseFirestore.instance
+          .collection('articles')
+          .orderBy('createdAt', descending: true)
+          .limit(20)
+          .get();
+
+      if (snap.docs.isEmpty) return null;
+
+      // استبعاد المقالات المقروءة سابقاً بواسطة userId
+      final seenSnap = await FirebaseFirestore.instance
+          .collection('articles')
+          .where('userId', isEqualTo: uid)
+          .get();
+
+      final seenUrls = seenSnap.docs.map((d) => d['url']).toSet();
+
+      // نرجّع أول مقال جديد
+      for (var doc in snap.docs) {
+        final data = doc.data();
+        if (!seenUrls.contains(data['url'])) {
+          return {
+            'docId': doc.id,
+            ...data,
+          };
+        }
+      }
+      return null;
+    } catch (e) {
+      print("❌ getFreshNewsForUser ERROR: $e");
+      return null;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -333,7 +372,8 @@ class _taskPageState extends State<taskPage> {
         "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
 
     final utKey = '${_uid!}_${_yyyyMMdd(selected)}';
-    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(utKey);
+    final utRef =
+        FirebaseFirestore.instance.collection('userTasks').doc(utKey);
 
     // 1) مهام الشهر المتاحة
     final tasksSnap = await FirebaseFirestore.instance
@@ -388,31 +428,73 @@ class _taskPageState extends State<taskPage> {
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
     final tKey = '${_uid!}_${_yyyyMMdd(tomorrow)}';
 
-    final ySnap = await FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(yKey)
-        .get();
-    final tSnap = await FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(tKey)
-        .get();
+    final ySnap =
+        await FirebaseFirestore.instance.collection('userTasks').doc(yKey).get();
+    final tSnap =
+        await FirebaseFirestore.instance.collection('userTasks').doc(tKey).get();
+
     if (ySnap.exists) yTaskId = ySnap.data()?['taskId'] as String?;
     if (tSnap.exists) tTaskId = tSnap.data()?['taskId'] as String?;
 
-    // 🔁 استخدم taskId أو id
     final currentTaskId =
         (currentTask['taskId'] ?? currentTask['id']) as String?;
+
     final excluded = <String?>{currentTaskId, yTaskId, tTaskId}
       ..removeWhere((e) => e == null);
-    final pool = validTasks.where((doc) => !excluded.contains(doc.id)).toList();
+
+    final pool =
+        validTasks.where((doc) => !excluded.contains(doc.id)).toList();
+
+    // لو pool فاضي نرجع للـ validTasks
     final finalPool = pool.isEmpty ? validTasks : pool;
+
+    // ===========================
+    // إضافة مهمة الخبر إذا موجود خبر جديد
+    // ===========================
+    final freshNews = await getFreshNewsForUser(_uid!);
+    bool hasFreshNews = freshNews != null;
+
+    List newPool = [];
+
+    if (hasFreshNews) {
+      newPool.add(null); // null = مهمة خبر
+    }
+
+    newPool.addAll(finalPool);
 
     // 3) اختيار عشوائي
     final rnd = Random(DateTime.now().millisecondsSinceEpoch);
-    final picked = finalPool[rnd.nextInt(finalPool.length)];
-    final pickedData = picked.data();
+    final picked = newPool[rnd.nextInt(newPool.length)];
 
-    // 4) حقول منزوعة التطبيع
+    // ===========================
+    // اختيار مهمة "خبر جديد"
+    // ===========================
+    if (picked == null) {
+      final news = freshNews!;
+
+      await utRef.update({
+        'taskId': 'news_dynamic',
+        'taskTitle': 'قراءة خبر بيئي',
+        'taskDescription': 'اقرئي هذا الخبر البيئي ثم أجيبي على الاختبار.',
+        'taskPoints': 10,
+        'taskValidation': 'التحقق عبر اجراء اختبار قصير',
+
+        'taskType': 'news',
+        'articleId': news['docId'],
+        'articleTitle': news['title'],
+        'articleContent': news['content'],
+        'articleImage': news['urlToImage'],
+        'articleSource': news['sourceName'],
+        'articleUrl': news['url'],
+        'articlePublishedAt': news['publishedAt'],
+      });
+
+      _attachUserTaskStreamFor(selected);
+      return;
+    }
+
+    // 4) مهمة عادية (غير خبر)
+    final pickedData = picked.data();
     final denorm = {
       'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
       'taskDescription': pickedData['description'] ?? '',
@@ -427,6 +509,19 @@ class _taskPageState extends State<taskPage> {
     _attachUserTaskStreamFor(selected);
   }
 
+
+  /// إنشاء مهمة اليوم للمستخدم عند عدم وجود مهمة مسبقة.
+  ///
+  /// المنطق:
+  /// - التحقق من صلاحية المهام حسب شهر الظهور والانتهاء.
+  /// - منع تكرار مهمة الأمس.
+  /// - محاولة جلب "خبر جديد" غير مقروء للمستخدم:
+  ///     • إن وجد → يتم إدراج مهمة خبر، وتخزين كامل بيانات المقال داخل userTasks.
+  ///     • إن لم يوجد → يتم اختيار مهمة عادية من مهام الشهر.
+  /// - حفظ جميع حقول المهمة داخل userTasks لتسهيل عرضها لاحقاً بدون API.
+  ///
+  /// الهدف:
+  /// ضمان عدم تكرار الأخبار، ومنع ظهور GAP، وجعل مهمة الخبر تُنشأ فقط عند توفر جديد.
   Future<void> _ensureUserTaskForDate(DateTime day) async {
     if (_uid == null) return;
 
@@ -447,6 +542,7 @@ class _taskPageState extends State<taskPage> {
 
     final monthKey = "${day.year}-${day.month.toString().padLeft(2, '0')}";
 
+    // 1) جلب مهام الشهر
     final tasksSnap = await FirebaseFirestore.instance
         .collection('tasks')
         .where('status', isEqualTo: 'active')
@@ -483,41 +579,87 @@ class _taskPageState extends State<taskPage> {
 
     if (validTasks.isEmpty) return;
 
+    // 2) تجنب تكرار مهمة أمس
     String? yTaskId;
     final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
-    final ySnap = await FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(yKey)
-        .get();
+    final ySnap =
+        await FirebaseFirestore.instance.collection('userTasks').doc(yKey).get();
     if (ySnap.exists) yTaskId = ySnap.data()?['taskId'] as String?;
 
     final excludedIds = {yTaskId}..removeWhere((id) => id == null);
-    final candidates = validTasks
-        .where((doc) => !excludedIds.contains(doc.id))
-        .toList();
-    final pool = candidates.isEmpty ? validTasks : candidates;
+    final candidates =
+        validTasks.where((doc) => !excludedIds.contains(doc.id)).toList();
 
+    final filteredTasks = candidates.isEmpty ? validTasks : candidates;
+
+    // 3) محاولة جلب خبر جديد
+    final freshNews = await getFreshNewsForUser(_uid!);
+    bool canShowNews = freshNews != null;
+
+    // 4) بناء pool شامل (خبر + مهام)
+    List newPool = [];
+    if (canShowNews) {
+      newPool.add(null); // null = مؤشر لمهمة خبر
+    }
+    newPool.addAll(filteredTasks);
+
+    // 5) اختيار عشوائي
     final rnd = Random(
       DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch,
     );
-    final picked = pool[rnd.nextInt(pool.length)];
+
+    final picked = newPool[rnd.nextInt(newPool.length)];
+
+    // تجهيز start/end/status
+    final start = _dayStart(day);
+    final end = _dayEnd(day);
+    final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
+
+    // ==========================
+    // 6) إذا كانت المهمة خبر
+    // ==========================
+    if (picked == null) {
+      final news = freshNews!;
+
+      await ref.set({
+        'userId': _uid,
+        'taskId': 'news_dynamic',
+        'taskTitle': 'قراءة خبر بيئي',
+        'taskDescription': 'اقرئي هذا الخبر البيئي ثم أجيبي على الاختبار.',
+        'taskPoints': 10,
+        'taskValidation': 'التحقق عبر اجراء اختبار قصير',
+
+        'taskType': 'news',
+        'articleId': news['docId'],
+        'articleTitle': news['title'],
+        'articleContent': news['content'],
+        'articleImage': news['urlToImage'],
+        'articleSource': news['sourceName'],
+        'articleUrl': news['url'],
+        'articlePublishedAt': news['publishedAt'],
+
+        'selectedAt': Timestamp.fromDate(start),
+        'windowStart': Timestamp.fromDate(start),
+        'windowEnd': Timestamp.fromDate(end),
+        'status': status,
+        'completedAt': null,
+      });
+      return;
+    }
+
+    // ==========================
+    // 7) مهمة عادية
+    // ==========================
     final pickedData = picked.data();
     final pickedTitle = pickedData['title'] ?? '(بدون عنوان)';
     final pickedDesc = pickedData['description'] ?? '';
     final pickedPoints = pickedData['points'] ?? 0;
-    // final pickedValidation = pickedData['validationStrategy'] ?? 'غير محددة';
-    final pickedValidation =
-    pickedData['validationStrategy'] ??
-    pickedData['validation'] ?? 
-    pickedData['taskValidation'] ??
-    'غير محددة';
+    final pickedValidation = pickedData['validationStrategy'] ??
+        pickedData['validation'] ??
+        pickedData['taskValidation'] ??
+        'غير محددة';
 
-    final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
-    final start = _dayStart(day);
-    final end = _dayEnd(day);
-
-    // ⛔️ لا نضع أي حقل carbonFootPrint هنا
     await ref.set({
       'userId': _uid,
       'taskId': picked.id,
@@ -527,7 +669,6 @@ class _taskPageState extends State<taskPage> {
       'windowStart': Timestamp.fromDate(start),
       'windowEnd': Timestamp.fromDate(end),
 
-      // de-normalized
       'taskTitle': pickedTitle,
       'taskDescription': pickedDesc,
       'taskPoints': pickedPoints,
@@ -714,10 +855,10 @@ class _taskPageState extends State<taskPage> {
                               };
 
                               // ✅ السماح بالإكمال لليوم والماضي فقط
-                              // final canPerformDay = !sel.isAfter(
-                              //   today,
-                              // ); // <= اليوم
-                              final canPerformDay = true; // temporary allow future
+                              final canPerformDay = !sel.isAfter(
+                                today,
+                              ); // <= اليوم
+                              // final canPerformDay = true; // temporary allow future
 
 
                               if ((ut['taskTitle'] == null ||
@@ -1213,7 +1354,7 @@ class _taskPageState extends State<taskPage> {
             ),
           ),
 
-          if (canPerform && !isCompleted) ...[
+          if (canPerform && !isCompleted && !isSubmitted) ...[
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
