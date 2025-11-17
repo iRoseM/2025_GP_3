@@ -868,7 +868,9 @@ class _ReportCardState extends State<_ReportCard> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton.icon(
-                    style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color.fromARGB(255, 220, 92, 83),
+                    ),
                     icon: const Icon(Icons.cancel_outlined),
                     label: const Text('رفض'),
                     onPressed: _busy || decision == 'rejected'

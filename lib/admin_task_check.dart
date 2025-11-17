@@ -915,8 +915,9 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                             Expanded(
                                               child: FilledButton.icon(
                                                 style: FilledButton.styleFrom(
-                                                  backgroundColor:
-                                                      Colors.green, // أخضر
+                                                  backgroundColor: Color(
+                                                    0xFF009688,
+                                                  ), // أخضر
                                                   disabledBackgroundColor:
                                                       Colors.grey[300],
                                                   foregroundColor: Colors.white,
@@ -943,7 +944,12 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                               child: FilledButton.icon(
                                                 style: FilledButton.styleFrom(
                                                   backgroundColor:
-                                                      Colors.red, // أحمر
+                                                      const Color.fromARGB(
+                                                        255,
+                                                        220,
+                                                        92,
+                                                        83,
+                                                      ), // أحمر
                                                   disabledBackgroundColor:
                                                       Colors.grey[300],
                                                   foregroundColor: Colors.white,
