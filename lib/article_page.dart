@@ -79,7 +79,6 @@ class _ArticlePageState extends State<ArticlePage> {
         _error = true;
         _loading = false;
       });
-
     } catch (e) {
       debugPrint("❌ Article load error: $e");
       setState(() {
@@ -148,7 +147,6 @@ class _ArticlePageState extends State<ArticlePage> {
           ),
         ),
       );
-
     } catch (e) {
       debugPrint("❌ generateShortTestVerification error: $e");
       setState(() => _generatingTest = false);
@@ -178,44 +176,46 @@ class _ArticlePageState extends State<ArticlePage> {
       child: Scaffold(
         extendBodyBehindAppBar: true,
         backgroundColor: Colors.transparent,
-        appBar: const NameerAppBar(
-          showBack: true,
-          showTitleInBar: false,
-        ),
+        appBar: const NameerAppBar(showBack: true, showTitleInBar: false),
         body: AnimatedBackgroundContainer(
           child: (_loading)
               ? const Center(
                   child: CircularProgressIndicator(color: AppColors.primary),
                 )
               : _error
-                  ? Center(
-                      child: Text(
-                        "لا يمكن تحميل المقال.",
+              ? Center(
+                  child: Text(
+                    "لا يمكن تحميل المقال.",
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      color: AppColors.dark,
+                      fontSize: 16,
+                    ),
+                  ),
+                )
+              : Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    (topPadding - 55).clamp(0, double.infinity),
+                    16,
+                    16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "مقال اليوم",
                         style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
                           color: AppColors.dark,
-                          fontSize: 16,
                         ),
                       ),
-                    )
-                  : Padding(
-                      padding: EdgeInsets.fromLTRB(16, topPadding - 55, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "مقال اليوم",
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.dark,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
+                      const SizedBox(height: 16),
 
-                          Expanded(child: _buildBodyWithRevealButton()),
-                        ],
-                      ),
-                    ),
+                      Expanded(child: _buildBodyWithRevealButton()),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
@@ -304,10 +304,7 @@ class _ArticlePageState extends State<ArticlePage> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
                     gradient: const LinearGradient(
-                      colors: [
-                        AppColors.primary,
-                        AppColors.tealSoft,
-                      ],
+                      colors: [AppColors.primary, AppColors.tealSoft],
                       begin: Alignment.centerRight,
                       end: Alignment.centerLeft,
                     ),
