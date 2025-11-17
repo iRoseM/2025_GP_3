@@ -543,10 +543,15 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               ),
             ],
           ),
-
+          // 🔥 العدّاد للمهمات التي تم إخفاؤها
+          if (task['status'] == 'hidden' && task['expiry_month'] != null) ...[
+            const SizedBox(height: 8),
+            _buildHideCountdown(task),
+          ],
           // 🔹 تاريخ الانتهاء (للمهام المنتهية فقط) + أيقونة التقويم
           if (statusText == 'منتهية' && task['expiry_month'] != null) ...[
             const SizedBox(height: 6),
+
             Row(
               children: [
                 const Icon(
@@ -570,7 +575,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           const SizedBox(height: 12),
 
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
               IconButton(
                 icon: const Icon(Icons.edit_outlined, color: Colors.grey),
@@ -606,6 +611,109 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHideCountdown(Map<String, dynamic> task) {
+    final exp = task['expiry_month'];
+    if (exp == null) return const SizedBox();
+
+    final parts = exp.split('-');
+    if (parts.length != 2) return const SizedBox();
+
+    final year = int.tryParse(parts[0]) ?? 0;
+    final month = int.tryParse(parts[1]) ?? 0;
+
+    // بداية الشهر القادم
+    final expiryDate = DateTime(year, month, 1);
+    final now = DateTime.now();
+    final diff = expiryDate.difference(now);
+
+    if (diff.isNegative) {
+      return const Text(
+        '🔔 تم تطبيق الإخفاء هذا الشهر',
+        style: TextStyle(
+          fontSize: 13,
+          color: Colors.redAccent,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    }
+
+    final days = diff.inDays;
+    final hours = diff.inHours % 24;
+    final mins = diff.inMinutes % 60;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.timer_outlined, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Text(
+              "متبقّي على بدء تطبيق إخفاء المهمة:",
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[800],
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 10),
+
+        // 👇👇 هنا نضيف المربعات 👇👇
+        Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            timeFlipBox(days.toString().padLeft(2, '0'), "يوم"),
+            const SizedBox(width: 8),
+            timeFlipBox(hours.toString().padLeft(2, '0'), "ساعة"),
+            const SizedBox(width: 8),
+            timeFlipBox(mins.toString().padLeft(2, '0'), "دقيقة"),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget timeFlipBox(String value, String label) {
+    return Column(
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.primary60, width: 1.3),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary33,
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            value,
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: AppColors.dark,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        SizedBox(height: 4),
+        Text(
+          label,
+          style: GoogleFonts.ibmPlexSansArabic(
+            color: AppColors.dark,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 
