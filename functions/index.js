@@ -1,6 +1,5 @@
 // ================== تحميل المتغيرات من ملف .env ==================
 require("dotenv").config();
-console.log("🔥 Current GEMINI_API_KEY:", process.env.GEMINI_API_KEY);
 
 // ================== إعداد Firebase Functions & Admin ==================
 const functions = require("firebase-functions/v1"); // ✅ v1 (عشان auth.user().onCreate & region)
@@ -190,9 +189,6 @@ ${articleText}
     });
 
     const result = await response.json();
-
-    console.log("🔥 Gemini Raw:", JSON.stringify(result, null, 2));
-
     // ✅ لو الـ API رجع error واضح من Google
     if (result.error) {
       console.error("❌ Gemini API error:", result.error);
