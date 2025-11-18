@@ -41,7 +41,7 @@ exports.createUserDoc = functions
 
     const baseData = {
       email: email || null,
-      username: email ? email.split("@")[0] : null,
+      // username: email ? email.split("@")[0] : null,
       role: isAdmin ? "admin" : "regular",
       isVerified: emailVerified,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -61,83 +61,83 @@ exports.createUserDoc = functions
 /* ============================================================
  * reserveUsername (Callable) - v2
  * ============================================================ */
-exports.reserveUsername = onCall(async (request) => {
-  const auth = request.auth;
-  if (!auth || !auth.uid) {
-    throw new HttpsError("unauthenticated", "UNAUTHENTICATED");
-  }
+// exports.reserveUsername = onCall(async (request) => {
+//   const auth = request.auth;
+//   if (!auth || !auth.uid) {
+//     throw new HttpsError("unauthenticated", "UNAUTHENTICATED");
+//   }
 
-  const uid = auth.uid;
-  const usernameRaw = (request.data?.username || "").trim();
-  const username = toLowerSafe(usernameRaw);
+//   const uid = auth.uid;
+//   const usernameRaw = (request.data?.username || "").trim();
+//   const username = toLowerSafe(usernameRaw);
 
-  const re = /^[a-z0-9._-]{3,24}$/;
-  if (!re.test(username)) {
-    throw new HttpsError("invalid-argument", "INVALID_USERNAME");
-  }
+//   const re = /^[a-z0-9._-]{3,24}$/;
+//   if (!re.test(username)) {
+//     throw new HttpsError("invalid-argument", "INVALID_USERNAME");
+//   }
 
-  const db = admin.firestore();
-  const usernameRef = db.collection("usernames").doc(username);
-  const userRef = db.collection("users").doc(uid);
+//   const db = admin.firestore();
+//   const usernameRef = db.collection("usernames").doc(username);
+//   const userRef = db.collection("users").doc(uid);
 
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(usernameRef);
+//   await db.runTransaction(async (tx) => {
+//     const snap = await tx.get(usernameRef);
 
-    if (snap.exists) {
-      const existing = snap.data();
-      if (existing && existing.uid && existing.uid !== uid) {
-        throw new HttpsError("failed-precondition", "USERNAME_TAKEN");
-      }
-    }
+//     if (snap.exists) {
+//       const existing = snap.data();
+//       if (existing && existing.uid && existing.uid !== uid) {
+//         throw new HttpsError("failed-precondition", "USERNAME_TAKEN");
+//       }
+//     }
 
-    tx.set(
-      usernameRef,
-      {
-        uid,
-        reservedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+//     tx.set(
+//       usernameRef,
+//       {
+//         uid,
+//         reservedAt: admin.firestore.FieldValue.serverTimestamp(),
+//       },
+//       { merge: true }
+//     );
 
-    tx.set(
-      userRef,
-      {
-        username: username,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-  });
+//     tx.set(
+//       userRef,
+//       {
+//         username: username,
+//         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+//       },
+//       { merge: true }
+//     );
+//   });
 
-  return { ok: true, username };
-});
+//   return { ok: true, username };
+// });
 
 /* ============================================================
  * markVerified (Callable) - v2
  * ============================================================ */
-exports.markVerified = onCall(async (request) => {
-  const auth = request.auth;
-  if (!auth || !auth.uid) {
-    throw new HttpsError("unauthenticated", "UNAUTHENTICATED");
-  }
-  const uid = auth.uid;
+// exports.markVerified = onCall(async (request) => {
+//   const auth = request.auth;
+//   if (!auth || !auth.uid) {
+//     throw new HttpsError("unauthenticated", "UNAUTHENTICATED");
+//   }
+//   const uid = auth.uid;
 
-  const userRec = await admin.auth().getUser(uid);
-  if (!userRec.emailVerified) {
-    return { ok: false, reason: "NOT_VERIFIED" };
-  }
+//   const userRec = await admin.auth().getUser(uid);
+//   if (!userRec.emailVerified) {
+//     return { ok: false, reason: "NOT_VERIFIED" };
+//   }
 
-  const db = admin.firestore();
-  await db.collection("users").doc(uid).set(
-    {
-      isVerified: true,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+//   const db = admin.firestore();
+//   await db.collection("users").doc(uid).set(
+//     {
+//       isVerified: true,
+//       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+//     },
+//     { merge: true }
+//   );
 
-  return { ok: true };
-});
+//   return { ok: true };
+// });
 
 /* ============================================================
  * generateShortTestVerification (Callable) - v2

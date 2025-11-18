@@ -2136,7 +2136,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
             MaterialPageRoute(builder: (_) => const AdminHomePage()),
             (r) => false,
           );
-          } else {
+        } else {
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const homePage()),
             (r) => false,
@@ -2433,11 +2433,7 @@ class _AnimatedGradientOutlineButtonState
     final gradient = LinearGradient(
       begin: Alignment(-1 + _shift.value, 0),
       end: Alignment(1 + _shift.value, 0),
-      colors: const [
-        AppColors.primary,
-        AppColors.primary,
-        AppColors.mint,
-      ],
+      colors: const [AppColors.primary, AppColors.primary, AppColors.mint],
       stops: const [0.0, 0.5, 1.0],
     );
 
@@ -2508,8 +2504,9 @@ class _GenderChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg =
-        selected ? AppColors.primary.withOpacity(.12) : Colors.transparent;
+    final bg = selected
+        ? AppColors.primary.withOpacity(.12)
+        : Colors.transparent;
     final border = selected ? AppColors.primary : AppColors.light;
     final fg = selected ? AppColors.dark : Colors.black.withOpacity(.7);
 
