@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart'; // 👈 مهم لتمييز الضغط على الجمل
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -41,9 +42,8 @@ class _ArticlePageState extends State<ArticlePage> {
   bool _showReadButton = false;
   bool _generatingTest = false;
 
-  // 📚 إعدادات حجم الخط (نستخدمها مع الـ Slider)
+  // 📚 إعدادات حجم الخط
   double _fontScale = 1.0; // بين 0.8 و 1.3 تقريباً
-
   double get _bodyFontSize => 15 * _fontScale;
   double get _titleFontSize => 22 * _fontScale;
 
@@ -52,9 +52,23 @@ class _ArticlePageState extends State<ArticlePage> {
   bool _isSpeaking = false;
   bool _ttsReady = false;
 
+  // 🎚 سرعة القراءة (base * factor)
+  final double _baseRate = 0.45;
+  final List<double> _speedFactors = [1.0, 1.25, 1.5, 1.75, 2.0];
+  int _speedIndex = 0;
+  double _speechRate = 0.45;
+
+  // 🧩 متابعة القراءة (تقسيم المقال إلى جمل)
+  List<String> _sentences = [];
+  int _currentSentenceIndex = -1;
+
+  // 👆 علشان نقدر نضيف TapGestureRecognizer لكل جملة ونفضّيها في dispose
+  final List<TapGestureRecognizer> _tapRecognizers = [];
+
   @override
   void initState() {
     super.initState();
+    _speechRate = _baseRate * _speedFactors[_speedIndex];
     _initTts();
     _loadStoredArticle();
   }
@@ -63,15 +77,12 @@ class _ArticlePageState extends State<ArticlePage> {
     _tts = FlutterTts();
 
     try {
-      // نفعّل الانتظار إلى أن يخلص speak
       await _tts.awaitSpeakCompletion(true);
 
-      // نحاول نختار صوت سعودي/عربي مدعوم على الجهاز
       final voices = await _tts.getVoices;
       String? selectedLanguage;
 
       if (voices is List) {
-        // نحاول نلقى ar-SA أولاً
         final saVoice = voices.firstWhere(
           (v) =>
               (v is Map &&
@@ -87,10 +98,8 @@ class _ArticlePageState extends State<ArticlePage> {
         );
 
         if (saVoice != null && saVoice is Map) {
-          selectedLanguage = (saVoice['locale'] ?? 'ar-SA')
-              .toString(); // لو لقينا صوت سعودي
+          selectedLanguage = (saVoice['locale'] ?? 'ar-SA').toString();
         } else {
-          // لو ما لقينا سعودي، نحاول أي عربي
           final anyArabic = voices.firstWhere(
             (v) =>
                 v is Map &&
@@ -103,37 +112,24 @@ class _ArticlePageState extends State<ArticlePage> {
         }
       }
 
-      // لو ما قدر يجيب voices، نحاول مباشرة ar-SA ثم ar
       selectedLanguage ??= 'ar-SA';
 
-      // إذا setLanguage رجع error، ممكن يرمي Exception
       await _tts.setLanguage(selectedLanguage);
-      await _tts.setSpeechRate(0.45);
+      await _tts.setSpeechRate(_speechRate);
       await _tts.setPitch(1.0);
 
       _ttsReady = true;
 
-      // التعامل مع انتهاء/إلغاء/خطأ القراءة
-      _tts.setCompletionHandler(() {
-        if (!mounted) return;
-        setState(() => _isSpeaking = false);
-      });
-
-      _tts.setCancelHandler(() {
-        if (!mounted) return;
-        setState(() => _isSpeaking = false);
-      });
-
       _tts.setErrorHandler((message) {
-        debugPrint("TTS error: $message");
         if (!mounted) return;
         setState(() {
           _isSpeaking = false;
+          _currentSentenceIndex = -1;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              "خدمة قراءة المقال غير متاحة أو حدث خطأ في الصوت.",
+              "حدث خطأ في خدمة قراءة المقال.",
               style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
             ),
             backgroundColor: Colors.redAccent,
@@ -141,7 +137,6 @@ class _ArticlePageState extends State<ArticlePage> {
         );
       });
     } catch (e) {
-      debugPrint("TTS init error: $e");
       _ttsReady = false;
     }
   }
@@ -149,6 +144,10 @@ class _ArticlePageState extends State<ArticlePage> {
   @override
   void dispose() {
     _tts.stop();
+    for (final r in _tapRecognizers) {
+      r.dispose();
+    }
+    _tapRecognizers.clear();
     super.dispose();
   }
 
@@ -179,6 +178,8 @@ class _ArticlePageState extends State<ArticlePage> {
           };
           _loading = false;
         });
+
+        _prepareSentences();
         return;
       }
 
@@ -187,7 +188,6 @@ class _ArticlePageState extends State<ArticlePage> {
         _loading = false;
       });
     } catch (e) {
-      debugPrint("❌ Article load error: $e");
       setState(() {
         _error = true;
         _loading = false;
@@ -196,28 +196,62 @@ class _ArticlePageState extends State<ArticlePage> {
   }
 
   // ======================================================
-  // 🔊 تقسيم النص لقطع صغيرة وقراءته
+  // 🧩 تجهيز الجمل للمتابعة
   // ======================================================
-  Future<void> _speakLongText(String text) async {
-    // Android TTS غالباً له حد حول 4000 حرف
-    const int maxLen = 3000;
-    final List<String> parts = [];
+  void _prepareSentences() {
+    final text = (_article?['content'] ?? '').toString().trim();
+    _sentences = [];
 
-    String clean = text.replaceAll('\n', ' ').replaceAll(RegExp(r'\s+'), ' ');
+    if (text.isEmpty) return;
 
-    for (int i = 0; i < clean.length; i += maxLen) {
-      final end = (i + maxLen < clean.length) ? i + maxLen : clean.length;
-      parts.add(clean.substring(i, end));
+    final regex = RegExp(r'([^\.!\؟\?\n]+[\.!\؟\?]?)', multiLine: true);
+    for (final match in regex.allMatches(text)) {
+      final s = match.group(0)?.trim();
+      if (s != null && s.isNotEmpty) {
+        _sentences.add(s);
+      }
     }
 
-    for (final part in parts) {
-      // لو اليوزر وقف القراءة، نطلع من اللوب
-      if (!_isSpeaking) break;
-      await _tts.speak(part);
-      // بفضل awaitSpeakCompletion(true) هي تنتظر لين يخلص الجزء
+    if (_sentences.isEmpty) {
+      _sentences = [text];
     }
   }
 
+  // ======================================================
+  // 🔊 قراءة المقال من جملة معيّنة إلى النهاية
+  // ======================================================
+  Future<void> _speakFromIndex(int startIndex) async {
+    if (_sentences.isEmpty) {
+      _prepareSentences();
+    }
+    if (_sentences.isEmpty) return;
+
+    if (startIndex < 0) startIndex = 0;
+    if (startIndex >= _sentences.length) return;
+
+    for (int i = startIndex; i < _sentences.length; i++) {
+      if (!_isSpeaking) break;
+
+      if (mounted) {
+        setState(() {
+          _currentSentenceIndex = i;
+        });
+      }
+
+      await _tts.speak(_sentences[i]);
+    }
+
+    if (mounted) {
+      setState(() {
+        if (_isSpeaking) {
+          _currentSentenceIndex = -1;
+        }
+        _isSpeaking = false;
+      });
+    }
+  }
+
+  // تشغيل/إيقاف مع الاستمرار من آخر جملة
   Future<void> _toggleSpeak() async {
     if (!_ttsReady) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -249,29 +283,75 @@ class _ArticlePageState extends State<ArticlePage> {
     }
 
     if (_isSpeaking) {
+      // إيقاف مؤقت مع الاحتفاظ بمكاننا
       await _tts.stop();
-      if (mounted) setState(() => _isSpeaking = false);
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          // نحتفظ بـ _currentSentenceIndex عشان نكمل لاحقًا
+        });
+      }
     } else {
       await _tts.stop();
       if (!mounted) return;
-      setState(() => _isSpeaking = true);
-      await _speakLongText(text);
-      // لو خلص كل الأجزاء بدون Error أو Cancel، نوقف الفلاغ
-      if (mounted) setState(() => _isSpeaking = false);
+
+      await _tts.setSpeechRate(_speechRate);
+
+      int startIndex;
+      if (_currentSentenceIndex < 0 ||
+          _currentSentenceIndex >= _sentences.length - 1) {
+        startIndex = 0;
+      } else {
+        startIndex = _currentSentenceIndex + 1;
+      }
+
+      setState(() {
+        _isSpeaking = true;
+      });
+
+      await _speakFromIndex(startIndex);
     }
+  }
+
+  // ✅ تغيير سرعة القراءة بالضغط على زر x1/x1.25... بدون إيقاف الصوت
+  Future<void> _cycleSpeed() async {
+    setState(() {
+      _speedIndex = (_speedIndex + 1) % _speedFactors.length;
+      _speechRate = _baseRate * _speedFactors[_speedIndex];
+    });
+
+    if (!_ttsReady) return;
+
+    // تحديث سرعة القراءة مباشرة، لو الصوت شغال يتغير تدريجيًا
+    await _tts.setSpeechRate(_speechRate);
+  }
+
+  String _speedLabel() {
+    final factor = _speedFactors[_speedIndex];
+    String s;
+    if (factor % 1 == 0) {
+      s = factor.toStringAsFixed(0);
+    } else {
+      s = factor.toStringAsFixed(2);
+      s = s.replaceFirst(RegExp(r'0+$'), '');
+      s = s.replaceFirst(RegExp(r'\.$'), '');
+    }
+    return 'x$s';
   }
 
   // ======================================================
   // 🔥 إنشاء اختبار قصير من الـ Cloud Function
   // ======================================================
   Future<void> _startShortTest() async {
-    final content = (_article?['content'] ?? '').toString();
+    final raw = (_article?['content'] ?? '').toString();
+    final content = raw.trim();
+    final length = content.length;
 
-    if (content.trim().isEmpty) {
+    if (length < 80) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "لا يمكن إنشاء اختبار قصير لأن نص المقال غير متوفر.",
+            "المقال قصير ولا يمكن إنشاء اختبار قصير له.",
             style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
           backgroundColor: AppColors.accent,
@@ -280,26 +360,41 @@ class _ArticlePageState extends State<ArticlePage> {
       return;
     }
 
+    // 🔇 إيقاف القراءة قبل الانتقال للاختبار
+    if (_isSpeaking) {
+      await _tts.stop();
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          _currentSentenceIndex = -1;
+        });
+      }
+    }
+
     setState(() => _generatingTest = true);
 
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable(
-        'generateShortTestVerification',
-      );
+      final functions = FirebaseFunctions.instanceFor(region: 'us-central1');
+      final callable = functions.httpsCallable('generateShortTestVerification');
 
       final result = await callable.call({
         'articleText': content,
         'apiType': 'gemini',
       });
 
-      Map data;
+      Map<String, dynamic> data;
       if (result.data is Map) {
-        data = result.data as Map;
+        data = Map<String, dynamic>.from(result.data as Map);
       } else {
         String raw = result.data.toString();
         raw = raw.replaceAll("```json", "").replaceAll("```", "").trim();
+
+        if (!raw.contains('{') || !raw.contains('}')) {
+          throw Exception('Invalid JSON from function');
+        }
+
         raw = raw.substring(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
-        data = jsonDecode(raw);
+        data = jsonDecode(raw) as Map<String, dynamic>;
       }
 
       final quiz = {
@@ -310,6 +405,7 @@ class _ArticlePageState extends State<ArticlePage> {
 
       setState(() => _generatingTest = false);
 
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -319,8 +415,19 @@ class _ArticlePageState extends State<ArticlePage> {
           ),
         ),
       );
+    } on FirebaseFunctionsException {
+      setState(() => _generatingTest = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "حدث خطأ في إنشاء الاختبار القصير. حاولي مرة أخرى لاحقًا.",
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     } catch (e) {
-      debugPrint("❌ generateShortTestVerification error: $e");
       setState(() => _generatingTest = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -429,14 +536,7 @@ class _ArticlePageState extends State<ArticlePage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                Text(
-                  a['content'] ?? '',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: _bodyFontSize,
-                    height: 1.7,
-                    color: Colors.black87,
-                  ),
-                ),
+                _buildArticleText(),
                 const SizedBox(height: 24),
                 Align(
                   alignment: Alignment.centerRight,
@@ -444,7 +544,7 @@ class _ArticlePageState extends State<ArticlePage> {
                     "المصدر: ${a['sourceName'] ?? ''}",
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 13,
-                      color: Colors.grey.shade700,
+                      color: Colors.grey.shade600,
                     ),
                   ),
                 ),
@@ -504,7 +604,87 @@ class _ArticlePageState extends State<ArticlePage> {
     );
   }
 
+  // 🧠 نص المقال مع متابعة القراءة + إمكانية الضغط على الجملة
+  Widget _buildArticleText() {
+    final text = (_article?['content'] ?? '').toString();
+
+    if (_sentences.isEmpty) {
+      return Text(
+        text,
+        style: GoogleFonts.ibmPlexSansArabic(
+          fontSize: _bodyFontSize,
+          height: 1.7,
+          color: Colors.black87,
+        ),
+      );
+    }
+
+    // فضي الـ recognizers القديمة
+    for (final r in _tapRecognizers) {
+      r.dispose();
+    }
+    _tapRecognizers.clear();
+
+    final spans = <InlineSpan>[];
+
+    for (int i = 0; i < _sentences.length; i++) {
+      final s = _sentences[i] + ' ';
+
+      Color color;
+      if (!_isSpeaking || _currentSentenceIndex == -1) {
+        // ما في قراءة → الكل أسود
+        color = Colors.black87;
+      } else if (i <= _currentSentenceIndex) {
+        // انقرأت → أسود
+        color = Colors.black87;
+      } else {
+        // لسه → رمادي أفتح
+        color = Colors.grey.shade400;
+      }
+
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () async {
+          if (!_ttsReady) return;
+          final content = (_article?['content'] ?? '').toString().trim();
+          if (content.isEmpty) return;
+
+          await _tts.stop();
+          if (!mounted) return;
+
+          await _tts.setSpeechRate(_speechRate);
+
+          setState(() {
+            _isSpeaking = true;
+            _currentSentenceIndex = i - 1;
+          });
+
+          _speakFromIndex(i);
+        };
+
+      _tapRecognizers.add(recognizer);
+
+      spans.add(
+        TextSpan(
+          text: s,
+          style: GoogleFonts.ibmPlexSansArabic(
+            fontSize: _bodyFontSize,
+            height: 1.7,
+            color: color,
+          ),
+          recognizer: recognizer,
+        ),
+      );
+    }
+
+    return RichText(
+      textDirection: TextDirection.rtl,
+      text: TextSpan(children: spans),
+    );
+  }
+
   Widget _buildReadingControls() {
+    final String speedLabel = _speedLabel();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -550,6 +730,29 @@ class _ArticlePageState extends State<ArticlePage> {
                       color: AppColors.primary,
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: _cycleSpeed,
+                    borderRadius: BorderRadius.circular(999),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        speedLabel,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -559,7 +762,7 @@ class _ArticlePageState extends State<ArticlePage> {
     );
   }
 
-  // 🔤 التحكم في حجم الخط كـ Slider
+  // 🔤 التحكم في حجم الخط كـ Slider صغير
   Widget _buildFontSizeControl() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -571,28 +774,23 @@ class _ArticlePageState extends State<ArticlePage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // أ- (صغير)
           Text(
             'أ',
             style: GoogleFonts.ibmPlexSansArabic(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: Colors.grey.shade700,
+              color: Colors.grey.shade600,
             ),
           ),
           const SizedBox(width: 4),
-
-          // الـ Slider بارتفاع صغير
           SizedBox(
             width: 110,
-            height: 24, // 🔹 هذا أهم شيء يقلل الارتفاع
+            height: 24,
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
-                trackHeight: 2, // أنحف
-                thumbShape: const RoundSliderThumbShape(
-                  enabledThumbRadius: 6,
-                ), // أصغر
-                overlayShape: SliderComponentShape.noOverlay, // بدون هالة كبيرة
+                trackHeight: 2,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: SliderComponentShape.noOverlay,
               ),
               child: Slider(
                 min: 0.8,
@@ -607,10 +805,7 @@ class _ArticlePageState extends State<ArticlePage> {
               ),
             ),
           ),
-
           const SizedBox(width: 4),
-
-          // أ+ (كبير)
           Text(
             'أ',
             style: GoogleFonts.ibmPlexSansArabic(

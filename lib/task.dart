@@ -123,54 +123,38 @@ class _taskPageState extends State<taskPage> {
   // ====================
   // جلب خبر جديد للمستخدم
   // ====================
-  // ====================
-// جلب خبر جديد للمستخدم (منع التكرار لكل مستخدم فقط)
-// ====================
-Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
-  try {
-    // 1) نجلب آخر 20 مقال من كولكشن المقالات (عامة للجميع)
-    final snap = await FirebaseFirestore.instance
-        .collection('articles')
-        .orderBy('createdAt', descending: true)
-        .limit(20)
-        .get();
+  Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
+    try {
+      // نجلب آخر 20 مقال من كولكشن المقالات
+      final snap = await FirebaseFirestore.instance
+          .collection('articles')
+          .orderBy('createdAt', descending: true)
+          .limit(20)
+          .get();
 
-    if (snap.docs.isEmpty) return null;
+      if (snap.docs.isEmpty) return null;
 
-    // 2) نجيب المقالات اللي سبق ظهرت لهذا المستخدم في مهام الأخبار
-    //    من كولكشن userTasks (مو من articles)
-    final seenSnap = await FirebaseFirestore.instance
-        .collection('userTasks')
-        .where('userId', isEqualTo: uid)
-        .where('taskType', isEqualTo: 'news')
-        .limit(50) // عدد كافي للتاريخ القريب
-        .get();
+      // استبعاد المقالات المقروءة سابقاً بواسطة userId
+      final seenSnap = await FirebaseFirestore.instance
+          .collection('articles')
+          .where('userId', isEqualTo: uid)
+          .get();
 
-    final seenUrls = seenSnap.docs
-        .map((d) => d.data()['articleUrl'])
-        .where((u) => u != null && (u as String).isNotEmpty)
-        .cast<String>()
-        .toSet();
+      final seenUrls = seenSnap.docs.map((d) => d['url']).toSet();
 
-    // 3) نرجع أول مقال "جديد" على هذا اليوزر
-    for (var doc in snap.docs) {
-      final data = doc.data();
-      final url = (data['url'] ?? '').toString();
-
-      // لو اليوزر ما سبق جاءته مهمة فيها هذا المقال → نعطيه ياها
-      if (url.isEmpty || !seenUrls.contains(url)) {
-        return {'docId': doc.id, ...data};
+      // نرجّع أول مقال جديد
+      for (var doc in snap.docs) {
+        final data = doc.data();
+        if (!seenUrls.contains(data['url'])) {
+          return {'docId': doc.id, ...data};
+        }
       }
+      return null;
+    } catch (e) {
+      debugPrint("❌ getFreshNewsForUser ERROR: $e");
+      return null;
     }
-
-    // لو كل العشرين مقال سبق شافهم في مهامه → ما فيه خبر جديد
-    return null;
-  } catch (e) {
-    debugPrint("❌ getFreshNewsForUser ERROR: $e");
-    return null;
   }
-}
-
 
   @override
   void initState() {
@@ -409,7 +393,7 @@ Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
   // =======================
   // ✅ تحديث مهمة اليوم المختار + الحقول المنزوعة التطبيع
   // =======================
-   Future<void> _refreshUserTask(Map<String, dynamic> currentTask) async {
+  Future<void> _refreshUserTask(Map<String, dynamic> currentTask) async {
     if (_uid == null || _selectedDay == null) return;
 
     final selected = _dayStart(_selectedDay!);
@@ -452,7 +436,6 @@ Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
     }).toList();
 
     if (validTasks.isEmpty) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -486,52 +469,33 @@ Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
     if (tSnap.exists) tTaskId = tSnap.data()?['taskId'] as String?;
 
     final currentTaskId =
-        (currentTask['taskId'] ?? currentTask['id'])?.toString();
+        (currentTask['taskId'] ?? currentTask['id']) as String?;
 
-    final excluded = <String>{};
-    if (currentTaskId != null && currentTaskId.isNotEmpty) {
-      excluded.add(currentTaskId);
-    }
-    if (yTaskId != null && yTaskId!.isNotEmpty) {
-      excluded.add(yTaskId!);
-    }
-    if (tTaskId != null && tTaskId!.isNotEmpty) {
-      excluded.add(tTaskId!);
-    }
+    final excluded = <String?>{currentTaskId, yTaskId, tTaskId}
+      ..removeWhere((e) => e == null);
 
-    // مهام بديلة فعلاً مختلفة عن الحالية وأمس وبكرة
-    final pool =
-        validTasks.where((doc) => !excluded.contains(doc.id)).toList();
+    final pool = validTasks.where((doc) => !excluded.contains(doc.id)).toList();
 
-    // 3) نحاول خبر جديد للمستخدم
+    // لو pool فاضي نرجع للـ validTasks
+    final finalPool = pool.isEmpty ? validTasks : pool;
+
+    // ===========================
+    // إضافة مهمة الخبر إذا موجود خبر جديد (للـ refresh فقط)
+    // ===========================
     final freshNews = await getFreshNewsForUser(_uid!);
-    final hasFreshNews = freshNews != null;
+    bool hasFreshNews = freshNews != null;
 
-    // 🔹 لو مافي ولا مهمة بديلة و لا خبر جديد → ما نغيّر المهمة
-    if (pool.isEmpty && !hasFreshNews) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'لا توجد مهمة بديلة لهذا اليوم.',
-            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-          ),
-          backgroundColor: AppColors.primary,
-        ),
-      );
-      return;
+    List newPool = [];
+
+    if (hasFreshNews) {
+      newPool.add(null); // null = مهمة خبر
     }
 
-    // 4) نبني الـ pool النهائي:
-    //    - لو فيه خبر فقط → [null]
-    //    - لو فيه مهام فقط → pool
-    //    - لو فيه الاثنين → [null, ...pool]
-    final List<dynamic> finalPool = [];
-    if (hasFreshNews) finalPool.add(null); // null = مهمة خبر
-    finalPool.addAll(pool);
+    newPool.addAll(finalPool);
 
+    // 3) اختيار عشوائي
     final rnd = Random(DateTime.now().millisecondsSinceEpoch);
-    final picked = finalPool[rnd.nextInt(finalPool.length)];
+    final picked = newPool[rnd.nextInt(newPool.length)];
 
     // ===========================
     // اختيار مهمة "خبر جديد"
@@ -560,10 +524,8 @@ Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
       return;
     }
 
-    // 5) مهمة عادية (غير خبر)
-    final pickedDoc = picked as QueryDocumentSnapshot<Map<String, dynamic>>;
-    final pickedData = pickedDoc.data();
-
+    // 4) مهمة عادية (غير خبر)
+    final pickedData = picked.data();
     final denorm = {
       'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
       'taskDescription': pickedData['description'] ?? '',
@@ -571,23 +533,11 @@ Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
       'taskValidation': pickedData['validationStrategy'] ?? 'غير محددة',
     };
 
-    await utRef.update({
-      'taskId': pickedDoc.id,
-      ...denorm,
-    });
+    // 5) تحديث وثيقة اليوم
+    await utRef.update({'taskId': picked.id, ...denorm});
 
+    // 6) إعادة ربط الستريم
     _attachUserTaskStreamFor(selected);
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'تم تغيير المهمة لليوم ✨',
-          style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-        ),
-        backgroundColor: AppColors.primary,
-      ),
-    );
   }
 
   /// إنشاء مهمة اليوم للمستخدم عند عدم وجود مهمة مسبقة.
@@ -817,195 +767,188 @@ Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
                   : kBottomNavigationBarHeight + 24;
 
               return SingleChildScrollView(
-  padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPad),
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        'مهامي',
-        style: GoogleFonts.ibmPlexSansArabic(
-          fontSize: 24,
-          fontWeight: FontWeight.w700,
-          color: AppColors.dark,
-        ),
-      ),
-      const SizedBox(height: 15),
-
-      _buildGrowthIndicator(
-        levelName: 'بذرة',
-        level: 1,
-        tasksPerDay: 1,
-        progressToNext: 0.45,
-      ),
-
-      const SizedBox(height: 15),
-      _buildCalendar(),
-      const SizedBox(height: 8),
-
-      (!_precheckDone)
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: CircularProgressIndicator(
-                  color: AppColors.primary,
-                ),
-              ),
-            )
-          : (_precheckError != null)
-              ? _buildUnavailableCard(
-                  title: 'تعذّر تحميل مهمة اليوم',
-                  subtitle: (_precheckError == 'permission-denied')
-                      ? 'صلاحيات غير كافية لقراءة مهامك. تأكدي أنك مسجّلة دخولًا وأن قواعد Firestore تسمح لصاحب الوثيقة بالقراءة.'
-                      : (_precheckError!.contains('unavailable') ||
-                              _precheckError!.contains('network'))
-                          ? 'مشكلة اتصال مؤقتة. تحقّقي من الإنترنت ثم جرّبي التحديث.'
-                          : 'خطأ: $_precheckError',
-                )
-              : (_userTaskStream == null)
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 40),
-                        child: CircularProgressIndicator(
-                          color: AppColors.primary,
-                        ),
+                padding: EdgeInsets.fromLTRB(16, topPadding, 16, bottomPad),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'مهامي',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
                       ),
-                    )
-                  : StreamBuilder<DocumentSnapshot>(
-                      stream: _userTaskStream!,
-                      builder: (context, snap) {
-                        if (snap.connectionState == ConnectionState.waiting) {
-                          return const Center(
+                    ),
+                    const SizedBox(height: 15),
+
+                    _buildGrowthIndicator(
+                      levelName: 'بذرة',
+                      level: 1,
+                      tasksPerDay: 1,
+                      progressToNext: 0.45,
+                    ),
+
+                    const SizedBox(height: 15),
+                    _buildCalendar(),
+                    const SizedBox(height: 8),
+
+                    (!_precheckDone)
+                        ? const Center(
                             child: Padding(
                               padding: EdgeInsets.symmetric(vertical: 40),
                               child: CircularProgressIndicator(
                                 color: AppColors.primary,
                               ),
                             ),
-                          );
-                        }
-
-                        final sel =
-                            _selectedDay ?? _dayStart(DateTime.now());
-                        final today = _dayStart(DateTime.now());
-                        final nextMonthStart = DateTime(
-                          today.year,
-                          today.month + 1,
-                          1,
-                        );
-
-                        // ⬇️ نستخدم اليوم بدون وقت
-                        final selDayOnly = _dayStart(sel);
-                        final todayDayOnly = _dayStart(DateTime.now());
-
-                        if (_joinDate != null && sel.isBefore(_joinDate!)) {
-                          return _buildUnavailableCard(
-                            title: 'غير متاحة',
-                            subtitle: 'لم تكن ضمن نمير في هذا التاريخ.',
-                          );
-                        }
-
-                        if (!snap.hasData || !snap.data!.exists) {
-                          return _buildUnavailableCard(
-                            title: 'لا توجد مهام متاحة',
-                            subtitle: 'لا توجد مهمة لليوم المحدد.',
-                          );
-                        }
-
-                        final ut =
-                            snap.data!.data() as Map<String, dynamic>;
-
-                        final newStatus =
-                            (ut['status'] as String?) ?? 'pending';
-                        _updateMonthStatusFor(sel, newStatus);
-
-                        if (sel.isAfter(nextMonthStart)) {
-                          return _buildUnavailableCard(
-                            title: 'غير متاحة',
-                            subtitle:
-                                'هذا الشهر لم يُفتح بعد. الرجاء العودة لاحقًا.',
-                          );
-                        }
-
-                        // ✅ نمرّر taskId + id (نفس القيمة) + باقي الحقول
-                        final data = <String, dynamic>{
-                          'taskId': ut['taskId'] ?? '',
-                          'title':
-                              ut['taskTitle'] ?? '(بدون عنوان)',
-                          'description':
-                              ut['taskDescription'] ?? '',
-                          'points': ut['taskPoints'] ?? 0,
-                          'validationStrategy':
-                              ut['taskValidation'] ?? 'غير محددة',
-                          'id': ut['taskId'] ?? '',
-                          'status': ut['status'] ?? 'pending',
-                        };
-
-                        // ✅ السماح بالإكمال لليوم فقط
-                        final bool canPerformDay =
-                            selDayOnly.isAtSameMomentAs(todayDayOnly);
-
-                        if ((ut['taskTitle'] == null ||
-                                ut['taskDescription'] == null) &&
-                            ut['taskId'] != null) {
-                          return FutureBuilder<DocumentSnapshot>(
-                            future: FirebaseFirestore.instance
-                                .collection('tasks')
-                                .doc(ut['taskId'])
-                                .get(),
-                            builder: (context, tSnap) {
-                              if (tSnap.connectionState ==
+                          )
+                        : (_precheckError != null)
+                        ? _buildUnavailableCard(
+                            title: 'تعذّر تحميل مهمة اليوم',
+                            subtitle: (_precheckError == 'permission-denied')
+                                ? 'صلاحيات غير كافية لقراءة مهامك. تأكدي أنك مسجّلة دخولًا وأن قواعد Firestore تسمح لصاحب الوثيقة بالقراءة.'
+                                : (_precheckError!.contains('unavailable') ||
+                                      _precheckError!.contains('network'))
+                                ? 'مشكلة اتصال مؤقتة. تحقّقي من الإنترنت ثم جرّبي التحديث.'
+                                : 'خطأ: $_precheckError',
+                          )
+                        : (_userTaskStream == null)
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 40),
+                              child: CircularProgressIndicator(
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          )
+                        : StreamBuilder<DocumentSnapshot>(
+                            stream: _userTaskStream!,
+                            builder: (context, snap) {
+                              if (snap.connectionState ==
                                   ConnectionState.waiting) {
                                 return const Center(
                                   child: Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: 40,
-                                    ),
+                                    padding: EdgeInsets.symmetric(vertical: 40),
                                     child: CircularProgressIndicator(
                                       color: AppColors.primary,
                                     ),
                                   ),
                                 );
                               }
-                              if (!tSnap.hasData || !tSnap.data!.exists) {
+
+                              final sel = _dayStart(
+                                _selectedDay ?? DateTime.now(),
+                              );
+                              final today = _dayStart(DateTime.now());
+                              final nextMonthStart = DateTime(
+                                today.year,
+                                today.month + 1,
+                                1,
+                              );
+
+                              if (_joinDate != null &&
+                                  sel.isBefore(_joinDate!)) {
                                 return _buildUnavailableCard(
-                                  title: 'المهمة غير متاحة',
-                                  subtitle: 'قد تكون حُذفت من النظام.',
+                                  title: 'غير متاحة',
+                                  subtitle: 'لم تكن ضمن نمير في هذا التاريخ.',
                                 );
                               }
-                              final td = tSnap.data!.data()
-                                  as Map<String, dynamic>;
-                              final fData = {
-                                'taskId': ut['taskId'],
-                                'title':
-                                    td['title'] ?? '(بدون عنوان)',
-                                'description':
-                                    td['description'] ?? '',
-                                'points': td['points'] ?? 0,
+
+                              if (!snap.hasData || !snap.data!.exists) {
+                                return _buildUnavailableCard(
+                                  title: 'لا توجد مهام متاحة',
+                                  subtitle: 'لا توجد مهمة لليوم المحدد.',
+                                );
+                              }
+
+                              final ut =
+                                  snap.data!.data() as Map<String, dynamic>;
+
+                              final newStatus =
+                                  (ut['status'] as String?) ?? 'pending';
+                              _updateMonthStatusFor(sel, newStatus);
+
+                              if (sel.isAfter(nextMonthStart)) {
+                                return _buildUnavailableCard(
+                                  title: 'غير متاحة',
+                                  subtitle:
+                                      'هذا الشهر لم يُفتح بعد. الرجاء العودة لاحقًا.',
+                                );
+                              }
+
+                              // ✅ نمرّر taskId + id (نفس القيمة) + باقي الحقول
+                              final data = <String, dynamic>{
+                                'taskId': ut['taskId'] ?? '',
+                                'title': ut['taskTitle'] ?? '(بدون عنوان)',
+                                'description': ut['taskDescription'] ?? '',
+                                'points': ut['taskPoints'] ?? 0,
                                 'validationStrategy':
-                                    td['validationStrategy'] ??
-                                        'غير محددة',
-                                'id': ut['taskId'],
-                                'status':
-                                    ut['status'] ?? 'pending',
+                                    ut['taskValidation'] ?? 'غير محددة',
+                                'id': ut['taskId'] ?? '',
+                                'status': ut['status'] ?? 'pending',
                               };
+
+                              // ✅ السماح بالإكمال لليوم والماضي فقط
+                              final canPerformDay = !sel.isAfter(today);
+
+                              if ((ut['taskTitle'] == null ||
+                                      ut['taskDescription'] == null) &&
+                                  ut['taskId'] != null) {
+                                return FutureBuilder<DocumentSnapshot>(
+                                  future: FirebaseFirestore.instance
+                                      .collection('tasks')
+                                      .doc(ut['taskId'])
+                                      .get(),
+                                  builder: (context, tSnap) {
+                                    if (tSnap.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 40,
+                                          ),
+                                          child: CircularProgressIndicator(
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    if (!tSnap.hasData || !tSnap.data!.exists) {
+                                      return _buildUnavailableCard(
+                                        title: 'المهمة غير متاحة',
+                                        subtitle: 'قد تكون حُذفت من النظام.',
+                                      );
+                                    }
+                                    final td =
+                                        tSnap.data!.data()
+                                            as Map<String, dynamic>;
+                                    final fData = {
+                                      'taskId': ut['taskId'],
+                                      'title': td['title'] ?? '(بدون عنوان)',
+                                      'description': td['description'] ?? '',
+                                      'points': td['points'] ?? 0,
+                                      'validationStrategy':
+                                          td['validationStrategy'] ??
+                                          'غير محددة',
+                                      'id': ut['taskId'],
+                                      'status': ut['status'] ?? 'pending',
+                                    };
+                                    return _buildUserTaskCard(
+                                      taskData: fData,
+                                      canPerform: canPerformDay,
+                                    );
+                                  },
+                                );
+                              }
+
                               return _buildUserTaskCard(
-                                taskData: fData,
+                                taskData: data,
                                 canPerform: canPerformDay,
                               );
                             },
-                          );
-                        }
-
-                        return _buildUserTaskCard(
-                          taskData: data,
-                          canPerform: canPerformDay,
-                        );
-                      },
-                    ),
-    ],
-  ),
-);
-
+                          ),
+                  ],
+                ),
+              );
             },
           ),
         ),
@@ -1301,7 +1244,7 @@ Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
     final validation = taskData['validationStrategy'] ?? 'غير محددة';
     final status = taskData['status'] ?? 'pending';
 
-    final sel = _selectedDay ?? _dayStart(DateTime.now());
+    final sel = _dayStart(_selectedDay ?? DateTime.now());
     final uid = _uid ?? '';
     final userTaskDocId = uid.isEmpty ? '' : '${uid}_${_yyyyMMdd(sel)}';
 
@@ -1505,7 +1448,7 @@ Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
                               ? 'بانتظار المراجعة ⏳'
                               : (canPerform
                                     ? 'بدء المهمة'
-                                    : 'يومها لم يحن بعد 🌞')),
+                                    : 'يومها لم يحن بعد ')),
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
