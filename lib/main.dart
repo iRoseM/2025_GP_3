@@ -2046,7 +2046,6 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
 }
 
 /* ======================= صفحة إشعار التحقق من البريد ======================= */
-
 class VerifyEmailPage extends StatefulWidget {
   final String email;
   const VerifyEmailPage({super.key, required this.email});
@@ -2077,8 +2076,9 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
       await user.sendEmailVerification();
 
       if (!mounted) return;
+      // ✅ رسالة قصيرة بأسلوب Slack message
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ تم إرسال رسالة التحقق مجددًا')),
+        const SnackBar(content: Text('✉️ تم إعادة إرسال رسالة التحقق')),
       );
     } on FirebaseAuthException catch (e) {
       String msg = 'تعذّر الإرسال (${e.code})';
@@ -2123,6 +2123,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
+        // ✅ رسالة قصيرة وواضحة
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('✅ تم تأكيد التحقق وتحديث الحساب')),
         );
@@ -2135,18 +2136,17 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
             MaterialPageRoute(builder: (_) => const AdminHomePage()),
             (r) => false,
           );
-        } else {
+          } else {
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const homePage()),
             (r) => false,
           );
         }
       } else {
+        // ⚠️ مستخدم ضغط "تحققت الآن" لكن البريد لسه مو متحقق
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'غير متحقق بعد — افتح رابط البريد ثم اضغط "تحققت الآن"',
-            ),
+            content: Text('⚠️ لم يتم التحقق من البريد الإلكتروني بعد'),
           ),
         );
       }
@@ -2430,23 +2430,23 @@ class _AnimatedGradientOutlineButtonState
     const double borderRadius = 28;
     const double borderWidth = 2;
 
+    final gradient = LinearGradient(
+      begin: Alignment(-1 + _shift.value, 0),
+      end: Alignment(1 + _shift.value, 0),
+      colors: const [
+        AppColors.primary,
+        AppColors.primary,
+        AppColors.mint,
+      ],
+      stops: const [0.0, 0.5, 1.0],
+    );
+
     return MouseRegion(
       onEnter: (_) => _ctrl.forward(),
       onExit: (_) => _ctrl.reverse(),
       child: AnimatedBuilder(
         animation: _shift,
         builder: (_, __) {
-          final gradient = LinearGradient(
-            begin: Alignment(-1 + _shift.value, 0),
-            end: Alignment(1 + _shift.value, 0),
-            colors: const [
-              AppColors.primary,
-              AppColors.primary,
-              AppColors.mint,
-            ],
-            stops: const [0.0, 0.5, 1.0],
-          );
-
           return Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(borderRadius),
@@ -2508,9 +2508,8 @@ class _GenderChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected
-        ? AppColors.primary.withOpacity(.12)
-        : Colors.transparent;
+    final bg =
+        selected ? AppColors.primary.withOpacity(.12) : Colors.transparent;
     final border = selected ? AppColors.primary : AppColors.light;
     final fg = selected ? AppColors.dark : Colors.black.withOpacity(.7);
 
