@@ -43,6 +43,7 @@ dependencies:
   flutter_background_service_android: ^6.2.2
   google_place_plus: ^1.0.0  
   flutter_tts: ^3.8.5
+  showcaseview: ^5.0.1
 
 
 dev_dependencies:
@@ -66,6 +67,9 @@ flutter:
     - assets/img/paperPin.png
     - assets/img/rvmPin.png
     - assets/img/foodPin.png
+    - assets/img/nameerLeft.png
+    - assets/img/nameerRight.png
+    - assets/img/nameerStand.png
 
 flutter_native_splash:
   color: "#FAFCFB"
