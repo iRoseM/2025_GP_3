@@ -112,9 +112,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
         child: Scaffold(
           extendBody: true,
           backgroundColor: AppColors.background,
-          // appBar: const NameerAppBar(
-          //   showTitleInBar: false, // 👈 عشان ما يطلع عنوان داخل الهيدر
-          // ),
           body: AnimatedBackgroundContainer(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(18),
@@ -255,46 +252,167 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
                   const SizedBox(height: 26),
 
-                  // 📊 Dashboard Container
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 20,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.15),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "📊 نظرة عامة على النظام",
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.dark,
+                  // 📊 Dashboard Container — تسحب القيم من Firestore (فقط المستخدمين الموثقين)
+                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .where('isVerified', isEqualTo: true) // ✅ فقط الموثقين
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 20,
                           ),
-                        ),
-                        const SizedBox(height: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.grey.withOpacity(0.15),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            "جاري تحميل الإحصائيات...",
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                        );
+                      }
 
-                        _buildStat("إجمالي المستخدمين المسجلين", "121"),
-                        _divider(),
-                        _buildStat("إجمالي المهام المستدامة المكتملة", "2,344"),
-                        _divider(),
-                        _buildStat("إجمالي النقاط الموزعة", "148,900"),
-                        _divider(),
-                        _buildStat("الأثر الكربوني الإجمالي", "122.42 كجم"),
-                      ],
-                    ),
+                      if (snapshot.hasError) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 20,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.grey.withOpacity(0.15),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            "حدث خطأ أثناء تحميل الإحصائيات.",
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red,
+                            ),
+                          ),
+                        );
+                      }
+
+                      final docs = snapshot.data?.docs ?? [];
+                      final totalUsers = docs.length;
+
+                      num totalPoints = 0;
+                      num totalCarbon = 0;
+                      num totalCompletedTasks = 0; // ✅ مجموع completedTask
+
+                      for (final doc in docs) {
+                        final data = doc.data();
+
+                        // points
+                        final p = data['points'];
+                        if (p is num) {
+                          totalPoints += p;
+                        } else if (p != null) {
+                          totalPoints += num.tryParse(p.toString()) ?? 0;
+                        }
+
+                        // totalCarbonSaved
+                        final c = data['totalCarbonSaved'];
+                        if (c is num) {
+                          totalCarbon += c;
+                        } else if (c != null) {
+                          totalCarbon += num.tryParse(c.toString()) ?? 0;
+                        }
+
+                        // ✅ completedTask
+                        final ct = data['completedTask'];
+                        if (ct is num) {
+                          totalCompletedTasks += ct;
+                        } else if (ct != null) {
+                          totalCompletedTasks +=
+                              num.tryParse(ct.toString()) ?? 0;
+                        }
+                      }
+
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 20,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "📊 نظرة عامة على النظام",
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+
+                            // إجمالي المستخدمين (الموثقين فقط)
+                            _buildStat(
+                              "إجمالي المستخدمين الموثقين",
+                              totalUsers.toString(),
+                            ),
+                            _divider(),
+
+                            // ✅ إجمالي المهام المكتملة (من حقل completedTask في users)
+                            _buildStat(
+                              "إجمالي المهام المستدامة المكتملة",
+                              totalCompletedTasks.toStringAsFixed(0),
+                            ),
+                            _divider(),
+
+                            // مجموع النقاط
+                            _buildStat(
+                              "إجمالي النقاط الموزعة",
+                              totalPoints.toStringAsFixed(0),
+                            ),
+                            _divider(),
+
+                            // مجموع الكربون
+                            _buildStat(
+                              "الأثر الكربوني الإجمالي",
+                              "${totalCarbon.toStringAsFixed(2)} كجم",
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
 
                   const SizedBox(height: 16),

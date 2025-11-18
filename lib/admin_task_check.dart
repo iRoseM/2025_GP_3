@@ -251,9 +251,8 @@ Future<CarbonCalcResult?> computeCarbonForTask({
     meta.addAll({
       'count': count,
       'ef_baseline_id': baselineRef,
-      'ef_actual_id': actualRef,
-      'baseline_per_item': base,
       'actual_per_item': act,
+      'baseline_per_item': base,
       'delta_per_item': delta,
     });
   } else {
@@ -1151,9 +1150,14 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         if (itemCount > 0) utUpdate['itemCount'] = itemCount;
         trx.update(utRef, utUpdate);
 
-        // 🪙 إضافة النقاط للمستخدم مرة واحدة فقط
+        // 🪙 إضافة النقاط + عدد المهام المكتملة للمستخدم مرة واحدة فقط
         if (canComplete && taskPoints > 0) {
-          trx.update(usersRef, {'points': FieldValue.increment(taskPoints)});
+          trx.update(usersRef, {
+            'points': FieldValue.increment(taskPoints),
+            'completedTask': FieldValue.increment(
+              1,
+            ), // 🔢 يزيد 1 (حتى لو الحقل مو موجود، Firestore ينشئه)
+          });
         }
 
         // 🕒 history log
