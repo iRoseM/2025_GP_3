@@ -46,6 +46,7 @@ class CompleteTaskSheet extends StatefulWidget {
 class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
+  final TextEditingController _itemCountCtrl = TextEditingController();
 
   bool _ready = false;
   bool _openingCamera = false;
@@ -70,8 +71,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   LatLng? _manualEnd;
   double? _manualDistanceKm;
 
-  // 🚫 ما عاد بنستخدم خانة عدد العناصر في الواجهة، بس نخلي باقي المنطق الموجود للمرونة
-  // (ما في TextEditingController ولا _chosenItems مستخدمين في الـ UI الآن).
+  // ✅ عدد العناصر المدخَل في الـ popup
+  int? _itemCount;
 
   Map<String, dynamic> get _calcRequires {
     final v = widget.taskData['calc_requires'];
@@ -117,8 +118,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       (widget.taskData['itemsEnabled'] == true) ||
       (widget.taskData['perItem'] == true);
 
-  // ✅ تعطيل خانة "عدد العناصر" بالكامل من الواجهة
+  // 🚫 ما عاد نستخدم خانة "عدد العناصر" في الواجهة (لكن نستخدم popup)
   bool get _shouldAskCount => false;
+
+  // ✅ هل هذه المهمة تحتاج popup لعدد العناصر؟
+  bool get _requiresItemDialog {
+    final mode = (widget.taskData['calcMode'] ?? '')
+        .toString()
+        .toLowerCase()
+        .trim();
+    return mode == 'deltaperitem';
+  }
 
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
@@ -751,6 +761,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   @override
   void dispose() {
     _controller?.dispose();
+    _itemCountCtrl.dispose();
     super.dispose();
   }
 
@@ -790,6 +801,211 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         _openCamera();
       }
     });
+  }
+
+  // ======================================================
+  // ✅ Popup لإدخال عدد العناصر عند calcMode = deltaPerItem
+  //    بدون صورة — وبنفس ستايل ديالوج تسجيل الخروج
+  // ======================================================
+  Future<void> _promptForItemCountIfNeeded() async {
+    if (!_requiresItemDialog) return;
+
+    // نحاول نقرأ أقل وأعلى قيمة من الـ taskData (لو موجودة), وإلا افتراضيًا 1..999
+    final minItems = _asInt(widget.taskData['minItems']) ?? 1;
+    final maxItems = _asInt(widget.taskData['maxItems']) ?? 999;
+
+    int clamp(int v) => v.clamp(minItems, maxItems);
+
+    // القيمة الافتراضية: آخر قيمة محفوظة، أو defaultItems من التاسك، أو minItems
+    final def = (_itemCount != null && _itemCount! > 0)
+        ? _itemCount!
+        : (_asInt(widget.taskData['defaultItems']) ?? minItems);
+
+    _itemCountCtrl.text = def.toString();
+
+    final result = await showGeneralDialog<int>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'items',
+      barrierColor: Colors.black54,
+      useRootNavigator: true,
+      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
+      transitionDuration: const Duration(milliseconds: 180),
+      transitionBuilder: (ctx, anim, _, __child) {
+        return Transform.scale(
+          scale: 0.95 + 0.05 * anim.value,
+          child: Opacity(
+            opacity: anim.value,
+            child: Center(
+              child: Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // ===== العنوان + الأيقونة =====
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.format_list_numbered,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'عدد العناصر المنجزة',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.dark,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // ===== أزرار - [TextField] + =====
+                        Row(
+                          children: [
+                            _counterButton(
+                              icon: Icons.remove_rounded,
+                              onTap: () {
+                                final cur = _asInt(_itemCountCtrl.text) ?? def;
+                                final next = clamp(cur - 1);
+                                _itemCountCtrl.text = next.toString();
+                                // ما نحتاج setState رئيسي هنا، بس مافي ضرر
+                                setState(() {});
+                              },
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: _itemCountCtrl,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(),
+                                textAlign: TextAlign.center,
+                                decoration: InputDecoration(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                    horizontal: 12,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  hintText: '$def',
+                                ),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            _counterButton(
+                              icon: Icons.add_rounded,
+                              onTap: () {
+                                final cur = _asInt(_itemCountCtrl.text) ?? def;
+                                final next = clamp(cur + 1);
+                                _itemCountCtrl.text = next.toString();
+                                setState(() {});
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        // ===== نص الحد الأدنى والأقصى =====
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'الحد الأدنى: $minItems  •  الأقصى: $maxItems',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 12.5,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // ===== أزرار إلغاء / حفظ =====
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.of(ctx).pop(null),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                    color: AppColors.primary,
+                                    width: 2,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
+                                ),
+                                child: Text(
+                                  'إلغاء',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  final raw = _asInt(_itemCountCtrl.text);
+                                  if (raw == null || raw <= 0) {
+                                    _showInlineError('أدخل عددًا صحيحًا.');
+                                    return;
+                                  }
+                                  final safe = clamp(raw);
+                                  _itemCountCtrl.text = safe.toString();
+                                  Navigator.of(ctx).pop(safe);
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                                child: Text(
+                                  'حفظ',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    // حفظ النتيجة في _itemCount
+    if (result != null && result > 0) {
+      setState(() {
+        _itemCount = clamp(result);
+      });
+    }
   }
 
   @override
@@ -957,8 +1173,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                           ),
                                         ),
                                 ),
-
-                                // 🧹 تمت إزالة كل ما يخص "عدد العناصر" من فوق الصورة
                                 Positioned(
                                   top: 10,
                                   right: 10,
@@ -1019,6 +1233,45 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                     ],
                                   ),
                                 ),
+                                if (_requiresItemDialog &&
+                                    (_itemCount != null && _itemCount! > 0))
+                                  Positioned(
+                                    top: 54,
+                                    right: 12,
+                                    child: _roundedGlass(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 8,
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              'عدد العناصر: ${_itemCount}',
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            InkWell(
+                                              onTap:
+                                                  _promptForItemCountIfNeeded,
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              child: const Icon(
+                                                Icons.edit,
+                                                size: 18,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 if (_inlineError != null)
                                   Positioned(
                                     top: 12,
@@ -1085,6 +1338,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 if (!mounted) return;
                                 if (shot != null) {
                                   setState(() => _capturedPath = shot.path);
+
+                                  // ✅ بعد التصوير مباشرة، نسأل عن عدد العناصر لو المهمة deltaPerItem
+                                  await _promptForItemCountIfNeeded();
                                 }
                                 if (mounted) {
                                   setState(() => _isCapturing = false);
@@ -1105,17 +1361,31 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 : () async {
                                     if (_capturedPath == null) return;
 
-                                    // ما عاد نستخدم عدد العناصر من الواجهة
-                                    int? safeItems;
+                                    // ✅ نجهّز عدد العناصر (من الـ popup)
+                                    int? safeItems = _itemCount;
+
+                                    final mode =
+                                        (widget.taskData['calcMode'] ?? '')
+                                            .toString()
+                                            .toLowerCase();
+
+                                    // ✅ لو المهمة deltaPerItem لازم يكون عندنا عدد عناصر
+                                    if (mode == 'deltaperitem' &&
+                                        (safeItems == null || safeItems <= 0)) {
+                                      await _promptForItemCountIfNeeded();
+                                      safeItems = _itemCount;
+                                      if (safeItems == null || safeItems <= 0) {
+                                        _showInlineError(
+                                          'يرجى إدخال عدد العناصر.',
+                                        );
+                                        return;
+                                      }
+                                    }
 
                                     if (!mounted || _isUploading) return;
                                     setState(() => _isUploading = true);
 
                                     try {
-                                      final mode =
-                                          (widget.taskData['calcMode'] ?? '')
-                                              .toString()
-                                              .toLowerCase();
                                       final isDistanceMode =
                                           mode == 'perkm' ||
                                           mode == 'deltaperkm';
@@ -1594,6 +1864,26 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _counterButton({required IconData icon, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppColors.primary.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.primary.withOpacity(0.45),
+            width: 1.3,
+          ),
+        ),
+        child: Icon(icon, size: 22, color: AppColors.primary),
       ),
     );
   }

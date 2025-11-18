@@ -1841,47 +1841,70 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _latCtrl,
-                            textAlign: TextAlign.right,
-                            keyboardType: TextInputType.number,
-                            decoration: _inputDeco(
-                              'Latitude',
-                              prefixIcon: const Icon(Icons.straighten_outlined),
-                            ),
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty)
-                                return 'إلزامي';
-                              final d = double.tryParse(v);
-                              if (d == null || d < -90 || d > 90)
-                                return 'قيمة غير صحيحة';
-                              return null;
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
+                        // 👈 أول حقل: Longitude
                         Expanded(
                           child: TextFormField(
                             controller: _lngCtrl,
                             textAlign: TextAlign.right,
                             keyboardType: TextInputType.number,
-                            decoration: _inputDeco(
-                              'Longitude',
-                              prefixIcon: const Icon(Icons.straighten),
-                            ),
+                            decoration:
+                                _inputDeco(
+                                  'Longitude',
+                                  prefixIcon: const Icon(Icons.straighten),
+                                ).copyWith(
+                                  // 👈 نخفي مساحة الخطأ عشان ما يرفع الفيلد
+                                  errorStyle: const TextStyle(
+                                    height: 0,
+                                    fontSize: 0,
+                                  ),
+                                ),
                             validator: (v) {
-                              if (v == null || v.trim().isEmpty)
+                              if (v == null || v.trim().isEmpty) {
                                 return 'إلزامي';
+                              }
                               final d = double.tryParse(v);
-                              if (d == null || d < -180 || d > 180)
+                              if (d == null || d < -180 || d > 180) {
                                 return 'قيمة غير صحيحة';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // 👈 ثاني حقل: Latitude
+                        Expanded(
+                          child: TextFormField(
+                            controller: _latCtrl,
+                            textAlign: TextAlign.right,
+                            keyboardType: TextInputType.number,
+                            decoration:
+                                _inputDeco(
+                                  'Latitude',
+                                  prefixIcon: const Icon(
+                                    Icons.straighten_outlined,
+                                  ),
+                                ).copyWith(
+                                  errorStyle: const TextStyle(
+                                    height: 0,
+                                    fontSize: 0,
+                                  ),
+                                ),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) {
+                                return 'إلزامي';
+                              }
+                              final d = double.tryParse(v);
+                              if (d == null || d < -90 || d > 90) {
+                                return 'قيمة غير صحيحة';
+                              }
                               return null;
                             },
                           ),
                         ),
                       ],
                     ),
+
                     const SizedBox(height: 10),
                     DecoratedBox(
                       decoration: BoxDecoration(
@@ -1926,15 +1949,17 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                         ),
                         onPressed: () async {
                           if (!_formKey.currentState!.validate()) return;
-                          final lat = double.parse(_latCtrl.text.trim());
-                          final lng = double.parse(_lngCtrl.text.trim());
+
+                          final lngVal = double.parse(_lngCtrl.text.trim());
+                          final latVal = double.parse(_latCtrl.text.trim());
+
                           await widget.onSubmit(
                             name: _nameCtrl.text.trim(),
                             type: _type,
                             isActive: _isActive,
                             provider: _providerCtrl.text.trim(),
-                            lat: lat,
-                            lng: lng,
+                            lat: lngVal,
+                            lng: latVal,
                           );
                           if (mounted) Navigator.pop(context);
                         },
