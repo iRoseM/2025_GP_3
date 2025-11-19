@@ -121,11 +121,11 @@ class _taskPageState extends State<taskPage> {
   DateTime _monthEnd(DateTime d) => DateTime(d.year, d.month + 1, 0);
 
   // ====================
-  // جلب خبر جديد للمستخدم
+  // جلب خبر جديد للمستخدم (مقال ما قد انعرض له من قبل)
   // ====================
   Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
     try {
-      // نجلب آخر 20 مقال من كولكشن المقالات
+      // 1) آخر 20 مقال من كولكشن المقالات
       final snap = await FirebaseFirestore.instance
           .collection('articles')
           .orderBy('createdAt', descending: true)
@@ -134,21 +134,30 @@ class _taskPageState extends State<taskPage> {
 
       if (snap.docs.isEmpty) return null;
 
-      // استبعاد المقالات المقروءة سابقاً بواسطة userId
-      final seenSnap = await FirebaseFirestore.instance
-          .collection('articles')
+      // 2) كل مقالات "news" اللي طلعت لهذا اليوزر من قبل في userTasks
+      final seenTasksSnap = await FirebaseFirestore.instance
+          .collection('userTasks')
           .where('userId', isEqualTo: uid)
+          .where('taskType', isEqualTo: 'news')
           .get();
 
-      final seenUrls = seenSnap.docs.map((d) => d['url']).toSet();
+      final seenUrls = seenTasksSnap.docs
+          .map((d) => (d.data()['articleUrl'] ?? '') as String)
+          .where((u) => u.isNotEmpty)
+          .toSet();
 
-      // نرجّع أول مقال جديد
+      // 3) نرجّع أول مقال عنوان URL حقه مو موجود في seenUrls
       for (var doc in snap.docs) {
         final data = doc.data();
-        if (!seenUrls.contains(data['url'])) {
+        final url = (data['url'] ?? '') as String;
+        if (url.isEmpty) continue;
+
+        if (!seenUrls.contains(url)) {
           return {'docId': doc.id, ...data};
         }
       }
+
+      // لو كل الـ 20 مقال سبق وانعرضت → ما فيه جديد
       return null;
     } catch (e) {
       debugPrint("❌ getFreshNewsForUser ERROR: $e");

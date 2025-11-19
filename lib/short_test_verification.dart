@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'task.dart';
 import 'services/title_header.dart';
 import 'services/background_container.dart';
@@ -186,13 +187,98 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
     );
   }
 
+  // ✅ بوب-اب عند الإجابة الصحيحة
+  Future<void> _showSuccessPopup() async {
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (dialogContext) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: SizedBox(
+            width: 340,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/img/nameerHappy.png',
+                    height: 120,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '!إجابة صحيحة',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    "عمل رائع! قراءة المقال ساهمت في إثراء معرفتك.",
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: 140,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 10,
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      child: Text(
+                        'تم',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _submit() async {
     setState(() => sending = true);
 
-    final correct = widget.quiz['answer'];
-    final bool isCorrect = selected == correct;
+    // 🔍 حوّل الكل لستـرنج + قص المسافات
+    final correct = (widget.quiz['answer'] ?? '').toString().trim();
+    final selectedValue = (selected ?? '').toString().trim();
+
+    final bool isCorrect = selectedValue == correct;
 
     if (!isCorrect) {
+      setState(() => sending = false);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -203,39 +289,44 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
         ),
       );
 
-      Navigator.pop(context);
+      Navigator.pop(context); // رجوع لصفحة المقال
       return;
     }
 
     try {
+      // ✅ تحديث مهمة المستخدم
       final ref = FirebaseFirestore.instance
           .collection("userTasks")
           .doc(widget.userTaskDocId);
 
-      final snap = await ref.get();
-      final data = snap.data() ?? {};
-
-      // 🔥 إصلاح الحقل لو كان مكتوب بشكل مختلف
       await ref.update({
         "taskValidation": "التحقق عبر اجراء اختبار قصير",
         "status": "completed",
         "completedAt": FieldValue.serverTimestamp(),
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "إجابة صحيحة! تم إكمال المهمة",
-            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
+      // ✅ زيادة completedTask في حساب اليوزر
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final userRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid);
 
-      Navigator.pop(context); // خروج من صفحة الاختبار
-      Navigator.pop(context); // خروج من صفحة المقال → رجوع للمهام
+        await userRef.update({
+          'completedTask': FieldValue.increment(
+            1,
+          ), // يزيد 1 مع كل مهمة يتم تأكيدها بالاختبار
+        });
+      }
+
+      // 🎉 عرض بوب-اب النجاح
+      await _showSuccessPopup();
+
+      // رجوع لصفحة المقال ثم صفحة المهام
+      Navigator.pop(context); // صفحة الاختبار
+      Navigator.pop(context); // صفحة المقال → المهام
     } catch (e) {
-      print("❌ ERROR IN SUBMIT: $e");
+      debugPrint("❌ ERROR IN SUBMIT: $e");
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

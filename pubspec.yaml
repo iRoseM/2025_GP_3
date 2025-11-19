@@ -70,6 +70,7 @@ flutter:
     - assets/img/nameerLeft.png
     - assets/img/nameerRight.png
     - assets/img/nameerStand.png
+    - assets/img/nameerHappy.png
 
 flutter_native_splash:
   color: "#FAFCFB"
