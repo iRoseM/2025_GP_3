@@ -833,6 +833,33 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   }
 
   void _unhideTaskDialog(Map<String, dynamic> task) async {
+    // 🔥 منع إظهار مهمة إذا كانت فئتها مخفية
+    final catName = task['category'];
+    final catDoc = await FirebaseFirestore.instance
+        .collection('categories')
+        .where('name', isEqualTo: catName)
+        .limit(1)
+        .get();
+
+    if (catDoc.docs.isNotEmpty) {
+      final catData = catDoc.docs.first.data() as Map<String, dynamic>;
+      if (catData['status'] == 'hidden') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text(
+              'لا يمكن إعادة إظهار هذه المهمة لأن الفئة التابعة لها مخفية ❌',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        );
+        return; // ❌ إيقاف الحوار بالكامل
+      }
+    }
+
     showDialog(
       context: context,
       builder: (context) => Directionality(

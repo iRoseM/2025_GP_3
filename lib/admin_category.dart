@@ -163,7 +163,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
               },
             ),
           ),
-          floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+          floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
           floatingActionButton: isKeyboardOpen ? null : _buildAddFab(),
         ),
       ),
@@ -493,6 +493,10 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                 ),
 
                 const SizedBox(height: 10),
+                if (cat['status'] == 'hidden' && cat['expiry_month'] != null)
+                  _buildCategoryCountdown(cat),
+
+                const SizedBox(height: 10),
 
                 // ✅ الأزرار أسفل الكارد
                 Row(
@@ -561,6 +565,104 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
     );
   }
 
+  Widget _buildCategoryCountdown(Map<String, dynamic> cat) {
+    final exp = cat['expiry_month'];
+    if (exp == null) return const SizedBox();
+
+    final parts = exp.split('-');
+    if (parts.length != 2) return const SizedBox();
+
+    final year = int.tryParse(parts[0]) ?? 0;
+    final month = int.tryParse(parts[1]) ?? 0;
+
+    final expiryDate = DateTime(year, month, 1);
+    final now = DateTime.now();
+    final diff = expiryDate.difference(now);
+
+    if (diff.isNegative) {
+      return const Text(
+        '🔔 تم تطبيق إخفاء الفئة هذا الشهر',
+        style: TextStyle(
+          fontSize: 13,
+          color: Colors.redAccent,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    }
+
+    final days = diff.inDays;
+    final hours = diff.inHours % 24;
+    final mins = diff.inMinutes % 60;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.timer_outlined, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Text(
+              'متبقّي على إخفاء الفئة:',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[800],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            timeFlipBox(days.toString().padLeft(2, '0'), "يوم"),
+            const SizedBox(width: 8),
+            timeFlipBox(hours.toString().padLeft(2, '0'), "ساعة"),
+            const SizedBox(width: 8),
+            timeFlipBox(mins.toString().padLeft(2, '0'), "دقيقة"),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget timeFlipBox(String value, String label) {
+    return Column(
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.primary60, width: 1.3),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary33,
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            value,
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: AppColors.dark,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        SizedBox(height: 4),
+        Text(
+          label,
+          style: GoogleFonts.ibmPlexSansArabic(
+            color: AppColors.dark,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
   // 🔹 إخفاء فئة (جدولة الإخفاء للشهر القادم مثل منطق المهام)
   void _hideCategoryDialog(Map<String, dynamic> cat) {
     final now = DateTime.now();
@@ -582,12 +684,14 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
           ),
           content: Text(
             'هل أنت متأكد من إخفاء هذه الفئة؟\n'
-            'لن يتم إخفاؤها فورًا من المستخدمين، بل سيتم تطبيق الإخفاء مع بداية الشهر القادم ($nextMonthKey).',
+            'لن يتم إخفاؤها فورًا من المستخدمين، بل سيتم تطبيق الإخفاء مع بداية الشهر القادم ($nextMonthKey).\n\n'
+            '⚠️ ملاحظة: جميع المهام المرتبطة بهذه الفئة سيتم إخفاؤها تلقائيًا معها في نفس التاريخ.',
             style: GoogleFonts.ibmPlexSansArabic(
               color: Colors.black87,
               fontSize: 14,
             ),
           ),
+
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -611,6 +715,19 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                     'expiry_month': nextMonthKey,
                     'updatedAt': FieldValue.serverTimestamp(),
                   });
+                  // 🔥 تحديث جميع المهام التابعة لهذه الفئة
+                  final tasksSnap = await FirebaseFirestore.instance
+                      .collection('tasks')
+                      .where('category', isEqualTo: cat['name'])
+                      .get();
+
+                  for (var doc in tasksSnap.docs) {
+                    await doc.reference.update({
+                      'status': 'hidden',
+                      'expiry_month': nextMonthKey,
+                      'updatedAt': FieldValue.serverTimestamp(),
+                    });
+                  }
 
                   if (!mounted) return;
 
@@ -730,6 +847,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                   'status': 'active',
                   'updatedAt': FieldValue.serverTimestamp(),
                 });
+
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
