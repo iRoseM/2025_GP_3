@@ -292,20 +292,23 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
       Navigator.pop(context); // رجوع لصفحة المقال
       return;
     }
-
     try {
-      // ✅ تحديث مهمة المستخدم
-      final ref = FirebaseFirestore.instance
+      final docRef = FirebaseFirestore.instance
           .collection("userTasks")
           .doc(widget.userTaskDocId);
 
-      await ref.update({
+      // 🟢 جلب بيانات المهمة لأخذ taskPoints من قاعدة البيانات
+      final taskSnap = await docRef.get();
+      final int taskPoints = taskSnap.data()?['taskPoints'] ?? 0;
+
+      // 🟢 تحديث مهمة المستخدم
+      await docRef.update({
         "taskValidation": "التحقق عبر اجراء اختبار قصير",
         "status": "completed",
         "completedAt": FieldValue.serverTimestamp(),
       });
 
-      // ✅ زيادة completedTask في حساب اليوزر
+      // 🟢 تحديث بيانات المستخدم
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         final userRef = FirebaseFirestore.instance
@@ -313,19 +316,20 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
             .doc(user.uid);
 
         await userRef.update({
-          'completedTask': FieldValue.increment(
-            1,
-          ), // يزيد 1 مع كل مهمة يتم تأكيدها بالاختبار
+          'completedTask': FieldValue.increment(1),
+          'points': FieldValue.increment(taskPoints),  // ← من الفايربيس
+          'lastCompletedTaskType': "quiz",
+          'lastQuizAnswer': selected,
         });
       }
 
-      // 🎉 عرض بوب-اب النجاح
+      // 🎉 بوب-اب
       await _showSuccessPopup();
 
-      // رجوع لصفحة المقال ثم صفحة المهام
-      Navigator.pop(context); // صفحة الاختبار
-      Navigator.pop(context); // صفحة المقال → المهام
-    } catch (e) {
+      Navigator.pop(context);
+      Navigator.pop(context);
+
+    }catch (e) {
       debugPrint("❌ ERROR IN SUBMIT: $e");
 
       ScaffoldMessenger.of(context).showSnackBar(
