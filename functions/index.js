@@ -1,11 +1,12 @@
-// ================== تحميل المتغيرات من ملف .env ==================
-require("dotenv").config();
+// ================== تحميل المتغيرات من ملف .env (ما نحتاجه الآن) ==================
+// require("dotenv").config();
 
 // ================== إعداد Firebase Functions & Admin ==================
 const functions = require("firebase-functions/v1"); // ✅ v1 (عشان auth.user().onCreate & region)
 const { onCall, HttpsError } = require("firebase-functions/v2/https"); // ✅ v2 callable
 const { setGlobalOptions } = require("firebase-functions/v2/options");
 const admin = require("firebase-admin");
+const { defineString } = require("firebase-functions/params"); // ✅ للـ params الجديدة
 
 admin.initializeApp();
 
@@ -14,6 +15,9 @@ setGlobalOptions({
   region: "us-central1",
   maxInstances: 10,
 });
+
+// ✅ تعريف param جديد بإسم صحيح (كلها حروف كبيرة + أندر سكور)
+const GEMINI_API_KEY = defineString("GEMINI_API_KEY");
 
 /** Helper: normalize safely */
 function toLowerSafe(s) {
@@ -59,7 +63,7 @@ exports.createUserDoc = functions
   });
 
 /* ============================================================
- * reserveUsername (Callable) - v2
+ * reserveUsername (Callable) - v2  (معلّقة حاليًا)
  * ============================================================ */
 // exports.reserveUsername = onCall(async (request) => {
 //   const auth = request.auth;
@@ -113,7 +117,7 @@ exports.createUserDoc = functions
 // });
 
 /* ============================================================
- * markVerified (Callable) - v2
+ * markVerified (Callable) - v2  (معلّقة حاليًا)
  * ============================================================ */
 // exports.markVerified = onCall(async (request) => {
 //   const auth = request.auth;
@@ -170,11 +174,12 @@ ${articleText}
 `;
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    // ✅ نقرأ المفتاح من Firebase params (GEMINI_API_KEY)
+    const apiKey = GEMINI_API_KEY.value();
 
-    // 🔎 لو وده ناقص نرمي خطأ واضح
+    // 🔎 لو مفقود نرمي خطأ واضح
     if (!apiKey) {
-      console.error("❌ GEMINI_API_KEY is missing in env!");
+      console.error("❌ GEMINI_API_KEY is missing in params!");
       throw new HttpsError("failed-precondition", "GEMINI_API_KEY_MISSING");
     }
 
@@ -189,21 +194,22 @@ ${articleText}
     });
 
     const result = await response.json();
+
     // ✅ لو الـ API رجع error واضح من Google
     if (result.error) {
       console.error("❌ Gemini API error:", result.error);
       throw new HttpsError(
         "internal",
-        `GEMINI_API_ERROR: ${result.error.message || result.error.status || "UNKNOWN_ERROR"}`
+        `GEMINI_API_ERROR: ${
+          result.error.message || result.error.status || "UNKNOWN_ERROR"
+        }`
       );
     }
 
     let text = result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     // 🧹 تنظيف Markdown
-    text = text.replace(/```json/g, "")
-               .replace(/```/g, "")
-               .trim();
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
     // 🧹 استخراج JSON فقط
     const first = text.indexOf("{");
@@ -237,7 +243,6 @@ ${articleText}
 
     // 🎯 نرجع JSON نظيف للكلينت
     return parsed;
-
   } catch (err) {
     console.error("❌ Gemini Error (outer catch):", err);
 
