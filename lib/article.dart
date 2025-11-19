@@ -427,7 +427,7 @@ class _ArticlePageState extends State<ArticlePage> {
         '⚠️ generateShortTestVerification ERROR: code=${e.code}, message=${e.message}, details=${e.details}');
 
     _showSnack(
-      "حدث خطأ في إنشاء الاختبار القصير. حاولي مرة أخرى لاحقًا.",
+    "تعذَّر إنشاء الاختبار القصير بسبب مشكلة في الاتصال. تأكد من اتصالك بالإنترنت ثم حاول مرة أخرى بعد قليل.",
       background: Colors.redAccent,
     );
   } catch (e) {
@@ -438,7 +438,7 @@ class _ArticlePageState extends State<ArticlePage> {
     print('⚠️ generateShortTestVerification UNKNOWN ERROR: $e');
 
     _showSnack(
-      "حدث خطأ أثناء إنشاء الاختبار القصير.",
+    "حدث خلل مؤقت أثناء إنشاء الاختبار القصير. تحقق من اتصالك بالإنترنت ثم حاول مرة أخرى بعد قليل.",
       background: Colors.redAccent,
     );
   }
