@@ -47,8 +47,10 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   final GlobalKey _ecoLandKey = GlobalKey();
   final GlobalKey _navKey = GlobalKey();
   final GlobalKey _ecoLandAnchorKey = GlobalKey(); // مرساة للسكرول
+  final GlobalKey _bannerKey = GlobalKey();
+  final GlobalKey _friendsKey = GlobalKey();
   bool _phase2Started = false; // علشان ما نكرر تشغيل المرحلة الثانية
-  BuildContext? _scCtx;                             // نخزّن showcaseContext
+  BuildContext? _scCtx;  // نخزّن showcaseContext
 
 
   void _onTap(int i) {
@@ -196,7 +198,12 @@ Future<void> _scrollToAnchor(GlobalKey key) async {
             _phase2Started = true;
             await _scrollToAnchor(_ecoLandAnchorKey);
             final controller = ShowCaseWidget.of(_scCtx!);
-            controller?.startShowCase([_ecoLandKey, _navKey]);
+            controller?.startShowCase([
+              _ecoLandKey,   // أرضي
+              _bannerKey,    // الإعلان
+              _friendsKey,   // الأصدقاء
+              _navKey,       // الشريط السفلي
+            ]);
           }
         },
       builder: (showcaseContext) {
@@ -801,287 +808,271 @@ Future<void> _scrollToAnchor(GlobalKey key) async {
                     const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
                     // === بلوك الأرض مع العنوان داخل نفس الحاوية ===
-SliverToBoxAdapter(
-  child: Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: RepaintBoundary(
-      key: _ecoLandAnchorKey, // ← مرساة السكرول
-      child: Showcase.withWidget(
-        key: _ecoLandKey,      // ← نفس المفتاح المستخدم في الجولة
-        overlayColor: Colors.black.withOpacity(0.35),
-        overlayOpacity: 0.35,
-        blurValue: 0,
-        container: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.12),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Directionality(
-            textDirection: TextDirection.rtl,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'EcoLand الخاصة بك',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    color: AppColors.dark,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'ابنِ عالمك الخاص: كل مهمة تُنجَز تضيف عنصرًا جديدًا لأرضك وتفتح ترقيات ممتعة.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.6,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // ← هذا هو البلوك القديم نفسه كما هو:
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x14000000),
-                blurRadius: 18,
-                offset: Offset(0, 8),
-              ),
-            ],
-            border: Border.all(
-              color: Color(0xFFE8F1EE),
-              width: 1.5,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // العنوان
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.terrain_rounded,
-                      color: AppColors.primary,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'أرضي في EcoLand',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.dark,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-
-              // المنصّة (بدون أي تعديل على الشكل)
-              SizedBox(
-                width: double.infinity,
-                height: 170,
-                child: IsoLand(
-                  rows: 6,
-                  cols: 6,
-                  height: 150,
-                  topColor: AppColors.mint,
-                  sideColor: AppColors.tealSoft,
-                  gridColor: AppColors.sea,
-                  gridOpacity: .08,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  ),
-),
-
-                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-                    // // Banner
-                    // SliverToBoxAdapter(
-                    //   child: Padding(
-                    //     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    //     child: _InlineBanner(
-                    //       label:
-                    //           'احفظ حيّك نظيفًا - شارك الآن واربح نقاطاً مضاعفة!',
-                    //       onTap: () {
-                    //         Navigator.push(
-                    //           context,
-                    //           MaterialPageRoute(
-                    //             builder: (_) => const RewardsPage(),
-                    //           ),
-                    //         );
-                    //       },
-                    //     ),
-                    //   ),
-                    // ),
-                    // const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-                    // // EcoLand Card (زر دخول) + Showcase مع صورة وشرح
-                    // SliverToBoxAdapter(
-                    //   child: Padding(
-                    //     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    //     child: AnimatedBuilder(
-                    //       animation: _floatingCtrl ?? const AlwaysStoppedAnimation(0.0),
-                    //       builder: (context, child) {
-                    //         final v = _floatingCtrl?.value ?? 0.0;
-                    //         final dy = -2 * math.sin(v * math.pi);
-                    //         return Transform.translate(
-                    //           offset: Offset(0, dy.isFinite ? dy : 0),
-                    //           child: child,
-                    //         );
-                    //       },
-                    //       child: Showcase.withWidget(
-                    //         key: _ecoLandKey,
-                    //         overlayColor: Colors.black.withOpacity(0.35),
-                    //         overlayOpacity: 0.35,
-                    //         blurValue: 0,
-                    //         container: Container(
-                    //           padding: const EdgeInsets.all(12),
-                    //           decoration: BoxDecoration(
-                    //             color: Colors.white,
-                    //             borderRadius: BorderRadius.circular(16),
-                    //             boxShadow: [
-                    //               BoxShadow(
-                    //                 color: Colors.black.withOpacity(0.12),
-                    //                 blurRadius: 12,
-                    //                 offset: const Offset(0, 6),
-                    //               ),
-                    //             ],
-                    //           ),
-                    //           child: const Directionality(
-                    //             textDirection: TextDirection.rtl,
-                    //             child: Column(
-                    //               mainAxisSize: MainAxisSize.min,
-                    //               children: [
-                    //                 ClipRRect(
-                    //                   borderRadius: BorderRadius.all(Radius.circular(12)),
-                    //                   child: Image(
-                    //                     image: AssetImage('assets/img/nameerStand.png'),
-                    //                     height: 80,
-                    //                     fit: BoxFit.cover,
-                    //                   ),
-                    //                 ),
-                    //                 SizedBox(height: 10),
-                    //                 Text(
-                    //                   'EcoLand الخاصة بك 🌱',
-                    //                   style: TextStyle(
-                    //                     fontWeight: FontWeight.w800,
-                    //                     fontSize: 16,
-                    //                     color: AppColors.dark,
-                    //                   ),
-                    //                 ),
-                    //                 SizedBox(height: 8),
-                    //                 Text(
-                    //                   'ابني عالمك الخاص: كل مهمة تضيف إنجازًا جديدًا لأرضك في EcoLand وتفتح ترقيات ممتعة.',
-                    //                   textAlign: TextAlign.center,
-                    //                   style: TextStyle(
-                    //                     fontSize: 13,
-                    //                     height: 1.6,
-                    //                     color: Colors.black87,
-                    //                   ),
-                    //                 ),
-                    //               ],
-                    //             ),
-                    //           ),
-                    //         ),
-                    //         child: _EcoLandCard(
-                    //           title: 'EcoLand الخاصة بك 🌱',
-                    //           subtitle: 'كل إنجاز يضيف لمسة جديدة على أرضك',
-                    //           onTap: () {},
-                    //         ),
-                    //       ),
-                    //     ),
-                    //   ),
-                    // ),
-                    // SliverToBoxAdapter(
-                    //   child: Padding(
-                    //     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    //     child: _EcoLandSection(ecoKey: _ecoLandKey),
-                    //   ),
-                    // ),
-                    // const SliverToBoxAdapter(child: SizedBox(height: 20)),
-
-                    // Friends
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
+                        child: RepaintBoundary(
+                          key: _ecoLandAnchorKey, // ← مرساة السكرول
+                          child: Showcase.withWidget(
+                            key: _ecoLandKey,      // ← نفس المفتاح المستخدم في الجولة
+                            overlayColor: Colors.black.withOpacity(0.35),
+                            overlayOpacity: 0.35,
+                            blurValue: 0,
+                            container: Container(
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(.1),
-                                borderRadius: BorderRadius.circular(12),
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.12),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
                               ),
-                              child: const Icon(
-                                Icons.group,
-                                color: AppColors.primary,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            const Expanded(
-                              child: Text(
-                                'أصدقائي',
-                                style: TextStyle(
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.dark,
+                              child: const Directionality(
+                                textDirection: TextDirection.rtl,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'EcoLand الخاصة بك',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 16,
+                                        color: AppColors.dark,
+                                      ),
+                                    ),
+                                    SizedBox(height: 8),
+                                    Text(
+                                      'ابنِ عالمك الخاص: كل مهمة تُنجَز تضيف عنصرًا جديدًا لأرضك وتفتح ترقيات ممتعة.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        height: 1.6,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                            TextButton.icon(
-                              onPressed: () {
-                                hasInternetConnection().then((online) {
-                                  if (!online) {
-                                    if (!context.mounted) return;
-                                    showNoInternetDialog(context);
-                                    return;
-                                  }
-                                });
-                              },
-                              icon: const Icon(Icons.arrow_back, size: 16),
-                              label: const Text('عرض الكل'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppColors.primary,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
+
+                            // ← هذا هو البلوك القديم نفسه كما هو:
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x14000000),
+                                    blurRadius: 18,
+                                    offset: Offset(0, 8),
+                                  ),
+                                ],
+                                border: Border.all(
+                                  color: Color(0xFFE8F1EE),
+                                  width: 1.5,
                                 ),
                               ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // العنوان
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withOpacity(.1),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: const Icon(
+                                          Icons.terrain_rounded,
+                                          color: AppColors.primary,
+                                          size: 24,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      const Expanded(
+                                        child: Text(
+                                          'أرضي في EcoLand',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w900,
+                                            color: AppColors.dark,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+
+                                  // المنصّة (بدون أي تعديل على الشكل)
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 170,
+                                    child: IsoLand(
+                                      rows: 6,
+                                      cols: 6,
+                                      height: 150,
+                                      topColor: AppColors.mint,
+                                      sideColor: AppColors.tealSoft,
+                                      gridColor: AppColors.sea,
+                                      gridOpacity: .08,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                    // Banner
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Showcase.withWidget(
+                          key: _bannerKey,
+                          overlayColor: Colors.black.withOpacity(0.35),
+                          overlayOpacity: 0.35,
+                          blurValue: 0,
+                          container: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(.12),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: const Directionality(
+                              textDirection: TextDirection.rtl,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('إعلانات وتحديات سريعة',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 16,
+                                        color: AppColors.dark,
+                                      )),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'ستجد هنا حملات ومهام موسمية تمنح نقاطًا مضاعفة أو جوائز خاصة. اضغط على الإعلان للمشاركة.',
+                                    style: TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          child: _InlineBanner(
+                            label: 'احفظ حيّك نظيفًا - شارك الآن واربح نقاطاً مضاعفة!',
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const RewardsPage()),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                    // Friends (Title Row)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Showcase.withWidget(
+                          key: _friendsKey,
+                          overlayColor: Colors.black.withOpacity(0.35),
+                          overlayOpacity: 0.35,
+                          blurValue: 0,
+                          container: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(.12),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: const Directionality(
+                              textDirection: TextDirection.rtl,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('أصدقاؤك ونشاطهم',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 16,
+                                        color: AppColors.dark,
+                                      )),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'تابع سلسلة إنجازات أصدقائك ونقاطهم، وقارِن تقدمك معهم. من هنا يمكنك استعراض الجميع أو إضافة أصدقاء.',
+                                    style: TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withOpacity(.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.group, color: AppColors.primary, size: 20),
+                              ),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Text(
+                                  'أصدقائي',
+                                  style: TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.dark,
+                                  ),
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: () {
+                                  hasInternetConnection().then((online) {
+                                    if (!online) {
+                                      if (!context.mounted) return;
+                                      showNoInternetDialog(context);
+                                      return;
+                                    }
+                                  });
+                                },
+                                icon: const Icon(Icons.arrow_back, size: 16),
+                                label: const Text('عرض الكل'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.primary,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -1184,7 +1175,7 @@ SliverToBoxAdapter(
   }
 }
 
-/* ======================= Widgets ======================= */
+  /* ======================= Widgets ======================= */
 
   class _PointsChip extends StatelessWidget {
     final int points;
@@ -1199,13 +1190,19 @@ SliverToBoxAdapter(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: AppColors.dark,
+            // ✅ gradient حقك (نفس ستايل البانر)
+            gradient: const LinearGradient(
+              colors: [AppColors.primary, AppColors.primary, AppColors.mint],
+              stops: [0.0, 0.5, 1.0],
+              begin: Alignment.bottomLeft,
+              end: Alignment.topRight,
+            ),
             borderRadius: BorderRadius.circular(100),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(.20),
-                blurRadius: 12,
-                offset: Offset(0, 4),
+                color: AppColors.primary.withOpacity(.25),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
@@ -2430,15 +2427,6 @@ class _EcoLandSection extends StatelessWidget {
       children: [
         const SizedBox(height: 16),
 
-        // ------------ Banner ------------
-        _InlineBanner(
-          label:
-              'احفظ حيّك نظيفًا - شارك الآن واربح نقاطاً مضاعفة!',
-          onTap: () {},
-        ),
-
-        const SizedBox(height: 16),
-
         // ------------ EcoLand Showcase ------------
         Showcase.withWidget(
           key: ecoKey,
@@ -2455,6 +2443,15 @@ class _EcoLandSection extends StatelessWidget {
         ),
 
         const SizedBox(height: 22),
+
+        // ------------ Banner ------------
+        _InlineBanner(
+          label:
+              'احفظ حيّك نظيفًا - شارك الآن واربح نقاطاً مضاعفة!',
+          onTap: () {},
+        ),
+
+        const SizedBox(height: 16),
       ],
     );
   }
