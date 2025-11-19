@@ -1585,7 +1585,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
                           .collection('facilities')
                           .doc(markerId.value)
                           .set({
-                            'name': name.isEmpty ? _normalizeType(type) : name,
+                            'address': name.trim().isEmpty
+                                ? 'عنوان غير محدد'
+                                : name.trim(),
+
                             'type': _normalizeType(type),
                             'lat': lat,
                             'lng': lng,
