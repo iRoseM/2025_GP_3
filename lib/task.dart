@@ -125,42 +125,66 @@ class _taskPageState extends State<taskPage> {
   // ====================
   Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
     try {
-      // 1) آخر 20 مقال من كولكشن المقالات
+      // 1) نجلب آخر 30 مقال من كولكشن المقالات (مصدر الأخبار)
       final snap = await FirebaseFirestore.instance
           .collection('articles')
           .orderBy('createdAt', descending: true)
-          .limit(20)
+          .limit(30)
           .get();
 
       if (snap.docs.isEmpty) return null;
 
-      // 2) كل مقالات "news" اللي طلعت لهذا اليوزر من قبل في userTasks
-      final seenTasksSnap = await FirebaseFirestore.instance
+      // 2) نجلب كل مهام الأخبار اللي سبق نُسبت لهذا المستخدم
+      //    سواء كانت "pending" أو "completed" أو أي حالة
+      final usedSnap = await FirebaseFirestore.instance
           .collection('userTasks')
           .where('userId', isEqualTo: uid)
-          .where('taskType', isEqualTo: 'news')
+          .where(
+            'taskType',
+            isEqualTo: 'news',
+          ) // إحنا كنا نضبطها في إنشاء المهمة
           .get();
 
-      final seenUrls = seenTasksSnap.docs
-          .map((d) => (d.data()['articleUrl'] ?? '') as String)
-          .where((u) => u.isNotEmpty)
+      // نكوّن set بكل الروابط اللي سبق استخدمناها
+      final usedUrls = usedSnap.docs
+          .map((d) => d.data()['articleUrl'])
+          .where((u) => u != null && u.toString().isNotEmpty)
+          .map((u) => u.toString())
           .toSet();
 
-      // 3) نرجّع أول مقال عنوان URL حقه مو موجود في seenUrls
+      // 3) نرجّع أول مقال جديد وصالح
       for (var doc in snap.docs) {
         final data = doc.data();
-        final url = (data['url'] ?? '') as String;
+        final url = (data['url'] ?? '').toString();
+        final contentRaw = (data['content'] ?? '').toString();
+        final content = contentRaw.trim();
+        final lower = content.toLowerCase();
+
         if (url.isEmpty) continue;
 
-        if (!seenUrls.contains(url)) {
-          return {'docId': doc.id, ...data};
+        // ⛔ لا نريد مقالات سبق ظهرت في userTasks لهذا المستخدم
+        if (usedUrls.contains(url)) {
+          continue;
         }
+
+        // ⛔ استبعاد المقالات المدفوعة / paywalled
+        if (lower.contains('only paid') ||
+            lower.contains('paid subscribers') ||
+            lower.contains('subscription required')) {
+          continue;
+        }
+        // ⛔ استبعاد المقالات القصيرة جدًا (واضح إنها مو نص حقيقي)
+        if (content.length < 80) {
+          continue;
+        }
+
+        // ✅ أول مقال مناسب
+        return {'docId': doc.id, ...data};
       }
 
-      // لو كل الـ 20 مقال سبق وانعرضت → ما فيه جديد
+      // لو ما لقينا أي مقال مناسب
       return null;
     } catch (e) {
-      debugPrint("❌ getFreshNewsForUser ERROR: $e");
       return null;
     }
   }
@@ -894,6 +918,9 @@ class _taskPageState extends State<taskPage> {
                                     ut['taskValidation'] ?? 'غير محددة',
                                 'id': ut['taskId'] ?? '',
                                 'status': ut['status'] ?? 'pending',
+
+                                'taskType': ut['taskType'],
+                                'articleContent': ut['articleContent'],
                               };
 
                               // ✅ السماح بالإكمال لليوم والماضي فقط
@@ -940,6 +967,9 @@ class _taskPageState extends State<taskPage> {
                                           'غير محددة',
                                       'id': ut['taskId'],
                                       'status': ut['status'] ?? 'pending',
+
+                                      'taskType': ut['taskType'],
+                                      'articleContent': ut['articleContent'],
                                     };
                                     return _buildUserTaskCard(
                                       taskData: fData,
@@ -1252,7 +1282,16 @@ class _taskPageState extends State<taskPage> {
     final points = taskData['points'] ?? 0;
     final validation = taskData['validationStrategy'] ?? 'غير محددة';
     final status = taskData['status'] ?? 'pending';
+    final taskType = (taskData['taskType'] ?? '').toString();
+    final articleContent = (taskData['articleContent'] ?? '').toString().trim();
 
+    // 🔴 لو هي مهمة "خبر" لكن المقال فاضي → لا تعرض مهمة، اعرض كرت "لا توجد مهمة"
+    if (taskType == 'news' && articleContent.isEmpty) {
+      return _buildUnavailableCard(
+        title: 'لا توجد مهمة لهذا اليوم',
+        subtitle: 'خبر هذا اليوم لم يعد متوفرًا، وسيتم استبداله لاحقًا.',
+      );
+    }
     final sel = _dayStart(_selectedDay ?? DateTime.now());
     final uid = _uid ?? '';
     final userTaskDocId = uid.isEmpty ? '' : '${uid}_${_yyyyMMdd(sel)}';
