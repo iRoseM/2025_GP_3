@@ -484,19 +484,83 @@ class _AdminMapPageState extends State<AdminMapPage> {
 
     final normalizedQuery = normalize(query);
 
-    // كلمات عامة → عرض كل الحاويات
-    final generic = {'حاويه', 'حاويات', 'سله', 'سلة', 'سلات', 'نقطه', 'نقطة'};
+    // كلمات عامة → ما نستخدمها في البحث
+    final generic = {
+      'حاويه',
+      'حاويات',
+      'سله',
+      'سلة',
+      'سلات',
+      'نقطه',
+      'نقطة',
+      'اقرب',
+      'الاقرب',
+      'وين',
+      'فين',
+      'ابي',
+      'ابغى',
+      'اريد',
+      'دلني',
+      'دليني',
+      'في',
+      'فيه',
+      'الحي',
+    };
 
     final parts = normalizedQuery
         .split(' ')
         .where((x) => x.isNotEmpty)
         .toList();
+
+    // كلمات مهمّة (مزود / حي / الخ)
     final nonGenericParts = parts
         .where((p) => !generic.contains(p) && p != 'حي')
         .toList();
 
-    // إذا كل الكلمات عامة → عرض كل الحاويات فقط
-    if (nonGenericParts.isEmpty) {
+    // هل فيه كلمة "حي/شارع/طريق" في نص البحث الأصلي؟
+    final bool queryHasAreaWord =
+        query.contains('حي') ||
+        query.contains('شارع') ||
+        query.contains('طريق');
+
+    // محاولة استخراج اسم الحي من النص (مثلاً: "حي اليرموك")
+    String? possibleArea;
+    final areaMatch = RegExp(r'(?:حي|شارع|طريق)\s*([^\s]+)').firstMatch(query);
+    if (areaMatch != null && areaMatch.groupCount >= 1) {
+      possibleArea = normalize(areaMatch.group(1)!);
+    } else if (parts.isNotEmpty) {
+      // لو ما كتب "حي" صراحة → نأخذ آخر كلمة كمنطقة تقريبية
+      possibleArea = parts.last;
+    }
+
+    // هل هذا بحث "حي فقط"؟ (مثلاً: "حي اليرموك" أو "حاوية حي اليرموك")
+    final bool isPureAreaOnlyQuery =
+        queryHasAreaWord && nonGenericParts.length <= 1;
+
+    // ⚠️ حي ضمني بدون كلمة "حي" (مثل: "حاوية مسك العليا")
+    final bool hasImplicitArea =
+        !queryHasAreaWord &&
+        possibleArea != null &&
+        nonGenericParts.length >= 2 &&
+        nonGenericParts.contains(possibleArea);
+
+    // توكنات المزود / الجهة فقط (نستثني اسم الحي إذا كان ضمن الكلمات)
+    List<String> providerTokensMain = nonGenericParts;
+    if ((queryHasAreaWord || hasImplicitArea) &&
+        possibleArea != null &&
+        nonGenericParts.length >= 2) {
+      providerTokensMain = nonGenericParts
+          .where((t) => t != possibleArea)
+          .toList();
+    }
+    if (isPureAreaOnlyQuery) {
+      providerTokensMain = [];
+    }
+
+    final bool hasAnyAreaConstraint = queryHasAreaWord || hasImplicitArea;
+
+    // إذا كل الكلمات عامة وما فيه كلمة "حي/شارع/طريق" → عرض كل الحاويات فقط
+    if (nonGenericParts.isEmpty && !hasAnyAreaConstraint) {
       if (_allMarkers.isEmpty) return;
 
       setState(() {
@@ -538,29 +602,98 @@ class _AdminMapPageState extends State<AdminMapPage> {
       return;
     }
 
-    // ================= 1) بحث تطابق كامل على الماركرات =================
-    final matched = <Marker>{};
+    // 📍 موقع الأدمن (أو افتراضي الرياض لو فشل)
+    Position pos;
+    try {
+      pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (_) {
+      pos = Position(
+        latitude: 24.7136,
+        longitude: 46.6753,
+        timestamp: DateTime.now(),
+        accuracy: 10,
+        altitude: 0,
+        altitudeAccuracy: 0,
+        heading: 0,
+        headingAccuracy: 0,
+        speed: 0,
+        speedAccuracy: 0,
+      );
+    }
+
+    // ============ 1) بحث على الماركرات (مزود + حي) ============
+
+    final List<Map<String, dynamic>> matches = [];
 
     for (final m in _allMarkers) {
       final text = normalize(
         '${m.infoWindow.title ?? ""} ${m.infoWindow.snippet ?? ""}',
       );
-      if (text.contains(normalizedQuery)) {
-        matched.add(m);
+
+      // تطابق كلمات المزود / النص العام (اسم فاندر، مزود، الخ)
+      final bool tokenMatch = providerTokensMain.isEmpty
+          ? false
+          : providerTokensMain.any((t) => text.contains(t));
+
+      // تطابق الحي/الموقع
+      final bool areaMatchThisMarker =
+          possibleArea != null && text.contains(possibleArea);
+
+      bool isMatch;
+
+      if (hasAnyAreaConstraint) {
+        if (isPureAreaOnlyQuery) {
+          // مثل: "حي اليرموك" أو "حاوية حي اليرموك" → نعتمد على الحي فقط
+          isMatch = areaMatchThisMarker;
+        } else {
+          // مثل:
+          // "حاوية الفاوندر حي اليرموك" أو "حاوية مسك العليا"
+          // → لازم (مزود + حي) معاً
+          isMatch = tokenMatch && areaMatchThisMarker;
+        }
+      } else {
+        // ما فيه "حي/شارع/طريق" ولا حي ضمني → نطابق على المزود فقط (مثلاً: "الفاوندر")
+        isMatch = tokenMatch;
+      }
+
+      if (isMatch) {
+        final d = Geolocator.distanceBetween(
+          pos.latitude,
+          pos.longitude,
+          m.position.latitude,
+          m.position.longitude,
+        );
+        matches.add({'marker': m, 'dist': d});
       }
     }
 
-    if (matched.isNotEmpty) {
+    if (matches.isNotEmpty) {
+      // لو البحث حي فقط → نجيب أقرب ٥ نقاط فقط
+      List<Map<String, dynamic>> top;
+      if (isPureAreaOnlyQuery ||
+          (hasImplicitArea && providerTokensMain.isEmpty)) {
+        matches.sort((a, b) => a['dist'].compareTo(b['dist']));
+        top = matches.take(5).toList();
+      } else {
+        top = matches;
+      }
+
+      final selectedMarkers = top
+          .map<Marker>((e) => e['marker'] as Marker)
+          .toSet();
+
       setState(() {
         _markers
           ..clear()
-          ..addAll(matched);
+          ..addAll(selectedMarkers);
       });
 
       final ctrl = await _mapCtrl.future;
 
       LatLngBounds? bounds;
-      for (final m in matched) {
+      for (final m in selectedMarkers) {
         final p = m.position;
         bounds = bounds == null
             ? LatLngBounds(southwest: p, northeast: p)
@@ -587,10 +720,96 @@ class _AdminMapPageState extends State<AdminMapPage> {
       if (bounds != null) {
         await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
       }
+
       return;
     }
 
-    // ================= 2) Google Places → أقرب حاوية للحي/الموقع =================
+    // ============ Fallback: لو كتب مزود + حي (صريح أو ضمني) وما لقى ولا واحدة معاً ============
+    if (hasAnyAreaConstraint &&
+        nonGenericParts.isNotEmpty &&
+        !isPureAreaOnlyQuery) {
+      // نفصل توكنات المزوّد عن اسم الحي (لو قدرنا نعرفه)
+      final providerTokens = (possibleArea == null)
+          ? nonGenericParts
+          : nonGenericParts.where((t) => t != possibleArea).toList();
+
+      if (providerTokens.isNotEmpty) {
+        final List<Map<String, dynamic>> founderMatches = [];
+
+        for (final m in _allMarkers) {
+          final text = normalize(
+            '${m.infoWindow.title ?? ""} ${m.infoWindow.snippet ?? ""}',
+          );
+          final providerMatch = providerTokens.any((t) => text.contains(t));
+          if (providerMatch) {
+            final d = Geolocator.distanceBetween(
+              pos.latitude,
+              pos.longitude,
+              m.position.latitude,
+              m.position.longitude,
+            );
+            founderMatches.add({'marker': m, 'dist': d});
+          }
+        }
+
+        if (founderMatches.isNotEmpty) {
+          founderMatches.sort((a, b) => a['dist'].compareTo(b['dist']));
+          final selectedMarkers = founderMatches
+              .map<Marker>((e) => e['marker'] as Marker)
+              .toSet();
+
+          setState(() {
+            _markers
+              ..clear()
+              ..addAll(selectedMarkers);
+          });
+
+          final ctrl = await _mapCtrl.future;
+          LatLngBounds? bounds;
+          for (final m in selectedMarkers) {
+            final p = m.position;
+            bounds = bounds == null
+                ? LatLngBounds(southwest: p, northeast: p)
+                : LatLngBounds(
+                    southwest: LatLng(
+                      p.latitude < bounds!.southwest.latitude
+                          ? p.latitude
+                          : bounds!.southwest.latitude,
+                      p.longitude < bounds!.southwest.longitude
+                          ? p.longitude
+                          : bounds!.southwest.longitude,
+                    ),
+                    northeast: LatLng(
+                      p.latitude > bounds!.northeast.latitude
+                          ? p.latitude
+                          : bounds!.northeast.latitude,
+                      p.longitude > bounds!.northeast.longitude
+                          ? p.longitude
+                          : bounds!.northeast.longitude,
+                    ),
+                  );
+          }
+
+          if (bounds != null) {
+            await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+          }
+
+          final providerLabel = providerTokens.join(' ');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'لا توجد حاويات لـ "$providerLabel" داخل الحي المحدد — تم عرض حاويات "$providerLabel" الأقرب لموقعك.',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+
+          return;
+        }
+      }
+    }
+
+    // ============ 2) Google Places → أقرب حاوية للحي/الموقع ============
     try {
       final url = Uri.parse(
         "https://maps.googleapis.com/maps/api/place/autocomplete/json"
@@ -655,9 +874,11 @@ class _AdminMapPageState extends State<AdminMapPage> {
         );
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+      // تجاهل أي خطأ في Google Places
+    }
 
-    // لو ما لقينا شيء → ولا شي يصير (ما فيه SnackBar)
+    // ما لقينا شيء → ولا شي يصير (ممكن تضيفي SnackBar لو حبيتي)
   }
 
   @override

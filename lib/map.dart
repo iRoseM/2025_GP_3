@@ -602,7 +602,7 @@ class _mapPageState extends State<mapPage> {
 
     final normalizedQuery = normalizeArabic(cleanInput(query.toLowerCase()));
 
-    // ===== كلمات عامة نعتبرها "عرض كل الحاويات" =====
+    // كلمات عامة جدًا (حاوية / حاويات / سلة..)
     final Set<String> genericQueryTokens = {
       normalizeArabic('حاوية'),
       normalizeArabic('حاويات'),
@@ -611,17 +611,86 @@ class _mapPageState extends State<mapPage> {
       normalizeArabic('سلات'),
     };
 
-    // لو بعد التنظيف صار فاضي أو مجرد كلمة عامة
-    if (normalizedQuery.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('اكتب نوع الحاوية أو كلمة توضح الشي اللي تدوره 🙂'),
-        ),
-      );
-      return;
+    final bool isNearestSearch = query.contains('اقرب');
+    final bool isAreaSearch = query.contains('حي') || query.contains('شارع');
+
+    // 🧩 قاموس المترادفات لأنواع الحاويات
+    final Map<String, List<String>> synonyms = {
+      'قوارير': [
+        'قوارير',
+        'علب',
+        'بلاستيك',
+        'زجاج',
+        'bottle',
+        'bottles',
+        'plastic',
+      ],
+      'ملابس': [
+        'ملابس',
+        'تبرع',
+        'كسوة',
+        'cloth',
+        'clothes',
+        'clothing',
+        'donation',
+        'clothes box',
+      ],
+      'اوراق': ['اوراق', 'ورق', 'كتب', 'paper', 'papers', 'books'],
+      'طعام': ['طعام', 'اكل', 'بقايا', 'عضوي', 'organic', 'food'],
+      'rvm': ['rvm', 'اله', 'آلة', 'استرجاع', 'reverse vending', 'rvm machine'],
+    };
+
+    String? searchCategory;
+    for (final entry in synonyms.entries) {
+      if (entry.value.any(
+        (w) => normalizedQuery.contains(normalizeArabic(w)),
+      )) {
+        searchCategory = entry.key;
+        break;
+      }
     }
 
-    // ✅ لو كتب كلمة عامة فقط (حاوية / حاويات / سلة / سلات ...) → نعرض كل الحاويات مع zoom out
+    // ✅ توكنز مفيدة بعد تنظيف الكلمات العامة (مثلاً: "حاوية مسك حي العليا" → ["مسك", "العليا"])
+    final List<String> tokens = normalizedQuery
+        .split(' ')
+        .where((t) => t.isNotEmpty)
+        .where((t) => !genericQueryTokens.contains(t))
+        .toList();
+
+    // ===== تجهيز معلومات الحي/المنطقة مرة وحدة =====
+    final queryNorm = normalizeArabic(query);
+
+    String? possibleArea;
+    final areaMatchGlobal = RegExp(
+      r'(?:حي|شارع|طريق)\s*([^\s]+)',
+    ).firstMatch(query);
+    if (areaMatchGlobal != null && areaMatchGlobal.groupCount >= 1) {
+      possibleArea = normalizeArabic(areaMatchGlobal.group(1)!);
+    } else {
+      final words = queryNorm.split(' ');
+      if (words.isNotEmpty) {
+        possibleArea = words.last;
+      }
+    }
+
+    final bool queryHasAreaWord =
+        query.contains('حي') ||
+        query.contains('شارع') ||
+        query.contains('طريق');
+
+    // 🔎 هل هذا "بحث حي فقط" (بدون مزوّد / نوع معيّن)؟
+    // مثال: "حي اليرموك" أو "حاوية حي اليرموك"
+    final bool isPureAreaOnlyQuery =
+        queryHasAreaWord && searchCategory == null && tokens.length <= 1;
+
+    // 🔎 حالة "منطقة ضمنياً" مثل: "حاوية مسك العليا" (ما فيها كلمة حي لكن فيها اسم حي واضح)
+    final bool hasImplicitArea =
+        !queryHasAreaWord &&
+        possibleArea != null &&
+        tokens.length >= 2 &&
+        tokens.contains(possibleArea);
+
+    // 🟡 لو كتب المستخدم "حاوية" أو "حاويات" فقط → نعرض كل النقاط مع zoom out
     if (genericQueryTokens.contains(normalizedQuery)) {
       if (_allMarkers.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -668,87 +737,10 @@ class _mapPageState extends State<mapPage> {
         await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
       }
 
-      return; // نوقف هنا، ما نروح لا Google Places ولا Firestore
-    }
-
-    // ===== المرحلة 1 — استخدام Google Places أولاً (أحياء، شوارع، معالم...) =====
-    final url = Uri.parse(
-      "https://maps.googleapis.com/maps/api/place/autocomplete/json"
-      "?input=$query&language=ar&components=country:sa&key=$kMapsApiKey",
-    );
-
-    final response = await http.get(url);
-    final data = json.decode(response.body);
-
-    if (data['status'] == "OK" && data['predictions'].isNotEmpty) {
-      final placeId = data['predictions'][0]['place_id'];
-
-      // الحصول على الإحداثيات
-      final detailsUrl = Uri.parse(
-        "https://maps.googleapis.com/maps/api/place/details/json"
-        "?place_id=$placeId&key=$kMapsApiKey",
-      );
-
-      final detailsRes = await http.get(detailsUrl);
-      final detailsData = json.decode(detailsRes.body);
-
-      final loc = detailsData['result']['geometry']['location'];
-      final lat = (loc['lat'] as num).toDouble();
-      final lng = (loc['lng'] as num).toDouble();
-
-      final ctrl = await _mapCtrl.future;
-      await ctrl.animateCamera(
-        CameraUpdate.newLatLngZoom(LatLng(lat, lng), 15),
-      );
-
-      // نوقف هنا ونرجع (بدون البحث في Firestore في هذا السيناريو)
       return;
     }
 
-    // ===== المرحلة 2 — البحث في حاويات Firestore إذا Google ما عطانا شيء مفيد =====
-
-    // 🧠 نحدد نية المستخدم (نوع البحث)
-    final isNearestSearch = query.contains('اقرب');
-    final isAreaSearch = query.contains('حي') || query.contains('شارع');
-
-    // 🧩 قاموس المترادفات
-    final Map<String, List<String>> synonyms = {
-      'قوارير': [
-        'قوارير',
-        'علب',
-        'بلاستيك',
-        'زجاج',
-        'bottle',
-        'bottles',
-        'plastic',
-      ],
-      'ملابس': [
-        'ملابس',
-        'تبرع',
-        'كسوة',
-        'cloth',
-        'clothes',
-        'clothing',
-        'donation',
-        'clothes box',
-      ],
-      'اوراق': ['اوراق', 'ورق', 'كتب', 'paper', 'papers', 'books'],
-      'طعام': ['طعام', 'اكل', 'بقايا', 'عضوي', 'organic', 'food'],
-      'rvm': ['rvm', 'اله', 'آلة', 'استرجاع', 'reverse vending', 'rvm machine'],
-    };
-
-    // ✅ تحديد نوع البحث
-    String? searchCategory;
-    for (final entry in synonyms.entries) {
-      if (entry.value.any(
-        (w) => normalizedQuery.contains(normalizeArabic(w)),
-      )) {
-        searchCategory = entry.key;
-        break;
-      }
-    }
-
-    // 📍 تحديد موقع المستخدم (افتراضي الرياض)
+    // 📍 موقع المستخدم (أو افتراضي الرياض)
     Position pos;
     try {
       pos = await Geolocator.getCurrentPosition(
@@ -769,54 +761,70 @@ class _mapPageState extends State<mapPage> {
       );
     }
 
-    // 🔍 نبحث عن الحاويات المطابقة
     final List<Map<String, dynamic>> matches = [];
+
+    // ✅ توكنات المزوّد فقط (نستثني اسم الحي إذا كان ضمن التوكنز)
+    List<String> providerTokensMain = tokens;
+    if ((queryHasAreaWord || hasImplicitArea) &&
+        possibleArea != null &&
+        tokens.length >= 2) {
+      providerTokensMain = tokens.where((t) => t != possibleArea).toList();
+    }
+    if (isPureAreaOnlyQuery && searchCategory == null) {
+      providerTokensMain = [];
+    }
+
+    final bool hasAnyAreaConstraint = queryHasAreaWord || hasImplicitArea;
 
     for (final f in _facilitiesByMarkerId.values) {
       final combined = normalizeArabic(
         '${f.type} ${f.address} ${f.city} ${f.provider}',
       );
-      bool isMatch = false;
 
-      // 🟢 نتحقق من نوع الحاوية
+      // ===== 1) تطابق بالنص (نوع / مزوّد / ... ) =====
+      bool baseMatch = false;
+
       if (searchCategory != null) {
         final keywords = synonyms[searchCategory]!
             .map(normalizeArabic)
             .toList();
         for (final k in keywords) {
           if (combined.contains(k)) {
-            isMatch = true;
+            baseMatch = true;
             break;
           }
         }
       } else {
-        isMatch = combined.contains(normalizedQuery);
-      }
-
-      // 🟣 نتحقق من الموقع (حي أو شارع)
-      final addressNorm = normalizeArabic(f.address);
-      final cityNorm = normalizeArabic(f.city);
-      final queryNorm = normalizeArabic(normalizedQuery);
-
-      String? possibleArea;
-
-      // 🔍 نحاول نكتشف اسم الحي أو الشارع من الجملة
-      final areaMatch = RegExp(
-        r'(?:حي|شارع|طريق)\s*([^\s]+)',
-      ).firstMatch(query);
-      if (areaMatch != null && areaMatch.groupCount >= 1) {
-        possibleArea = normalizeArabic(areaMatch.group(1)!);
-      } else {
-        final words = queryNorm.split(' ');
-        if (words.isNotEmpty) {
-          possibleArea = words.last;
+        if (providerTokensMain.isNotEmpty) {
+          // يكفي أي كلمة من كلمات المزوّد
+          baseMatch = providerTokensMain.any((t) => combined.contains(t));
         }
       }
 
-      if (possibleArea != null &&
+      // ===== 2) تطابق الحي/الشارع =====
+      final addressNorm = normalizeArabic(f.address);
+      final cityNorm = normalizeArabic(f.city);
+
+      final bool areaMatchesThisFacility =
+          possibleArea != null &&
           (addressNorm.contains(possibleArea) ||
-              cityNorm.contains(possibleArea))) {
-        isMatch = true;
+              cityNorm.contains(possibleArea));
+
+      // ===== 3) منطق الدمج =====
+      bool isMatch = false;
+
+      if (hasAnyAreaConstraint) {
+        if (isPureAreaOnlyQuery && searchCategory == null) {
+          // مثل: "حي اليرموك" أو "حاوية حي اليرموك" → نعتمد على الحي فقط
+          isMatch = areaMatchesThisFacility;
+        } else {
+          // كل الحالات الأخرى اللي فيها مزوّد + حي (صريح أو ضمني)
+          // مثل: "حاوية مسك حي العليا" أو "حاوية مسك العليا"
+          isMatch = baseMatch && areaMatchesThisFacility;
+        }
+      } else {
+        // ما فيه أي كلمة حي/شارع/طريق ولا implicit area → نكتفي بالمزوّد / النوع
+        isMatch = baseMatch;
       }
 
       if (isMatch) {
@@ -830,99 +838,238 @@ class _mapPageState extends State<mapPage> {
       }
     }
 
-    // 🚫 في حال ما لقى نتائج
-    if (matches.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('لم يتم العثور على مواقع مطابقة لعبارة "$query".'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
+    // ✅ لو لقينا نتائج في Firestore → نعرضها ونوقف، ما نروح لـ Google Places
+    if (matches.isNotEmpty) {
+      List<Map<String, dynamic>> top = [];
 
-    // 📏 نقرر كيف نعرض النتائج
-    List<Map<String, dynamic>> top = [];
-    if (isNearestSearch || (!isAreaSearch && searchCategory != null)) {
-      matches.sort((a, b) => a['dist'].compareTo(b['dist']));
-      top = matches.take(5).toList();
-    } else {
-      top = matches;
-    }
-
-    final nearest = top.first['facility'] as Facility;
-
-    // 🗺️ نعرض النتائج على الخريطة
-    setState(() {
-      _markers
-        ..clear()
-        ..addAll(
-          _allMarkers.where((m) {
-            return top.any(
-              (t) =>
-                  (m.position.latitude == (t['facility'] as Facility).lat) &&
-                  (m.position.longitude == (t['facility'] as Facility).lng),
-            );
-          }),
-        );
-    });
-
-    // 🎯 تقريب الكاميرا لتشمل كل النتائج
-    final ctrl = await _mapCtrl.future;
-    LatLngBounds? bounds;
-
-    for (final t in top) {
-      final f = t['facility'] as Facility;
-      final p = LatLng(f.lat, f.lng);
-
-      if (bounds == null) {
-        bounds = LatLngBounds(southwest: p, northeast: p);
+      // هنا أضفنا isPureAreaOnlyQuery → نفس منطق "أقرب" أو نوع معيّن
+      if (isNearestSearch || searchCategory != null || isPureAreaOnlyQuery) {
+        matches.sort((a, b) => a['dist'].compareTo(b['dist']));
+        top = matches.take(5).toList();
       } else {
-        bounds = LatLngBounds(
-          southwest: LatLng(
-            p.latitude < bounds.southwest.latitude
-                ? p.latitude
-                : bounds.southwest.latitude,
-            p.longitude < bounds.southwest.longitude
-                ? p.longitude
-                : bounds.southwest.longitude,
-          ),
-          northeast: LatLng(
-            p.latitude > bounds.northeast.latitude
-                ? p.latitude
-                : bounds.northeast.latitude,
-            p.longitude > bounds.northeast.longitude
-                ? p.longitude
-                : bounds.northeast.longitude,
-          ),
-        );
+        top = matches;
+      }
+
+      final nearest = top.first['facility'] as Facility;
+
+      setState(() {
+        _markers
+          ..clear()
+          ..addAll(
+            _allMarkers.where((m) {
+              return top.any(
+                (t) =>
+                    (m.position.latitude == (t['facility'] as Facility).lat) &&
+                    (m.position.longitude == (t['facility'] as Facility).lng),
+              );
+            }),
+          );
+      });
+
+      final ctrl = await _mapCtrl.future;
+      LatLngBounds? bounds;
+
+      for (final t in top) {
+        final f = t['facility'] as Facility;
+        final p = LatLng(f.lat, f.lng);
+
+        if (bounds == null) {
+          bounds = LatLngBounds(southwest: p, northeast: p);
+        } else {
+          bounds = LatLngBounds(
+            southwest: LatLng(
+              p.latitude < bounds.southwest.latitude
+                  ? p.latitude
+                  : bounds.southwest.latitude,
+              p.longitude < bounds.southwest.longitude
+                  ? p.longitude
+                  : bounds.southwest.longitude,
+            ),
+            northeast: LatLng(
+              p.latitude > bounds.northeast.latitude
+                  ? p.latitude
+                  : bounds.northeast.latitude,
+              p.longitude > bounds.northeast.longitude
+                  ? p.longitude
+                  : bounds.northeast.longitude,
+            ),
+          );
+        }
+      }
+
+      if (bounds != null) {
+        await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+      }
+
+      String message;
+      final categoryText = searchCategory ?? 'نقطة استدامة';
+      if (isNearestSearch || (!isAreaSearch && searchCategory != null)) {
+        message = 'تم العثور على ${top.length} من $categoryText.';
+      } else if (isAreaSearch || isPureAreaOnlyQuery || hasImplicitArea) {
+        message = 'تم عرض أقرب ${top.length} من $categoryText في الحي المحدد.';
+      } else {
+        message = 'تم العثور على ${top.length} من نقاط الاستدامة.';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+
+      if (isNearestSearch ||
+          searchCategory != null ||
+          isPureAreaOnlyQuery ||
+          hasImplicitArea) {
+        Future.delayed(const Duration(seconds: 1), () {
+          _showFacilitySheet(nearest);
+        });
+      }
+
+      return; // 🛑 مهم: لا نكمل لـ Google Places
+    }
+
+    // ===== Fallback: لو المستخدم كتب مزوّد + حي (صريح أو ضمني) وما لقينا أي نقطة تطابق الاثنين معاً =====
+    if ((queryHasAreaWord || hasImplicitArea) &&
+        tokens.isNotEmpty &&
+        !isPureAreaOnlyQuery) {
+      // نفصل توكنات المزوّد عن اسم الحي (لو قدرنا نعرفه)
+      final providerTokens = (possibleArea == null)
+          ? tokens
+          : tokens.where((t) => t != possibleArea).toList();
+
+      if (providerTokens.isNotEmpty) {
+        final List<Map<String, dynamic>> providerMatches = [];
+
+        for (final f in _facilitiesByMarkerId.values) {
+          final combined = normalizeArabic(
+            '${f.type} ${f.address} ${f.city} ${f.provider}',
+          );
+
+          final providerMatch = providerTokens.any((t) => combined.contains(t));
+
+          if (providerMatch) {
+            final dist = Geolocator.distanceBetween(
+              pos.latitude,
+              pos.longitude,
+              f.lat,
+              f.lng,
+            );
+            providerMatches.add({'facility': f, 'dist': dist});
+          }
+        }
+
+        if (providerMatches.isNotEmpty) {
+          providerMatches.sort((a, b) => a['dist'].compareTo(b['dist']));
+          final top = providerMatches;
+          final nearest = top.first['facility'] as Facility;
+
+          setState(() {
+            _markers
+              ..clear()
+              ..addAll(
+                _allMarkers.where((m) {
+                  return top.any(
+                    (t) =>
+                        (m.position.latitude ==
+                            (t['facility'] as Facility).lat) &&
+                        (m.position.longitude ==
+                            (t['facility'] as Facility).lng),
+                  );
+                }),
+              );
+          });
+
+          final ctrl = await _mapCtrl.future;
+          LatLngBounds? bounds;
+          for (final t in top) {
+            final f = t['facility'] as Facility;
+            final p = LatLng(f.lat, f.lng);
+
+            if (bounds == null) {
+              bounds = LatLngBounds(southwest: p, northeast: p);
+            } else {
+              bounds = LatLngBounds(
+                southwest: LatLng(
+                  p.latitude < bounds.southwest.latitude
+                      ? p.latitude
+                      : bounds.southwest.latitude,
+                  p.longitude < bounds.southwest.longitude
+                      ? p.longitude
+                      : bounds.southwest.longitude,
+                ),
+                northeast: LatLng(
+                  p.latitude > bounds.northeast.latitude
+                      ? p.latitude
+                      : bounds.northeast.latitude,
+                  p.longitude > bounds.northeast.longitude
+                      ? p.longitude
+                      : bounds.northeast.longitude,
+                ),
+              );
+            }
+          }
+
+          if (bounds != null) {
+            await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
+          }
+
+          final rawProviderName = (nearest.provider).toString().trim();
+          final displayProviderName = rawProviderName.isNotEmpty
+              ? rawProviderName
+              : providerTokens.join(' ');
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'لا توجد حاويات لـ "$displayProviderName" داخل الحي المحدد — تم عرض أقرب حاويات "$displayProviderName" لموقعك.',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+
+          return;
+        }
       }
     }
 
-    if (bounds != null) {
-      await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 100));
-    }
-
-    // 📢 نص الرسالة حسب نوع البحث
-    String message;
-    final categoryText = searchCategory ?? 'نقطة استدامة';
-    if (isNearestSearch || (!isAreaSearch && searchCategory != null)) {
-      message = 'تم العثور على ${top.length} من $categoryText.';
-    } else if (isAreaSearch) {
-      message = 'تم العثور على ${top.length} من $categoryText .';
-    } else {
-      message = 'تم العثور على ${top.length} من نقاط الاستدامة.';
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    // ===== المرحلة 2 — إذا Firestore ما لقى شيء، نجرب نفهمه كموقع عبر Google Places =====
+    final url = Uri.parse(
+      "https://maps.googleapis.com/maps/api/place/autocomplete/json"
+      "?input=$query&language=ar&components=country:sa&key=$kMapsApiKey",
     );
 
-    if (isNearestSearch || (!isAreaSearch && searchCategory != null)) {
-      Future.delayed(const Duration(seconds: 1), () {
-        _showFacilitySheet(nearest);
-      });
+    final response = await http.get(url);
+    final data = json.decode(response.body);
+
+    if (data['status'] == "OK" && data['predictions'].isNotEmpty) {
+      final placeId = data['predictions'][0]['place_id'];
+
+      final detailsUrl = Uri.parse(
+        "https://maps.googleapis.com/maps/api/place/details/json"
+        "?place_id=$placeId&key=$kMapsApiKey",
+      );
+
+      final detailsRes = await http.get(detailsUrl);
+      final detailsData = json.decode(detailsRes.body);
+
+      final loc = detailsData['result']['geometry']['location'];
+      final lat = (loc['lat'] as num).toDouble();
+      final lng = (loc['lng'] as num).toDouble();
+
+      final ctrl = await _mapCtrl.future;
+      await ctrl.animateCamera(
+        CameraUpdate.newLatLngZoom(LatLng(lat, lng), 15),
+      );
+
+      return;
     }
+
+    // ولا Firestore ولا Google Places فهموا النص
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('لم يتم العثور على مواقع حاويات مطابقة لعبارة "$query".'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   // ===== Bottom sheet لتفاصيل الفاسيليتي =====
