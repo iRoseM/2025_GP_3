@@ -49,6 +49,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   final GlobalKey _ecoLandAnchorKey = GlobalKey(); // مرساة للسكرول
   final GlobalKey _bannerKey = GlobalKey();
   final GlobalKey _friendsKey = GlobalKey();
+  final GlobalKey _carbonKey = GlobalKey(); // كرت "إجمالي خفض الكربون"
   bool _phase2Started = false; // علشان ما نكرر تشغيل المرحلة الثانية
   BuildContext? _scCtx;  // نخزّن showcaseContext
 
@@ -142,10 +143,11 @@ Future<void> _startShowcaseIfNeeded(BuildContext showcaseContext) async {
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
     ShowCaseWidget.of(showcaseContext)?.startShowCase([
-      _profileKey,
-      _pointsKey, 
-      _summaryKey,
-      // ملاحظة: لا نضيف _ecoLandKey ولا _navKey هنا
+    _profileKey,
+    _pointsKey,
+    _carbonKey,   // ⇦ خطوة الكربون أولاً
+    _summaryKey,  // ⇦ بعدها الداشبورد
+    // لا نضيف EcoLand/Nav هنا — تبقى في المرحلة الثانية
     ]);
   });
 }
@@ -733,17 +735,58 @@ Future<void> _scrollToAnchor(GlobalKey key) async {
                         },
                       ),
                     ),
-
                     // === إجمالي خفض الكربون ===
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: const _CarbonFootprintCard(),
+                        child: Showcase.withWidget(
+                          key: _carbonKey,
+                          overlayColor: Colors.black.withOpacity(0.35),
+                          overlayOpacity: 0.35,
+                          blurValue: 0,
+                          container: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.12),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: const Directionality(
+                              textDirection: TextDirection.rtl,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'إجمالي خفض الكربون',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16,
+                                      color: AppColors.dark,
+                                    ),
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'هذا المؤشر يوضح مجموع الأثر البيئي الذي حققته من كل مهامك (كجم CO₂e). كلما زاد الرقم زاد تأثيرك الإيجابي.',
+                                    style: TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          child: const _CarbonFootprintCard(),
+                        ),
                       ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                    // === Daily progress + شرح الكربون والداشبورد ===
+                    // === Daily progress الداشبورد ===
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -772,7 +815,7 @@ Future<void> _scrollToAnchor(GlobalKey key) async {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'إحصاءات اليوم وتأثيرك',
+                                    'لوحة التحكم اليومية',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 16,
@@ -781,7 +824,7 @@ Future<void> _scrollToAnchor(GlobalKey key) async {
                                   ),
                                   SizedBox(height: 8),
                                   Text(
-                                    'يعرض «إجمالي خفض الكربون» الأثر التراكمي على البيئة. لوحة التحكم اليومية توضّح إنجازات اليوم، المهام المتبقية، وسلسلة الاستدامة.',
+                                    'هنا متابعة إنجازات اليوم: نسبة التقدّم، المهام المنجزة والمتبقية، وسلسلة الأيام المتتالية. استخدمها لمعرفة ما يلزمك اليوم.',
                                     style: TextStyle(
                                       fontSize: 13,
                                       height: 1.6,
