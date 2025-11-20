@@ -33,6 +33,7 @@ class ArticlePage extends StatefulWidget {
   @override
   State<ArticlePage> createState() => _ArticlePageState();
 }
+
 class _ArticlePageState extends State<ArticlePage> {
   Map<String, dynamic>? _article;
   bool _loading = true;
@@ -152,7 +153,6 @@ class _ArticlePageState extends State<ArticlePage> {
           background: Colors.redAccent,
         );
       });
-
     } catch (e) {
       _ttsReady = false;
     }
@@ -271,9 +271,7 @@ class _ArticlePageState extends State<ArticlePage> {
   // تشغيل/إيقاف مع الاستمرار من آخر جملة
   Future<void> _toggleSpeak() async {
     if (!_ttsReady) {
-      _showSnack(
-        "ميزة قراءة المقال غير مدعومة على هذا الجهاز.",
-      );
+      _showSnack("ميزة قراءة المقال غير مدعومة على هذا الجهاز.");
       return;
     }
 
@@ -281,9 +279,7 @@ class _ArticlePageState extends State<ArticlePage> {
     final text = (_article!['content'] ?? '').toString().trim();
 
     if (text.isEmpty) {
-      _showSnack(
-        "لا يوجد نص لقراءته.",
-      );
+      _showSnack("لا يوجد نص لقراءته.");
       return;
     }
 
@@ -318,7 +314,6 @@ class _ArticlePageState extends State<ArticlePage> {
     }
   }
 
-
   // ✅ تغيير سرعة القراءة بالضغط على زر x1/x1.25... بدون إيقاف الصوت
   Future<void> _cycleSpeed() async {
     setState(() {
@@ -343,108 +338,102 @@ class _ArticlePageState extends State<ArticlePage> {
       s = s.replaceFirst(RegExp(r'\.$'), '');
     }
     return 'x$s';
-  }Future<void> _startShortTest() async {
-  final raw = (_article?['content'] ?? '').toString();
-  final content = raw.trim();
-  final length = content.length;
-
-  if (length < 80) {
-    _showSnack(
-      "المقال قصير ولا يمكن إنشاء اختبار قصير له.",
-    );
-    return;
   }
 
-  if (_isSpeaking) {
-    await _tts.stop();
-    if (!mounted) return;
-    setState(() {
-      _isSpeaking = false;
-      _currentSentenceIndex = -1;
-    });
-  }
+  Future<void> _startShortTest() async {
+    final raw = (_article?['content'] ?? '').toString();
+    final content = raw.trim();
+    final length = content.length;
 
-  if (!mounted) return;
-  setState(() => _generatingTest = true);
-
-  try {
-    final functions =
-        FirebaseFunctions.instanceFor(region: 'us-central1');
-    final callable =
-        functions.httpsCallable('generateShortTestVerification');
-
-    final result = await callable.call({
-      'articleText': content,
-      'apiType': 'gemini',
-    });
-
-    Map<String, dynamic> data;
-
-    if (result.data is Map) {
-      data = Map<String, dynamic>.from(result.data as Map);
-    } else {
-      String raw = result.data.toString();
-      raw = raw.replaceAll("```json", "").replaceAll("```", "").trim();
-
-      if (!raw.contains('{') || !raw.contains('}')) {
-        throw Exception('Invalid JSON from function');
-      }
-
-      raw = raw.substring(
-        raw.indexOf("{"),
-        raw.lastIndexOf("}") + 1,
-      );
-
-      data = jsonDecode(raw) as Map<String, dynamic>;
+    if (length < 80) {
+      _showSnack("المقال قصير ولا يمكن إنشاء اختبار قصير له.");
+      return;
     }
 
-    final quiz = {
-      'question': data['question'] ?? '',
-      'options': List<String>.from(data['options'] ?? const []),
-      'answer': data['answer'] ?? '',
-    };
+    if (_isSpeaking) {
+      await _tts.stop();
+      if (!mounted) return;
+      setState(() {
+        _isSpeaking = false;
+        _currentSentenceIndex = -1;
+      });
+    }
 
     if (!mounted) return;
-    setState(() => _generatingTest = false);
+    setState(() => _generatingTest = true);
 
-    if (!mounted) return;
+    try {
+      final functions = FirebaseFunctions.instanceFor(region: 'us-central1');
+      final callable = functions.httpsCallable('generateShortTestVerification');
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ShortTestVerificationPage(
-          userTaskDocId: widget.userTaskDocId,
-          quiz: quiz,
+      final result = await callable.call({
+        'articleText': content,
+        'apiType': 'gemini',
+      });
+
+      Map<String, dynamic> data;
+
+      if (result.data is Map) {
+        data = Map<String, dynamic>.from(result.data as Map);
+      } else {
+        String raw = result.data.toString();
+        raw = raw.replaceAll("```json", "").replaceAll("```", "").trim();
+
+        if (!raw.contains('{') || !raw.contains('}')) {
+          throw Exception('Invalid JSON from function');
+        }
+
+        raw = raw.substring(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
+
+        data = jsonDecode(raw) as Map<String, dynamic>;
+      }
+
+      final quiz = {
+        'question': data['question'] ?? '',
+        'options': List<String>.from(data['options'] ?? const []),
+        'answer': data['answer'] ?? '',
+      };
+
+      if (!mounted) return;
+      setState(() => _generatingTest = false);
+
+      if (!mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ShortTestVerificationPage(
+            userTaskDocId: widget.userTaskDocId,
+            quiz: quiz,
+          ),
         ),
-      ),
-    );
-  } on FirebaseFunctionsException catch (e) {
-    if (!mounted) return;
-    setState(() => _generatingTest = false);
+      );
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted) return;
+      setState(() => _generatingTest = false);
 
-    // 👇 طباعة الخطأ في الـ console
-    print(
-        '⚠️ generateShortTestVerification ERROR: code=${e.code}, message=${e.message}, details=${e.details}');
+      // 👇 طباعة الخطأ في الـ console
+      print(
+        '⚠️ generateShortTestVerification ERROR: code=${e.code}, message=${e.message}, details=${e.details}',
+      );
 
-    _showSnack(
-    "تعذَّر إنشاء الاختبار القصير بسبب مشكلة في الاتصال. تأكد من اتصالك بالإنترنت ثم حاول مرة أخرى بعد قليل.",
-      background: Colors.redAccent,
-    );
-  } catch (e) {
-    if (!mounted) return;
-    setState(() => _generatingTest = false);
+      _showSnack(
+        "تعذَّر إنشاء الاختبار القصير بسبب مشكلة في الاتصال. تأكد من اتصالك بالإنترنت ثم حاول مرة أخرى بعد قليل.",
+        background: Colors.redAccent,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _generatingTest = false);
 
-    // 👇 خطأ غير متوقع
-    print('⚠️ generateShortTestVerification UNKNOWN ERROR: $e');
+      // 👇 خطأ غير متوقع
+      print('⚠️ generateShortTestVerification UNKNOWN ERROR: $e');
 
-    _showSnack(
-    "حدث خلل مؤقت أثناء إنشاء الاختبار القصير. تحقق من اتصالك بالإنترنت ثم حاول مرة أخرى بعد قليل.",
-      background: Colors.redAccent,
-    );
+      _showSnack(
+        "حدث خلل مؤقت أثناء إنشاء الاختبار القصير. تحقق من اتصالك بالإنترنت ثم حاول مرة أخرى بعد قليل.",
+        background: Colors.redAccent,
+      );
+    }
   }
-}
-
-
 
   // ======================================================
   // UI
@@ -486,7 +475,7 @@ class _ArticlePageState extends State<ArticlePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "مقال اليوم",
+                        (_article?['title'] ?? ''),
                         style: GoogleFonts.ibmPlexSansArabic(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
