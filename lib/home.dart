@@ -770,11 +770,14 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                     );
                                                   },
                                                 ),
-
-
                                                 child: _PointsChip(
                                                   points: points,
-                                                  onTap: () {},
+                                                  onTap: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(builder: (_) => const RewardsPage()),
+                                                    );
+                                                  },
                                                 ),
                                               ),
                                             ],
