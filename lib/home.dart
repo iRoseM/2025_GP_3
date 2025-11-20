@@ -50,6 +50,8 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   final GlobalKey _bannerKey = GlobalKey();
   final GlobalKey _friendsKey = GlobalKey();
   final GlobalKey _carbonKey = GlobalKey(); // كرت "إجمالي خفض الكربون"
+  OverlayEntry? _skipEntry;
+  bool _tourRunning = false;
   bool _phase2Started = false; // علشان ما نكرر تشغيل المرحلة الثانية
   BuildContext? _scCtx;  // نخزّن showcaseContext
 
@@ -89,6 +91,44 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
         break;
     }
   }
+    // عرض زر تخطي الجولة 
+  void _showSkipOverlay() {
+    if (_skipEntry != null) return;
+
+    _skipEntry = OverlayEntry(
+      builder: (ctx) {
+        return Positioned(
+          bottom: 80,  // ← أفضل منطقة، فوق الـNavbar مباشرة
+          left: 16,
+          child: Material(
+            color: Colors.transparent,
+            child: _SkipTourButton(
+              onSkip: () {
+                final ctrl = (_scCtx != null)
+                    ? ShowCaseWidget.of(_scCtx!)
+                    : null;
+
+                ctrl?.dismiss();
+                _hideSkipOverlay();
+                setState(() => _tourRunning = false);
+              },
+            ),
+          ),
+        );
+
+      },
+    );
+
+  Navigator.of(context, rootNavigator: true).overlay!.insert(_skipEntry!);
+  }
+
+
+  // إخفاء زر تخطي الجولة
+  void _hideSkipOverlay() {
+    _skipEntry?..remove();
+    _skipEntry = null;
+  }
+
 
   late final AnimationController _bgCtrl;
   AnimationController? _floatingCtrl;
@@ -130,38 +170,37 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
     // )..repeat();
   }
 
-Future<void> _startShowcaseIfNeeded(BuildContext showcaseContext) async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
+  Future<void> _startShowcaseIfNeeded(BuildContext showcaseContext) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-  final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
-  final snap = await ref.get();
-  final data = snap.data();
+    final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final snap = await ref.get();
+    final data = snap.data();
 
-  if (data != null && data['seenHomeOnboardingV2'] == true) return;
-  await ref.set({'seenHomeOnboardingV2': true}, SetOptions(merge: true));
-
-  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (data != null && data['seenHomeOnboardingV2'] == true) return;
+    await ref.set({'seenHomeOnboardingV2': true}, SetOptions(merge: true));
+    _tourRunning = true;
+    // _showSkipOverlay();
     ShowCaseWidget.of(showcaseContext)?.startShowCase([
-    _profileKey,
-    _pointsKey,
-    _carbonKey,   // ⇦ خطوة الكربون أولاً
-    _summaryKey,  // ⇦ بعدها الداشبورد
-    // لا نضيف EcoLand/Nav هنا — تبقى في المرحلة الثانية
+      _profileKey,
+      _pointsKey,
+      _carbonKey,
+      _summaryKey,
     ]);
-  });
-}
-Future<void> _scrollToAnchor(GlobalKey key) async {
-  final ctx = key.currentContext;
-  if (ctx == null) return;
-  await Scrollable.ensureVisible(
-    ctx,
-    alignment: 0.1,
-    duration: const Duration(milliseconds: 600),
-    curve: Curves.easeInOut,
-  );
-  await Future.delayed(const Duration(milliseconds: 100));
-}
+  }
+
+  Future<void> _scrollToAnchor(GlobalKey key) async {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    await Scrollable.ensureVisible(
+      ctx,
+      alignment: 0.1,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeInOut,
+    );
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
 
 
 
@@ -171,6 +210,8 @@ Future<void> _scrollToAnchor(GlobalKey key) async {
     _floatingCtrl?.dispose();
     _scrollCtrl.dispose(); // ← ضروري
     super.dispose();
+    _hideSkipOverlay();
+
   }
 
   Future<void> saveFcmToken() async {
@@ -194,20 +235,19 @@ Future<void> _scrollToAnchor(GlobalKey key) async {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
     return ShowCaseWidget(
-        onFinish: () async {
-          // نبدأ المرحلة الثانية بعد ما تخلص المرحلة الأولى
-          if (!_phase2Started && _scCtx != null) {
-            _phase2Started = true;
-            await _scrollToAnchor(_ecoLandAnchorKey);
-            final controller = ShowCaseWidget.of(_scCtx!);
-            controller?.startShowCase([
-              _ecoLandKey,   // أرضي
-              _bannerKey,    // الإعلان
-              _friendsKey,   // الأصدقاء
-              _navKey,       // الشريط السفلي
-            ]);
-          }
-        },
+      onFinish: () async {
+        if (!_phase2Started && _scCtx != null) {
+          _phase2Started = true;
+          await _scrollToAnchor(_ecoLandAnchorKey);
+          final controller = ShowCaseWidget.of(_scCtx!);
+          controller?.startShowCase([_ecoLandKey, _bannerKey, _friendsKey, _navKey]);
+          // لا نُخفي زر التخطي هنا — ما زلنا في الجولة
+        } else {
+          // انتهت المرحلة الثانية = نهاية الجولة بالكامل
+          _hideSkipOverlay();
+          setState(() => _tourRunning = false);
+        }
+      },
       builder: (showcaseContext) {
         // خزّني الكونتكست حق الـ Showcase عشان نستخدمه في onFinish
         _scCtx ??= showcaseContext;
@@ -217,954 +257,1099 @@ Future<void> _scrollToAnchor(GlobalKey key) async {
           _didScheduleShowcase = true;
           _startShowcaseIfNeeded(showcaseContext);
         }
+        return Directionality( 
+          textDirection: TextDirection.rtl, 
+          child: Stack(
+            children: [
+              Scaffold(
+                extendBody: true,
+                backgroundColor: Colors.transparent,
+                      body: AnimatedBackgroundContainer(
+                        child: SafeArea(
+                          bottom: false,
+                          child: CustomScrollView(
+                            controller: _scrollCtrl,
+                            slivers: [
+                              // ====================== Header ======================
+                              SliverToBoxAdapter(
+                                child: Builder(
+                                  builder: (context) {
+                                    final uid = FirebaseAuth.instance.currentUser?.uid;
 
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          
-          child: Scaffold(
-            extendBody: true,
-            backgroundColor: Colors.transparent,
-            body: AnimatedBackgroundContainer(
-              child: SafeArea(
-                bottom: false,
-                child: CustomScrollView(
-                  controller: _scrollCtrl,
-                  slivers: [
-                    // ====================== Header ======================
-                    SliverToBoxAdapter(
-                      child: Builder(
-                        builder: (context) {
-                          final uid = FirebaseAuth.instance.currentUser?.uid;
-
-                          // لو ما فيه مستخدم مسجل
-                          if (uid == null) {
-                            return Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                16,
-                                16,
-                                12,
-                              ),
-                              child: Row(
-                                children: [
-                                  // صورة البروفايل → تودّي لصفحة البروفايل
-                                  Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(999),
-                                      onTap: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) => const profilePage(),
-                                          ),
-                                        );
-                                      },
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              AppColors.primary.withOpacity(.2),
-                                              AppColors.sea.withOpacity(.1),
-                                            ],
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: AppColors.primary
-                                                  .withOpacity(.2),
-                                              blurRadius: 12,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ],
+                                    // لو ما فيه مستخدم مسجل
+                                    if (uid == null) {
+                                      return Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          16,
+                                          16,
+                                          12,
                                         ),
-                                        child: const CircleAvatar(
-                                          radius: 24,
-                                          backgroundColor: Colors.transparent,
-                                          child: Icon(
-                                            Icons.person_outline,
-                                            color: AppColors.primary,
-                                            size: 28,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  const SizedBox(width: 12),
-
-                                  const Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'مرحبًا 👋',
-                                          style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w800,
-                                            color: AppColors.dark,
-                                          ),
-                                        ),
-                                        Text(
-                                          'لنجعل اليوم مميزاً!',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: AppColors.sea,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  _PointsChip(points: 0, onTap: () {}),
-                                ],
-                              ),
-                            );
-                          }
-
-                          // لو فيه مستخدم، نجلب بياناته من Firestore
-                          return StreamBuilder<
-                            DocumentSnapshot<Map<String, dynamic>>
-                          >(
-                            stream: FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(uid)
-                                .snapshots(),
-                            builder: (context, snap) {
-                              // 🔸 لو صار خطأ (غالباً انقطاع نت أو صلاحيات)
-                              if (snap.hasError) {
-                                return Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    16,
-                                    16,
-                                    12,
-                                  ),
-                                  child: Row(
-                                    children: const [
-                                      Icon(
-                                        Icons.person_outline,
-                                        color: AppColors.primary,
-                                        size: 48,
-                                      ),
-                                      SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                        child: Row(
                                           children: [
-                                            Text(
-                                              'مرحبًا 👋',
-                                              style: TextStyle(
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.dark,
+                                            // صورة البروفايل → تودّي لصفحة البروفايل
+                                            Material(
+                                              color: Colors.transparent,
+                                              child: InkWell(
+                                                borderRadius: BorderRadius.circular(999),
+                                                onTap: () {
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder: (_) => const profilePage(),
+                                                    ),
+                                                  );
+                                                },
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    gradient: LinearGradient(
+                                                      colors: [
+                                                        AppColors.primary.withOpacity(.2),
+                                                        AppColors.sea.withOpacity(.1),
+                                                      ],
+                                                    ),
+                                                    boxShadow: [
+                                                      BoxShadow(
+                                                        color: AppColors.primary
+                                                            .withOpacity(.2),
+                                                        blurRadius: 12,
+                                                        offset: const Offset(0, 4),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  child: const CircleAvatar(
+                                                    radius: 24,
+                                                    backgroundColor: Colors.transparent,
+                                                    child: Icon(
+                                                      Icons.person_outline,
+                                                      color: AppColors.primary,
+                                                      size: 28,
+                                                    ),
+                                                  ),
+                                                ),
                                               ),
                                             ),
-                                            Text(
-                                              'تحقق من اتصالك بالإنترنت',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: AppColors.sea,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
 
-                              // 🔸 لو البيانات ما وصلت بعد
-                              if (snap.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Padding(
-                                  padding: EdgeInsets.fromLTRB(16, 16, 16, 12),
-                                  child: Row(
-                                    children: [
-                                      CircularProgressIndicator(
-                                        color: AppColors.primary,
-                                      ),
-                                      SizedBox(width: 16),
-                                      Text(
-                                        'جاري التحميل...',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.dark,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
+                                            const SizedBox(width: 12),
 
-                              // 🔸 لو البيانات جاهزة نعرضها
-                              final data = snap.data?.data();
-                              final username = (data?['username'] ?? 'مستخدم')
-                                  .toString();
-
-                              int _asInt(dynamic v) {
-                                if (v is int) return v;
-                                if (v is double) return v.toInt();
-                                if (v == null) return 0;
-                                return int.tryParse('$v') ?? 0;
-                              }
-
-                              final int points = _asInt(
-                                data?['points'] ?? data?['wallet'],
-                              );
-
-                              return Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  16,
-                                  16,
-                                  12,
-                                ),
-                                child: Row(
-                                  children: [
-                                    // صورة البروفايل → Showcase + شرح + تخطي
-                                    StreamBuilder<
-                                      DocumentSnapshot<Map<String, dynamic>>
-                                    >(
-                                      stream:
-                                          FirebaseAuth.instance.currentUser ==
-                                              null
-                                          ? const Stream.empty()
-                                          : FirebaseFirestore.instance
-                                                .collection('users')
-                                                .doc(
-                                                  FirebaseAuth
-                                                      .instance
-                                                      .currentUser!
-                                                      .uid,
-                                                )
-                                                .snapshots(),
-                                      builder: (context, snapshot) {
-                                        final data = snapshot.data?.data();
-                                        final int? pfpIndex =
-                                            (data?['pfpIndex'] is int)
-                                            ? (data?['pfpIndex'] as int)
-                                            : int.tryParse(
-                                                '${data?['pfpIndex'] ?? ''}',
-                                              );
-                                        String? avatarPath;
-                                        if (pfpIndex != null &&
-                                            pfpIndex >= 0 &&
-                                            pfpIndex < 8) {
-                                          avatarPath =
-                                              'assets/pfp/pfp${pfpIndex + 1}.png';
-                                        }
-
-                                        return Showcase.withWidget(
-                                          key: _profileKey,
-                                          overlayColor: Colors.black.withOpacity(0.35), // غامق — يخلي التور واضح
-                                          overlayOpacity: 0.35,
-                                          blurValue: 0,
-                                          container: Builder(
-                                            builder: (ctx) => Container(
-                                              padding: const EdgeInsets.all(12),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withOpacity(0.12),
-                                                    blurRadius: 12,
-                                                    offset: const Offset(0, 6),
+                                            const Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    'مرحبًا 👋',
+                                                    style: TextStyle(
+                                                      fontSize: 20,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: AppColors.dark,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    'لنجعل اليوم مميزاً!',
+                                                    style: TextStyle(
+                                                      fontSize: 13,
+                                                      color: AppColors.sea,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
                                                   ),
                                                 ],
                                               ),
-                                              child: Directionality(
-                                                textDirection:
-                                                    TextDirection.rtl,
-                                                child: Column(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    const Text(
-                                                      "هنا ملفك الشخصي",
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        fontSize: 16,
-                                                        color: Color.fromARGB(255, 60, 59, 59),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 8),
-                                                    const Text(
-                                                       'من هنا يمكن متابعة الملف، تعديل الصورة واسم المستخدم، والاطلاع على الإنجازات.',
-                                                      style: TextStyle(
-                                                        fontSize: 13,
-                                                        height: 1.6,
-                                                        color: Colors.black87,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 8),
-                                                    const Align(
-                                                      alignment:
-                                                          AlignmentDirectional
-                                                              .centerEnd,
-                                                      child: Text(
-                                                        'للتنقل اضغط خارج البالون، ويمكن استخدام زر «تخطي الجولة» أدناه.',
+                                            ),
+                                            _PointsChip(points: 0, onTap: () {}),
+                                          ],
+                                        ),
+                                      );
+                                    }
+
+                                    // لو فيه مستخدم، نجلب بياناته من Firestore
+                                    return StreamBuilder<
+                                      DocumentSnapshot<Map<String, dynamic>>
+                                    >(
+                                      stream: FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(uid)
+                                          .snapshots(),
+                                      builder: (context, snap) {
+                                        // 🔸 لو صار خطأ (غالباً انقطاع نت أو صلاحيات)
+                                        if (snap.hasError) {
+                                          return Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              16,
+                                              16,
+                                              16,
+                                              12,
+                                            ),
+                                            child: Row(
+                                              children: const [
+                                                Icon(
+                                                  Icons.person_outline,
+                                                  color: AppColors.primary,
+                                                  size: 48,
+                                                ),
+                                                SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        'مرحبًا 👋',
                                                         style: TextStyle(
-                                                          fontSize: 11,
-                                                          color: Colors.black54,
+                                                          fontSize: 20,
+                                                          fontWeight: FontWeight.w800,
+                                                          color: AppColors.dark,
                                                         ),
                                                       ),
-                                                    ),
-                                                    const SizedBox(height: 12),
-                                                    Align(
-                                                      alignment:
-                                                          AlignmentDirectional
-                                                              .centerStart,
-                                                      child: TextButton(
-                                                        onPressed: () {
-                                                          // ❌ أغلق كل الـ Showcase مره وحده
-                                                          ShowCaseWidget.of(
-                                                            ctx,
-                                                          )?.dismiss();
-                                                        },
-                                                        child: const Text(
-                                                          'تخطي الجولة',
-                                                          style: TextStyle(
-                                                            color: AppColors
-                                                                .primary,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                          ),
+                                                      Text(
+                                                        'تحقق من اتصالك بالإنترنت',
+                                                        style: TextStyle(
+                                                          fontSize: 13,
+                                                          color: AppColors.sea,
+                                                          fontWeight: FontWeight.w600,
                                                         ),
                                                       ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-
-                                          child: Material(
-                                            color: Colors.transparent,
-                                            child: InkWell(
-                                              borderRadius:
-                                                  BorderRadius.circular(999),
-                                              onTap: () {
-                                                Navigator.of(context).push(
-                                                  MaterialPageRoute(
-                                                    builder: (_) =>
-                                                        const profilePage(),
-                                                  ),
-                                                );
-                                              },
-                                              child: Container(
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  gradient: LinearGradient(
-                                                    colors: [
-                                                      AppColors.primary
-                                                          .withOpacity(.2),
-                                                      AppColors.mint
-                                                          .withOpacity(.1),
                                                     ],
-                                                  ),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: AppColors.primary
-                                                          .withOpacity(.2),
-                                                      blurRadius: 12,
-                                                      offset: const Offset(
-                                                        0,
-                                                        4,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: CircleAvatar(
-                                                  radius: 24,
-                                                  backgroundColor:
-                                                      Colors.transparent,
-                                                  backgroundImage:
-                                                      (avatarPath != null)
-                                                      ? AssetImage(avatarPath)
-                                                      : null,
-                                                  child: (avatarPath == null)
-                                                      ? const Icon(
-                                                          Icons.person_outline,
-                                                          color:
-                                                              AppColors.primary,
-                                                          size: 28,
-                                                        )
-                                                      : null,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-
-                                    const SizedBox(width: 12),
-
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          if (snap.connectionState ==
-                                              ConnectionState.waiting)
-                                            const Text(
-                                              'مرحبًا 👋',
-                                              style: TextStyle(
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.dark,
-                                              ),
-                                            )
-                                          else
-                                            Text(
-                                              'مرحبًا، $username 👋',
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.dark,
-                                              ),
-                                            ),
-                                          const Text(
-                                            'لنجعل اليوم مميزاً!',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: AppColors.sea,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Showcase.withWidget(
-                                      key: _pointsKey,
-                                      overlayColor: Colors.black.withOpacity(0.35), // غامق — يخلي التور واضح
-                                      overlayOpacity: 0.35,
-                                      blurValue: 0,
-                                      container: Builder(
-                                        builder: (ctx) {
-                                          final size = MediaQuery.of(ctx).size;
-
-                                          // مقاس ديناميكي للصورة (أكبر) مع حد أقصى
-                                          final double imgH = math.min(size.width * 0.65, 300);
-
-                                          return SizedBox(
-                                            width: size.width,
-                                            height: 320, // رفعنا الارتفاع عشان يسمح للنزلة
-                                            child: Stack(
-                                              clipBehavior: Clip.none,
-                                              children: [
-                                                // البالون الأبيض
-                                                Positioned(
-                                                  top: 40,
-                                                  left: 20,
-                                                  child: Container(
-                                                    width: 260,
-                                                    padding: const EdgeInsets.all(14),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.white,
-                                                      borderRadius: BorderRadius.circular(16),
-                                                      boxShadow: [
-                                                        BoxShadow(
-                                                          color: Colors.black.withOpacity(0.12),
-                                                          blurRadius: 12,
-                                                          offset: const Offset(0, 6),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    child: const Directionality(
-                                                      textDirection: TextDirection.rtl,
-                                                      child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                                        children: [
-                                                          Text("هنا نقاطك ",
-                                                              style: TextStyle(
-                                                                fontWeight: FontWeight.w800,
-                                                                fontSize: 16,
-                                                                color: AppColors.dark,
-                                                              )),
-                                                          SizedBox(height: 8),
-                                                          Text(
-                                                            'كل مهمة تُنجَز تضيف نقاطًا إلى رصيدك هنا، ويمكن استبدالها في صفحة الجوائز.',
-                                                            style: TextStyle(fontSize: 13, height: 1.5, color: Colors.black87),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-
-                                                // صورة Nameer — أكبر ولأسفل
-                                                Positioned(
-                                                  right: -14,      // أقرب للحافة
-                                                  bottom: -60,     // نزّلناها لتحت
-                                                  child: Image.asset(
-                                                    'assets/img/nameerLeft.png',
-                                                    height: imgH,   // أكبر بشكل متناسب
-                                                    fit: BoxFit.contain,
                                                   ),
                                                 ),
                                               ],
                                             ),
                                           );
-                                        },
-                                      ),
+                                        }
 
+                                        // 🔸 لو البيانات ما وصلت بعد
+                                        if (snap.connectionState ==
+                                            ConnectionState.waiting) {
+                                          return const Padding(
+                                            padding: EdgeInsets.fromLTRB(16, 16, 16, 12),
+                                            child: Row(
+                                              children: [
+                                                CircularProgressIndicator(
+                                                  color: AppColors.primary,
+                                                ),
+                                                SizedBox(width: 16),
+                                                Text(
+                                                  'جاري التحميل...',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AppColors.dark,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }
 
-                                      child: _PointsChip(
-                                        points: points,
-                                        onTap: () {},
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    // === إجمالي خفض الكربون ===
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: Showcase.withWidget(
-                          key: _carbonKey,
-                          overlayColor: Colors.black.withOpacity(0.35),
-                          overlayOpacity: 0.35,
-                          blurValue: 0,
-                          container: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.12),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: const Directionality(
-                              textDirection: TextDirection.rtl,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'إجمالي خفض الكربون',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 16,
-                                      color: AppColors.dark,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'هذا المؤشر يوضح مجموع الأثر البيئي الذي حققته من كل مهامك (كجم CO₂e). كلما زاد الرقم زاد تأثيرك الإيجابي.',
-                                    style: TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          child: const _CarbonFootprintCard(),
-                        ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                                        // 🔸 لو البيانات جاهزة نعرضها
+                                        final data = snap.data?.data();
+                                        final username = (data?['username'] ?? 'مستخدم')
+                                            .toString();
 
-                    // === Daily progress الداشبورد ===
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                        child: Showcase.withWidget(
-                          overlayColor: Colors.black.withOpacity(0.35), // غامق — يخلي التور واضح
-                          overlayOpacity: 0.35,
-                          blurValue: 0,
-                          key: _summaryKey,
-                          container: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withOpacity(.20),
-                                  blurRadius: 12,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Directionality(
-                              textDirection: TextDirection.rtl,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'لوحة التحكم اليومية',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 16,
-                                      color: AppColors.dark,
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'هنا متابعة إنجازات اليوم: نسبة التقدّم، المهام المنجزة والمتبقية، وسلسلة الأيام المتتالية. استخدمها لمعرفة ما يلزمك اليوم.',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      height: 1.6,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          child: _DailyProgressCard(
-                            percent: .62,
-                            bullets: const [
-                              'أنهيت مهمتين من قائمة اليوم',
-                              'تبقّى: إعادة تدوير البلاستيك + قراءة مقال',
-                              'سلسلة الاستدامة: 3 أيام متتالية!',
-                            ],
-                            onTapDetails: () {},
-                            colored: false,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                                        int _asInt(dynamic v) {
+                                          if (v is int) return v;
+                                          if (v is double) return v.toInt();
+                                          if (v == null) return 0;
+                                          return int.tryParse('$v') ?? 0;
+                                        }
 
-                    // === بلوك الأرض مع العنوان داخل نفس الحاوية ===
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: RepaintBoundary(
-                          key: _ecoLandAnchorKey, // ← مرساة السكرول
-                          child: Showcase.withWidget(
-                            key: _ecoLandKey,      // ← نفس المفتاح المستخدم في الجولة
-                            overlayColor: Colors.black.withOpacity(0.35),
-                            overlayOpacity: 0.35,
-                            blurValue: 0,
-                            container: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.12),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 6),
-                                  ),
-                                ],
-                              ),
-                              child: const Directionality(
-                                textDirection: TextDirection.rtl,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'EcoLand الخاصة بك',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 16,
-                                        color: AppColors.dark,
-                                      ),
-                                    ),
-                                    SizedBox(height: 8),
-                                    Text(
-                                      'ابنِ عالمك الخاص: كل مهمة تُنجَز تضيف عنصرًا جديدًا لأرضك وتفتح ترقيات ممتعة.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        height: 1.6,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                                        final int points = _asInt(
+                                          data?['points'] ?? data?['wallet'],
+                                        );
 
-                            // ← هذا هو البلوك القديم نفسه كما هو:
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(24),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x14000000),
-                                    blurRadius: 18,
-                                    offset: Offset(0, 8),
-                                  ),
-                                ],
-                                border: Border.all(
-                                  color: Color(0xFFE8F1EE),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // العنوان
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(8),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primary.withOpacity(.1),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: const Icon(
-                                          Icons.terrain_rounded,
-                                          color: AppColors.primary,
-                                          size: 24,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      const Expanded(
-                                        child: Text(
-                                          'أرضي في EcoLand',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900,
-                                            color: AppColors.dark,
+                                        return Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            16,
+                                            16,
+                                            16,
+                                            12,
                                           ),
+                                          child: Row(
+                                            children: [
+                                              // صورة البروفايل → Showcase + شرح + تخطي
+                                              StreamBuilder<
+                                                DocumentSnapshot<Map<String, dynamic>>
+                                              >(
+                                                stream:
+                                                    FirebaseAuth.instance.currentUser ==
+                                                        null
+                                                    ? const Stream.empty()
+                                                    : FirebaseFirestore.instance
+                                                          .collection('users')
+                                                          .doc(
+                                                            FirebaseAuth
+                                                                .instance
+                                                                .currentUser!
+                                                                .uid,
+                                                          )
+                                                          .snapshots(),
+                                                builder: (context, snapshot) {
+                                                  final data = snapshot.data?.data();
+                                                  final int? pfpIndex =
+                                                      (data?['pfpIndex'] is int)
+                                                      ? (data?['pfpIndex'] as int)
+                                                      : int.tryParse(
+                                                          '${data?['pfpIndex'] ?? ''}',
+                                                        );
+                                                  String? avatarPath;
+                                                  if (pfpIndex != null &&
+                                                      pfpIndex >= 0 &&
+                                                      pfpIndex < 8) {
+                                                    avatarPath =
+                                                        'assets/pfp/pfp${pfpIndex + 1}.png';
+                                                  }
+
+                                                  return Showcase.withWidget(
+                                                    key: _profileKey,
+                                                    overlayColor: Colors.black.withOpacity(0.35), // غامق — يخلي التور واضح
+                                                    overlayOpacity: 0.35,
+                                                    blurValue: 0,
+                                                    container: Builder(
+                                                      builder: (ctx) => Container(
+                                                        padding: const EdgeInsets.all(12),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.white,
+                                                          borderRadius:
+                                                              BorderRadius.circular(16),
+                                                          boxShadow: [
+                                                            BoxShadow(
+                                                              color: Colors.black
+                                                                  .withOpacity(0.12),
+                                                              blurRadius: 12,
+                                                              offset: const Offset(0, 6),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        child: Directionality(
+                                                          textDirection:
+                                                              TextDirection.rtl,
+                                                          child: Column(
+                                                            mainAxisSize:
+                                                                MainAxisSize.min,
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment.start,
+                                                            children: [
+                                                              const Text(
+                                                                "هنا ملفك الشخصي",
+                                                                style: TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight.w800,
+                                                                  fontSize: 16,
+                                                                  color: Color.fromARGB(255, 60, 59, 59),
+                                                                ),
+                                                              ),
+                                                              const SizedBox(height: 8),
+                                                              const Text(
+                                                                'من هنا يمكن متابعة الملف، تعديل الصورة واسم المستخدم، والاطلاع على الإنجازات.',
+                                                                textDirection: TextDirection.rtl,   // 👈 أضف هذا
+                                                                style: TextStyle(
+                                                                  fontSize: 13,
+                                                                  height: 1.6,
+                                                                  color: Colors.black87,
+                                                                ),
+                                                              ),
+                                                              const SizedBox(height: 8),
+                                                              const Align(
+                                                                alignment: Alignment.centerRight,
+                                                                child: Text(
+                                                                  'للتنقل اضغط خارج البالون، ويمكن استخدام زر «تخطي الجولة» أدناه.',
+                                                                  style: TextStyle(
+                                                                    fontSize: 11,
+                                                                    color: Colors.black54,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              // ⭐ Skip Button (Inside Bubble)
+                                                              Align(
+                                                                alignment: Alignment.centerLeft,
+                                                                child: TextButton(
+                                                                onPressed: () {
+                                                                  final ctrl = ShowCaseWidget.of(_scCtx!);
+                                                                  ctrl?.dismiss();
+                                                                },
+                                                                child: const Text(
+                                                                  'تخطي الجولة',
+                                                                  style: TextStyle(
+                                                                    color: AppColors.primary,
+                                                                    fontWeight: FontWeight.w800,
+                                                                  ),
+                                                                ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+
+                                                    child: Material(
+                                                      color: Colors.transparent,
+                                                      child: InkWell(
+                                                        borderRadius:
+                                                            BorderRadius.circular(999),
+                                                        onTap: () {
+                                                          Navigator.of(context).push(
+                                                            MaterialPageRoute(
+                                                              builder: (_) =>
+                                                                  const profilePage(),
+                                                            ),
+                                                          );
+                                                        },
+                                                        child: Container(
+                                                          decoration: BoxDecoration(
+                                                            shape: BoxShape.circle,
+                                                            gradient: LinearGradient(
+                                                              colors: [
+                                                                AppColors.primary
+                                                                    .withOpacity(.2),
+                                                                AppColors.mint
+                                                                    .withOpacity(.1),
+                                                              ],
+                                                            ),
+                                                            boxShadow: [
+                                                              BoxShadow(
+                                                                color: AppColors.primary
+                                                                    .withOpacity(.2),
+                                                                blurRadius: 12,
+                                                                offset: const Offset(
+                                                                  0,
+                                                                  4,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                          child: CircleAvatar(
+                                                            radius: 24,
+                                                            backgroundColor:
+                                                                Colors.transparent,
+                                                            backgroundImage:
+                                                                (avatarPath != null)
+                                                                ? AssetImage(avatarPath)
+                                                                : null,
+                                                            child: (avatarPath == null)
+                                                                ? const Icon(
+                                                                    Icons.person_outline,
+                                                                    color:
+                                                                        AppColors.primary,
+                                                                    size: 28,
+                                                                  )
+                                                                : null,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+
+                                              const SizedBox(width: 12),
+
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    if (snap.connectionState ==
+                                                        ConnectionState.waiting)
+                                                      const Text(
+                                                        'مرحبًا 👋',
+                                                        style: TextStyle(
+                                                          fontSize: 20,
+                                                          fontWeight: FontWeight.w800,
+                                                          color: AppColors.dark,
+                                                        ),
+                                                      )
+                                                    else
+                                                      Text(
+                                                        'مرحبًا، $username 👋',
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: const TextStyle(
+                                                          fontSize: 20,
+                                                          fontWeight: FontWeight.w800,
+                                                          color: AppColors.dark,
+                                                        ),
+                                                      ),
+                                                    const Text(
+                                                      'لنجعل اليوم مميزاً!',
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        color: AppColors.sea,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Showcase.withWidget(
+                                                key: _pointsKey,
+                                                overlayColor: Colors.black.withOpacity(0.35), // غامق — يخلي التور واضح
+                                                overlayOpacity: 0.35,
+                                                blurValue: 0,
+                                                container: Builder(
+                                                  builder: (ctx) {
+                                                    final size = MediaQuery.of(ctx).size;
+
+                                                    // مقاس ديناميكي للصورة (أكبر) مع حد أقصى
+                                                    final double imgH = math.min(size.width * 0.65, 300);
+
+                                                    return SizedBox(
+                                                      width: size.width,
+                                                      height: 320, // رفعنا الارتفاع عشان يسمح للنزلة
+                                                      child: Stack(
+                                                        clipBehavior: Clip.none,
+                                                        children: [
+                                                          // البالون الأبيض
+                                                          Positioned(
+                                                            top: 40,
+                                                            left: 20,
+                                                            child: Container(
+                                                              width: 260,
+                                                              padding: const EdgeInsets.all(14),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors.white,
+                                                                borderRadius: BorderRadius.circular(16),
+                                                                boxShadow: [
+                                                                  BoxShadow(
+                                                                    color: Colors.black.withOpacity(0.12),
+                                                                    blurRadius: 12,
+                                                                    offset: const Offset(0, 6),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                              child: Directionality(
+                                                                textDirection: TextDirection.rtl,
+                                                                child: Column(
+                                                                  mainAxisSize: MainAxisSize.min,
+                                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                                  children: [
+                                                                    Text("هنا نقاطك ",
+                                                                        style: TextStyle(
+                                                                          fontWeight: FontWeight.w800,
+                                                                          fontSize: 16,
+                                                                          color: AppColors.dark,
+                                                                        )),
+                                                                    SizedBox(height: 8),
+                                                                    Text(
+                                                                      'كل مهمة تُنجَز تضيف نقاطًا إلى رصيدك هنا، ويمكن استبدالها في صفحة الجوائز.',
+                                                                      style: TextStyle(fontSize: 13, height: 1.5, color: Colors.black87),
+                                                                    ),
+                                                                    Align(
+                                                                      alignment: Alignment.centerLeft,
+                                                                      child: TextButton(
+                                                                        onPressed: () {
+                                                                          ShowCaseWidget.of(_scCtx!).dismiss();
+                                                                        },
+                                                                        child: const Text(
+                                                                          'تخطي الجولة',
+                                                                          style: TextStyle(
+                                                                            color: AppColors.primary,
+                                                                            fontWeight: FontWeight.w800,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+
+                                                          // صورة Nameer — أكبر ولأسفل
+                                                          Positioned(
+                                                            right: -14,      // أقرب للحافة
+                                                            bottom: -60,     // نزّلناها لتحت
+                                                            child: Image.asset(
+                                                              'assets/img/nameerLeft.png',
+                                                              height: imgH,   // أكبر بشكل متناسب
+                                                              fit: BoxFit.contain,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+
+
+                                                child: _PointsChip(
+                                                  points: points,
+                                                  onTap: () {},
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                              // === إجمالي خفض الكربون ===
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                  child: Showcase.withWidget(
+                                    key: _carbonKey,
+                                    overlayColor: Colors.black.withOpacity(0.35),
+                                    overlayOpacity: 0.35,
+                                    blurValue: 0,
+
+                                    // 👇 مهم: إضافة Builder للحصول على ctx
+                                    container: Builder(
+                                      builder: (ctx) => Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.12),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 6),
+                                            ),
+                                          ],
+                                        ),
+
+                                        child: Directionality(
+                                          textDirection: TextDirection.rtl,
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Text(
+                                                'إجمالي خفض الكربون',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 16,
+                                                  color: AppColors.dark,
+                                                ),
+                                              ),
+
+                                              const SizedBox(height: 8),
+
+                                              const Text(
+                                                'هذا المؤشر يوضح مجموع الأثر البيئي الذي حققته من كل مهامك (كجم CO₂e). كلما زاد الرقم زاد تأثيرك الإيجابي.',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  height: 1.6,
+                                                  color: Colors.black87,
+                                                ),
+                                              ),
+
+                                              const SizedBox(height: 16),
+
+                                              // ⭐ زر تخطي الجولة داخل البالون
+                                              Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: TextButton(
+                                                  onPressed: () {
+                                                    ShowCaseWidget.of(_scCtx!).dismiss();
+                                                  },
+                                                  child: const Text(
+                                                    'تخطي الجولة',
+                                                    style: TextStyle(
+                                                      color: AppColors.primary,
+                                                      fontWeight: FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                    child: const _CarbonFootprintCard(),
+                                  ),
+                                ),
+                              ),
+
+                              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                              // === Daily progress الداشبورد ===
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                  child: Showcase.withWidget(
+                                    overlayColor: Colors.black.withOpacity(0.35),
+                                    overlayOpacity: 0.35,
+                                    blurValue: 0,
+                                    key: _summaryKey,
+
+                                    // 👇 نضيف Builder للحصول على ctx
+                                    container: Builder(
+                                      builder: (ctx) => Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: AppColors.primary.withOpacity(.20),
+                                              blurRadius: 12,
+                                              offset: Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Directionality(
+                                          textDirection: TextDirection.rtl,
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'لوحة التحكم اليومية',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 16,
+                                                  color: AppColors.dark,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              const Text(
+                                                'هنا متابعة إنجازات اليوم: نسبة التقدّم، المهام المنجزة والمتبقية، وسلسلة الأيام المتتالية. استخدمها لمعرفة ما يلزمك اليوم.',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  height: 1.6,
+                                                  color: Colors.black87,
+                                                ),
+                                              ),
+
+                                              const SizedBox(height: 16),
+
+                                              // ⭐ زر تخطي الجولة
+                                              Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: TextButton(
+                                                  onPressed: () {
+                                                    ShowCaseWidget.of(_scCtx!).dismiss();
+                                                  },
+                                                  child: const Text(
+                                                    'تخطي الجولة',
+                                                    style: TextStyle(
+                                                      color: AppColors.primary,
+                                                      fontWeight: FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                    child: _DailyProgressCard(
+                                      percent: .62,
+                                      bullets: const [
+                                        'أنهيت مهمتين من قائمة اليوم',
+                                        'تبقّى: إعادة تدوير البلاستيك + قراءة مقال',
+                                        'سلسلة الاستدامة: 3 أيام متتالية!',
+                                      ],
+                                      onTapDetails: () {},
+                                      colored: false,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                              // === بلوك الأرض مع العنوان داخل نفس الحاوية ===
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  child: RepaintBoundary(
+                                    key: _ecoLandAnchorKey, // ← مرساة السكرول
+                                    child: Showcase.withWidget(
+                                      key: _ecoLandKey,
+                                      overlayColor: Colors.black.withOpacity(0.35),
+                                      overlayOpacity: 0.35,
+                                      blurValue: 0,
+
+                                      // 👇 لازم Builder للحصول على ctx
+                                      container: Builder(
+                                        builder: (ctx) => Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(16),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.12),
+                                                blurRadius: 12,
+                                                offset: const Offset(0, 6),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Directionality(
+                                            textDirection: TextDirection.rtl,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Text(
+                                                  'EcoLand الخاصة بك',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w800,
+                                                    fontSize: 16,
+                                                    color: AppColors.dark,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                const Text(
+                                                  'ابنِ عالمك الخاص: كل مهمة تُنجَز تضيف عنصرًا جديدًا لأرضك وتفتح ترقيات ممتعة.',
+                                                  textAlign: TextAlign.center,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    height: 1.6,
+                                                    color: Colors.black87,
+                                                  ),
+                                                ),
+
+                                                const SizedBox(height: 16),
+
+                                                // ⭐ زر تخطي الجولة
+                                                Align(
+                                                  alignment: Alignment.centerLeft,
+                                                  child: TextButton(
+                                                    onPressed: () {
+                                                      ShowCaseWidget.of(_scCtx!).dismiss();
+                                                    },
+                                                    child: const Text(
+                                                      'تخطي الجولة',
+                                                      style: TextStyle(
+                                                        color: AppColors.primary,
+                                                        fontWeight: FontWeight.w800,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+
+                                      // 👇 البلوك القديم (بدون تعديل)
+                                      child: Container(
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(24),
+                                          boxShadow: const [
+                                            BoxShadow(
+                                              color: Color(0x14000000),
+                                              blurRadius: 18,
+                                              offset: Offset(0, 8),
+                                            ),
+                                          ],
+                                          border: Border.all(
+                                            color: Color(0xFFE8F1EE),
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.primary.withOpacity(.1),
+                                                    borderRadius: BorderRadius.circular(12),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.terrain_rounded,
+                                                    color: AppColors.primary,
+                                                    size: 24,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                const Expanded(
+                                                  child: Text(
+                                                    'أرضي في EcoLand',
+                                                    style: TextStyle(
+                                                      fontSize: 18,
+                                                      fontWeight: FontWeight.w900,
+                                                      color: AppColors.dark,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 14),
+
+                                            SizedBox(
+                                              width: double.infinity,
+                                              height: 170,
+                                              child: IsoLand(
+                                                rows: 6,
+                                                cols: 6,
+                                                height: 150,
+                                                topColor: AppColors.mint,
+                                                sideColor: AppColors.tealSoft,
+                                                gridColor: AppColors.sea,
+                                                gridOpacity: .08,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                              // Banner
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  child: Showcase.withWidget(
+                                    key: _bannerKey,
+                                    overlayColor: Colors.black.withOpacity(0.35),
+                                    overlayOpacity: 0.35,
+                                    blurValue: 0,
+
+                                    // 👇 مهم جداً لإضافة ctx
+                                    container: Builder(
+                                      builder: (ctx) => Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(.12),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 6),
+                                            ),
+                                          ],
+                                        ),
+
+                                        child: Directionality(
+                                          textDirection: TextDirection.rtl,
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'إعلانات وتحديات سريعة',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 16,
+                                                  color: AppColors.dark,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              const Text(
+                                                'ستجد هنا حملات ومهام موسمية تمنح نقاطًا مضاعفة أو جوائز خاصة. اضغط على الإعلان للمشاركة.',
+                                                style: TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
+                                              ),
+
+                                              const SizedBox(height: 16),
+
+                                              // ⭐ زر تخطي الجولة
+                                              Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: TextButton(
+                                                  onPressed: () {
+                                                    ShowCaseWidget.of(_scCtx!).dismiss();
+                                                  },
+                                                  child: const Text(
+                                                    'تخطي الجولة',
+                                                    style: TextStyle(
+                                                      color: AppColors.primary,
+                                                      fontWeight: FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                    child: _InlineBanner(
+                                      label: 'احفظ حيّك نظيفًا - شارك الآن واربح نقاطاً مضاعفة!',
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (_) => const RewardsPage()),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+                              // Friends (Title Row)
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  child: Showcase.withWidget(
+                                    key: _friendsKey,
+                                    overlayColor: Colors.black.withOpacity(0.35),
+                                    overlayOpacity: 0.35,
+                                    blurValue: 0,
+
+                                    // 👇 نضيف Builder للحصول على ctx
+                                    container: Builder(
+                                      builder: (ctx) => Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(16),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(.12),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 6),
+                                            ),
+                                          ],
+                                        ),
+
+                                        child: Directionality(
+                                          textDirection: TextDirection.rtl,
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'أصدقاؤك ونشاطهم',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 16,
+                                                  color: AppColors.dark,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              const Text(
+                                                'تابع سلسلة إنجازات أصدقائك ونقاطهم، وقارِن تقدمك معهم. من هنا يمكنك استعراض الجميع أو إضافة أصدقاء.',
+                                                style: TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
+                                              ),
+
+                                              const SizedBox(height: 16),
+
+                                              // ⭐ زر تخطي الجولة
+                                              Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: TextButton(
+                                                  onPressed: () {
+                                                    ShowCaseWidget.of(_scCtx!).dismiss();
+                                                  },
+                                                  child: const Text(
+                                                    'تخطي الجولة',
+                                                    style: TextStyle(
+                                                      color: AppColors.primary,
+                                                      fontWeight: FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary.withOpacity(.1),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: const Icon(
+                                            Icons.group,
+                                            color: AppColors.primary,
+                                            size: 20,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        const Expanded(
+                                          child: Text(
+                                            'أصدقائي',
+                                            style: TextStyle(
+                                              fontSize: 19,
+                                              fontWeight: FontWeight.w800,
+                                              color: AppColors.dark,
+                                            ),
+                                          ),
+                                        ),
+                                        TextButton.icon(
+                                          onPressed: () {
+                                            hasInternetConnection().then((online) {
+                                              if (!online) {
+                                                if (!context.mounted) return;
+                                                showNoInternetDialog(context);
+                                                return;
+                                              }
+                                            });
+                                          },
+                                          icon: const Icon(Icons.arrow_back, size: 16),
+                                          label: const Text('عرض الكل'),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: AppColors.primary,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                              SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: _FriendCard(
+                                          name: 'سارة',
+                                          points: 220,
+                                          streak: 4,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _FriendCard(
+                                          name: 'خالد',
+                                          points: 180,
+                                          streak: 2,
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 14),
+                                ),
+                              ),
 
-                                  // المنصّة (بدون أي تعديل على الشكل)
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 170,
-                                    child: IsoLand(
-                                      rows: 6,
-                                      cols: 6,
-                                      height: 150,
-                                      topColor: AppColors.mint,
-                                      sideColor: AppColors.tealSoft,
-                                      gridColor: AppColors.sea,
-                                      gridOpacity: .08,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-                    // Banner
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Showcase.withWidget(
-                          key: _bannerKey,
-                          overlayColor: Colors.black.withOpacity(0.35),
-                          overlayOpacity: 0.35,
-                          blurValue: 0,
-                          container: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(.12),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: const Directionality(
-                              textDirection: TextDirection.rtl,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('إعلانات وتحديات سريعة',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 16,
-                                        color: AppColors.dark,
-                                      )),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'ستجد هنا حملات ومهام موسمية تمنح نقاطًا مضاعفة أو جوائز خاصة. اضغط على الإعلان للمشاركة.',
-                                    style: TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          child: _InlineBanner(
-                            label: 'احفظ حيّك نظيفًا - شارك الآن واربح نقاطاً مضاعفة!',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const RewardsPage()),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-                    // Friends (Title Row)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Showcase.withWidget(
-                          key: _friendsKey,
-                          overlayColor: Colors.black.withOpacity(0.35),
-                          overlayOpacity: 0.35,
-                          blurValue: 0,
-                          container: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(.12),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: const Directionality(
-                              textDirection: TextDirection.rtl,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('أصدقاؤك ونشاطهم',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 16,
-                                        color: AppColors.dark,
-                                      )),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'تابع سلسلة إنجازات أصدقائك ونقاطهم، وقارِن تقدمك معهم. من هنا يمكنك استعراض الجميع أو إضافة أصدقاء.',
-                                    style: TextStyle(fontSize: 13, height: 1.6, color: Colors.black87),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withOpacity(.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(Icons.group, color: AppColors.primary, size: 20),
-                              ),
-                              const SizedBox(width: 10),
-                              const Expanded(
-                                child: Text(
-                                  'أصدقائي',
-                                  style: TextStyle(
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.w800,
-                                    color: AppColors.dark,
-                                  ),
-                                ),
-                              ),
-                              TextButton.icon(
-                                onPressed: () {
-                                  hasInternetConnection().then((online) {
-                                    if (!online) {
-                                      if (!context.mounted) return;
-                                      showNoInternetDialog(context);
-                                      return;
-                                    }
-                                  });
-                                },
-                                icon: const Icon(Icons.arrow_back, size: 16),
-                                label: const Text('عرض الكل'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppColors.primary,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                ),
-                              ),
+                              const SliverToBoxAdapter(child: SizedBox(height: 120)),
                             ],
                           ),
                         ),
                       ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _FriendCard(
-                                name: 'سارة',
-                                points: 220,
-                                streak: 4,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _FriendCard(
-                                name: 'خالد',
-                                points: 180,
-                                streak: 2,
-                              ),
-                            ),
-                          ],
+                      bottomNavigationBar: isKeyboardOpen ? null : Showcase.withWidget(
+                        key: _navKey,
+                        overlayColor: Colors.black,
+                        overlayOpacity: 0.35,
+                        blurValue: 4,
+                        container: _buildNavBarHelpBubble(),
+                        child: BottomNavPage(
+                          currentIndex: _currentIndex,
+                          onTap: _onTap,
                         ),
                       ),
                     ),
-
-                    const SliverToBoxAdapter(child: SizedBox(height: 120)),
                   ],
-                ),
-              ),
-            ),
-            bottomNavigationBar: isKeyboardOpen
-                ? null
-                : Showcase.withWidget(
-                    key: _navKey,
-                    overlayColor:  Colors.black,  
-                    overlayOpacity:  0.35,  // مغبش شوي
-                    blurValue: 4, // بلور خفيف
-                    container: _buildNavBarHelpBubble(),
-                    child: BottomNavPage(
-                      currentIndex: _currentIndex,
-                      onTap: _onTap,
-                    ),
-                  ),
-          ),
-        );
+                )
+              );
       },
     );
   }
@@ -1795,293 +1980,6 @@ class _AnimatedRing extends StatelessWidget {
   }
 }
 
-// EcoLand Card Widget
-class _EcoLandCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _EcoLandCard({
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.white, AppColors.light.withOpacity(.1)],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(.15),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-        border: Border.all(color: AppColors.light.withOpacity(.6), width: 2),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.dark,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: AppColors.dark.withOpacity(.7),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          gradient: const LinearGradient(
-                            colors: [
-                              AppColors.primary,
-                              AppColors.primary,
-                              AppColors.tealSoft,
-                            ],
-                            stops: [0.0, 0.5, 1.0],
-                            begin: Alignment.bottomLeft,
-                            end: Alignment.topRight,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withOpacity(.3),
-                              blurRadius: 12,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: ElevatedButton(
-                          onPressed: onTap,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            shadowColor: Colors.transparent,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 14,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'ادخل الآن',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              SizedBox(width: 6),
-                              Icon(Icons.arrow_back, size: 18),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                // ثابت، مضمون المقاس
-                SizedBox(
-                  height: 120, // تقدرين تغيّرينها 120–160 حسب ما تبين
-                  child: const _EcoLandIllustration(),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-  // Illustration Widget
-class _EcoLandIllustration extends StatelessWidget {
-  const _EcoLandIllustration();
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (_, c) {
-        // نضمن قيم double صريحة:
-        final double w = (c.maxWidth.isFinite && c.maxWidth > 0)
-            ? c.maxWidth
-            : 200.0;  // <- double
-        final double h = (c.maxHeight.isFinite && c.maxHeight > 0)
-            ? c.maxHeight
-            : 120.0;  // <- double
-
-        return CustomPaint(
-          size: Size(w, h),
-          painter: _EcoLandPainter(),
-        );
-      },
-    );
-  }
-}
-
-
-class _EcoLandPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    // حارس أمان — لو المقاس مو مضبوط لا نرسم
-    if (!size.width.isFinite || !size.height.isFinite || size.width <= 0 || size.height <= 0) {
-      return;
-    }
-    // خلفية ناعمة
-    final bgGradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [const Color(0xFFE3F2FD), const Color(0xFFF1F8E9)],
-    ).createShader(Offset.zero & size);
-
-    final bg = Paint()..shader = bgGradient;
-    final rounded = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      const Radius.circular(18),
-    );
-    canvas.drawRRect(rounded, bg);
-
-    // الأرض: mint → tealSoft
-    final ground = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [AppColors.mint, AppColors.tealSoft],
-      ).createShader(Offset.zero & size);
-
-    final land = RRect.fromRectAndRadius(
-      Rect.fromLTWH(
-        size.width * .08,
-        size.height * .12,
-        size.width * .84,
-        size.height * .76,
-      ),
-      const Radius.circular(16),
-    );
-    canvas.drawRRect(land, ground);
-
-    // ظل خفيف
-    final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(.08)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-    final shadowRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(
-        size.width * .08 + 3,
-        size.height * .12 + 3,
-        size.width * .84,
-        size.height * .76,
-      ),
-      const Radius.circular(16),
-    );
-    canvas.drawRRect(shadowRect, shadowPaint);
-    canvas.drawRRect(land, ground);
-
-    // شبكة 4×4
-    const cols = 4, rows = 4;
-    final cellW = (size.width * .84) / cols;
-    final cellH = (size.height * .76) / rows;
-    final left = size.width * .08;
-    final top = size.height * .12;
-
-    final gridPaint = Paint()
-      ..color = AppColors.tealSoft.withOpacity(.35)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-
-    for (int c = 1; c < cols; c++) {
-      final x = left + c * cellW;
-      canvas.drawLine(Offset(x, top), Offset(x, top + rows * cellH), gridPaint);
-    }
-    for (int r = 1; r < rows; r++) {
-      final y = top + r * cellH;
-      canvas.drawLine(
-        Offset(left, y),
-        Offset(left + cols * cellW, y),
-        gridPaint,
-      );
-    }
-
-    final borderPaint = Paint()
-      ..color = AppColors.tealSoft.withOpacity(.55)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(left, top, cols * cellW, rows * cellH),
-        const Radius.circular(14),
-      ),
-      borderPaint,
-    );
-
-    final dotPaint = Paint()..color = AppColors.sea.withOpacity(.35);
-    for (int r = 0; r <= rows; r++) {
-      for (int c = 0; c <= cols; c++) {
-        final x = left + c * cellW;
-        final y = top + r * cellH;
-        canvas.drawCircle(Offset(x, y), 2.5, dotPaint);
-      }
-    }
-
-    // توضيح
-    final textStyle = TextStyle(
-      color: AppColors.dark.withOpacity(.45),
-      fontSize: 9,
-      fontWeight: FontWeight.w600,
-    );
-
-    final textPainter = TextPainter(
-      text: TextSpan(text: '${cols}×${rows} مربعات', style: textStyle),
-      textDirection: TextDirection.rtl,
-    );
-
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset(
-        left + (cols * cellW) / 2 - textPainter.width / 2,
-        top + rows * cellH + 8,
-      ),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
 class _FriendCard extends StatelessWidget {
   final String name;
   final int points;
@@ -2460,85 +2358,40 @@ class _IsoPositioned extends StatelessWidget {
   }
   
 }
-class _EcoLandSection extends StatelessWidget {
-  final GlobalKey ecoKey;
-  const _EcoLandSection({required this.ecoKey});
+class _SkipTourButton extends StatelessWidget {
+  final VoidCallback onSkip;
+  const _SkipTourButton({required this.onSkip});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const SizedBox(height: 16),
-
-        // ------------ EcoLand Showcase ------------
-        Showcase.withWidget(
-          key: ecoKey,
-          overlayColor: Colors.black.withOpacity(0.35),
-          overlayOpacity: 0.35,
-          blurValue: 0,
-          container: _ecoLandHelpBubble(),
-
-          child: _EcoLandCard(
-            title: 'EcoLand الخاصة بك 🌱',
-            subtitle: 'كل إنجاز يضيف لمسة جديدة على أرضك',
-            onTap: () {},
-          ),
-        ),
-
-        const SizedBox(height: 22),
-
-        // ------------ Banner ------------
-        _InlineBanner(
-          label:
-              'احفظ حيّك نظيفًا - شارك الآن واربح نقاطاً مضاعفة!',
-          onTap: () {},
-        ),
-
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _ecoLandHelpBubble() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(.12),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: const Directionality(
-        textDirection: TextDirection.rtl,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'EcoLand الخاصة بك 🌱',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
-                color: AppColors.dark,
+    return Material(
+      color: Colors.white,
+      elevation: 8,
+      borderRadius: BorderRadius.circular(24),
+      child: InkWell(
+        onTap: onSkip,
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.close, size: 18, color: AppColors.dark),
+              SizedBox(width: 6),
+              Text(
+                'تخطي الجولة',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.dark,
+                ),
               ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'ابني عالمك الخاص: كل مهمة تضيف إنجازًا جديدًا لأرضك في EcoLand وتفتح ترقيات ممتعة.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.6,
-                color: Colors.black87,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
+
+
