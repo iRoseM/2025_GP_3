@@ -520,15 +520,7 @@ class _ArticlePageState extends State<ArticlePage> {
                 const SizedBox(height: 12),
                 _buildReadingControls(),
                 const SizedBox(height: 16),
-                Text(
-                  a['title'] ?? '',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: _titleFontSize,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(height: 20),
+
                 _buildArticleText(),
                 const SizedBox(height: 24),
                 Align(
