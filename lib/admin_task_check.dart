@@ -1209,13 +1209,10 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
           if (itemCount > 0) 'itemCount': itemCount,
           'createdAt': FieldValue.serverTimestamp(),
           'seen': false,
-          'title': 'تم الاعتماد 🎉',
+          'title': 'تم اعتماد المهمة 🎉',
           'body': 'أُضيفت $taskPoints نقطة • وفَّرت $carbonText كجم CO₂ 🌿',
           'message':
               'تم اعتماد طلبك لمهمة: $taskTitle — نقاط: $taskPoints • توفير: $carbonText كجم CO₂',
-          'icon': 'check_circle',
-          'iconColor': '#4CAF50',
-          'accentColor': '#4BAA98',
         });
       });
 
@@ -1291,14 +1288,18 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
           final notifRef = FirebaseFirestore.instance
               .collection('notifications')
               .doc();
+          final taskTitle = (data['taskTitle'] ?? '').toString();
           trx.set(notifRef, {
             'type': 'submission_rejected',
             'userId': userId,
             'submissionId': subRef.id,
-            'taskTitle': data['taskTitle'],
+            'taskTitle': taskTitle,
             'createdAt': FieldValue.serverTimestamp(),
             'seen': false,
-            'message': 'تم رفض طلبك لمهمة: ${data['taskTitle'] ?? ''}',
+            'title': 'تم رفض الطلب ❌',
+            'body':
+                'تم رفض طلبك لمهمة: $taskTitle. يمكنك إعادة المحاولة بعد التعديل.',
+            'message': 'تم رفض طلبك لمهمة: $taskTitle',
           });
         }
       });

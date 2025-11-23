@@ -125,7 +125,7 @@ class _RewardsPageState extends State<RewardsPage> {
           'rewardID': rewardID,
           'code': couponCode,
           'status': 'pending',
-          'redeemedAt': FieldValue.serverTimestamp(),
+          //'redeemedAt': FieldValue.serverTimestamp(),
         });
 
         // التحقق من الرصيد
@@ -143,7 +143,7 @@ class _RewardsPageState extends State<RewardsPage> {
         // إكمال العملية + انتهاء الصلاحية بعد 10 دقائق
         final expiresAt = DateTime.now().add(const Duration(minutes: 10));
         tx.update(redemptionRef, {
-          'status': 'completed',
+          'status': 'expired',
           'rewardTitle': rewardTitle,
           'costPoints': cost,
           'expiresAt': Timestamp.fromDate(expiresAt),

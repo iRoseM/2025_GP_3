@@ -309,22 +309,22 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         (widget.taskData['actualFactorRef'] ?? efDoc['actualFactorRef'])
             ?.toString();
 
-    final dir = (widget.taskData['direction'] ?? efDoc['direction'] ?? '')
-        .toString()
-        .toLowerCase();
-    final isSave = (dir.isEmpty || dir == 'save');
+    // final dir = (widget.taskData['direction'] ?? efDoc['direction'] ?? '')
+    //     .toString()
+    //     .toLowerCase();
+    //final isSave = (dir.isEmpty || dir == 'save');
 
-    if (calcMode == 'perkm' && km != null && km > 0) {
-      final perKmVal = await _getEfPerUnit(
-        efIdFromTask,
-        valueFieldFromTask: valueFieldFromTask,
-      );
-      if (perKmVal == null) {
-        return 0.0;
-      }
-      final res = (isSave ? perKmVal : 0.0) * km;
-      return res;
-    }
+    // if (calcMode == 'perkm' && km != null && km > 0) {
+    //   final perKmVal = await _getEfPerUnit(
+    //     efIdFromTask,
+    //     valueFieldFromTask: valueFieldFromTask,
+    //   );
+    //   if (perKmVal == null) {
+    //     return 0.0;
+    //   }
+    //   final res = (isSave ? perKmVal : 0.0) * km;
+    //   return res;
+    // }
 
     if (calcMode == 'deltaperkm' && km != null && km > 0) {
       final baseline = baseRef != null
@@ -345,17 +345,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return res;
     }
 
-    if (calcMode == 'peritem' && items != null && items > 0) {
-      final perItemVal = await _getEfPerUnit(
-        efIdFromTask,
-        valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
-      );
-      if (perItemVal == null) {
-        return 0.0;
-      }
-      final res = (isSave ? perItemVal : 0.0) * items;
-      return res;
-    }
+    // if (calcMode == 'peritem' && items != null && items > 0) {
+    //   final perItemVal = await _getEfPerUnit(
+    //     efIdFromTask,
+    //     valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
+    //   );
+    //   if (perItemVal == null) {
+    //     return 0.0;
+    //   }
+    //   final res = (isSave ? perItemVal : 0.0) * items;
+    //   return res;
+    // }
 
     if (calcMode == 'deltaperitem' && items != null && items > 0) {
       const defaultField = 'ef_kgco2_per_unit';
@@ -396,10 +396,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         efIdFromTask,
         valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
       );
-      if (perItemVal != null) {
-        final res = (isSave ? perItemVal : 0.0) * items;
-        return res;
-      }
+      // if (perItemVal != null) {
+      //   final res = (isSave ? perItemVal : 0.0) * items;
+      //   return res;
+      // }
     }
 
     if ((calcMode.isEmpty || calcMode == 'auto') && km != null && km > 0) {
@@ -407,10 +407,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         efIdFromTask,
         valueFieldFromTask: valueFieldFromTask,
       );
-      if (perKmVal != null) {
-        final res = (isSave ? perKmVal : 0.0) * km;
-        return res;
-      }
+      // if (perKmVal != null) {
+      //   final res = (isSave ? perKmVal : 0.0) * km;
+      //   return res;
+      // }
     }
     return 0.0;
   }

@@ -201,7 +201,7 @@ class _taskPageState extends State<taskPage> {
     Future<Map<String, dynamic>?> tryFromFirestore() async {
       final articlesSnap = await firestore
           .collection('articles')
-          .orderBy('createdAt', descending: true)
+          .orderBy('publishedAt', descending: true)
           .limit(50)
           .get();
 
@@ -222,10 +222,7 @@ class _taskPageState extends State<taskPage> {
       // ابحث عن أول مقال جديد ما شافه المستخدم
       for (var doc in articlesSnap.docs) {
         if (!usedIds.contains(doc.id)) {
-          return {
-            'docId': doc.id,
-            ...doc.data(),
-          };
+          return {'docId': doc.id, ...doc.data()};
         }
       }
 
@@ -244,7 +241,8 @@ class _taskPageState extends State<taskPage> {
         "البيئة OR المناخ OR الاستدامة OR الطاقة النظيفة OR تدوير OR نفايات OR تلوث OR انبعاثات OR تشجير";
 
     final apiUrl = Uri.parse(
-        "https://newsdata.io/api/1/news?apikey=$apiKey&q=$query&language=ar&category=environment");
+      "https://newsdata.io/api/1/news?apikey=$apiKey&q=$query&language=ar&category=environment",
+    );
 
     try {
       final res = await http.get(apiUrl);
@@ -277,7 +275,7 @@ class _taskPageState extends State<taskPage> {
         'محميات',
         'تغير المناخ',
         'طاقة نظيفة',
-        'مصادر طبيعية'
+        'مصادر طبيعية',
       ];
 
       // نجيب المقالات المخزنة سابقًا لمنع التكرار
@@ -288,12 +286,13 @@ class _taskPageState extends State<taskPage> {
 
       // فلترة نتائج الـ API
       final filtered = results.where((art) {
-        final merged = ((art['title'] ?? '') +
-                ' ' +
-                (art['full_content'] ?? '') +
-                ' ' +
-                (art['description'] ?? ''))
-            .toLowerCase();
+        final merged =
+            ((art['title'] ?? '') +
+                    ' ' +
+                    (art['full_content'] ?? '') +
+                    ' ' +
+                    (art['description'] ?? ''))
+                .toLowerCase();
 
         return keywords.any((k) => merged.contains(k));
       }).toList();
@@ -310,11 +309,12 @@ class _taskPageState extends State<taskPage> {
 
         if (existingTitles.contains(title)) continue;
 
-        final content = (rawArt['full_content'] ??
-                rawArt['content'] ??
-                rawArt['description'] ??
-                '')
-            .toString();
+        final content =
+            (rawArt['full_content'] ??
+                    rawArt['content'] ??
+                    rawArt['description'] ??
+                    '')
+                .toString();
 
         if (content.length < 80) continue; // محتوى غير صالح
 
@@ -326,9 +326,9 @@ class _taskPageState extends State<taskPage> {
           'urlToImage': rawArt['image_url'] ?? '',
           'sourceName': rawArt['source_id'] ?? '',
           'publishedAt': rawArt['pubDate'] ?? '',
-          'language': 'ar',
+          //'language': 'ar',
           'category': 'environment',
-          'createdAt': FieldValue.serverTimestamp(),
+          //'createdAt': FieldValue.serverTimestamp(),
         });
 
         existingTitles.add(title); // منع التكرار لاحقًا
@@ -623,8 +623,10 @@ class _taskPageState extends State<taskPage> {
     if (validTasks.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('لا توجد مهام مُتاحة لهذا الشهر.',
-              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white)),
+          content: Text(
+            'لا توجد مهام مُتاحة لهذا الشهر.',
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+          ),
           backgroundColor: AppColors.primary,
         ),
       );
@@ -637,14 +639,26 @@ class _taskPageState extends State<taskPage> {
 
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
     final tKey = '${_uid!}_${_yyyyMMdd(tomorrow)}';
-    final ySnap = await FirebaseFirestore.instance.collection('userTasks').doc(yKey).get();
-    final tSnap = await FirebaseFirestore.instance.collection('userTasks').doc(tKey).get();
+    final ySnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(yKey)
+        .get();
+    final tSnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(tKey)
+        .get();
 
-    final yTaskId = (ySnap.exists) ? (ySnap.data()?['taskId'] as String?) : null;
-    final tTaskId = (tSnap.exists) ? (tSnap.data()?['taskId'] as String?) : null;
-    final currentTaskId = (currentTask['taskId'] ?? currentTask['id']) as String?;
+    final yTaskId = (ySnap.exists)
+        ? (ySnap.data()?['taskId'] as String?)
+        : null;
+    final tTaskId = (tSnap.exists)
+        ? (tSnap.data()?['taskId'] as String?)
+        : null;
+    final currentTaskId =
+        (currentTask['taskId'] ?? currentTask['id']) as String?;
 
-    final excluded = <String?>{currentTaskId, yTaskId, tTaskId}..removeWhere((e) => e == null);
+    final excluded = <String?>{currentTaskId, yTaskId, tTaskId}
+      ..removeWhere((e) => e == null);
     final pool = validTasks.where((doc) => !excluded.contains(doc.id)).toList();
     final finalPool = pool.isEmpty ? validTasks : pool;
 
@@ -667,7 +681,8 @@ class _taskPageState extends State<taskPage> {
     // 📰 6) لو اختير "مهمة خبر" → نربطها بمهمة الأدمن المحددة ID ونقرأ تفاصيلها من Firestore
     if (picked == null && hasFreshNews) {
       final news = freshNews!;
-      const newsTaskId = "bJjITCm7ZWlmzEk2QNPr"; // ← ID مهمة "قراءة خبر بيئي" من الأدمن
+      const newsTaskId =
+          "bJjITCm7ZWlmzEk2QNPr"; // ← ID مهمة "قراءة خبر بيئي" من الأدمن
 
       // 🔹 نحضر بيانات مهمة الأدمن كاملة
       final taskSnap = await FirebaseFirestore.instance
@@ -704,7 +719,6 @@ class _taskPageState extends State<taskPage> {
       return;
     }
 
-
     // 🟩 7) مهمة عادية (غير خبر)
     final pickedData = picked.data();
     final denorm = {
@@ -717,7 +731,6 @@ class _taskPageState extends State<taskPage> {
     await utRef.update({'taskId': picked.id, ...denorm});
     _attachUserTaskStreamFor(selected);
   }
-
 
   // =============================================================
   // ✅ إنشاء مهمة اليوم للمستخدم (لو ما عنده مهمة لهذا اليوم)
@@ -751,11 +764,13 @@ class _taskPageState extends State<taskPage> {
       if (vf is Timestamp) {
         final d = vf.toDate();
         visibleFrom = "${d.year}-${d.month.toString().padLeft(2, '0')}";
-      } else if (vf is String) visibleFrom = vf;
+      } else if (vf is String)
+        visibleFrom = vf;
       if (em is Timestamp) {
         final d = em.toDate();
         expiryMonth = "${d.year}-${d.month.toString().padLeft(2, '0')}";
-      } else if (em is String) expiryMonth = em;
+      } else if (em is String)
+        expiryMonth = em;
 
       final isVisible =
           (visibleFrom == null) || (visibleFrom.compareTo(monthKey) <= 0);
@@ -769,11 +784,18 @@ class _taskPageState extends State<taskPage> {
     // 🟨 2) نتجنب تكرار مهمة الأمس
     final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
-    final ySnap = await FirebaseFirestore.instance.collection('userTasks').doc(yKey).get();
-    final yTaskId = (ySnap.exists) ? (ySnap.data()?['taskId'] as String?) : null;
+    final ySnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(yKey)
+        .get();
+    final yTaskId = (ySnap.exists)
+        ? (ySnap.data()?['taskId'] as String?)
+        : null;
 
     final excludedIds = {yTaskId}..removeWhere((id) => id == null);
-    final candidates = validTasks.where((doc) => !excludedIds.contains(doc.id)).toList();
+    final candidates = validTasks
+        .where((doc) => !excludedIds.contains(doc.id))
+        .toList();
     final filteredTasks = candidates.isEmpty ? validTasks : candidates;
 
     // 📰 3) جلب خبر جديد فقط إذا اليوم = اليوم الحالي
@@ -787,7 +809,9 @@ class _taskPageState extends State<taskPage> {
     newPool.addAll(filteredTasks);
 
     // 🎲 5) اختيار مهمة عشوائية
-    final rnd = Random(DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch);
+    final rnd = Random(
+      DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch,
+    );
     final picked = newPool[rnd.nextInt(newPool.length)];
 
     // ⏰ تجهيز الوقت والحالة
@@ -798,7 +822,8 @@ class _taskPageState extends State<taskPage> {
     // 📰 6) لو هي مهمة خبر → استخدم ID الأدمن المحدد
     if (picked == null && canShowNews) {
       final news = freshNews!;
-      const newsTaskId = "bJjTCm7ZWlmzEk2QNPr"; // ← ID مهمة "قراءة خبر بيئي" من الأدمن
+      const newsTaskId =
+          "bJjTCm7ZWlmzEk2QNPr"; // ← ID مهمة "قراءة خبر بيئي" من الأدمن
 
       await ref.set({
         'userId': _uid,

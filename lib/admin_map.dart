@@ -257,18 +257,20 @@ class _AdminMapPageState extends State<AdminMapPage> {
 
         final String type = _normalizeType((m['type'] ?? '').toString());
         final String provider = (m['provider'] ?? '').toString();
-        final String name = (m['name'] ?? '').toString();
-        final String city = (m['city'] ?? '').toString();
+        //final String city = (m['city'] ?? '').toString();
         final String address = (m['address'] ?? '').toString();
         final String status = (m['status'] ?? 'نشط').toString();
 
         statusMap[d.id] = status;
         final pos = LatLng(lat, lng);
-        final title = (name.isNotEmpty) ? name : type;
+
+        // 👈 العنوان الآن يعتمد فقط على address (أو نوع الحاوية لو address فاضي)
+        final title = address.isNotEmpty ? address : type;
+
         final snippetParts = <String>[
           type,
           if (provider.isNotEmpty) provider,
-          if (city.isNotEmpty) city,
+          //if (city.isNotEmpty) city,
           if (address.isNotEmpty) address,
         ];
         final snippet = snippetParts.join(' • ');
@@ -1053,7 +1055,6 @@ class _AdminMapPageState extends State<AdminMapPage> {
   }
 
   // ===================== الفلاتر =====================
-  // ===================== الفلاتر =====================
   void _showFiltersBottomSheet() {
     showModalBottomSheet(
       context: context,
@@ -1397,7 +1398,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
             final data = snap.data!.data() ?? {};
             final type = _normalizeType((data['type'] ?? '').toString());
             final provider = (data['provider'] ?? '').toString();
-            final city = (data['city'] ?? '').toString();
+            //final city = (data['city'] ?? '').toString();
             final address = (data['address'] ?? '').toString();
             final statusStr =
                 (data['status'] ?? _statusById[markerId.value] ?? 'نشط')
@@ -1454,7 +1455,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   // المعلومات التفصيلية
                   if (provider.isNotEmpty && provider != 'غير محدد')
                     _kvRightAligned('المزود', provider),
-                  if (city.isNotEmpty) _kvRightAligned('المدينة', city),
+                  //if (city.isNotEmpty) _kvRightAligned('المدينة', city),
                   if (address.isNotEmpty) _kvRightAligned('العنوان', address),
 
                   const Divider(height: 24),
@@ -1588,7 +1589,6 @@ class _AdminMapPageState extends State<AdminMapPage> {
                             'address': name.trim().isEmpty
                                 ? 'عنوان غير محدد'
                                 : name.trim(),
-
                             'type': _normalizeType(type),
                             'lat': lat,
                             'lng': lng,
@@ -1596,7 +1596,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                                 ? 'غير محدد'
                                 : provider.trim(),
                             'status': statusStr,
-                            'updatedAt': FieldValue.serverTimestamp(),
+                            //'updatedAt': FieldValue.serverTimestamp(),
                           }, SetOptions(merge: true));
 
                       // حدّث الماركر محليًا
@@ -1740,10 +1740,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
         'type': normalizedType,
         'lat': pos.latitude,
         'lng': pos.longitude,
-        'city': 'الرياض',
+        //'city': 'الرياض',
         'provider': provider.trim().isEmpty ? 'غير محدد' : provider.trim(),
         'status': statusStr,
-        'createdAt': FieldValue.serverTimestamp(),
+        //'createdAt': FieldValue.serverTimestamp(),
       });
 
       setState(() {
@@ -1881,7 +1881,7 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                   const Divider(height: 10),
                   const SizedBox(height: 10),
 
-                  // اسم الموقع (إلزامي)
+                  // اسم الموقع (إلزامي) → يساوي address
                   Row(
                     children: const [
                       Text(

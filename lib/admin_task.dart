@@ -1977,25 +1977,140 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   // ---------------------------------------------------------------------------
   // 🧩 منطق الحفظ — Auto EF mapping بالكامل
-Future<void> _saveTask() async {
-  if (!(_formKey.currentState?.validate() ?? false)) return;
+  Future<void> _saveTask() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
-  final title = _titleCtrl.text.trim();
-  final desc = _descCtrl.text.trim();
-  final normalizedTitle = _norm(title);
+    final title = _titleCtrl.text.trim();
+    final desc = _descCtrl.text.trim();
+    final normalizedTitle = _norm(title);
 
-  // 🔹 التحقق من التكرار (فقط للإضافة الجديدة)
-  if (widget.task == null) {
-    final existing = await _tasks
-        .where('title_normalized', isEqualTo: normalizedTitle)
-        .limit(1)
-        .get();
-    if (existing.docs.isNotEmpty) {
+    // 🔹 التحقق من التكرار (فقط للإضافة الجديدة)
+    if (widget.task == null) {
+      final existing = await _tasks
+          .where('title_normalized', isEqualTo: normalizedTitle)
+          .limit(1)
+          .get();
+      if (existing.docs.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text(
+              'اسم المهمة "$title" مستخدم بالفعل',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
+    // 🔹 نجيب بيانات الفئة عشان نعرف هل هي سلوك غير مباشر
+    bool isIndirectCategory = false;
+    if (_selectedCategory != null && _selectedCategory!.isNotEmpty) {
+      final catSnap = await FirebaseFirestore.instance
+          .collection('categories')
+          .where('name', isEqualTo: _selectedCategory)
+          .limit(1)
+          .get();
+
+      if (catSnap.docs.isNotEmpty) {
+        final catData = catSnap.docs.first.data() as Map<String, dynamic>;
+        isIndirectCategory = catData['parent']?.toString() == 'سلوك غير مباشر';
+      }
+    }
+
+    // 🔹 تحديد الحالة
+    String status = 'active';
+    if (_expiryMonth != null && _expiryMonth!.compareTo(currentMonth) <= 0) {
+      status = 'hidden';
+    }
+
+    // ✅ الربط التلقائي EF (km + items) إذا كانت الفئة "سلوك مباشر" فقط
+    Map<String, dynamic>? autoEf;
+    if (!isIndirectCategory) {
+      autoEf = await _autoPickEfForTask(title: title, desc: desc);
+    }
+
+    // إعداد البيانات الأساسية
+    final data = <String, dynamic>{
+      'title': title,
+      'title_normalized': normalizedTitle,
+      'description': desc,
+      'points': int.parse(_pointsCtrl.text),
+      'category': _selectedCategory,
+      'validationStrategy': _validationType,
+      'status': status,
+      'visible_from': nextMonth,
+      if (_expiryMonth != null) 'expiry_month': _expiryMonth,
+      'managedBy': 'nameer admin',
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    // 🟢 حقول الكربون فقط لو الفئة "سلوك مباشر"
+    if (!isIndirectCategory) {
+      if (autoEf != null) {
+        final calcMode = (autoEf['calcMode'] ?? 'perItem').toString();
+        data['calcMode'] = calcMode;
+        data['direction'] = 'save';
+
+        if (autoEf['calc_requires'] != null) {
+          data['calc_requires'] = autoEf['calc_requires'];
+        }
+
+        if (autoEf['__chosen_name'] != null) {
+          data['ef_debugLabel'] = autoEf['__chosen_name'];
+        }
+
+        final lowerMode = calcMode.toLowerCase();
+
+        if (lowerMode == 'deltaperkm' || lowerMode == 'deltaperitem') {
+          if (autoEf['baselineFactorRef'] != null) {
+            data['baselineFactorRef'] = autoEf['baselineFactorRef'];
+          }
+          if (autoEf['actualFactorRef'] != null) {
+            data['emissionFactorRef'] = autoEf['actualFactorRef'];
+          }
+        } else {
+          if (autoEf['ef_ref'] != null) {
+            data['emissionFactorRef'] = autoEf['ef_ref'];
+          }
+        }
+      } else {
+        // fallback بسيط: لو ما في تطابق، نخلي perItem (بدون مراجع)
+        data['calcMode'] = 'perItem';
+        data['direction'] = 'save';
+      }
+    } else {
+      // 🔻 إذا الفئة "سلوك غير مباشر" و كنا نعدّل مهمة قديمة
+      // نمسح حقول الكربون من المهمة في حالة التحديث
+      if (widget.task != null) {
+        data['calcMode'] = FieldValue.delete();
+        data['direction'] = FieldValue.delete();
+        data['emissionFactorRef'] = FieldValue.delete();
+        data['baselineFactorRef'] = FieldValue.delete();
+        data['calc_requires'] = FieldValue.delete();
+        data['ef_debugLabel'] = FieldValue.delete();
+      }
+      // في حالة الإضافة الجديدة ما نضيف أي من الحقول السابقة أساساً 👍
+    }
+
+    // حفظ في فايربيس
+    if (widget.task == null) {
+      data['createdAt'] = FieldValue.serverTimestamp();
+      await _tasks.add(data);
+    } else {
+      await _tasks.doc(widget.task!['id']).update(data);
+    }
+
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: Colors.green,
           content: Text(
-            'اسم المهمة "$title" مستخدم بالفعل',
+            widget.task == null ? 'تم حفظ المهمة ✅' : 'تم تحديث المهمة ✅',
             style: GoogleFonts.ibmPlexSansArabic(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -2003,125 +2118,9 @@ Future<void> _saveTask() async {
           ),
         ),
       );
-      return;
+      Navigator.pop(context, true);
     }
   }
-
-  // 🔹 نجيب بيانات الفئة عشان نعرف هل هي سلوك غير مباشر
-  bool isIndirectCategory = false;
-  if (_selectedCategory != null && _selectedCategory!.isNotEmpty) {
-    final catSnap = await FirebaseFirestore.instance
-        .collection('categories')
-        .where('name', isEqualTo: _selectedCategory)
-        .limit(1)
-        .get();
-
-    if (catSnap.docs.isNotEmpty) {
-      final catData = catSnap.docs.first.data() as Map<String, dynamic>;
-      isIndirectCategory =
-          catData['parent']?.toString() == 'سلوك غير مباشر';
-    }
-  }
-
-  // 🔹 تحديد الحالة
-  String status = 'active';
-  if (_expiryMonth != null && _expiryMonth!.compareTo(currentMonth) <= 0) {
-    status = 'hidden';
-  }
-
-  // ✅ الربط التلقائي EF (km + items) إذا كانت الفئة "سلوك مباشر" فقط
-  Map<String, dynamic>? autoEf;
-  if (!isIndirectCategory) {
-    autoEf = await _autoPickEfForTask(title: title, desc: desc);
-  }
-
-  // إعداد البيانات الأساسية
-  final data = <String, dynamic>{
-    'title': title,
-    'title_normalized': normalizedTitle,
-    'description': desc,
-    'points': int.parse(_pointsCtrl.text),
-    'category': _selectedCategory,
-    'validationStrategy': _validationType,
-    'status': status,
-    'visible_from': nextMonth,
-    if (_expiryMonth != null) 'expiry_month': _expiryMonth,
-    'managedBy': 'nameer admin',
-    'updatedAt': FieldValue.serverTimestamp(),
-  };
-
-  // 🟢 حقول الكربون فقط لو الفئة "سلوك مباشر"
-  if (!isIndirectCategory) {
-    if (autoEf != null) {
-      final calcMode = (autoEf['calcMode'] ?? 'perItem').toString();
-      data['calcMode'] = calcMode;
-      data['direction'] = 'save';
-
-      if (autoEf['calc_requires'] != null) {
-        data['calc_requires'] = autoEf['calc_requires'];
-      }
-
-      if (autoEf['__chosen_name'] != null) {
-        data['ef_debugLabel'] = autoEf['__chosen_name'];
-      }
-
-      final lowerMode = calcMode.toLowerCase();
-
-      if (lowerMode == 'deltaperkm' || lowerMode == 'deltaperitem') {
-        if (autoEf['baselineFactorRef'] != null) {
-          data['baselineFactorRef'] = autoEf['baselineFactorRef'];
-        }
-        if (autoEf['actualFactorRef'] != null) {
-          data['emissionFactorRef'] = autoEf['actualFactorRef'];
-        }
-      } else {
-        if (autoEf['ef_ref'] != null) {
-          data['emissionFactorRef'] = autoEf['ef_ref'];
-        }
-      }
-    } else {
-      // fallback بسيط: لو ما في تطابق، نخلي perItem (بدون مراجع)
-      data['calcMode'] = 'perItem';
-      data['direction'] = 'save';
-    }
-  } else {
-    // 🔻 إذا الفئة "سلوك غير مباشر" و كنا نعدّل مهمة قديمة
-    // نمسح حقول الكربون من المهمة في حالة التحديث
-    if (widget.task != null) {
-      data['calcMode'] = FieldValue.delete();
-      data['direction'] = FieldValue.delete();
-      data['emissionFactorRef'] = FieldValue.delete();
-      data['baselineFactorRef'] = FieldValue.delete();
-      data['calc_requires'] = FieldValue.delete();
-      data['ef_debugLabel'] = FieldValue.delete();
-    }
-    // في حالة الإضافة الجديدة ما نضيف أي من الحقول السابقة أساساً 👍
-  }
-
-  // حفظ في فايربيس
-  if (widget.task == null) {
-    data['createdAt'] = FieldValue.serverTimestamp();
-    await _tasks.add(data);
-  } else {
-    await _tasks.doc(widget.task!['id']).update(data);
-  }
-
-  if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: Colors.green,
-        content: Text(
-          widget.task == null ? 'تم حفظ المهمة ✅' : 'تم تحديث المهمة ✅',
-          style: GoogleFonts.ibmPlexSansArabic(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-    Navigator.pop(context, true);
-  }
-}
 
   // ---------------------------------------------------------------------------
   // 🗓 Bottom Sheet لاختيار (السنة + الشهر)

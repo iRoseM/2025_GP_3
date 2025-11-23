@@ -1138,7 +1138,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       final patch = <String, dynamic>{
         'age': newAge,
         'gender': newGender,
-        'updatedAt': FieldValue.serverTimestamp(),
+        //'updatedAt': FieldValue.serverTimestamp(),
       };
       if (newPfp != null) patch['pfpIndex'] = newPfp;
 

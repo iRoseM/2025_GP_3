@@ -30,7 +30,7 @@ class MyReportsPage extends StatefulWidget {
 class _MyReportsPageState extends State<MyReportsPage> {
   @override
   void dispose() {
-    _markAllAsRead(); // ✅ يخلي الإشعارات كمقروء لما المستخدم يطلع
+    _markAllAsRead();
     super.dispose();
   }
 
@@ -41,11 +41,11 @@ class _MyReportsPageState extends State<MyReportsPage> {
     final query = await FirebaseFirestore.instance
         .collection('notifications')
         .where('userId', isEqualTo: user.uid)
-        .where('read', isEqualTo: false)
+        .where('seen', isEqualTo: false)
         .get();
 
     for (var doc in query.docs) {
-      await doc.reference.update({'read': true});
+      await doc.reference.update({'seen': true});
     }
   }
 
@@ -139,7 +139,7 @@ class _MyReportsPageState extends State<MyReportsPage> {
                           itemCount: docs.length,
                           itemBuilder: (context, i) {
                             final data = docs[i].data();
-                            final isRead = data['read'] == true;
+                            final isRead = data['seen'] == true;
 
                             final title =
                                 (data['title'] ??
@@ -150,10 +150,7 @@ class _MyReportsPageState extends State<MyReportsPage> {
                             final message =
                                 (data['message'] ?? data['body'] ?? '')
                                     .toString();
-                            final type = (data['type'] ?? '')
-                                .toString(); // مثال: submission_approved / submission_rejected
-                            final customIconName = (data['icon'] ?? '')
-                                .toString(); // مثلاً: check_circle
+                            final type = (data['type'] ?? '').toString();
                             final ts = data['createdAt'] as Timestamp?;
                             final time = ts?.toDate();
 
@@ -161,45 +158,22 @@ class _MyReportsPageState extends State<MyReportsPage> {
                             IconData icon;
                             Color iconColor;
 
-                            // 1) أولوية حسب النوع (إن وُجد)
-                            if (type == 'submission_approved' ||
-                                type == 'task_approved') {
-                              icon = Icons.verified_rounded;
-                              iconColor = Colors.green;
-                            } else if (type == 'submission_rejected' ||
-                                type == 'task_rejected') {
-                              icon = Icons.cancel_rounded;
-                              iconColor = Colors.redAccent;
-                            } else {
-                              // 2) إن وُجد اسم أيقونة مخصصة داخل الوثيقة (اختياري)
-                              if (customIconName.isNotEmpty) {
-                                // خريطة بسيطة لأسماء شائعة -> أيقونات Flutter
-                                final map = <String, IconData>{
-                                  'check_circle': Icons.verified_rounded,
-                                  'done': Icons.verified_rounded,
-                                  'cancel': Icons.cancel_rounded,
-                                  'error': Icons.error_outline,
-                                  'info': Icons.info_outline,
-                                  'update': Icons.refresh_rounded,
-                                  'bell': Icons.notifications_active_outlined,
-                                };
-                                icon =
-                                    map[customIconName] ??
-                                    Icons.notifications_active_outlined;
+                            // 1) حسب النوع من الـ backend
+                            switch (type) {
+                              case 'submission_approved':
+                              case 'task_approved':
+                                icon = Icons.verified_rounded;
+                                iconColor = Colors.green;
+                                break;
 
-                                // لون افتراضي لطيف
-                                if (customIconName == 'check_circle' ||
-                                    customIconName == 'done') {
-                                  iconColor = Colors.green;
-                                } else if (customIconName == 'cancel') {
-                                  iconColor = Colors.redAccent;
-                                } else if (customIconName == 'error') {
-                                  iconColor = Colors.orange;
-                                } else {
-                                  iconColor = AppColors.sea;
-                                }
-                              } else {
-                                // 3) تحليل نصي للعنوان/الرسالة (توافق مع الإصدارات القديمة)
+                              case 'submission_rejected':
+                              case 'task_rejected':
+                                icon = Icons.cancel_rounded;
+                                iconColor = Colors.redAccent;
+                                break;
+
+                              default:
+                                // 2) تحليل نصي للعنوان/الرسالة (توافق مع الإصدارات القديمة)
                                 final t = title.toLowerCase();
                                 final m = message.toLowerCase();
 
@@ -234,7 +208,6 @@ class _MyReportsPageState extends State<MyReportsPage> {
                                   icon = Icons.notifications_active_outlined;
                                   iconColor = AppColors.sea;
                                 }
-                              }
                             }
 
                             return AnimatedContainer(
@@ -283,7 +256,8 @@ class _MyReportsPageState extends State<MyReportsPage> {
                                     if (time != null) ...[
                                       const SizedBox(height: 6),
                                       Text(
-                                        '${time.year}/${time.month}/${time.day} - ${time.hour}:${time.minute.toString().padLeft(2, '0')}',
+                                        '${time.year}/${time.month}/${time.day} - '
+                                        '${time.hour}:${time.minute.toString().padLeft(2, '0')}',
                                         style: GoogleFonts.ibmPlexSansArabic(
                                           fontSize: 12,
                                           color: Colors.grey,

@@ -713,7 +713,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                   await _categoriesCol.doc(cat['id']).update({
                     'status': 'hidden',
                     'expiry_month': nextMonthKey,
-                    'updatedAt': FieldValue.serverTimestamp(),
+                    //'updatedAt': FieldValue.serverTimestamp(),
                   });
                   // 🔥 تحديث جميع المهام التابعة لهذه الفئة
                   final tasksSnap = await FirebaseFirestore.instance
@@ -725,7 +725,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                     await doc.reference.update({
                       'status': 'hidden',
                       'expiry_month': nextMonthKey,
-                      'updatedAt': FieldValue.serverTimestamp(),
+                      //'updatedAt': FieldValue.serverTimestamp(),
                     });
                   }
 
@@ -845,7 +845,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                 Navigator.pop(context);
                 await _categoriesCol.doc(cat['id']).update({
                   'status': 'active',
-                  'updatedAt': FieldValue.serverTimestamp(),
+                  //'updatedAt': FieldValue.serverTimestamp(),
                 });
 
                 if (mounted) {

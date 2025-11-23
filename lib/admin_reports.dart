@@ -446,10 +446,9 @@ class _ReportCardState extends State<_ReportCard> {
       // تحديث حالة البلاغ في قاعدة البيانات
       final updates = {
         'decision': decision,
-        'managedBy': currentAdmin?.uid ?? 'admin',
-        'managedByName':
-            currentAdmin?.displayName ?? currentAdmin?.email ?? 'Admin',
-        'resolvedAt': FieldValue.serverTimestamp(),
+        //'managedBy': currentAdmin?.uid ?? 'admin',
+        //'managedByName':currentAdmin?.displayName ?? currentAdmin?.email ?? 'Admin',
+        //'resolvedAt': FieldValue.serverTimestamp(),
         if (reason != null && reason.isNotEmpty) 'rejectionReason': reason,
       };
       await widget.doc.reference.update(updates);
@@ -499,9 +498,9 @@ class _ReportCardState extends State<_ReportCard> {
           'title': notifTitle,
           'message': notifMsg,
           'createdAt': FieldValue.serverTimestamp(),
-          'read': false,
-          'source': 'facilityReport',
-          'sourceId': widget.doc.id,
+          'seen': false,
+          //'source': 'facilityReport',
+          //'sourceId': widget.doc.id,
           'decision': decision,
         });
 
@@ -672,7 +671,7 @@ class _ReportCardState extends State<_ReportCard> {
             final name = f['name'] ?? '';
             final type = f['type'] ?? '';
             final address = f['address'] ?? '';
-            final city = f['city'] ?? '';
+            //final city = f['city'] ?? '';
             return Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -693,10 +692,7 @@ class _ReportCardState extends State<_ReportCard> {
                     style: const TextStyle(color: Colors.black54),
                   ),
                   const SizedBox(height: 8),
-                  if (address.toString().isNotEmpty ||
-                      city.toString().isNotEmpty)
-                    Text('الموقع: $address، $city'),
-                  const SizedBox(height: 8),
+                  //if (address.toString().isNotEmpty ||city.toString().isNotEmpty)Text('الموقع: $address، $city'),const SizedBox(height: 8),
                   FilledButton.icon(
                     icon: const Icon(Icons.copy),
                     label: const Text(

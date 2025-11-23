@@ -40,7 +40,7 @@ class Facility {
   final double lng;
   final String type; // مثل: RVM أو حاوية ملابس...
   final String provider; // من الداتابيس
-  final String city;
+  //final String city;
   final String address;
   final String status; // 'نشط' أو 'متوقف'
 
@@ -50,7 +50,7 @@ class Facility {
     required this.lng,
     required this.type,
     required this.provider,
-    required this.city,
+    //required this.city,
     required this.address,
     required this.status,
   });
@@ -306,7 +306,7 @@ class _mapPageState extends State<mapPage> {
 
         final String type = _normalizeType((m['type'] ?? '').toString());
         final String provider = (m['provider'] ?? '').toString();
-        final String city = (m['city'] ?? '').toString();
+        //final String city = (m['city'] ?? '').toString();
         final String address = (m['address'] ?? '').toString();
 
         final String status = (m['status'] ?? 'نشط').toString(); // 👈 الحالة
@@ -320,7 +320,7 @@ class _mapPageState extends State<mapPage> {
           lng: lng,
           type: type,
           provider: provider,
-          city: city,
+          //city: city,
           address: address,
           status: status,
         );
@@ -338,7 +338,7 @@ class _mapPageState extends State<mapPage> {
                   ? address
                   : [
                       if (provider.isNotEmpty) provider,
-                      if (city.isNotEmpty) city,
+                      //if (city.isNotEmpty) city,
                     ].join(' • '),
               onTap: () => _showFacilitySheet(facility),
             ),
@@ -777,9 +777,7 @@ class _mapPageState extends State<mapPage> {
     final bool hasAnyAreaConstraint = queryHasAreaWord || hasImplicitArea;
 
     for (final f in _facilitiesByMarkerId.values) {
-      final combined = normalizeArabic(
-        '${f.type} ${f.address} ${f.city} ${f.provider}',
-      );
+      final combined = normalizeArabic('${f.type} ${f.address} ${f.provider}');
 
       // ===== 1) تطابق بالنص (نوع / مزوّد / ... ) =====
       bool baseMatch = false;
@@ -803,12 +801,10 @@ class _mapPageState extends State<mapPage> {
 
       // ===== 2) تطابق الحي/الشارع =====
       final addressNorm = normalizeArabic(f.address);
-      final cityNorm = normalizeArabic(f.city);
+      //final cityNorm = normalizeArabic(f.city);
 
       final bool areaMatchesThisFacility =
-          possibleArea != null &&
-          (addressNorm.contains(possibleArea) ||
-              cityNorm.contains(possibleArea));
+          possibleArea != null && (addressNorm.contains(possibleArea));
 
       // ===== 3) منطق الدمج =====
       bool isMatch = false;
@@ -941,7 +937,7 @@ class _mapPageState extends State<mapPage> {
 
         for (final f in _facilitiesByMarkerId.values) {
           final combined = normalizeArabic(
-            '${f.type} ${f.address} ${f.city} ${f.provider}',
+            '${f.type} ${f.address} ${f.provider}',
           );
 
           final providerMatch = providerTokens.any((t) => combined.contains(t));
@@ -1145,7 +1141,7 @@ class _mapPageState extends State<mapPage> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                if (f.address.isNotEmpty || f.city.isNotEmpty)
+                if (f.address.isNotEmpty)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1156,10 +1152,7 @@ class _mapPageState extends State<mapPage> {
                       ),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: Text(
-                          f.address.isNotEmpty ? f.address : f.city,
-                          textAlign: TextAlign.right,
-                        ),
+                        child: Text(f.address, textAlign: TextAlign.right),
                       ),
                     ],
                   ),
@@ -1405,8 +1398,8 @@ class _mapPageState extends State<mapPage> {
         'type': type,
         'facilityID': facility.id,
         'reportedBy': uid,
-        'managedBy': '',
-        'createdAt': FieldValue.serverTimestamp(),
+        //'managedBy': '',
+        //'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;

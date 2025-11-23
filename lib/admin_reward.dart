@@ -101,12 +101,12 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
       'costPoints': points,
       'imageUrl': img,
       'isActive': _isActive,
-      'updatedAt': FieldValue.serverTimestamp(),
+      //'updatedAt': FieldValue.serverTimestamp(),
     };
 
     try {
       if (docId == null) {
-        rewardData['createdAt'] = FieldValue.serverTimestamp();
+        //rewardData['createdAt'] = FieldValue.serverTimestamp();
         await FirebaseFirestore.instance.collection('rewards').add(rewardData);
       } else {
         await FirebaseFirestore.instance
@@ -602,7 +602,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                         child: StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
                               .collection('rewards')
-                              .orderBy('createdAt', descending: true)
+                              //.orderBy('createdAt', descending: true)
                               .snapshots(),
                           builder: (context, snapshot) {
                             if (snapshot.connectionState ==
