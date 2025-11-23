@@ -169,42 +169,45 @@ class _ArticlePageState extends State<ArticlePage> {
   }
 
   // ======================================================
-  // 🔥 قراءة المقال من userTasks فقط (بدون API)
+  // 🔥 قراءة المقال بناءً على articleId (من userTasks)
   // ======================================================
   Future<void> _loadStoredArticle() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('User not logged in');
 
+      // 📄 نقرأ وثيقة مهمة المستخدم
       final userTaskRef = FirebaseFirestore.instance
           .collection('userTasks')
           .doc(widget.userTaskDocId);
-
       final snap = await userTaskRef.get();
       final data = snap.data() ?? {};
 
-      if (data['taskType'] == 'news') {
-        setState(() {
-          _article = {
-            'title': data['articleTitle'] ?? '',
-            'content': data['articleContent'] ?? '',
-            'urlToImage': data['articleImage'] ?? '',
-            'sourceName': data['articleSource'] ?? '',
-            'url': data['articleUrl'] ?? '',
-            'publishedAt': data['articlePublishedAt'] ?? '',
-          };
-          _loading = false;
-        });
-
-        _prepareSentences();
-        return;
+      // 📰 نتحقق إذا فيها articleId
+      final articleId = data['articleId'];
+      if (articleId == null || articleId.toString().isEmpty) {
+        throw Exception('No articleId found in userTask');
       }
 
+      // 📚 نجيب المقال من كولكشن articles
+      final artSnap = await FirebaseFirestore.instance
+          .collection('articles')
+          .doc(articleId)
+          .get();
+
+      if (!artSnap.exists) {
+        throw Exception('Article not found in Firestore');
+      }
+
+      // ✅ نحفظ المقال في الحالة
       setState(() {
-        _error = true;
+        _article = artSnap.data();
         _loading = false;
       });
+
+      _prepareSentences();
     } catch (e) {
+      debugPrint("❌ loadStoredArticle error: $e");
       setState(() {
         _error = true;
         _loading = false;
