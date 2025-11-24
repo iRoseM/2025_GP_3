@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_core/firebase_core.dart'; // ✅ جديد علشان FirebaseException
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'home.dart';
 import 'main.dart';
@@ -717,6 +718,36 @@ class profilePage extends StatelessWidget {
     );
   }
 
+  // دالة مساعدة لفتح تطبيق الإيميل
+  Future<void> _openSupportEmail() async {
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: 'appnameer@gmail.com',
+      queryParameters: <String, String>{
+        'subject': 'دعم تطبيق Nameer',
+        // تقدرِين تضيفين body جاهز إذا حبيتي
+        // 'body': 'السلام عليكم، لدي استفسار حول...'
+      },
+    );
+
+    if (!await launchUrl(emailUri)) {
+      // لو ما قدر يفتح تطبيق البريد
+      throw Exception('لا يمكن فتح تطبيق البريد');
+    }
+  }
+
+  Future<void> _openEmail() async {
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: 'appnameer@gmail.com',
+      queryParameters: {'subject': 'دعم تطبيق Nameer'},
+    );
+
+    if (!await launchUrl(emailUri)) {
+      throw Exception('لا يمكن فتح تطبيق البريد');
+    }
+  }
+
   void _showSupportSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -760,17 +791,17 @@ class profilePage extends StatelessWidget {
                 const SizedBox(height: 12),
                 _faqItem(
                   q: 'كيف أستعيد كلمة المرور؟',
-                  a: 'من شاشة تسجيل الدخول اختر "نسيت كلمة المرور" واتبع التعليمات لإعادة التعيين.',
+                  a: 'أعد تعيين كلمة المرور عبر حسابك الشخصي أو من شاشة تسجيل الدخول اختر "نسيت كلمة المرور" واتبع التعليمات لإعادة التعيين.',
                 ),
                 const SizedBox(height: 8),
                 _faqItem(
                   q: 'كيف أتواصل مع الدعم؟',
-                  a: 'أرسل لنا رسالة من داخل التطبيق: الإعدادات > المساعدة والدعم > تواصل معنا.',
+                  a: 'أرسل لنا رسالة عبر تواصل معنا : الإعدادات > المساعدة والدعم > تواصل معنا.',
                 ),
                 const SizedBox(height: 8),
                 _faqItem(
                   q: 'كيف أبلّغ عن مشكلة؟',
-                  a: 'أرفق وصف المشكلة ولقطة شاشة إن أمكن وسنراجعها خلال أقرب وقت.',
+                  a: 'أرسل لنا رسالة عبر تواصل معنا تتضمّن وصف المشكلة وصورة لها إن أمكن: الإعدادات > المساعدة والدعم > تواصل معنا.',
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -783,9 +814,17 @@ class profilePage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _showSnack(context, 'جارٍ فتح نموذج التواصل…');
+                      onPressed: () async {
+                        Navigator.pop(ctx); // إغلاق الـ bottom sheet أولاً
+                        try {
+                          await _openSupportEmail();
+                        } catch (e) {
+                          // لو حبيتي، تعرضين سناك لو فشل فتح البريد
+                          _showSnack(
+                            context,
+                            'تعذر فتح تطبيق البريد. تأكد من وجود تطبيق بريد على جهازك.',
+                          );
+                        }
                       },
                       icon: const Icon(Icons.chat_bubble_outline),
                       label: Text(
