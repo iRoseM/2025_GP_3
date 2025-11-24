@@ -376,7 +376,16 @@ class _mapPageState extends State<mapPage> {
       debugPrint('❌ Facilities load error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذّر تحميل نقاط الخريطة')),
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text(
+              'تعذّر تحميل نقاط الخريطة',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         );
       }
     } finally {
@@ -456,7 +465,16 @@ class _mapPageState extends State<mapPage> {
       debugPrint('❌ center/filter error: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       );
     }
   }
@@ -477,7 +495,16 @@ class _mapPageState extends State<mapPage> {
       debugPrint('❌ center-only error: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS')),
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       );
     }
   }
@@ -503,8 +530,14 @@ class _mapPageState extends State<mapPage> {
 
     if (nearby.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('لا توجد نقاط قريبة ضمن النطاق — تم عرض جميع النقاط'),
+        SnackBar(
+          content: Text(
+            'لا توجد نقاط قريبة ضمن النطاق — تم عرض جميع النقاط',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ),
       );
     }
@@ -528,8 +561,15 @@ class _mapPageState extends State<mapPage> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS'),
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text(
+              'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         );
       }
@@ -546,9 +586,17 @@ class _mapPageState extends State<mapPage> {
 
     query = query.trim();
     if (query.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('يرجى إدخال نص البحث')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'يرجى إدخال نص البحث',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
       return;
     }
 
@@ -694,7 +742,15 @@ class _mapPageState extends State<mapPage> {
     if (genericQueryTokens.contains(normalizedQuery)) {
       if (_allMarkers.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('لا توجد حاويات متاحة حاليًا')),
+          SnackBar(
+            content: Text(
+              'لا توجد حاويات متاحة حاليًا',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         );
         return;
       }
@@ -908,7 +964,16 @@ class _mapPageState extends State<mapPage> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+        SnackBar(
+          backgroundColor: AppColors.primary,
+          content: Text(
+            message,
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       );
 
       if (isNearestSearch ||
@@ -1017,8 +1082,11 @@ class _mapPageState extends State<mapPage> {
             SnackBar(
               content: Text(
                 'لا توجد حاويات لـ "$displayProviderName" داخل الحي المحدد — تم عرض أقرب حاويات "$displayProviderName" لموقعك.',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              behavior: SnackBarBehavior.floating,
             ),
           );
 
@@ -1062,8 +1130,13 @@ class _mapPageState extends State<mapPage> {
     // ولا Firestore ولا Google Places فهموا النص
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('لم يتم العثور على مواقع حاويات مطابقة لعبارة "$query".'),
-        behavior: SnackBarBehavior.floating,
+        content: Text(
+          'لم يتم العثور على مواقع حاويات مطابقة لعبارة "$query".',
+          style: GoogleFonts.ibmPlexSansArabic(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -1483,7 +1556,16 @@ class _mapPageState extends State<mapPage> {
       debugPrint('❌ report error: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذّر إرسال البلاغ، حاول لاحقًا')),
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            'تعذّر إرسال البلاغ، حاول لاحقًا',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       );
     }
   }

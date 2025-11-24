@@ -80,9 +80,13 @@ class _ArticlePageState extends State<ArticlePage> {
       SnackBar(
         content: Text(
           message,
-          style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+
+          style: GoogleFonts.ibmPlexSansArabic(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
         ),
-        backgroundColor: background ?? AppColors.accent,
+        backgroundColor: background ?? AppColors.dark,
       ),
     );
   }

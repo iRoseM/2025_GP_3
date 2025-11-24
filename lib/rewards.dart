@@ -95,7 +95,15 @@ class _RewardsPageState extends State<RewardsPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الرجاء تسجيل الدخول أولاً')),
+        SnackBar(
+          content: Text(
+            'الرجاء تسجيل الدخول أولاً',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -159,7 +167,16 @@ class _RewardsPageState extends State<RewardsPage> {
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم استبدال "$rewardTitle" بنجاح 🎉')),
+        SnackBar(
+          backgroundColor: AppColors.primary,
+          content: Text(
+            'تم استبدال "$rewardTitle" بنجاح 🎉',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       );
     } catch (e) {
       final scaffoldContext = context;
@@ -172,9 +189,18 @@ class _RewardsPageState extends State<RewardsPage> {
         message = 'حدث خلل في حسابك، يرجى تسجيل الدخول من جديد.';
       }
 
-      ScaffoldMessenger.of(
-        scaffoldContext,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            message,
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -291,8 +317,15 @@ class _RewardsPageState extends State<RewardsPage> {
                             ClipboardData(text: couponCode),
                           );
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('تم نسخ الكود إلى الحافظة ✅'),
+                            SnackBar(
+                              backgroundColor: AppColors.primary,
+                              content: Text(
+                                'تم نسخ الكود إلى الحافظة ✅',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           );
                         }
