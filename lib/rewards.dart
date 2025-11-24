@@ -143,7 +143,7 @@ class _RewardsPageState extends State<RewardsPage> {
         // إكمال العملية + انتهاء الصلاحية بعد 10 دقائق
         final expiresAt = DateTime.now().add(const Duration(minutes: 10));
         tx.update(redemptionRef, {
-          'status': 'expired',
+          'status': 'completed',
           'rewardTitle': rewardTitle,
           'costPoints': cost,
           'expiresAt': Timestamp.fromDate(expiresAt),

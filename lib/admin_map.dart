@@ -33,6 +33,7 @@ class AppColors {
   static const background = Color(0xFFF3FAF7);
   static const mint = Color(0xFFB6E9C1);
   static const tealSoft = Color(0xFF75BCAF);
+  static const red = Colors.red;
 }
 
 class AdminMapPage extends StatefulWidget {
@@ -310,9 +311,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
         await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
       }
 
-      debugPrint('✅ تم تحميل ${markers.length} موقع (نشط ومتوقف) من Firestore');
+      debugPrint(' تم تحميل ${markers.length} موقع (نشط ومتوقف) من Firestore');
     } catch (e) {
-      debugPrint('❌ خطأ أثناء تحميل الفاسيلتيز: $e');
+      debugPrint(' خطأ أثناء تحميل الفاسيلتيز: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تعذر تحميل المواقع من السحابة')),

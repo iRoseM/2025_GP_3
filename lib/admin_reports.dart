@@ -11,15 +11,18 @@ import 'services/title_header.dart';
 import 'services/background_container.dart';
 
 /// ألوان المشروع
-class RColors {
-  static const primary = Color(0xFF009688);
-  static const dark = Color(0xFF00695C);
-  static const bg = Color(0xFFFAFCFB);
-}
-
-// لو عندك تعريف AppColors في ملف آخر استورديه، هنا بس للتوافق مع العنوان:
 class AppColors {
+  static const primary = Color(0xFF4BAA98);
   static const dark = Color(0xFF3C3C3B);
+  static const accent = Color(0xFFF4A340);
+  static const sea = Color(0xFF1F7A8C);
+  static const primary60 = Color(0x994BAA98);
+  static const primary33 = Color(0x544BAA98);
+  static const light = Color(0xFF79D0BE);
+  static const background = Color(0xFFF3FAF7);
+  static const mint = Color(0xFFB6E9C1);
+  static const tealSoft = Color(0xFF75BCAF);
+  static const red = Colors.red;
 }
 
 class AdminReportPage extends StatefulWidget {
@@ -87,9 +90,9 @@ class _AdminReportPageState extends State<AdminReportPage> {
                       return FilterChip(
                         label: Text(label),
                         selected: selected,
-                        selectedColor: RColors.primary.withOpacity(.15),
+                        selectedColor: AppColors.primary.withOpacity(.15),
                         labelStyle: TextStyle(
-                          color: selected ? RColors.primary : Colors.black87,
+                          color: selected ? AppColors.primary : Colors.black87,
                           fontWeight: FontWeight.w700,
                         ),
                         onSelected: (v) {
@@ -109,7 +112,7 @@ class _AdminReportPageState extends State<AdminReportPage> {
 
                   FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: RColors.primary,
+                      backgroundColor: AppColors.primary,
                     ),
                     onPressed: () {
                       Navigator.pop(context);
@@ -221,7 +224,7 @@ class _AdminReportPageState extends State<AdminReportPage> {
                               ),
                               child: const Icon(
                                 Icons.tune,
-                                color: RColors.primary,
+                                color: AppColors.primary,
                                 size: 24,
                               ),
                             ),
@@ -278,6 +281,20 @@ class _ReportList extends StatelessWidget {
 
         final docs = snap.data!.docs.toList();
 
+        // 1) pending فوق
+        // 2) approved / rejected تحت
+        docs.sort((a, b) {
+          final da = (a.data()['decision'] ?? 'pending') as String;
+          final db = (b.data()['decision'] ?? 'pending') as String;
+
+          // pending أولاً
+          if (da == 'pending' && db != 'pending') return -1;
+          if (db == 'pending' && da != 'pending') return 1;
+
+          // لو كلهم pending أو كلهم مو pending → خلي Firestore ترتيب التاريخ يمشي
+          return 0;
+        });
+
         final s = searchText.trim().toLowerCase();
         final hasStatusFilter = statusFilters.isNotEmpty;
 
@@ -324,7 +341,7 @@ class _ReportList extends StatelessWidget {
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: RColors.dark,
+                    color: AppColors.sea,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -377,7 +394,7 @@ class _ReportCardState extends State<_ReportCard> {
       case 'rejected':
         return Colors.red;
       default:
-        return RColors.dark;
+        return AppColors.sea;
     }
   }
 
@@ -543,46 +560,102 @@ class _ReportCardState extends State<_ReportCard> {
 
   void _confirmReject() {
     final ctrl = TextEditingController();
-    showDialog(
+
+    showModalBottomSheet(
       context: context,
-      builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          title: const Text('رفض التقرير'),
-          content: TextField(
-            controller: ctrl,
-            maxLines: 3,
-            textAlign: TextAlign.right,
-            decoration: const InputDecoration(
-              labelText: 'سبب الرفض (اختياري)',
-              hintText: 'اكتب سببًا موجزًا',
-              alignLabelWithHint: true,
-            ),
-          ),
-          actions: [
-            Column(
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) {
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('إلغاء'),
+                const Text(
+                  'رفض التقرير',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: ctrl,
+                  maxLines: 3,
+                  textAlign: TextAlign.right,
+                  decoration: const InputDecoration(
+                    labelText: 'سبب الرفض (اختياري)',
+                    hintText: 'اكتب سببًا موجزًا',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 4),
-                FilledButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await _updateDecision('rejected', reason: ctrl.text);
-                  },
-                  child: const Text('رفض'),
+
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    // زر تأكيد الرفض (Filled)
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 50), // 👈 توحيد الارتفاع
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          padding: EdgeInsets
+                              .zero, // padding نخليه صفر لأن الـ height يعوض
+                        ),
+                        onPressed: _busy
+                            ? null
+                            : () async {
+                                Navigator.pop(ctx);
+                                await _updateDecision(
+                                  'rejected',
+                                  reason: ctrl.text.trim(),
+                                );
+                              },
+                        child: const Text('تأكيد الرفض'),
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // زر الإلغاء Outlined بنفس الارتفاع
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(
+                            0,
+                            50,
+                          ), // 👈 نفس الارتفاع بالملّي
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          side: BorderSide(
+                            color: Colors.grey.shade500,
+                            width: 1.4,
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('إلغاء'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -750,7 +823,10 @@ class _ReportCardState extends State<_ReportCard> {
 
                 // أيقونة التفاصيل
                 IconButton(
-                  icon: const Icon(Icons.info_outline, color: RColors.primary),
+                  icon: const Icon(
+                    Icons.info_outline,
+                    color: AppColors.primary,
+                  ),
                   tooltip: 'تفاصيل الحاوية',
                   onPressed: facilityID.isEmpty
                       ? null
@@ -760,7 +836,7 @@ class _ReportCardState extends State<_ReportCard> {
                 // أيقونة الإرجاع (تظهر فقط إذا التقرير مو "قيد المراجعة")
                 if (decision != 'pending')
                   IconButton(
-                    icon: const Icon(Icons.refresh, color: RColors.primary),
+                    icon: const Icon(Icons.refresh, color: AppColors.primary),
                     tooltip: 'إرجاع لقيد المراجعة',
                     onPressed: _busy ? null : _confirmReturn,
                   ),
@@ -935,7 +1011,7 @@ class _Chip extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: RColors.dark),
+            Icon(icon, size: 18, color: AppColors.sea),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
