@@ -384,119 +384,6 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
 
   double _round2(double v) => (v * 100).roundToDouble() / 100.0;
 
-  /// 🧮 منطق حساب savedKgCO2 للمستخدم عند الاعتماد:
-  /// - perItem      → factor * count
-  /// - perKm        → (baseline - actual) * distanceKm (baseline افتراضي سيارة بنزين)
-  /// - deltaPerKm   → (baseline - actual) * distanceKm
-  /// - deltaPerItem → (baseline - actual) * count
-  Future<double> _computeSavedKgCO2({
-    String? calcMode,
-    String? efRef,
-    String? baselineRef,
-    String direction = 'save',
-    required int count,
-    required double distanceKm,
-    required Map<String, dynamic> taskSnapshotOrMinimal,
-  }) async {
-    calcMode ??= taskSnapshotOrMinimal['calcMode'] as String?;
-    efRef ??= taskSnapshotOrMinimal['emissionFactorRef'] as String?;
-    baselineRef ??= taskSnapshotOrMinimal['baselineFactorRef'] as String?;
-    direction = (taskSnapshotOrMinimal['direction'] as String?) ?? direction;
-
-    final mode = (calcMode ?? 'perItem').toString().toLowerCase();
-
-    // نظامنا يحسب "توفير" فقط، فلو المهمة emit ما نضيف شيء للبصمة المحفوظة
-    if (direction.toLowerCase() != 'save') return 0.0;
-
-    // perItem → يعتمد فقط على عدد الوحدات
-    if (mode == 'peritem') {
-      if ((efRef ?? '').isEmpty || count <= 0) return 0.0;
-      final f = await _getFactorByRef(efRef!);
-      if (f == null) return 0.0;
-      final factor = _readEfValueFlexible(f, preferField: _efValueField) ?? 0.0;
-      return _round2(count * factor);
-    }
-
-    // ✅ perKm → نحسب التوفير مقابل سيارة بنزين (transportCarGasolinePerKm)
-    if (mode == 'perkm') {
-      if (distanceKm <= 0) return 0.0;
-
-      // actual = العامل المستدام (حافلة/مترو/غيره)
-      String? actualRef =
-          efRef ?? taskSnapshotOrMinimal['emissionFactorRef'] as String?;
-      if (actualRef == null || actualRef.isEmpty) return 0.0;
-
-      // baseline = من المهمة لو محدد، وإلا القيمة الافتراضية transportCarGasolinePerKm
-      String baselineId =
-          baselineRef ??
-          (taskSnapshotOrMinimal['baselineFactorRef'] as String?) ??
-          kDefaultTransportBaselineRef;
-
-      if (baselineId.isEmpty) {
-        // لو حتى الافتراضي مو موجود لأي سبب → نرجع للسلوك القديم (perKm * factor)
-        final fAct = await _getFactorByRef(actualRef);
-        if (fAct == null) return 0.0;
-        final factor =
-            _readEfValueFlexible(fAct, preferField: _efValueField) ?? 0.0;
-        return _round2(distanceKm * factor);
-      }
-
-      final baseF = await _getFactorByRef(baselineId);
-      final actF = await _getFactorByRef(actualRef);
-
-      if (baseF == null || actF == null) return 0.0;
-
-      final base =
-          _readEfValueFlexible(baseF, preferField: _efValueField) ?? 0.0;
-      final act = _readEfValueFlexible(actF, preferField: _efValueField) ?? 0.0;
-      final delta = base - act;
-
-      if (delta <= 0) return 0.0;
-      return _round2(delta * distanceKm);
-    }
-
-    // deltaPerKm → baseline-actual لكل كم
-    if (mode == 'deltaperkm') {
-      if ((baselineRef ?? '').isEmpty ||
-          (efRef ?? '').isEmpty ||
-          distanceKm <= 0) {
-        return 0.0;
-      }
-      final baseF = await _getFactorByRef(baselineRef!);
-      final actF = await _getFactorByRef(efRef!);
-      if (baseF == null || actF == null) return 0.0;
-      final base =
-          _readEfValueFlexible(baseF, preferField: _efValueField) ?? 0.0;
-      final act = _readEfValueFlexible(actF, preferField: _efValueField) ?? 0.0;
-      final delta = base - act;
-      if (delta <= 0) return 0.0;
-      return _round2(delta * distanceKm);
-    }
-
-    // ✅ deltaPerItem → (baseline - actual) لكل قطعة
-    if (mode == 'deltaperitem') {
-      if ((baselineRef ?? '').isEmpty || (efRef ?? '').isEmpty || count <= 0) {
-        return 0.0;
-      }
-      final baseF = await _getFactorByRef(baselineRef!);
-      final actF = await _getFactorByRef(efRef!);
-      if (baseF == null || actF == null) return 0.0;
-      final base =
-          _readEfValueFlexible(baseF, preferField: _efValueField) ?? 0.0;
-      final act = _readEfValueFlexible(actF, preferField: _efValueField) ?? 0.0;
-      final delta = base - act;
-      if (delta <= 0) return 0.0;
-      return _round2(delta * count);
-    }
-
-    // fallback perItem
-    if ((efRef ?? '').isEmpty || count <= 0) return 0.0;
-    final f = await _getFactorByRef(efRef!);
-    if (f == null) return 0.0;
-    final factor = _readEfValueFlexible(f, preferField: _efValueField) ?? 0.0;
-    return _round2(count * factor);
-  }
-
   // =====================================================
   // 🧮 deltaPerKm: تحسب الفرق فقط (baseline - actual) * km
   //    بدون أي تحديث في Firestore (التحديث يتم في _approve)
@@ -1064,7 +951,6 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
     );
 
     final distanceKm = _asDouble(data['distanceKm']);
-    double savedKgCO2 = _asDouble(data['carbonSaved']);
 
     final usersRef = FirebaseFirestore.instance.collection('users').doc(userId);
     final utRef = FirebaseFirestore.instance
@@ -1100,52 +986,22 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
         final currentStatus = (ut['status'] as String?) ?? 'pending';
         final canComplete = currentStatus != 'completed';
 
-        // ⚙️ لو savedKgCO2 <= 0 نحاول نعيد حسابه من عوامل الكربون
-        if (savedKgCO2 <= 0) {
-          // 👇 عدّلي أسماء الفيلدز حسب تركيب الـ task عندك لو مختلفة
-          final baseKgCO2 = _asDouble(
-            ut['baseKgCO2'] ??
-                sub['baseKgCO2'] ??
-                ut['factors']?['baseKgCO2'] ??
-                sub['factors']?['baseKgCO2'],
-          );
-          final perItemKgCO2 = _asDouble(
-            ut['perItemKgCO2'] ??
-                sub['perItemKgCO2'] ??
-                ut['factors']?['perItemKgCO2'] ??
-                sub['factors']?['perItemKgCO2'],
-          );
-          final perKmKgCO2 = _asDouble(
-            ut['perKmKgCO2'] ??
-                sub['perKmKgCO2'] ??
-                ut['factors']?['perKmKgCO2'] ??
-                sub['factors']?['perKmKgCO2'],
-          );
-
-          final usedItemCount = itemCount > 0
-              ? itemCount
-              : _asInt(sub['itemCount'] ?? ut['itemCount']);
-
-          final usedDistanceKm = distanceKm > 0
-              ? distanceKm
-              : _asDouble(sub['distanceKm'] ?? ut['distanceKm']);
-
-          final recalculated =
-              baseKgCO2 +
-              perItemKgCO2 * usedItemCount +
-              perKmKgCO2 * usedDistanceKm;
-          if (recalculated > 0) {
-            savedKgCO2 = recalculated;
-          }
-        }
+        // ✅ نقرأ قيمة الكربون المحفوظة من complete_task.dart
+        final carbonSaved = _asDouble(
+          ut['carbonSaved'] ??
+              sub['carbonSaved'] ??
+              ut['savedKgCO2'] ?? // للتوافق مع البيانات القديمة لو موجودة
+              sub['savedKgCO2'] ?? // للتوافق مع البيانات القديمة لو موجودة
+              data['carbonSaved'],
+        );
 
         // 🔁 تحديث وثيقة submission
         final subUpdate = <String, dynamic>{
           'status': 'approved',
-          'processedAt': FieldValue.serverTimestamp(),
-          'processedBy': admin?.uid,
+          //'processedAt': FieldValue.serverTimestamp(),
+          //'processedBy': admin?.uid,
         };
-        if (savedKgCO2 > 0) subUpdate['savedKgCO2'] = savedKgCO2;
+        if (carbonSaved > 0) subUpdate['carbonSaved'] = carbonSaved;
         if (distanceKm > 0 && (sub['distanceKm'] == null)) {
           subUpdate['distanceKm'] = distanceKm;
         }
@@ -1161,7 +1017,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
           'completedAt': FieldValue.serverTimestamp(),
           'canRetry': false,
         };
-        if (savedKgCO2 > 0) utUpdate['savedKgCO2'] = savedKgCO2;
+        if (carbonSaved > 0) utUpdate['carbonSaved'] = carbonSaved;
         if (distanceKm > 0 && (ut['distanceKm'] == null)) {
           utUpdate['distanceKm'] = distanceKm;
         }
@@ -1192,15 +1048,15 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
           'at': FieldValue.serverTimestamp(),
           'taskTitle': taskTitle,
         };
-        if (savedKgCO2 > 0) histData['savedKgCO2'] = savedKgCO2;
+        if (carbonSaved > 0) histData['carbonSaved'] = carbonSaved;
         if (itemCount > 0) histData['itemCount'] = itemCount;
         trx.set(historyRef, histData);
 
         // 🔁 تحديث totalCarbonSaved + lastCarbonUpdateAt
         trx.set(usersRef, {
           'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-          if (savedKgCO2 > 0)
-            'totalCarbonSaved': FieldValue.increment(savedKgCO2),
+          if (carbonSaved > 0)
+            'totalCarbonSaved': FieldValue.increment(carbonSaved),
         }, SetOptions(merge: true));
 
         // 📅 dayMarks
@@ -1214,7 +1070,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
             .collection('notifications')
             .doc();
         final carbonText = _fmtKgLocal(
-          savedKgCO2.isFinite && savedKgCO2 >= 0 ? savedKgCO2 : 0.0,
+          carbonSaved.isFinite && carbonSaved >= 0 ? carbonSaved : 0.0,
         );
         trx.set(notifRef, {
           'type': 'submission_approved',
@@ -1222,7 +1078,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
           'submissionId': subRef.id,
           'taskTitle': taskTitle,
           'points': taskPoints,
-          'savedKgCO2': savedKgCO2.isFinite ? savedKgCO2 : 0.0,
+          //'carbonSaved': carbonSaved.isFinite ? carbonSaved : 0.0,
           if (distanceKm > 0) 'distanceKm': distanceKm,
           if (itemCount > 0) 'itemCount': itemCount,
           'createdAt': FieldValue.serverTimestamp(),
@@ -1308,8 +1164,8 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
 
         trx.update(subRef, {
           'status': 'rejected',
-          'processedAt': FieldValue.serverTimestamp(),
-          'processedBy': admin?.uid,
+          //'processedAt': FieldValue.serverTimestamp(),
+          //'processedBy': admin?.uid,
         });
 
         trx.update(utRef, {

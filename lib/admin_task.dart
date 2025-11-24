@@ -2045,8 +2045,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
       'status': status,
       'visible_from': nextMonth,
       if (_expiryMonth != null) 'expiry_month': _expiryMonth,
-      'managedBy': 'nameer admin',
-      'updatedAt': FieldValue.serverTimestamp(),
+      //'managedBy': 'nameer admin',
+      //'updatedAt': FieldValue.serverTimestamp(),
     };
 
     // 🟢 حقول الكربون فقط لو الفئة "سلوك مباشر"
@@ -2099,7 +2099,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
     // حفظ في فايربيس
     if (widget.task == null) {
-      data['createdAt'] = FieldValue.serverTimestamp();
+      //data['createdAt'] = FieldValue.serverTimestamp();
       await _tasks.add(data);
     } else {
       await _tasks.doc(widget.task!['id']).update(data);
@@ -2796,7 +2796,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
         'name_normalized': normalized,
         'parent': _parent,
         'description': _descCtrl.text.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
+        //'createdAt': FieldValue.serverTimestamp(),
       });
     } else {
       await _categoriesCol.doc(widget.category!['id']).update({
@@ -2804,7 +2804,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
         'name_normalized': normalized,
         'parent': _parent,
         'description': _descCtrl.text.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
+        //'createdAt': FieldValue.serverTimestamp(),
       });
     }
 
