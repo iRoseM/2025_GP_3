@@ -285,9 +285,17 @@ class _RegisterPageState extends State<RegisterPage>
     }
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('أدخل البريد أولًا')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'أدخل البريد أولًا',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
       return;
     }
     try {
@@ -295,8 +303,15 @@ class _RegisterPageState extends State<RegisterPage>
       await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ تم إرسال رابط إعادة التعيين إلى بريدك'),
+        SnackBar(
+          backgroundColor: AppColors.primary,
+          content: Text(
+            '✅ تم إرسال رابط إعادة التعيين إلى بريدك',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
         ),
       );
     } on FirebaseAuthException catch (e) {
@@ -323,13 +338,31 @@ class _RegisterPageState extends State<RegisterPage>
       }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('❌ $msg')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            '❌ $msg',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('❌ خطأ غير متوقع أثناء الإرسال')),
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            '❌ خطأ غير متوقع أثناء الإرسال',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
       );
     }
   }
@@ -387,9 +420,15 @@ class _RegisterPageState extends State<RegisterPage>
 
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
+              backgroundColor: AppColors.primary,
               content: Text(
                 'تم إرسال رسالة التحقق إلى بريدك، يرجى التحقق قبل تسجيل الدخول.',
+
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
               ),
               behavior: SnackBarBehavior.floating,
             ),
@@ -410,9 +449,18 @@ class _RegisterPageState extends State<RegisterPage>
           }
 
           if (!mounted) return;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('❌ $msg')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.redAccent,
+              content: Text(
+                '❌ $msg',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          );
         }
 
         // ⏩ التوجيه لصفحة التحقق بعد الإشعار
@@ -423,6 +471,10 @@ class _RegisterPageState extends State<RegisterPage>
     } on FirebaseAuthException catch (e) {
       String msg = 'تعذّر تسجيل الدخول (${e.code})';
       switch (e.code) {
+        case 'invalid-credential':
+          msg = 'بيانات الدخول غير صحيحة';
+          break;
+
         case 'invalid-email':
           msg = 'بريد إلكتروني غير صالح';
           break;
@@ -438,13 +490,31 @@ class _RegisterPageState extends State<RegisterPage>
           break;
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('❌ $msg')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            '❌ $msg',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('❌ خطأ غير متوقع أثناء تسجيل الدخول')),
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            '❌ خطأ غير متوقع أثناء تسجيل الدخول',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
       );
     }
   }
@@ -1417,19 +1487,45 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       }
       if (e.code == 'network-request-failed') {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذّر الاتصال — تأكد من الإنترنت')),
+          SnackBar(
+            content: Text(
+              'تعذّر الاتصال — تأكد من الإنترنت',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
         );
         return;
       }
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('❌ خطأ غير متوقع (${e.code})')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            '❌ خطأ غير متوقع (${e.code})',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       // يشمل permission-denied من Firestore وغيره
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ تعذّر إنشاء الحساب (${e.toString()})')),
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            '❌ تعذّر إنشاء الحساب (${e.toString()})',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _reserving = false);
@@ -1876,7 +1972,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                                   return 'أدخل رقمًا صحيحًا';
                                                 }
                                                 if (n < 7 || n > 120) {
-                                                  return 'العمر غير منطقي';
+                                                  return 'الحد الأدنى للعمر 7 سنوات';
                                                 }
                                                 return null;
                                               },
@@ -2078,7 +2174,16 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
       if (!mounted) return;
       // ✅ رسالة قصيرة بأسلوب Slack message
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✉️ تم إعادة إرسال رسالة التحقق')),
+        SnackBar(
+          backgroundColor: AppColors.primary,
+          content: Text(
+            '✉️ تم إعادة إرسال رسالة التحقق',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
       );
     } on FirebaseAuthException catch (e) {
       String msg = 'تعذّر الإرسال (${e.code})';
@@ -2090,13 +2195,23 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
           msg = 'تحقق من اتصال الإنترنت';
           break;
         case 'too-many-requests':
-          msg = 'محاولات كثيرة — جرّب لاحقًا';
+          msg =
+              'لقد قمت بمحاولات متعددة خلال وقت قصير. يرجى الانتظار قليلًا ثم المحاولة مرة أخرى';
           break;
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('❌ $msg')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            '❌ $msg',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -2125,7 +2240,16 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
 
         // ✅ رسالة قصيرة وواضحة
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ تم تأكيد التحقق وتحديث الحساب')),
+          SnackBar(
+            backgroundColor: AppColors.primary,
+            content: Text(
+              '✅ تم تأكيد التحقق وتحديث الحساب',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
         );
 
         // وجّه حسب الدور
@@ -2145,16 +2269,32 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
       } else {
         // ⚠️ مستخدم ضغط "تحققت الآن" لكن البريد لسه مو متحقق
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ لم يتم التحقق من البريد الإلكتروني بعد'),
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text(
+              '⚠️ لم يتم التحقق من البريد الإلكتروني بعد',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
           ),
         );
       }
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('❌ حدث خطأ أثناء التحقق')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            '❌ حدث خطأ أثناء التحقق',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _checking = false);
     }

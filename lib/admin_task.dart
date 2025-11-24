@@ -2108,7 +2108,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.primary,
           content: Text(
             widget.task == null ? 'تم حفظ المهمة ✅' : 'تم تحديث المهمة ✅',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -2811,7 +2811,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.primary,
           content: Text(
             widget.category == null
                 ? 'تمت إضافة الفئة بنجاح ✅'

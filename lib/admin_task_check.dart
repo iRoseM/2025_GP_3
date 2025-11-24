@@ -1014,7 +1014,16 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
-        const SnackBar(content: Text('يحتاج صلاحية أدمن لاعتماد الطلب')),
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            'يحتاج صلاحية أدمن لاعتماد الطلب',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -1027,7 +1036,16 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
-        const SnackBar(content: Text('الطلب ناقص userId/userTaskDocId')),
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            'تعذّر تنفيذ الطلب — بيانات أساسية مفقودة',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -1219,12 +1237,32 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
-        const SnackBar(content: Text('تم اعتماد الطلب ✅')),
+        SnackBar(
+          backgroundColor: AppColors.primary,
+          content: Text(
+            'تم اعتماد الطلب بنجاح ✅',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
-      messenger?.showSnackBar(SnackBar(content: Text('خطأ: $e')));
+      messenger?.showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            'خطأ: $e',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -1235,7 +1273,16 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
-        const SnackBar(content: Text('يحتاج صلاحية أدمن لرفض الطلب')),
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            'يحتاج صلاحية أدمن لرفض الطلب',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
       );
       return;
     }
@@ -1306,11 +1353,33 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
 
       if (!mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
-      messenger?.showSnackBar(const SnackBar(content: Text('تم رفض الطلب ❌')));
+      messenger?.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.primary,
+          content: Text(
+            'تم رفض الطلب ✅',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.maybeOf(context);
-      messenger?.showSnackBar(SnackBar(content: Text('خطأ: $e')));
+      messenger?.showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            'خطأ: $e',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
     }
   }
 }
