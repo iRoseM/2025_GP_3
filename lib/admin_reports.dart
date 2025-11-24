@@ -19,7 +19,16 @@ class RColors {
 
 // لو عندك تعريف AppColors في ملف آخر استورديه، هنا بس للتوافق مع العنوان:
 class AppColors {
+  static const primary = Color(0xFF4BAA98);
   static const dark = Color(0xFF3C3C3B);
+  static const accent = Color(0xFFF4A340);
+  static const sea = Color(0xFF1F7A8C);
+  static const primary60 = Color(0x994BAA98);
+  static const primary33 = Color(0x544BAA98);
+  static const light = Color(0xFF79D0BE);
+  static const background = Color(0xFFF3FAF7);
+  static const mint = Color(0xFFB6E9C1);
+  static const tealSoft = Color(0xFF75BCAF);
 }
 
 class AdminReportPage extends StatefulWidget {
@@ -30,6 +39,9 @@ class AdminReportPage extends StatefulWidget {
 }
 
 class _AdminReportPageState extends State<AdminReportPage> {
+  final GlobalKey<ScaffoldMessengerState> reportMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
   @override
   void initState() {
     super.initState();
@@ -156,92 +168,97 @@ class _AdminReportPageState extends State<AdminReportPage> {
       textDirection: TextDirection.rtl,
       child: Theme(
         data: baseTheme.copyWith(textTheme: textTheme),
-        child: Scaffold(
-          extendBody: true,
-          backgroundColor: Colors.transparent,
-          extendBodyBehindAppBar: true,
+        child: ScaffoldMessenger(
+          key: reportMessengerKey,
 
-          // ✅ الهيدر العام (من title_header.dart)
-          appBar: const NameerAppBar(showTitleInBar: false, showBack: true),
+          child: Scaffold(
+            extendBody: true,
+            backgroundColor: Colors.transparent,
+            extendBodyBehindAppBar: true,
 
-          body: AnimatedBackgroundContainer(
-            child: Builder(
-              builder: (context) {
-                final statusBar = MediaQuery.of(context).padding.top;
-                const headerH = 20.0; // ارتفاع الهيدر الحقيقي
-                const gap = 12.0;
-                final topPadding = statusBar + headerH + gap;
+            // ✅ الهيدر العام (من title_header.dart)
+            appBar: const NameerAppBar(showTitleInBar: false, showBack: true),
 
-                return Padding(
-                  padding: EdgeInsets.fromLTRB(12, topPadding, 12, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ✅ العنوان أسفل الهيدر
-                      Text(
-                        'بلاغات الحاويات',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
-                        ),
-                      ),
-                      const SizedBox(height: 15),
+            body: AnimatedBackgroundContainer(
+              child: Builder(
+                builder: (context) {
+                  final statusBar = MediaQuery.of(context).padding.top;
+                  const headerH = 20.0; // ارتفاع الهيدر الحقيقي
+                  const gap = 12.0;
+                  final topPadding = statusBar + headerH + gap;
 
-                      // ✅ شريط البحث + الفلتر (نفس نمط الصفحات الثانية)
-                      Row(
-                        children: [
-                          // شريط البحث
-                          Expanded(
-                            child: _SearchBar(
-                              controller: _searchCtrl,
-                              hint: 'ابحث بالوصف / النوع / معرف الحاوية…',
-                              onChanged: (_) => setState(() {}),
-                            ),
+                  return Padding(
+                    padding: EdgeInsets.fromLTRB(12, topPadding, 12, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ✅ العنوان أسفل الهيدر
+                        Text(
+                          'بلاغات الحاويات',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.dark,
                           ),
-                          const SizedBox(width: 8),
+                        ),
+                        const SizedBox(height: 15),
 
-                          // زر الفلتر يفتح BottomSheet بالـ FilterChips
-                          InkWell(
-                            onTap: _showStatusFilterSheet,
-                            borderRadius: BorderRadius.circular(14),
-                            child: Container(
-                              height: 48,
-                              width: 48,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x14000000),
-                                    blurRadius: 12,
-                                    offset: Offset(0, 6),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.tune,
-                                color: RColors.primary,
-                                size: 24,
+                        // ✅ شريط البحث + الفلتر (نفس نمط الصفحات الثانية)
+                        Row(
+                          children: [
+                            // شريط البحث
+                            Expanded(
+                              child: _SearchBar(
+                                controller: _searchCtrl,
+                                hint: 'ابحث بالوصف / النوع / معرف الحاوية…',
+                                onChanged: (_) => setState(() {}),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 8),
 
-                      const SizedBox(height: 8),
-
-                      // ✅ قائمة البلاغات
-                      Expanded(
-                        child: _ReportList(
-                          statusFilters: selectedDecisionValues,
-                          searchText: _searchCtrl.text,
+                            // زر الفلتر يفتح BottomSheet بالـ FilterChips
+                            InkWell(
+                              onTap: _showStatusFilterSheet,
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                height: 48,
+                                width: 48,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0x14000000),
+                                      blurRadius: 12,
+                                      offset: Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.tune,
+                                  color: RColors.primary,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              },
+
+                        const SizedBox(height: 8),
+
+                        // ✅ قائمة البلاغات
+                        Expanded(
+                          child: _ReportList(
+                            statusFilters: selectedDecisionValues,
+                            searchText: _searchCtrl.text,
+                            messengerKey: reportMessengerKey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -255,8 +272,12 @@ class _ReportList extends StatelessWidget {
   /// قائمة قيم decision المختارة: ['pending', 'approved', ...]
   final List<String> statusFilters;
   final String searchText;
-
-  const _ReportList({required this.statusFilters, required this.searchText});
+  final GlobalKey<ScaffoldMessengerState> messengerKey;
+  const _ReportList({
+    required this.statusFilters,
+    required this.searchText,
+    required this.messengerKey,
+  });
 
   Query<Map<String, dynamic>> _baseQuery() {
     final col = FirebaseFirestore.instance.collection('facilityReports');
@@ -341,13 +362,14 @@ class _ReportList extends StatelessWidget {
             }
           },
           child: ListView.separated(
+            key: UniqueKey(),
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
             itemCount: filtered.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
               final d = filtered[i];
-              return _ReportCard(doc: d);
+              return _ReportCard(doc: d, messengerKey: messengerKey);
             },
           ),
         );
@@ -359,7 +381,9 @@ class _ReportList extends StatelessWidget {
 /// بطاقة التقرير
 class _ReportCard extends StatefulWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
-  const _ReportCard({required this.doc});
+  final GlobalKey<ScaffoldMessengerState> messengerKey;
+
+  const _ReportCard({required this.doc, required this.messengerKey, super.key});
 
   @override
   State<_ReportCard> createState() => _ReportCardState();
@@ -523,18 +547,39 @@ class _ReportCardState extends State<_ReportCard> {
       }
 
       if (mounted) {
+        // يعيد بناء البطاقة فوراً
         setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
+
+        // السناك بار يظهر من أعلى الصفحة وليس من داخل الكارد
+        widget.messengerKey.currentState?.showSnackBar(
           SnackBar(
-            content: Text('تم تحديث الحالة إلى ${_statusLabel(decision)}'),
+            backgroundColor: AppColors.primary,
+            content: Text(
+              'تم تحديث الحالة إلى ${_statusLabel(decision)}',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('تعذّر تحديث التقرير')));
+          Navigator.of(context, rootNavigator: true).context,
+        ).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.primary,
+            content: Text(
+              'تم تحديث الحالة إلى ${_statusLabel(decision)}',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -703,7 +748,16 @@ class _ReportCardState extends State<_ReportCard> {
                       await Clipboard.setData(ClipboardData(text: id));
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('تم نسخ معرف الحاوية')),
+                        SnackBar(
+                          backgroundColor: AppColors.primary,
+                          content: Text(
+                            'تم نسخ معرف الحاوية',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       );
                     },
                   ),

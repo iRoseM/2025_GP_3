@@ -130,9 +130,18 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
         final message = docId == null
             ? 'تمت إضافة المكافأة بنجاح 🎉'
             : 'تم تحديث المكافأة بنجاح ✏️';
-        ScaffoldMessenger.of(
-          scaffoldContext,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.primary,
+            content: Text(
+              message,
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        );
       });
     } catch (e) {
       final scaffoldContext = parentContext;
@@ -140,9 +149,18 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
         Navigator.of(parentContext, rootNavigator: true).pop();
       }
       Future.microtask(() {
-        ScaffoldMessenger.of(
-          scaffoldContext,
-        ).showSnackBar(SnackBar(content: Text('خطأ أثناء الإضافة: $e')));
+        ScaffoldMessenger.of(scaffoldContext).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text(
+              'خطأ أثناء الإضافة: $e',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        );
       });
     }
   }
@@ -891,8 +909,13 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                                                               context,
                                                                             ).showSnackBar(
                                                                               SnackBar(
+                                                                                backgroundColor: AppColors.primary,
                                                                                 content: Text(
-                                                                                  'تم حذف "$rewardName" بنجاح 🗑️',
+                                                                                  'تم حذف المكافآة بنجاح 🗑️',
+                                                                                  style: GoogleFonts.ibmPlexSansArabic(
+                                                                                    color: Colors.white,
+                                                                                    fontWeight: FontWeight.w700,
+                                                                                  ),
                                                                                 ),
                                                                               ),
                                                                             );
@@ -907,9 +930,14 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                                                             ScaffoldMessenger.of(
                                                                               context,
                                                                             ).showSnackBar(
-                                                                              const SnackBar(
+                                                                              SnackBar(
+                                                                                backgroundColor: Colors.redAccent,
                                                                                 content: Text(
                                                                                   'فشل حذف المكافأة ❌',
+                                                                                  style: GoogleFonts.ibmPlexSansArabic(
+                                                                                    color: Colors.white,
+                                                                                    fontWeight: FontWeight.w700,
+                                                                                  ),
                                                                                 ),
                                                                               ),
                                                                             );
