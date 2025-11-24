@@ -299,6 +299,16 @@ class _ReportList extends StatelessWidget {
 
         final docs = snap.data!.docs.toList();
 
+        docs.sort((a, b) {
+          final da = (a.data()['decision'] ?? 'pending') as String;
+          final db = (b.data()['decision'] ?? 'pending') as String;
+
+          if (da == 'pending' && db != 'pending') return -1;
+          if (db == 'pending' && da != 'pending') return 1;
+
+          return 0;
+        });
+
         final s = searchText.trim().toLowerCase();
         final hasStatusFilter = statusFilters.isNotEmpty;
 
@@ -588,46 +598,98 @@ class _ReportCardState extends State<_ReportCard> {
 
   void _confirmReject() {
     final ctrl = TextEditingController();
-    showDialog(
+
+    showModalBottomSheet(
       context: context,
-      builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          title: const Text('رفض التقرير'),
-          content: TextField(
-            controller: ctrl,
-            maxLines: 3,
-            textAlign: TextAlign.right,
-            decoration: const InputDecoration(
-              labelText: 'سبب الرفض (اختياري)',
-              hintText: 'اكتب سببًا موجزًا',
-              alignLabelWithHint: true,
-            ),
-          ),
-          actions: [
-            Column(
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) {
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('إلغاء'),
+                const Text(
+                  'رفض التقرير',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: ctrl,
+                  maxLines: 3,
+                  textAlign: TextAlign.right,
+                  decoration: const InputDecoration(
+                    labelText: 'سبب الرفض (اختياري)',
+                    hintText: 'اكتب سببًا موجزًا',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 4),
-                FilledButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await _updateDecision('rejected', reason: ctrl.text);
-                  },
-                  child: const Text('رفض'),
+
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    // زر تأكيد الرفض (Filled)
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 50), // توحيد الارتفاع
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                        onPressed: _busy
+                            ? null
+                            : () async {
+                                Navigator.pop(ctx);
+                                await _updateDecision(
+                                  'rejected',
+                                  reason: ctrl.text.trim(),
+                                );
+                              },
+                        child: const Text('تأكيد الرفض'),
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // زر الإلغاء Outlined بنفس الارتفاع
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 50), // نفس الارتفاع
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          side: BorderSide(
+                            color: Colors.grey.shade500,
+                            width: 1.4,
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('إلغاء'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
