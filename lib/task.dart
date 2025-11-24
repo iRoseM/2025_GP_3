@@ -627,7 +627,6 @@ class _taskPageState extends State<taskPage> {
             'لا توجد مهام مُتاحة لهذا الشهر.',
             style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
-          backgroundColor: AppColors.primary,
         ),
       );
       return;

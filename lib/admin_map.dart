@@ -316,7 +316,16 @@ class _AdminMapPageState extends State<AdminMapPage> {
       debugPrint(' خطأ أثناء تحميل الفاسيلتيز: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر تحميل المواقع من السحابة')),
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text(
+              'تعذر تحميل المواقع من السحابة',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         );
       }
     } finally {
@@ -393,8 +402,15 @@ class _AdminMapPageState extends State<AdminMapPage> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تعذّر تحديد موقعك. تأكد من الإذن وGPS'),
+          SnackBar(
+            backgroundColor: Colors.redAccent,
+            content: Text(
+              'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         );
       }
@@ -802,6 +818,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
             SnackBar(
               content: Text(
                 'لا توجد حاويات لـ "$providerLabel" داخل الحي المحدد — تم عرض حاويات "$providerLabel" الأقرب لموقعك.',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               behavior: SnackBarBehavior.floating,
             ),
@@ -1350,7 +1370,14 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   });
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('تمت إضافة "${_lastAddedName!}" بنجاح ✅'),
+                      backgroundColor: AppColors.primary,
+                      content: Text(
+                        'تمت إضافة "${_lastAddedName!}" بنجاح ✅',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   );
                 }
@@ -1360,9 +1387,18 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   if (!isTypeValid) msg += '• نوع الحاوية ♻️\n';
                   if (!isLocationSelected)
                     msg += '• تحديد الموقع على الخريطة 📍';
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(msg)));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: Colors.redAccent,
+                      content: Text(
+                        msg,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  );
                 },
           style: FilledButton.styleFrom(
             backgroundColor: isReady ? Colors.teal : Colors.grey,
@@ -1695,7 +1731,16 @@ class _AdminMapPageState extends State<AdminMapPage> {
                       } catch (e) {
                         if (mounted) Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('فشل حذف السحابة')),
+                          SnackBar(
+                            backgroundColor: Colors.redAccent,
+                            content: Text(
+                              'فشل حذف السحابة',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                         );
                       }
                     },
@@ -1777,7 +1822,16 @@ class _AdminMapPageState extends State<AdminMapPage> {
     } catch (e) {
       debugPrint('❌ خطأ في الحفظ: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('حدث خطأ أثناء حفظ البيانات')),
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            'حدث خطأ أثناء حفظ البيانات',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       );
     }
   }
@@ -2029,12 +2083,32 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                                   lat: p.latitude,
                                   lng: p.longitude,
                                 );
+                                // 🎉✨ SnackBar نجاح هنا
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      backgroundColor: AppColors.primary,
+                                      content: Text(
+                                        'تمت إضافة الموقع بنجاح ✅',
+                                        style: GoogleFonts.ibmPlexSansArabic(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
                                 if (mounted) Navigator.pop(context);
                               } catch (_) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
+                                  SnackBar(
+                                    backgroundColor: Colors.redAccent,
                                     content: Text(
                                       'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
                                   ),
                                 );

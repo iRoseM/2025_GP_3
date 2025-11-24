@@ -869,11 +869,15 @@ class profilePage extends StatelessWidget {
   static void _showSnack(BuildContext context, String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
+        backgroundColor: Colors.redAccent,
         content: Text(
           msg,
-          style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w600),
+
+          style: GoogleFonts.ibmPlexSansArabic(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
         ),
-        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -1117,9 +1121,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: Colors.redAccent,
           content: Text(
             'لا يوجد مستخدم مسجّل.',
-            style: GoogleFonts.ibmPlexSansArabic(),
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       );
@@ -1161,11 +1169,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: AppColors.primary,
           content: Text(
             'تم حفظ التغييرات ✅',
             style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w700),
           ),
-          behavior: SnackBarBehavior.floating,
         ),
       );
       Navigator.of(context).pop();
@@ -1184,9 +1192,18 @@ class _EditProfilePageState extends State<EditProfilePage> {
       ).showSnackBar(SnackBar(content: Text('❌ $msg')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('❌ خطأ غير متوقع: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.redAccent,
+          content: Text(
+            '❌ خطأ غير متوقع: $e',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
     }
   }
 
