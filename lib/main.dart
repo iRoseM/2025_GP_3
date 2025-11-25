@@ -694,20 +694,17 @@ class _RegisterPageState extends State<RegisterPage>
                                         ),
                                         hintText: '••••••••',
                                         errorMaxLines: 3,
-                                        suffixIcon: AnimatedRotation(
-                                          turns: _obscure ? 0 : .25,
-                                          duration: const Duration(
-                                            milliseconds: 220,
+                                        suffixIcon: IconButton(
+                                          onPressed: () => setState(
+                                            () => _obscure = !_obscure,
                                           ),
-                                          child: IconButton(
-                                            onPressed: () => setState(
-                                              () => _obscure = !_obscure,
-                                            ),
-                                            icon: Icon(
-                                              _obscure
-                                                  ? Icons.visibility
-                                                  : Icons.visibility_off,
-                                            ),
+                                          icon: Icon(
+                                            _obscure
+                                                ? Icons.visibility_outlined
+                                                : Icons.visibility_off_outlined,
+                                            color: _obscure
+                                                ? AppColors.primary
+                                                : Colors.grey,
                                           ),
                                         ),
                                       ),
@@ -1003,6 +1000,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
   String? _confirmError; // ✅ جديد
 
   bool _obscure = true;
+  bool _obscureConfirm = true;
   String _gender = 'male'; // 'male' or 'female'
   bool _reserving = false; // حالة الحجز/الإنشاء
 
@@ -1804,24 +1802,24 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                               if (_touchedPass)
                                                 _statusIcon(_passStatus) ??
                                                     const SizedBox.shrink(),
-                                              AnimatedRotation(
-                                                turns: _obscure ? 0 : .25,
-                                                duration: const Duration(
-                                                  milliseconds: 220,
+                                              IconButton(
+                                                onPressed: () => setState(
+                                                  () => _obscure = !_obscure,
                                                 ),
-                                                child: IconButton(
-                                                  onPressed: () => setState(
-                                                    () => _obscure = !_obscure,
-                                                  ),
-                                                  icon: Icon(
-                                                    _obscure
-                                                        ? Icons.visibility
-                                                        : Icons.visibility_off,
-                                                  ),
+                                                icon: Icon(
+                                                  _obscure
+                                                      ? Icons
+                                                            .visibility_outlined
+                                                      : Icons
+                                                            .visibility_off_outlined,
+                                                  color: _obscure
+                                                      ? AppColors.primary
+                                                      : Colors.grey,
                                                 ),
                                               ),
                                             ],
                                           ),
+
                                           errorText:
                                               _touchedPass &&
                                                   _passStatus ==
@@ -1873,7 +1871,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                       TextFormField(
                                         focusNode: _fnConfirm,
                                         controller: _confirmCtrl,
-                                        obscureText: true,
+                                        obscureText: _obscureConfirm,
                                         textInputAction: TextInputAction.done,
                                         onChanged: (_) {
                                           if (_touchedConfirm) {
@@ -1887,9 +1885,30 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                             Icons.check_circle_outline,
                                           ),
                                           hintText: 'أعد إدخال كلمة المرور',
-                                          suffixIcon: _touchedConfirm
-                                              ? _statusIcon(_confirmStatus)
-                                              : null,
+                                          suffixIcon: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (_touchedConfirm)
+                                                _statusIcon(_confirmStatus) ??
+                                                    const SizedBox.shrink(),
+                                              IconButton(
+                                                onPressed: () => setState(
+                                                  () => _obscureConfirm =
+                                                      !_obscureConfirm,
+                                                ),
+                                                icon: Icon(
+                                                  _obscureConfirm
+                                                      ? Icons
+                                                            .visibility_outlined
+                                                      : Icons
+                                                            .visibility_off_outlined,
+                                                  color: _obscureConfirm
+                                                      ? AppColors.primary
+                                                      : Colors.grey,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                           errorText:
                                               _touchedConfirm &&
                                                   _confirmStatus ==
