@@ -59,8 +59,8 @@ Future<Map<String, dynamic>?> _getEfDoc(String id) async {
   return {'id': snap.id, ...data};
 }
 
-double _numOr0(dynamic v) =>
-    (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
+// double _numOr0(dynamic v) =>
+//     (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
 
 // ✅ قارئ مرن لقيمة العامل (يدعم valueField داخلي وأسماء شائعة)
 double? _readEfValueFlexible(
@@ -115,8 +115,8 @@ double? _readEfValueFlexible(
 }
 
 // للتوافق مع الاستدعاءات القديمة
-double? _readEfValue(Map<String, dynamic> efDoc) =>
-    _readEfValueFlexible(efDoc, preferField: _efValueField);
+// double? _readEfValue(Map<String, dynamic> efDoc) =>
+//     _readEfValueFlexible(efDoc, preferField: _efValueField);
 
 Future<Map<String, dynamic>?> resolveEmissionFactorForTask(
   Map<String, dynamic> task,
@@ -189,8 +189,8 @@ Future<CarbonCalcResult?> computeCarbonForTask({
   final meta = <String, dynamic>{
     'mode': rawMode,
     'ef_id': ef['id'],
-    'ef_name': ef['name'],
-    'direction': direction,
+    //'ef_name': ef['name'],
+    //'direction': direction,
   };
 
   Future<double?> _efValByRef(String? ref) async {
@@ -372,102 +372,102 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
 
   // =================== helpers لحساب الكربون ===================
 
-  Future<Map<String, dynamic>?> _getFactorByRef(String refId) async {
-    if (refId.isEmpty) return null;
-    final snap = await FirebaseFirestore.instance
-        .collection(_efCollection)
-        .doc(refId)
-        .get();
-    if (!snap.exists) return null;
-    return snap.data() as Map<String, dynamic>?;
-  }
+  // Future<Map<String, dynamic>?> _getFactorByRef(String refId) async {
+  //   if (refId.isEmpty) return null;
+  //   final snap = await FirebaseFirestore.instance
+  //       .collection(_efCollection)
+  //       .doc(refId)
+  //       .get();
+  //   if (!snap.exists) return null;
+  //   return snap.data() as Map<String, dynamic>?;
+  // }
 
-  double _round2(double v) => (v * 100).roundToDouble() / 100.0;
+  // double _round2(double v) => (v * 100).roundToDouble() / 100.0;
 
   // =====================================================
   // 🧮 deltaPerKm: تحسب الفرق فقط (baseline - actual) * km
   //    بدون أي تحديث في Firestore (التحديث يتم في _approve)
   // =====================================================
-  Future<double> _computeDeltaPerKmValue({
-    required Map<String, dynamic> task,
-    required double distanceKm,
-  }) async {
-    try {
-      if (distanceKm <= 0) {
-        throw Exception('distanceKm يجب أن تكون أكبر من صفر');
-      }
+  // Future<double> _computeDeltaPerKmValue({
+  //   required Map<String, dynamic> task,
+  //   required double distanceKm,
+  // }) async {
+  //   try {
+  //     if (distanceKm <= 0) {
+  //       throw Exception('distanceKm يجب أن تكون أكبر من صفر');
+  //     }
 
-      // 1) refs من المهمة لو موجودة
-      String? baselineRef =
-          (task['baselineFactorRef'] ?? task['baseline_factor_ref'])
-              ?.toString();
-      String? actualRef =
-          (task['emissionFactorRef'] ??
-                  task['actualFactorRef'] ??
-                  task['emission_factor_ref'])
-              ?.toString();
+  //     // 1) refs من المهمة لو موجودة
+  //     String? baselineRef =
+  //         (task['baselineFactorRef'] ?? task['baseline_factor_ref'])
+  //             ?.toString();
+  //     String? actualRef =
+  //         (task['emissionFactorRef'] ??
+  //                 task['actualFactorRef'] ??
+  //                 task['emission_factor_ref'])
+  //             ?.toString();
 
-      // 2) لو ناقصة نحاول نجيب وثيقة EF ونقرأ منها
-      Future<Map<String, dynamic>?> _loadEfFromTaskOrResolve() async {
-        final taskEfId =
-            (task['emissionFactorRef'] ?? task['emission_factor_ref'])
-                ?.toString();
-        if (taskEfId != null && taskEfId.isNotEmpty) {
-          return await _getEfDoc(taskEfId);
-        }
-        return await resolveEmissionFactorForTask(task);
-      }
+  //     // 2) لو ناقصة نحاول نجيب وثيقة EF ونقرأ منها
+  //     Future<Map<String, dynamic>?> _loadEfFromTaskOrResolve() async {
+  //       final taskEfId =
+  //           (task['emissionFactorRef'] ?? task['emission_factor_ref'])
+  //               ?.toString();
+  //       if (taskEfId != null && taskEfId.isNotEmpty) {
+  //         return await _getEfDoc(taskEfId);
+  //       }
+  //       return await resolveEmissionFactorForTask(task);
+  //     }
 
-      if ((baselineRef == null || baselineRef.isEmpty) ||
-          (actualRef == null || actualRef.isEmpty)) {
-        final efDoc = await _loadEfFromTaskOrResolve();
-        if (efDoc != null) {
-          baselineRef ??=
-              (efDoc['baselineFactorRef'] ?? efDoc['baseline_factor_ref'])
-                  ?.toString();
-          actualRef ??=
-              (efDoc['actualFactorRef'] ??
-                      efDoc['emissionFactorRef'] ??
-                      efDoc['actual_factor_ref'] ??
-                      efDoc['emission_factor_ref'])
-                  ?.toString();
-        }
-      }
+  //     if ((baselineRef == null || baselineRef.isEmpty) ||
+  //         (actualRef == null || actualRef.isEmpty)) {
+  //       final efDoc = await _loadEfFromTaskOrResolve();
+  //       if (efDoc != null) {
+  //         baselineRef ??=
+  //             (efDoc['baselineFactorRef'] ?? efDoc['baseline_factor_ref'])
+  //                 ?.toString();
+  //         actualRef ??=
+  //             (efDoc['actualFactorRef'] ??
+  //                     efDoc['emissionFactorRef'] ??
+  //                     efDoc['actual_factor_ref'] ??
+  //                     efDoc['emission_factor_ref'])
+  //                 ?.toString();
+  //       }
+  //     }
 
-      if (baselineRef == null ||
-          baselineRef.isEmpty ||
-          actualRef == null ||
-          actualRef.isEmpty) {
-        final idOrTitle = task['id'] ?? task['title'] ?? '(task?)';
-        throw Exception(
-          'baseline/actual factor refs مفقودة (task=$idOrTitle). تأكد من baselineFactorRef و actualFactorRef في EF.',
-        );
-      }
+  //     if (baselineRef == null ||
+  //         baselineRef.isEmpty ||
+  //         actualRef == null ||
+  //         actualRef.isEmpty) {
+  //       final idOrTitle = task['id'] ?? task['title'] ?? '(task?)';
+  //       throw Exception(
+  //         'baseline/actual factor refs مفقودة (task=$idOrTitle). تأكد من baselineFactorRef و actualFactorRef في EF.',
+  //       );
+  //     }
 
-      Future<double?> _getVal(String id) async {
-        final snap = await FirebaseFirestore.instance
-            .collection(_efCollection)
-            .doc(id)
-            .get();
-        if (!snap.exists) return null;
-        final m = snap.data() as Map<String, dynamic>?;
-        if (m == null) return null;
-        return _readEfValueFlexible(m, preferField: _efValueField);
-      }
+  //     Future<double?> _getVal(String id) async {
+  //       final snap = await FirebaseFirestore.instance
+  //           .collection(_efCollection)
+  //           .doc(id)
+  //           .get();
+  //       if (!snap.exists) return null;
+  //       final m = snap.data() as Map<String, dynamic>?;
+  //       if (m == null) return null;
+  //       return _readEfValueFlexible(m, preferField: _efValueField);
+  //     }
 
-      final base = await _getVal(baselineRef) ?? 0.0;
-      final act = await _getVal(actualRef) ?? 0.0;
-      final delta = base - act;
-      if (delta <= 0) {
-        return 0.0;
-      }
+  //     final base = await _getVal(baselineRef) ?? 0.0;
+  //     final act = await _getVal(actualRef) ?? 0.0;
+  //     final delta = base - act;
+  //     if (delta <= 0) {
+  //       return 0.0;
+  //     }
 
-      final savedKg = delta * distanceKm;
-      return savedKg;
-    } catch (e) {
-      return 0.0;
-    }
-  }
+  //     final savedKg = delta * distanceKm;
+  //     return savedKg;
+  //   } catch (e) {
+  //     return 0.0;
+  //   }
+  // }
 
   // =================== الدالة الرئيسية (UI + اعتماد/رفض) ===================
 

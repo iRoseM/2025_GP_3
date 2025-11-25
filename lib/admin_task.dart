@@ -1431,7 +1431,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
         // ✅ deltaPerKm (baseline مقابل actual)
         return {
           'calcMode': 'deltaPerKm',
-          'direction': 'save',
+          //'direction': 'save',
           'baselineFactorRef': baselineKm['__id'],
           'actualFactorRef': actualKm['__id'],
           'calc_requires': {
@@ -1446,7 +1446,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
         // ✅ perKm (عامل واحد فقط لكل كم)
         return {
           'calcMode': 'perKm',
-          'direction': 'save',
+          //'direction': 'save',
           'ef_ref': actualKm['__id'],
           'calc_requires': {
             'askCount': false,
@@ -1506,7 +1506,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
       // ✅ deltaPerItem (قطعة لبس landfill vs إعادة تدوير)
       return {
         'calcMode': 'deltaPerItem',
-        'direction': 'save',
+        //'direction': 'save',
         'baselineFactorRef': baselineItem['__id'],
         'actualFactorRef': actualItem['__id'],
         'calc_requires': {
@@ -1522,7 +1522,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     // 🔁 fallback: perItem بعامل واحد (بدون baseline)
     return {
       'calcMode': 'perItem',
-      'direction': 'save',
+      //'direction': 'save',
       'ef_ref': actualItem['__id'],
       'calc_requires': {
         'askCount': true,
@@ -2054,15 +2054,15 @@ class _AddTaskPageState extends State<AddTaskPage> {
       if (autoEf != null) {
         final calcMode = (autoEf['calcMode'] ?? 'perItem').toString();
         data['calcMode'] = calcMode;
-        data['direction'] = 'save';
+        //data['direction'] = 'save';
 
         if (autoEf['calc_requires'] != null) {
           data['calc_requires'] = autoEf['calc_requires'];
         }
 
-        if (autoEf['__chosen_name'] != null) {
-          data['ef_debugLabel'] = autoEf['__chosen_name'];
-        }
+        // if (autoEf['__chosen_name'] != null) {
+        //   data['ef_debugLabel'] = autoEf['__chosen_name'];
+        // }
 
         final lowerMode = calcMode.toLowerCase();
 
@@ -2081,18 +2081,18 @@ class _AddTaskPageState extends State<AddTaskPage> {
       } else {
         // fallback بسيط: لو ما في تطابق، نخلي perItem (بدون مراجع)
         data['calcMode'] = 'perItem';
-        data['direction'] = 'save';
+        //data['direction'] = 'save';
       }
     } else {
       // 🔻 إذا الفئة "سلوك غير مباشر" و كنا نعدّل مهمة قديمة
       // نمسح حقول الكربون من المهمة في حالة التحديث
       if (widget.task != null) {
         data['calcMode'] = FieldValue.delete();
-        data['direction'] = FieldValue.delete();
+        //data['direction'] = FieldValue.delete();
         data['emissionFactorRef'] = FieldValue.delete();
         data['baselineFactorRef'] = FieldValue.delete();
         data['calc_requires'] = FieldValue.delete();
-        data['ef_debugLabel'] = FieldValue.delete();
+        //data['ef_debugLabel'] = FieldValue.delete();
       }
       // في حالة الإضافة الجديدة ما نضيف أي من الحقول السابقة أساساً 👍
     }

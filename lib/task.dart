@@ -117,7 +117,7 @@ class _taskPageState extends State<taskPage> {
     });
   }
 
-  List<String> _remainingTaskIds = [];
+  // List<String> _remainingTaskIds = [];
 
   DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
   DateTime _monthEnd(DateTime d) => DateTime(d.year, d.month + 1, 0);
@@ -850,8 +850,8 @@ class _taskPageState extends State<taskPage> {
       'selectedAt': Timestamp.fromDate(start),
       'status': status,
       'completedAt': null,
-      'windowStart': Timestamp.fromDate(start),
-      'windowEnd': Timestamp.fromDate(end),
+      //'windowStart': Timestamp.fromDate(start),
+      //'windowEnd': Timestamp.fromDate(end),
       'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
       'taskDescription': pickedData['description'] ?? '',
       'taskPoints': pickedData['points'] ?? 0,
@@ -874,10 +874,10 @@ class _taskPageState extends State<taskPage> {
     });
   }
 
-  bool _isWithinDayWindow(DateTime day, DateTime now) {
-    return now.isAfter(_dayStart(day).subtract(const Duration(seconds: 1))) &&
-        now.isBefore(_dayEnd(day).add(const Duration(seconds: 1)));
-  }
+  // bool _isWithinDayWindow(DateTime day, DateTime now) {
+  //   return now.isAfter(_dayStart(day).subtract(const Duration(seconds: 1))) &&
+  //       now.isBefore(_dayEnd(day).add(const Duration(seconds: 1)));
+  // }
 
   @override
   Widget build(BuildContext context) {

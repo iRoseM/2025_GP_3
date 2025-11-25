@@ -36,8 +36,8 @@ class AdminBottomNav extends StatelessWidget {
         label: 'الخريطة',
       ),
       NavItem(
-        outlined: Icons.description_outlined,
-        filled: Icons.description,
+        outlined: Icons.fact_check_outlined,
+        filled: Icons.fact_check,
         label: 'المهام',
       ),
       NavItem(

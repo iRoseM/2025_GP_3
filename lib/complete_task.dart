@@ -12,8 +12,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'services/map_pick_route.dart';
 
-const String kMapsApiKey = 'YOUR_GOOGLE_PLACES_API_KEY';
-
 class AppColors {
   static const primary = Color(0xFF4BAA98);
   static const dark = Color(0xFF3C3C3B);
@@ -104,22 +102,22 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return kws.any((k) => s.contains(k));
   }
 
-  bool get _isPerItemMode {
-    final raw = (_calcRequires['calcMode'] ?? widget.taskData['calcMode'] ?? '')
-        .toString()
-        .toLowerCase()
-        .trim();
-    return raw == 'peritem' || raw == 'deltaperitem';
-  }
+  // bool get _isPerItemMode {
+  //   final raw = (_calcRequires['calcMode'] ?? widget.taskData['calcMode'] ?? '')
+  //       .toString()
+  //       .toLowerCase()
+  //       .trim();
+  //   return raw == 'peritem' || raw == 'deltaperitem';
+  // }
 
-  bool get _askCountFlag =>
-      (_calcRequires['askCount'] == true) ||
-      (widget.taskData['askCount'] == true) ||
-      (widget.taskData['itemsEnabled'] == true) ||
-      (widget.taskData['perItem'] == true);
+  // bool get _askCountFlag =>
+  //     (_calcRequires['askCount'] == true) ||
+  //     (widget.taskData['askCount'] == true) ||
+  //     (widget.taskData['itemsEnabled'] == true) ||
+  //     (widget.taskData['perItem'] == true);
 
   // 🚫 ما عاد نستخدم خانة "عدد العناصر" في الواجهة (لكن نستخدم popup)
-  bool get _shouldAskCount => false;
+  //bool get _shouldAskCount => false;
 
   // ✅ هل هذه المهمة تحتاج popup لعدد العناصر؟
   bool get _requiresItemDialog {
@@ -389,29 +387,29 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return res;
     }
 
-    if ((calcMode.isEmpty || calcMode == 'auto') &&
-        items != null &&
-        items > 0) {
-      final perItemVal = await _getEfPerUnit(
-        efIdFromTask,
-        valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
-      );
-      // if (perItemVal != null) {
-      //   final res = (isSave ? perItemVal : 0.0) * items;
-      //   return res;
-      // }
-    }
+    // if ((calcMode.isEmpty || calcMode == 'auto') &&
+    //     items != null &&
+    //     items > 0) {
+    //   final perItemVal = await _getEfPerUnit(
+    //     efIdFromTask,
+    //     valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
+    //   );
+    //   // if (perItemVal != null) {
+    //   //   final res = (isSave ? perItemVal : 0.0) * items;
+    //   //   return res;
+    //   // }
+    // }
 
-    if ((calcMode.isEmpty || calcMode == 'auto') && km != null && km > 0) {
-      final perKmVal = await _getEfPerUnit(
-        efIdFromTask,
-        valueFieldFromTask: valueFieldFromTask,
-      );
-      // if (perKmVal != null) {
-      //   final res = (isSave ? perKmVal : 0.0) * km;
-      //   return res;
-      // }
-    }
+    // if ((calcMode.isEmpty || calcMode == 'auto') && km != null && km > 0) {
+    //   final perKmVal = await _getEfPerUnit(
+    //     efIdFromTask,
+    //     valueFieldFromTask: valueFieldFromTask,
+    //   );
+    //   // if (perKmVal != null) {
+    //   //   final res = (isSave ? perKmVal : 0.0) * km;
+    //   //   return res;
+    //   // }
+    // }
     return 0.0;
   }
 
@@ -582,20 +580,20 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       'status': 'pending',
       'imageUrls': [downloadUrl],
       'createdAt': FieldValue.serverTimestamp(),
-      'processedAt': null,
-      'processedBy': null,
+      //'processedAt': null,
+      //'processedBy': null,
       ...extra,
     });
 
     await utRef.set({
       'userId': uid,
       'status': 'submitted',
-      'submittedAt': FieldValue.serverTimestamp(),
+      //'submittedAt': FieldValue.serverTimestamp(),
       'evidence': {
         'type': 'photo',
         'url': downloadUrl,
         'storagePath': storageRef.fullPath,
-        'uploadedAt': FieldValue.serverTimestamp(),
+        //'uploadedAt': FieldValue.serverTimestamp(),
       },
       'taskTitle': widget.taskData['title'] ?? '',
       'taskPoints': taskPoints,
