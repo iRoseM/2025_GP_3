@@ -1715,7 +1715,7 @@ class _CarbonFootprintCard extends StatelessWidget {
           : d.toStringAsFixed(1);
     }
 
-    // 10 أو أكثر: بدون كسور إذا كان عددًا صحيحًا، وإلا منزل واحدة
+    // 10 أو أكثر: بدون كسور إذا كان عددًا صحيحًا، وإلا منزلة واحدة
     return (d == d.roundToDouble())
         ? d.toStringAsFixed(0)
         : d.toStringAsFixed(1);
@@ -1822,15 +1822,46 @@ class _CarbonFootprintCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // العنوان
-                Text(
-                  title,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.dark,
-                  ),
+                // العنوان + التول تيب
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message:
+                          'يوضّح هذا الرقم مقدار الانبعاثات التي تجنّبتها من مهامك في التطبيق، '
+                          'مقاسة بالكيلوغرام من مكافئ ثاني أكسيد الكربون (kg CO₂e). '
+                          'كلما زاد الرقم كان تأثيرك الإيجابي على المناخ أكبر 🌍.',
+                      padding: const EdgeInsets.all(8),
+                      waitDuration: const Duration(milliseconds: 400),
+                      showDuration: const Duration(seconds: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black87,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      textStyle: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        height: 1.5,
+                      ),
+                      child: const Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: AppColors.sea,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
 
@@ -1894,13 +1925,18 @@ class _CarbonFootprintCard extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.eco_rounded, color: Colors.white, size: 28),
+            child: const Icon(
+              Icons.eco_rounded,
+              color: Colors.white,
+              size: 28,
+            ),
           ),
         ],
       ),
     );
   }
 }
+
 
 /// 🟢 تستدعى مثلاً داخل homePage.initState()
 Future<void> ensureUserCarbonFields() async {
