@@ -9,27 +9,7 @@ import 'services/fcm_service.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
 import 'services/background_container.dart';
-
-/// ألوان المشروع
-class RColors {
-  static const primary = Color(0xFF009688);
-  static const dark = Color(0xFF00695C);
-  static const bg = Color(0xFFFAFCFB);
-}
-
-// لو عندك تعريف AppColors في ملف آخر استورديه، هنا بس للتوافق مع العنوان:
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 class AdminReportPage extends StatefulWidget {
   const AdminReportPage({super.key});
@@ -39,7 +19,7 @@ class AdminReportPage extends StatefulWidget {
 }
 
 class _AdminReportPageState extends State<AdminReportPage> {
-  final GlobalKey<ScaffoldMessengerState> reportMessengerKey =
+  final GlobalKey<ScaffoldMessengerState> _messengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
   @override
@@ -99,9 +79,11 @@ class _AdminReportPageState extends State<AdminReportPage> {
                       return FilterChip(
                         label: Text(label),
                         selected: selected,
-                        selectedColor: RColors.primary.withOpacity(.15),
+                        selectedColor: slackMesseges.primary.withOpacity(.15),
                         labelStyle: TextStyle(
-                          color: selected ? RColors.primary : Colors.black87,
+                          color: selected
+                              ? slackMesseges.primary
+                              : Colors.black87,
                           fontWeight: FontWeight.w700,
                         ),
                         onSelected: (v) {
@@ -121,7 +103,7 @@ class _AdminReportPageState extends State<AdminReportPage> {
 
                   FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: RColors.primary,
+                      backgroundColor: slackMesseges.primary,
                     ),
                     onPressed: () {
                       Navigator.pop(context);
@@ -169,21 +151,17 @@ class _AdminReportPageState extends State<AdminReportPage> {
       child: Theme(
         data: baseTheme.copyWith(textTheme: textTheme),
         child: ScaffoldMessenger(
-          key: reportMessengerKey,
-
+          key: _messengerKey,
           child: Scaffold(
             extendBody: true,
             backgroundColor: Colors.transparent,
             extendBodyBehindAppBar: true,
-
-            // ✅ الهيدر العام (من title_header.dart)
             appBar: const NameerAppBar(showTitleInBar: false, showBack: true),
-
             body: AnimatedBackgroundContainer(
               child: Builder(
                 builder: (context) {
                   final statusBar = MediaQuery.of(context).padding.top;
-                  const headerH = 20.0; // ارتفاع الهيدر الحقيقي
+                  const headerH = 20.0;
                   const gap = 12.0;
                   final topPadding = statusBar + headerH + gap;
 
@@ -192,21 +170,17 @@ class _AdminReportPageState extends State<AdminReportPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ✅ العنوان أسفل الهيدر
                         Text(
                           'بلاغات الحاويات',
                           style: GoogleFonts.ibmPlexSansArabic(
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.dark,
+                            color: slackMesseges.sea,
                           ),
                         ),
                         const SizedBox(height: 15),
-
-                        // ✅ شريط البحث + الفلتر (نفس نمط الصفحات الثانية)
                         Row(
                           children: [
-                            // شريط البحث
                             Expanded(
                               child: _SearchBar(
                                 controller: _searchCtrl,
@@ -215,8 +189,6 @@ class _AdminReportPageState extends State<AdminReportPage> {
                               ),
                             ),
                             const SizedBox(width: 8),
-
-                            // زر الفلتر يفتح BottomSheet بالـ FilterChips
                             InkWell(
                               onTap: _showStatusFilterSheet,
                               borderRadius: BorderRadius.circular(14),
@@ -236,22 +208,19 @@ class _AdminReportPageState extends State<AdminReportPage> {
                                 ),
                                 child: const Icon(
                                   Icons.tune,
-                                  color: RColors.primary,
+                                  color: slackMesseges.primary,
                                   size: 24,
                                 ),
                               ),
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 8),
-
-                        // ✅ قائمة البلاغات
                         Expanded(
                           child: _ReportList(
                             statusFilters: selectedDecisionValues,
                             searchText: _searchCtrl.text,
-                            messengerKey: reportMessengerKey,
+                            messengerKey: _messengerKey, // ✅ نمرر المفتاح
                           ),
                         ),
                       ],
@@ -267,12 +236,12 @@ class _AdminReportPageState extends State<AdminReportPage> {
   }
 }
 
-/// قائمة التقارير مع فلترة الحالة والبحث (متعدد الحالات)
 class _ReportList extends StatelessWidget {
-  /// قائمة قيم decision المختارة: ['pending', 'approved', ...]
   final List<String> statusFilters;
   final String searchText;
+
   final GlobalKey<ScaffoldMessengerState> messengerKey;
+
   const _ReportList({
     required this.statusFilters,
     required this.searchText,
@@ -299,13 +268,13 @@ class _ReportList extends StatelessWidget {
 
         final docs = snap.data!.docs.toList();
 
+        // الأولوية للـ pending
         docs.sort((a, b) {
           final da = (a.data()['decision'] ?? 'pending') as String;
           final db = (b.data()['decision'] ?? 'pending') as String;
 
           if (da == 'pending' && db != 'pending') return -1;
           if (db == 'pending' && da != 'pending') return 1;
-
           return 0;
         });
 
@@ -355,7 +324,7 @@ class _ReportList extends StatelessWidget {
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: RColors.dark,
+                    color: slackMesseges.sea,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -379,7 +348,10 @@ class _ReportList extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
               final d = filtered[i];
-              return _ReportCard(doc: d, messengerKey: messengerKey);
+              return _ReportCard(
+                doc: d,
+                messengerKey: messengerKey, // ✅ نمرر المفتاح للكارت
+              );
             },
           ),
         );
@@ -411,7 +383,7 @@ class _ReportCardState extends State<_ReportCard> {
       case 'rejected':
         return Colors.red;
       default:
-        return RColors.dark;
+        return slackMesseges.sea;
     }
   }
 
@@ -474,125 +446,65 @@ class _ReportCardState extends State<_ReportCard> {
       return;
     }
     setState(() => _busy = true);
+
     try {
-      final currentAdmin = FirebaseAuth.instance.currentUser;
-
-      // تحديث حالة البلاغ في قاعدة البيانات
-      final updates = {
+      await widget.doc.reference.update({
         'decision': decision,
-        //'managedBy': currentAdmin?.uid ?? 'admin',
-        //'managedByName':currentAdmin?.displayName ?? currentAdmin?.email ?? 'Admin',
-        //'resolvedAt': FieldValue.serverTimestamp(),
         if (reason != null && reason.isNotEmpty) 'rejectionReason': reason,
-      };
-      await widget.doc.reference.update(updates);
+      });
 
-      // جلب بيانات البلاغ والحاوية
-      final reportData = widget.doc.data();
-      final reportedUserId = reportData['reportedBy'];
-      final facilityID = reportData['facilityID'];
+      // نحدد الرسالة واللون حسب القرار
+      String? successMsg;
+      Color? snackColor;
 
-      String notifTitle = '';
-      String notifMsg = '';
-
-      if (facilityID != null) {
-        final facilitySnap = await FirebaseFirestore.instance
-            .collection('facilities')
-            .doc(facilityID)
-            .get();
-        final facility = facilitySnap.data();
-        final type = facility?['type'] ?? 'حاوية';
-        final address = facility?['address'] ?? '';
-        String neighborhood = '';
-
-        // استخراج اسم الحي من العنوان إن وُجد
-        final match = RegExp(r'حي\s?([^،]*)').firstMatch(address);
-        if (match != null) neighborhood = match.group(1)!;
-
-        // صياغة الرسالة حسب القرار
-        if (decision == 'approved') {
-          notifTitle = 'تم معالجة البلاغ';
-          notifMsg =
-              'تم معالجة البلاغ المتعلّق بـ "$type"${neighborhood.isNotEmpty ? ' في حي $neighborhood' : ''}. شكرًا لتعاونك 🌱';
-        } else if (decision == 'rejected') {
-          notifTitle = 'البلاغ غير صحيح';
-          notifMsg =
-              'بعد التحقق من البلاغ المتعلّق بـ "$type"${neighborhood.isNotEmpty ? ' في حي $neighborhood' : ''}، تبيّن أنه غير صحيح ♻️';
-        } else if (decision == 'pending') {
-          notifTitle = 'تمت إعادة البلاغ للمراجعة';
-          notifMsg =
-              'تمت إعادة البلاغ المتعلّق بـ "$type"${neighborhood.isNotEmpty ? ' في حي $neighborhood' : ''} للمراجعة من جديد 🔄';
-        }
+      if (decision == 'approved') {
+        successMsg = 'تم اعتماد البلاغ بنجاح ✅';
+        snackColor = slackMesseges.primary;
+      } else if (decision == 'rejected') {
+        successMsg = 'تم رفض البلاغ وإشعار المستخدم ❌';
+        snackColor = slackMesseges.red;
       }
+      // 👈 لا else: لو رجعتيه لقيد المراجعة ما نعرض SnackBar
 
-      // إنشاء الإشعار في قاعدة البيانات
-      if (reportedUserId != null && notifTitle.isNotEmpty) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'userId': reportedUserId,
-          'title': notifTitle,
-          'message': notifMsg,
-          'createdAt': FieldValue.serverTimestamp(),
-          'seen': false,
-          //'source': 'facilityReport',
-          //'sourceId': widget.doc.id,
-          'decision': decision,
-        });
-
-        // 🔔 إرسال إشعار خارجي (Push Notification)
-        final userSnap = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(reportedUserId)
-            .get();
-
-        final userData = userSnap.data();
-        final fcmToken = userData?['fcmToken'];
-
-        if (fcmToken != null && fcmToken.isNotEmpty) {
-          await FCMService.sendPushNotification(
-            token: fcmToken,
-            title: notifTitle,
-            body: notifMsg,
-          );
-        }
-      }
-
-      if (mounted) {
-        // يعيد بناء البطاقة فوراً
-        setState(() {});
-
-        // السناك بار يظهر من أعلى الصفحة وليس من داخل الكارد
-        widget.messengerKey.currentState?.showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.primary,
-            content: Text(
-              'تم تحديث الحالة إلى ${_statusLabel(decision)}',
-              style: GoogleFonts.ibmPlexSansArabic(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
+      final messenger = widget.messengerKey.currentState;
+      if (messenger != null && successMsg != null && snackColor != null) {
+        messenger
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              backgroundColor: snackColor,
+              content: Text(
+                successMsg,
+                style: GoogleFonts.ibmPlexSansArabic(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-          ),
-        );
+          );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          Navigator.of(context, rootNavigator: true).context,
-        ).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.primary,
-            content: Text(
-              'تم تحديث الحالة إلى ${_statusLabel(decision)}',
-              style: GoogleFonts.ibmPlexSansArabic(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
+      final messenger = widget.messengerKey.currentState;
+      if (messenger != null) {
+        messenger
+          ..clearSnackBars()
+          ..showSnackBar(
+            SnackBar(
+              backgroundColor: slackMesseges.red,
+              content: Text(
+                'حدث خطأ أثناء تحديث حالة البلاغ، حاول مرة أخرى.',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-          ),
-        );
+          );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -644,7 +556,7 @@ class _ReportCardState extends State<_ReportCard> {
                     Expanded(
                       child: FilledButton(
                         style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 50), // توحيد الارتفاع
+                          minimumSize: const Size(0, 50),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(30),
                           ),
@@ -669,7 +581,7 @@ class _ReportCardState extends State<_ReportCard> {
                     Expanded(
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 50), // نفس الارتفاع
+                          minimumSize: const Size(0, 50),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(30),
                           ),
@@ -778,7 +690,7 @@ class _ReportCardState extends State<_ReportCard> {
             final name = f['name'] ?? '';
             final type = f['type'] ?? '';
             final address = f['address'] ?? '';
-            //final city = f['city'] ?? '';
+
             return Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -799,7 +711,6 @@ class _ReportCardState extends State<_ReportCard> {
                     style: const TextStyle(color: Colors.black54),
                   ),
                   const SizedBox(height: 8),
-                  //if (address.toString().isNotEmpty ||city.toString().isNotEmpty)Text('الموقع: $address، $city'),const SizedBox(height: 8),
                   FilledButton.icon(
                     icon: const Icon(Icons.copy),
                     label: const Text(
@@ -811,7 +722,7 @@ class _ReportCardState extends State<_ReportCard> {
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          backgroundColor: AppColors.primary,
+                          backgroundColor: appColors.primary,
                           content: Text(
                             'تم نسخ معرف الحاوية',
                             style: GoogleFonts.ibmPlexSansArabic(
@@ -853,7 +764,6 @@ class _ReportCardState extends State<_ReportCard> {
             // الصف العلوي: العنوان + الأيقونات
             Row(
               children: [
-                // العنوان "الموقع غير دقيق" أو نوع البلاغ
                 Expanded(
                   child: Text(
                     type,
@@ -863,20 +773,22 @@ class _ReportCardState extends State<_ReportCard> {
                     ),
                   ),
                 ),
-
-                // أيقونة التفاصيل
                 IconButton(
-                  icon: const Icon(Icons.info_outline, color: RColors.primary),
+                  icon: const Icon(
+                    Icons.info_outline,
+                    color: slackMesseges.primary,
+                  ),
                   tooltip: 'تفاصيل الحاوية',
                   onPressed: facilityID.isEmpty
                       ? null
                       : () => _showFacilitySheet(facilityID),
                 ),
-
-                // أيقونة الإرجاع (تظهر فقط إذا التقرير مو "قيد المراجعة")
                 if (decision != 'pending')
                   IconButton(
-                    icon: const Icon(Icons.refresh, color: RColors.primary),
+                    icon: const Icon(
+                      Icons.refresh,
+                      color: slackMesseges.primary,
+                    ),
                     tooltip: 'إرجاع لقيد المراجعة',
                     onPressed: _busy ? null : _confirmReturn,
                   ),
@@ -885,7 +797,6 @@ class _ReportCardState extends State<_ReportCard> {
 
             const SizedBox(height: 4),
 
-            // ✅ حالة البلاغ في سطر مستقل أعلى الوصف
             Align(
               alignment: Alignment.centerLeft,
               child: Container(
@@ -908,7 +819,6 @@ class _ReportCardState extends State<_ReportCard> {
               ),
             ),
 
-            // ✅ الوصف تحت الحالة بعرض الكارد كامل
             if (description.isNotEmpty) ...[
               const SizedBox(height: 6),
               Text(
@@ -925,7 +835,6 @@ class _ReportCardState extends State<_ReportCard> {
               spacing: 8,
               runSpacing: 6,
               children: [
-                // اسم الحاوية بدل الـ ID
                 FutureBuilder<String>(
                   future: _getFacilityName(facilityID.toString()),
                   builder: (context, snap) {
@@ -938,8 +847,6 @@ class _ReportCardState extends State<_ReportCard> {
                     );
                   },
                 ),
-
-                // اسم المستخدم بدل uid
                 FutureBuilder<String>(
                   future: _getUserName(reportedBy.toString()),
                   builder: (context, snap) {
@@ -953,7 +860,6 @@ class _ReportCardState extends State<_ReportCard> {
                     );
                   },
                 ),
-
                 if (createdAt != null)
                   _Chip(
                     icon: Icons.calendar_month_outlined,
@@ -1051,7 +957,7 @@ class _Chip extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: RColors.dark),
+            Icon(icon, size: 18, color: slackMesseges.sea),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
