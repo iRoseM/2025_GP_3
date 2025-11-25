@@ -627,6 +627,7 @@ class _taskPageState extends State<taskPage> {
             'لا توجد مهام مُتاحة لهذا الشهر.',
             style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
+          backgroundColor: AppColors.primary,
         ),
       );
       return;
@@ -833,8 +834,8 @@ class _taskPageState extends State<taskPage> {
         'taskValidation': 'التحقق عبر اجراء اختبار قصير',
         'articleId': news['docId'],
         'selectedAt': Timestamp.fromDate(start),
-        //'windowStart': Timestamp.fromDate(start),
-        //'windowEnd': Timestamp.fromDate(end),
+        'windowStart': Timestamp.fromDate(start),
+        'windowEnd': Timestamp.fromDate(end),
         'status': status,
         'completedAt': null,
       });
@@ -849,8 +850,8 @@ class _taskPageState extends State<taskPage> {
       'selectedAt': Timestamp.fromDate(start),
       'status': status,
       'completedAt': null,
-      //'windowStart': Timestamp.fromDate(start),
-      //'windowEnd': Timestamp.fromDate(end),
+      'windowStart': Timestamp.fromDate(start),
+      'windowEnd': Timestamp.fromDate(end),
       'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
       'taskDescription': pickedData['description'] ?? '',
       'taskPoints': pickedData['points'] ?? 0,
@@ -1672,9 +1673,9 @@ Future<bool?> showCompleteTaskSheet(
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     builder: (_) => CompleteTaskSheet(
-      taskData: mergedTask, // ← نرسل الميرج
+      taskData: mergedTask, // ← نرسل الميرج، مو userTaskData الخام
       selectedDay: selectedDay,
-      taskId: (mergedTask['id'] ?? mergedTask['taskId'] ?? '') as String,
+      userTaskDocId: userTaskDocId,
     ),
   );
 }

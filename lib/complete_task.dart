@@ -30,15 +30,13 @@ class AppColors {
 class CompleteTaskSheet extends StatefulWidget {
   final Map<String, dynamic> taskData;
   final DateTime selectedDay;
-
-  /// ✅ بدال userTaskDocId نمرّر taskId نفسه
-  final String taskId;
+  final String userTaskDocId;
 
   const CompleteTaskSheet({
     super.key,
     required this.taskData,
     required this.selectedDay,
-    required this.taskId,
+    required this.userTaskDocId,
   });
 
   @override
@@ -135,21 +133,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
-  /// ✅ نبني userTaskId داخليًا من uid + اليوم + taskId
-  String _buildUserTaskId({
-    required String uid,
-    required DateTime day,
-    required String taskId,
-  }) {
-    final dayKey = _yyyyMMdd(day);
-    return '${uid}_${dayKey}_$taskId';
-  }
-
   double _deg2rad(double deg) => deg * math.pi / 180.0;
   double _haversineKm(double lat1, double lon1, double lat2, double lon2) {
     const R = 6371.0;
     final dLat = _deg2rad(lat2 - lat1);
-    final dLon = _deg2rad(lat2 - lon1);
+    final dLon = _deg2rad(lon2 - lon1);
     final a =
         math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(_deg2rad(lat1)) *
@@ -276,7 +264,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }
     final vfInDoc = d['valueField'] ?? d['efValueField'];
     if (vfInDoc is String && vfInDoc.isNotEmpty) {
-      final v = _asDouble(vfInDoc);
+      final v = _asDouble(d[vfInDoc]);
       if (v != null) {
         return v;
       }
@@ -321,6 +309,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         (widget.taskData['actualFactorRef'] ?? efDoc['actualFactorRef'])
             ?.toString();
 
+    // final dir = (widget.taskData['direction'] ?? efDoc['direction'] ?? '')
+    //     .toString()
+    //     .toLowerCase();
+    //final isSave = (dir.isEmpty || dir == 'save');
+
+    // if (calcMode == 'perkm' && km != null && km > 0) {
+    //   final perKmVal = await _getEfPerUnit(
+    //     efIdFromTask,
+    //     valueFieldFromTask: valueFieldFromTask,
+    //   );
+    //   if (perKmVal == null) {
+    //     return 0.0;
+    //   }
+    //   final res = (isSave ? perKmVal : 0.0) * km;
+    //   return res;
+    // }
+
     if (calcMode == 'deltaperkm' && km != null && km > 0) {
       final baseline = baseRef != null
           ? await _getEfPerUnit(baseRef, valueFieldFromTask: valueFieldFromTask)
@@ -339,6 +344,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       final res = (delta > 0 ? delta : 0.0) * km;
       return res;
     }
+
+    // if (calcMode == 'peritem' && items != null && items > 0) {
+    //   final perItemVal = await _getEfPerUnit(
+    //     efIdFromTask,
+    //     valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
+    //   );
+    //   if (perItemVal == null) {
+    //     return 0.0;
+    //   }
+    //   final res = (isSave ? perItemVal : 0.0) * items;
+    //   return res;
+    // }
 
     if (calcMode == 'deltaperitem' && items != null && items > 0) {
       const defaultField = 'ef_kgco2_per_unit';
@@ -375,14 +392,25 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     if ((calcMode.isEmpty || calcMode == 'auto') &&
         items != null &&
         items > 0) {
-      await _getEfPerUnit(
+      final perItemVal = await _getEfPerUnit(
         efIdFromTask,
         valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
       );
+      // if (perItemVal != null) {
+      //   final res = (isSave ? perItemVal : 0.0) * items;
+      //   return res;
+      // }
     }
 
     if ((calcMode.isEmpty || calcMode == 'auto') && km != null && km > 0) {
-      await _getEfPerUnit(efIdFromTask, valueFieldFromTask: valueFieldFromTask);
+      final perKmVal = await _getEfPerUnit(
+        efIdFromTask,
+        valueFieldFromTask: valueFieldFromTask,
+      );
+      // if (perKmVal != null) {
+      //   final res = (isSave ? perKmVal : 0.0) * km;
+      //   return res;
+      // }
     }
     return 0.0;
   }
@@ -417,7 +445,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   Future<void> _createSubmissionAndMarkSubmitted({
     required String localPath,
     required int taskPoints,
-    required String taskId,
+    String? taskId,
     double? distanceKm,
     double? carbonSaved,
     int? itemCount,
@@ -434,16 +462,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
     final uid = user.uid;
     final dayKey = _yyyyMMdd(widget.selectedDay);
-
-    /// ✅ نبني userTaskId موحّد
-    final userTaskId = _buildUserTaskId(
-      uid: uid,
-      day: widget.selectedDay,
-      taskId: taskId,
-    );
-
-    /// ✅ مسار أوضح في التخزين: submissions/{uid}/{dayKey}/{userTaskId}/{timestamp}.jpg
-    final basePath = 'submissions/$uid/$dayKey/$userTaskId';
+    final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
     final name = DateTime.now().millisecondsSinceEpoch.toString();
 
     final storage = FirebaseStorage.instance;
@@ -518,11 +537,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }
 
     final subRef = FirebaseFirestore.instance.collection('submissions').doc();
-
-    /// ✅ نستخدم userTaskId الموحد هنا
     final utRef = FirebaseFirestore.instance
         .collection('userTasks')
-        .doc(userTaskId);
+        .doc(widget.userTaskDocId);
 
     final extra = <String, dynamic>{};
 
@@ -556,34 +573,33 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     if (calcMode != null && calcMode.isNotEmpty) {
       extra['calcMode'] = calcMode;
     }
-
-    /// ✅ ما نرجع نخزّن userTaskDocId كسطر منفصل
     await subRef.set({
       'userId': uid,
-      'userTaskId': userTaskId,
-      'taskId': taskId,
+      'userTaskDocId': widget.userTaskDocId,
+      'taskId': taskId ?? '',
       'taskTitle': widget.taskData['title'] ?? '',
       'taskPoints': taskPoints,
       'status': 'pending',
       'imageUrls': [downloadUrl],
       'createdAt': FieldValue.serverTimestamp(),
+      'processedAt': null,
+      'processedBy': null,
       ...extra,
     });
 
     await utRef.set({
       'userId': uid,
-      'userTaskId': userTaskId,
       'status': 'submitted',
-      //'submittedAt': FieldValue.serverTimestamp(),
+      'submittedAt': FieldValue.serverTimestamp(),
       'evidence': {
         'type': 'photo',
         'url': downloadUrl,
         'storagePath': storageRef.fullPath,
-        //'uploadedAt': FieldValue.serverTimestamp(),
+        'uploadedAt': FieldValue.serverTimestamp(),
       },
       'taskTitle': widget.taskData['title'] ?? '',
       'taskPoints': taskPoints,
-      'taskId': taskId,
+      if (taskId != null) 'taskId': taskId,
       if (distanceKm != null) 'distanceKm': distanceKm,
       'carbonSaved': carbonForStore,
       if (_geoStart != null) 'geoStart': _geoStart,
@@ -860,6 +876,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 final cur = _asInt(_itemCountCtrl.text) ?? def;
                                 final next = clamp(cur - 1);
                                 _itemCountCtrl.text = next.toString();
+                                // ما نحتاج setState رئيسي هنا، بس مافي ضرر
                                 setState(() {});
                               },
                             ),
@@ -997,10 +1014,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final title = task['title'] ?? 'مهمة غير معروفة';
     final desc = task['description'] ?? '';
     final pts = (task['points'] ?? 0) as int;
-
-    /// ✅ نستخدم taskId القادم من الـ widget
-    final taskId = widget.taskId;
-
+    final taskId = task['id'] as String?;
     final requiresPhotoExact = true;
     final isTransport = (_autoDistance || _isTransportTask);
 
