@@ -1806,135 +1806,190 @@ class _CarbonFootprintCard extends StatelessWidget {
     );
   }
 
-  Widget _buildRow(
-    BuildContext context, {
-    required String title,
-    required String valueText,
-    required String unit,
-    required bool loading,
-  }) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Row(
-        children: [
-          // النصوص
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // العنوان + التول تيب
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        title,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.dark,
-                        ),
+Widget _buildRow(
+  BuildContext context, {
+  required String title,
+  required String valueText,
+  required String unit,
+  required bool loading,
+}) {
+  return Directionality(
+    textDirection: TextDirection.rtl,
+    child: Row(
+      children: [
+        // النصوص
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // العنوان + زر المعلومات (Dialog)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.dark,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Tooltip(
-                      message:
-                          'يوضّح هذا الرقم مقدار الانبعاثات التي تجنّبتها من مهامك في التطبيق، '
-                          'مقاسة بالكيلوغرام من مكافئ ثاني أكسيد الكربون (kg CO₂e). '
-                          'كلما زاد الرقم كان تأثيرك الإيجابي على المناخ أكبر 🌍.',
-                      padding: const EdgeInsets.all(8),
-                      waitDuration: const Duration(milliseconds: 400),
-                      showDuration: const Duration(seconds: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black87,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      textStyle: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        height: 1.5,
-                      ),
-                      child: const Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: AppColors.sea,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
+                  ),
+                  const SizedBox(width: 6),
 
-                // القيمة والوحدة
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (loading)
-                      const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.primary,
-                        ),
-                      )
-                    else
-                      Text(
-                        valueText,
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.primary,
-                          height: 1.0,
-                        ),
-                      ),
-                    const SizedBox(width: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: Text(
-                        unit,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black.withOpacity(.6),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
+                  // 👇 زر المعلومات (يظهر Dialog جميل)
+                  GestureDetector(
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) {
+                          return Dialog(
+                            backgroundColor: Colors.white,
+                            insetPadding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 24,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(18),
+                              child: Directionality(
+                                textDirection: TextDirection.rtl,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      "ما هو إجمالي خفض الكربون؟",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.dark,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
 
-          // الأيقونة
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.primary, AppColors.mint],
-                begin: Alignment.bottomLeft,
-                end: Alignment.topRight,
+                                    const Text(
+                                      "يوضّح هذا الرقم مقدار الانبعاثات التي تجنّبتها بإنجاز مهامك، "
+                                      "مقاسة بالكيلوغرام من مكافئ ثاني أكسيد الكربون (kg CO₂e). "
+                                      "كلما زاد الرقم، كان تأثيرك الإيجابي على البيئة أكبر 🌿🌍.",
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        height: 1.6,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+
+                                    const SizedBox(height: 20),
+
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: TextButton(
+                                        onPressed: () => Navigator.pop(ctx),
+                                        child: const Text(
+                                          "حسنًا",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                    child: const Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: AppColors.sea,
+                    ),
+                  ),
+                ],
               ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(.25),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.eco_rounded,
-              color: Colors.white,
-              size: 28,
-            ),
+
+              const SizedBox(height: 8),
+
+              // القيمة + الوحدة
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (loading)
+                    const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
+                    )
+                  else
+                    Text(
+                      valueText,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.primary,
+                        height: 1.0,
+                      ),
+                    ),
+
+                  const SizedBox(width: 8),
+
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      unit,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black.withOpacity(.6),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+
+        const SizedBox(width: 12),
+
+        // أيقونة الكرت
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.primary, AppColors.mint],
+              begin: Alignment.bottomLeft,
+              end: Alignment.topRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(.25),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.eco_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
+        ),
+      ],
+    ),
+  );
+}
 }
 
 
