@@ -28,25 +28,31 @@ class MyReportsPage extends StatefulWidget {
 }
 
 class _MyReportsPageState extends State<MyReportsPage> {
+  Timestamp? lastOpened;
+
   @override
-  void dispose() {
-    _markAllAsRead();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadAndUpdateLastOpened();
   }
 
-  Future<void> _markAllAsRead() async {
+  Future<void> _loadAndUpdateLastOpened() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final query = await FirebaseFirestore.instance
-        .collection('notifications')
-        .where('userId', isEqualTo: user.uid)
-        .where('seen', isEqualTo: false)
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
         .get();
 
-    for (var doc in query.docs) {
-      await doc.reference.update({'seen': true});
-    }
+    lastOpened = userDoc.data()?['lastOpenedNotifications'] as Timestamp?;
+
+    // حدّث الوقت الحالي كآخر زيارة
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+      'lastOpenedNotifications': FieldValue.serverTimestamp(),
+    });
+
+    setState(() {});
   }
 
   @override
@@ -58,13 +64,11 @@ class _MyReportsPageState extends State<MyReportsPage> {
       child: Scaffold(
         extendBodyBehindAppBar: true,
         backgroundColor: AppColors.background,
-
         appBar: const NameerAppBar(
           showTitleInBar: false,
           showBack: true,
           height: 80,
         ),
-
         body: Builder(
           builder: (context) {
             final statusBar = MediaQuery.of(context).padding.top;
@@ -108,6 +112,10 @@ class _MyReportsPageState extends State<MyReportsPage> {
 
                         final docs = snap.data!.docs;
 
+                        // 🔥 لو lastOpened = null (أول مرة يدخل) نستخدم تاريخ قديم بحيث كله يعتبر "جديد"
+                        final localLastOpened =
+                            lastOpened?.toDate() ?? DateTime(2000);
+
                         if (docs.isEmpty) {
                           return Center(
                             child: Column(
@@ -139,75 +147,39 @@ class _MyReportsPageState extends State<MyReportsPage> {
                           itemCount: docs.length,
                           itemBuilder: (context, i) {
                             final data = docs[i].data();
-                            final isRead = data['seen'] == true;
+                            final ts = data['createdAt'] as Timestamp?;
+                            final time = ts?.toDate();
+
+                            final isNew =
+                                ts != null &&
+                                ts.toDate().isAfter(localLastOpened);
 
                             final title =
-                                (data['title'] ??
-                                        data['Title'] ??
-                                        data['header'] ??
-                                        '')
+                                (data['title'] ?? data['header'] ?? '')
                                     .toString();
                             final message =
                                 (data['message'] ?? data['body'] ?? '')
                                     .toString();
                             final type = (data['type'] ?? '').toString();
-                            final ts = data['createdAt'] as Timestamp?;
-                            final time = ts?.toDate();
 
-                            // ===== منطق تحديد الأيقونة واللون =====
+                            // ===== الأيقونات =====
                             IconData icon;
                             Color iconColor;
 
-                            // 1) حسب النوع من الـ backend
                             switch (type) {
                               case 'submission_approved':
                               case 'task_approved':
                                 icon = Icons.verified_rounded;
                                 iconColor = Colors.green;
                                 break;
-
                               case 'submission_rejected':
                               case 'task_rejected':
                                 icon = Icons.cancel_rounded;
                                 iconColor = Colors.redAccent;
                                 break;
-
                               default:
-                                // 2) تحليل نصي للعنوان/الرسالة (توافق مع الإصدارات القديمة)
-                                final t = title.toLowerCase();
-                                final m = message.toLowerCase();
-
-                                final isApproved =
-                                    t.contains('تم الاعتماد') ||
-                                    t.contains('تمت الموافقة') ||
-                                    m.contains('تم الاعتماد') ||
-                                    m.contains('تمت الموافقة');
-
-                                final isRejected =
-                                    t.contains('تم الرفض') ||
-                                    t.contains('مرفوض') ||
-                                    m.contains('تم الرفض') ||
-                                    m.contains('مرفوض');
-
-                                final isProcessed =
-                                    t.contains('تم معالجة') ||
-                                    t.contains('تم المراجعة') ||
-                                    m.contains('تم معالجة') ||
-                                    m.contains('تم المراجعة');
-
-                                if (isApproved) {
-                                  icon = Icons.verified_rounded;
-                                  iconColor = Colors.green;
-                                } else if (isRejected) {
-                                  icon = Icons.cancel_rounded;
-                                  iconColor = Colors.redAccent;
-                                } else if (isProcessed) {
-                                  icon = Icons.refresh_rounded;
-                                  iconColor = AppColors.primary;
-                                } else {
-                                  icon = Icons.notifications_active_outlined;
-                                  iconColor = AppColors.sea;
-                                }
+                                icon = Icons.notifications_active_outlined;
+                                iconColor = AppColors.sea;
                             }
 
                             return AnimatedContainer(
@@ -216,16 +188,16 @@ class _MyReportsPageState extends State<MyReportsPage> {
                               margin: const EdgeInsets.symmetric(vertical: 8),
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: isRead
-                                    ? AppColors.mint.withOpacity(0.20)
-                                    : Colors.white,
+                                color: isNew
+                                    ? Colors.white
+                                    : AppColors.mint.withOpacity(0.20),
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black12.withOpacity(
-                                      isRead ? 0.05 : 0.15,
+                                      isNew ? 0.12 : 0.05,
                                     ),
-                                    blurRadius: isRead ? 2 : 6,
+                                    blurRadius: isNew ? 6 : 2,
                                     offset: const Offset(0, 3),
                                   ),
                                 ],

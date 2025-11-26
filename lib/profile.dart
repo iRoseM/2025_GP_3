@@ -334,103 +334,160 @@ class profilePage extends StatelessWidget {
                                       children: [
                                         if (data?['role'] != 'admin')
                                           StreamBuilder<
-                                            QuerySnapshot<Map<String, dynamic>>
+                                            DocumentSnapshot<
+                                              Map<String, dynamic>
+                                            >
                                           >(
                                             stream: FirebaseFirestore.instance
-                                                .collection('notifications')
-                                                .where(
-                                                  'userId',
-                                                  isEqualTo: FirebaseAuth
+                                                .collection('users')
+                                                .doc(
+                                                  FirebaseAuth
                                                       .instance
-                                                      .currentUser
-                                                      ?.uid,
+                                                      .currentUser!
+                                                      .uid,
                                                 )
-                                                .where('read', isEqualTo: false)
                                                 .snapshots(),
-                                            builder: (context, snapshot) {
-                                              // نحضّر الـ trailing حسب الحالة
-                                              Widget trailing;
-
-                                              if (snapshot.hasError) {
-                                                final err = snapshot.error;
-                                                if (err is FirebaseException) {
-                                                  final isNetwork =
-                                                      err.code ==
-                                                          'unavailable' ||
-                                                      err.code ==
-                                                          'network-request-failed';
-                                                  if (isNetwork) {
-                                                    WidgetsBinding.instance
-                                                        .addPostFrameCallback((
-                                                          _,
-                                                        ) {
-                                                          if (context.mounted)
-                                                            showNoInternetDialog(
-                                                              context,
-                                                            );
-                                                        });
-                                                  }
-                                                }
-                                                // في حالة الخطأ خليه سهم عادي
-                                                trailing = const Icon(
-                                                  Icons.chevron_left,
-                                                  color: Colors.black54,
-                                                  size: 22,
+                                            builder: (context, userSnap) {
+                                              if (!userSnap.hasData) {
+                                                return _SettingTile(
+                                                  title: 'إشعاراتي',
+                                                  icon: Icons
+                                                      .notifications_outlined,
+                                                  trailing: const Icon(
+                                                    Icons.chevron_left,
+                                                    color: Colors.black54,
+                                                    size: 22,
+                                                  ),
+                                                  onTap: () {
+                                                    Navigator.of(context).push(
+                                                      MaterialPageRoute(
+                                                        builder: (_) =>
+                                                            const MyReportsPage(),
+                                                      ),
+                                                    );
+                                                  },
                                                 );
-                                              } else {
-                                                final unreadCount =
-                                                    snapshot
-                                                        .data
-                                                        ?.docs
-                                                        .length ??
-                                                    0;
-                                                trailing = unreadCount > 0
-                                                    ? Container(
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 8,
-                                                              vertical: 4,
-                                                            ),
-                                                        decoration: BoxDecoration(
-                                                          color:
-                                                              Colors.redAccent,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                12,
-                                                              ),
-                                                        ),
-                                                        child: const Text(
-                                                          'جديدة',
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 12,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                      )
-                                                    : const Icon(
+                                              }
+
+                                              // آخر مرة فتح فيها المستخدم صفحة الإشعارات
+                                              final userData = userSnap.data!
+                                                  .data()!;
+                                              final lastOpened =
+                                                  userData['lastOpenedNotifications']
+                                                      as Timestamp?;
+
+                                              return StreamBuilder<
+                                                QuerySnapshot<
+                                                  Map<String, dynamic>
+                                                >
+                                              >(
+                                                stream: FirebaseFirestore
+                                                    .instance
+                                                    .collection('notifications')
+                                                    .where(
+                                                      'userId',
+                                                      isEqualTo: FirebaseAuth
+                                                          .instance
+                                                          .currentUser!
+                                                          .uid,
+                                                    )
+                                                    .orderBy(
+                                                      'createdAt',
+                                                      descending: true,
+                                                    )
+                                                    .snapshots(),
+                                                builder: (context, notifSnap) {
+                                                  if (!notifSnap.hasData) {
+                                                    return _SettingTile(
+                                                      title: 'إشعاراتي',
+                                                      icon: Icons
+                                                          .notifications_outlined,
+                                                      trailing: const Icon(
                                                         Icons.chevron_left,
                                                         color: Colors.black54,
                                                         size: 22,
-                                                      );
-                                              }
+                                                      ),
+                                                      onTap: () {
+                                                        Navigator.of(
+                                                          context,
+                                                        ).push(
+                                                          MaterialPageRoute(
+                                                            builder: (_) =>
+                                                                const MyReportsPage(),
+                                                          ),
+                                                        );
+                                                      },
+                                                    );
+                                                  }
 
-                                              // تايل واحد دائمًا، والـ onTap شغّال بكل الحالات
-                                              return _SettingTile(
-                                                title: 'إشعاراتي',
-                                                icon: Icons
-                                                    .notifications_outlined,
-                                                trailing: trailing,
-                                                onTap: () {
-                                                  Navigator.of(
-                                                    context,
-                                                    rootNavigator: true,
-                                                  ).push(
-                                                    MaterialPageRoute(
-                                                      builder: (_) =>
-                                                          const MyReportsPage(),
-                                                    ),
+                                                  // حساب عدد الإشعارات الجديدة
+                                                  int newCount = 0;
+                                                  for (var doc
+                                                      in notifSnap.data!.docs) {
+                                                    final createdAt =
+                                                        doc['createdAt']
+                                                            as Timestamp?;
+                                                    if (lastOpened == null ||
+                                                        (createdAt != null &&
+                                                            createdAt
+                                                                .toDate()
+                                                                .isAfter(
+                                                                  lastOpened
+                                                                      .toDate(),
+                                                                ))) {
+                                                      newCount++;
+                                                    }
+                                                  }
+
+                                                  // إذا فيه إشعارات جديدة -> نعرض "جديدة"
+                                                  Widget trailing = newCount > 0
+                                                      ? Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 4,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors
+                                                                .redAccent,
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  12,
+                                                                ),
+                                                          ),
+                                                          child: const Text(
+                                                            'جديدة',
+                                                            style: TextStyle(
+                                                              color:
+                                                                  Colors.white,
+                                                              fontSize: 12,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                            ),
+                                                          ),
+                                                        )
+                                                      : const Icon(
+                                                          Icons.chevron_left,
+                                                          color: Colors.black54,
+                                                          size: 22,
+                                                        );
+
+                                                  return _SettingTile(
+                                                    title: 'إشعاراتي',
+                                                    icon: Icons
+                                                        .notifications_outlined,
+                                                    trailing: trailing,
+                                                    onTap: () {
+                                                      Navigator.of(
+                                                        context,
+                                                      ).push(
+                                                        MaterialPageRoute(
+                                                          builder: (_) =>
+                                                              const MyReportsPage(),
+                                                        ),
+                                                      );
+                                                    },
                                                   );
                                                 },
                                               );
@@ -454,12 +511,14 @@ class profilePage extends StatelessWidget {
                                             'التطبيق حالياً يدعم اللغة العربية فقط، وسيتم إضافة لغات أخرى قريباً بإذن الله✨',
                                           ),
                                         ),
+
                                         _SettingTile(
                                           title: 'الخصوصية والأمان',
                                           icon: Icons.lock_outline,
                                           onTap: () =>
                                               _showPrivacySheet(context),
                                         ),
+
                                         _SettingTile(
                                           title: 'المساعدة والدعم',
                                           icon: Icons.help_outline,
