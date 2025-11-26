@@ -189,8 +189,8 @@ class _MyReportsPageState extends State<MyReportsPage> {
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
                                 color: isNew
-                                    ? Colors.white
-                                    : AppColors.mint.withOpacity(0.20),
+                                    ? AppColors.mint.withOpacity(0.20)
+                                    : Colors.white,
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
