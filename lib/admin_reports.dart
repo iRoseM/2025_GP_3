@@ -452,6 +452,89 @@ class _ReportCardState extends State<_ReportCard> {
         'decision': decision,
         if (reason != null && reason.isNotEmpty) 'rejectionReason': reason,
       });
+      // نجيب بيانات البلاغ
+      final m = widget.doc.data();
+      final reportedBy = (m['reportedBy'] ?? '').toString();
+      final facilityId = m['facilityID'] ?? '';
+
+      // نجيب بيانات الحاوية
+      Map<String, dynamic>? facility;
+      try {
+        final fsnap = await FirebaseFirestore.instance
+            .collection('facilities')
+            .doc(facilityId)
+            .get();
+        if (fsnap.exists) facility = fsnap.data();
+      } catch (_) {}
+
+      final facName = facility?['name'] ?? facility?['type'] ?? 'الحاوية';
+      final fullAddress = (facility?['address'] ?? '').toString();
+
+      String district = '';
+
+      // نبحث عن كلمة "حي"
+      final idx = fullAddress.indexOf('حي');
+      if (idx != -1) {
+        // ناخذ النص من "حي" إلى آخر العنوان
+        String after = fullAddress.substring(idx).trim();
+
+        // نشيل أي فواصل مباشرة بعد "حي"
+        after = after.replaceAll('،', '').replaceAll(',', '').trim();
+
+        // نفصل بالكلمات
+        List<String> parts = after.split(RegExp(r'\s+'));
+
+        // "حي شراء" فقط
+        if (parts.length >= 2) {
+          district = '${parts[0]} ${parts[1]}'.trim();
+        } else {
+          district = parts[0].trim();
+        }
+
+        // نتأكد ما فيها فاصلة مرة ثانية
+        district = district.replaceAll('،', '').replaceAll(',', '').trim();
+      }
+
+      // =====================================================
+
+      // 🔔 تركيب النصوص
+      String notifTitle;
+      String notifBody;
+
+      if (decision == 'approved') {
+        notifTitle = 'تم معالجة البلاغ';
+
+        if (district.isNotEmpty) {
+          notifBody =
+              'تم معالجة البلاغ المتعلق بـ "$facName" في $district. شكرًا لتعاونك 🌱';
+        } else {
+          notifBody =
+              'تم معالجة البلاغ المتعلق بـ "$facName". شكرًا لتعاونك 🌱';
+        }
+      } else {
+        notifTitle = 'البلاغ غير صحيح';
+
+        if (district.isNotEmpty) {
+          notifBody =
+              'بعد التحقق من البلاغ المتعلق بـ "$facName" في $district. تبيّن أنه غير صحيح ♻️';
+        } else {
+          notifBody =
+              'بعد التحقق من البلاغ المتعلق بـ "$facName". تبيّن أنه غير صحيح ♻️';
+        }
+      }
+
+      // إضافة الإشعار
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'type': decision == 'approved'
+            ? 'facility_report_approved'
+            : 'facility_report_rejected',
+        'userId': reportedBy,
+        'reportId': widget.doc.id,
+        'createdAt': FieldValue.serverTimestamp(),
+        'seen': false,
+        'title': notifTitle,
+        'body': notifBody,
+      });
 
       // نحدد الرسالة واللون حسب القرار
       String? successMsg;
