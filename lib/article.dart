@@ -10,19 +10,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'services/title_header.dart';
 import 'services/background_container.dart';
 import 'short_test_verification.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 class ArticlePage extends StatefulWidget {
   final String userTaskDocId;
@@ -86,7 +74,7 @@ class _ArticlePageState extends State<ArticlePage> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        backgroundColor: background ?? AppColors.dark,
+        backgroundColor: background ?? appColors.dark,
       ),
     );
   }
@@ -154,7 +142,7 @@ class _ArticlePageState extends State<ArticlePage> {
         });
         _showSnack(
           "حدث خطأ في خدمة قراءة المقال.",
-          background: Colors.redAccent,
+          background: slackMesseges.red,
         );
       });
     } catch (e) {
@@ -426,7 +414,7 @@ class _ArticlePageState extends State<ArticlePage> {
 
       _showSnack(
         "تعذَّر إنشاء الاختبار القصير بسبب مشكلة في الاتصال. تأكد من اتصالك بالإنترنت ثم حاول مرة أخرى بعد قليل.",
-        background: Colors.redAccent,
+        background: slackMesseges.red,
       );
     } catch (e) {
       if (!mounted) return;
@@ -437,7 +425,7 @@ class _ArticlePageState extends State<ArticlePage> {
 
       _showSnack(
         "حدث خلل مؤقت أثناء إنشاء الاختبار القصير. تحقق من اتصالك بالإنترنت ثم حاول مرة أخرى بعد قليل.",
-        background: Colors.redAccent,
+        background: slackMesseges.red,
       );
     }
   }
@@ -459,14 +447,14 @@ class _ArticlePageState extends State<ArticlePage> {
         body: AnimatedBackgroundContainer(
           child: _loading
               ? const Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
+                  child: CircularProgressIndicator(color: appColors.primary),
                 )
               : _error
               ? Center(
                   child: Text(
                     "لا يمكن تحميل المقال.",
                     style: GoogleFonts.ibmPlexSansArabic(
-                      color: AppColors.dark,
+                      color: appColors.dark,
                       fontSize: 16,
                     ),
                   ),
@@ -486,7 +474,7 @@ class _ArticlePageState extends State<ArticlePage> {
                         style: GoogleFonts.ibmPlexSansArabic(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -562,7 +550,7 @@ class _ArticlePageState extends State<ArticlePage> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
                     gradient: const LinearGradient(
-                      colors: [AppColors.primary, AppColors.tealSoft],
+                      colors: [appColors.primary, appColors.tealSoft],
                       begin: Alignment.centerRight,
                       end: Alignment.centerLeft,
                     ),
@@ -701,7 +689,7 @@ class _ArticlePageState extends State<ArticlePage> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: _isSpeaking
-                    ? AppColors.primary.withOpacity(0.12)
+                    ? appColors.primary.withOpacity(0.12)
                     : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(999),
               ),
@@ -711,7 +699,7 @@ class _ArticlePageState extends State<ArticlePage> {
                   Icon(
                     _isSpeaking ? Icons.volume_up : Icons.volume_down,
                     size: 20,
-                    color: AppColors.primary,
+                    color: appColors.primary,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -719,7 +707,7 @@ class _ArticlePageState extends State<ArticlePage> {
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
+                      color: appColors.primary,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -740,7 +728,7 @@ class _ArticlePageState extends State<ArticlePage> {
                         style: GoogleFonts.ibmPlexSansArabic(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                     ),
@@ -803,7 +791,7 @@ class _ArticlePageState extends State<ArticlePage> {
             style: GoogleFonts.ibmPlexSansArabic(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: AppColors.dark,
+              color: appColors.dark,
             ),
           ),
         ],

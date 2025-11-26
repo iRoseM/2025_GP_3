@@ -20,6 +20,7 @@ import 'services/firebase_options.dart';
 import 'services/splash.dart';
 import 'home.dart';
 import 'admin_home.dart';
+import '../services/app_colors.dart';
 
 // تهيئة الإشعارات المحلية
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -111,23 +112,12 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-/* ======================= ألوان وتيم ======================= */
-
-class AppColors {
-  static const primary = Color(0xFF009688);
-  static const dark = Color(0xFF00695C);
-  static const light = Color(0xFF4DB6AC);
-  static const background = Color(0xFFFAFCFB);
-  static const orange = Color(0xFFFFB74D);
-  static const mint = Color(0xFFB6E9C1);
-}
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final scheme = ColorScheme.fromSeed(seedColor: AppColors.primary);
+    final scheme = ColorScheme.fromSeed(seedColor: appColors.primary);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Nameer Register',
@@ -135,17 +125,17 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: scheme.copyWith(
-          primary: AppColors.primary,
-          secondary: AppColors.light,
+          primary: appColors.primary,
+          secondary: appColors.light,
           onPrimary: Colors.white,
         ),
         fontFamily: GoogleFonts.ibmPlexSansArabic().fontFamily,
         textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(),
         primaryTextTheme: GoogleFonts.ibmPlexSansArabicTextTheme(),
-        scaffoldBackgroundColor: AppColors.background,
+        scaffoldBackgroundColor: appColors.background,
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
+            backgroundColor: appColors.primary,
             foregroundColor: Colors.white,
             textStyle: const TextStyle(
               fontWeight: FontWeight.w700,
@@ -158,24 +148,24 @@ class MyApp extends StatelessWidget {
           ),
         ),
         textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(foregroundColor: AppColors.dark),
+          style: TextButton.styleFrom(foregroundColor: appColors.dark),
         ),
         inputDecorationTheme: const InputDecorationTheme(
-          prefixIconColor: AppColors.primary,
-          suffixIconColor: AppColors.primary,
+          prefixIconColor: appColors.primary,
+          suffixIconColor: appColors.primary,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.all(Radius.circular(14)),
           ),
           enabledBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: AppColors.light, width: 1.2),
+            borderSide: BorderSide(color: appColors.light, width: 1.2),
             borderRadius: BorderRadius.all(Radius.circular(14)),
           ),
           focusedBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: AppColors.primary, width: 1.6),
+            borderSide: BorderSide(color: appColors.primary, width: 1.6),
             borderRadius: BorderRadius.all(Radius.circular(14)),
           ),
           errorBorder: OutlineInputBorder(
-            borderSide: BorderSide(color: Colors.red),
+            borderSide: BorderSide(color: slackMesseges.red),
             borderRadius: BorderRadius.all(Radius.circular(14)),
           ),
           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -304,7 +294,7 @@ class _RegisterPageState extends State<RegisterPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.primary,
+          backgroundColor: slackMesseges.primary,
           content: Text(
             '✅ تم إرسال رابط إعادة التعيين إلى بريدك',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -340,7 +330,7 @@ class _RegisterPageState extends State<RegisterPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             '❌ $msg',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -354,7 +344,7 @@ class _RegisterPageState extends State<RegisterPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             '❌ خطأ غير متوقع أثناء الإرسال',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -394,12 +384,15 @@ class _RegisterPageState extends State<RegisterPage>
 
       final user = FirebaseAuth.instance.currentUser;
 
-      if (user == null) throw FirebaseAuthException(code: 'user-not-found');
+      if (user == null) {
+        throw FirebaseAuthException(code: 'user-not-found');
+      }
 
       if (user.emailVerified) {
         // ✅ المستخدم مفعّل، وجّهه حسب الدور
         final role = await _fetchUserRole(user.uid);
         if (!mounted) return;
+
         if (role == 'admin') {
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const AdminHomePage()),
@@ -421,16 +414,19 @@ class _RegisterPageState extends State<RegisterPage>
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              backgroundColor: AppColors.primary,
-              content: Text(
-                'تم إرسال رسالة التحقق إلى بريدك، يرجى التحقق قبل تسجيل الدخول.',
-
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
+              backgroundColor: slackMesseges.primary,
+              behavior: SnackBarBehavior.floating,
+              content: Directionality(
+                textDirection: TextDirection.rtl,
+                child: Text(
+                  'تم إرسال رسالة التحقق إلى بريدك، يرجى التحقق قبل تسجيل الدخول.',
+                  textAlign: TextAlign.right,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
               ),
-              behavior: SnackBarBehavior.floating,
             ),
           );
         } on FirebaseAuthException catch (e) {
@@ -451,12 +447,16 @@ class _RegisterPageState extends State<RegisterPage>
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              backgroundColor: Colors.redAccent,
-              content: Text(
-                '❌ $msg',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
+              backgroundColor: slackMesseges.red,
+              content: Directionality(
+                textDirection: TextDirection.rtl,
+                child: Text(
+                  '❌ $msg',
+                  textAlign: TextAlign.right,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
@@ -474,7 +474,6 @@ class _RegisterPageState extends State<RegisterPage>
         case 'invalid-credential':
           msg = 'بيانات الدخول غير صحيحة';
           break;
-
         case 'invalid-email':
           msg = 'بريد إلكتروني غير صالح';
           break;
@@ -489,15 +488,20 @@ class _RegisterPageState extends State<RegisterPage>
           msg = 'تعذّر الاتصال — تأكد من الإنترنت';
           break;
       }
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
-          content: Text(
-            '❌ $msg',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+          backgroundColor: slackMesseges.red,
+          content: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Text(
+              '❌ $msg',
+              textAlign: TextAlign.right,
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
@@ -506,12 +510,16 @@ class _RegisterPageState extends State<RegisterPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
-          content: Text(
-            '❌ خطأ غير متوقع أثناء تسجيل الدخول',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+          backgroundColor: slackMesseges.red,
+          content: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Text(
+              '❌ خطأ غير متوقع أثناء تسجيل الدخول',
+              textAlign: TextAlign.right,
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
@@ -562,13 +570,13 @@ class _RegisterPageState extends State<RegisterPage>
                         right: 20 + 10 * math.sin(2 * math.pi * t),
                         top: 80 + 20 * math.cos(2 * math.pi * t),
                         size: 180,
-                        color: AppColors.primary.withOpacity(.12),
+                        color: appColors.primary.withOpacity(.12),
                       ),
                       _blob(
                         left: -40 + 30 * math.cos(2 * math.pi * (t + .3)),
                         bottom: -10 + 25 * math.sin(2 * math.pi * (t + .3)),
                         size: 220,
-                        color: AppColors.light.withOpacity(.10),
+                        color: appColors.light.withOpacity(.10),
                       ),
                     ],
                   );
@@ -703,7 +711,7 @@ class _RegisterPageState extends State<RegisterPage>
                                                 ? Icons.visibility_outlined
                                                 : Icons.visibility_off_outlined,
                                             color: _obscure
-                                                ? AppColors.primary
+                                                ? appColors.primary
                                                 : Colors.grey,
                                           ),
                                         ),
@@ -849,8 +857,8 @@ class GradientBackgroundPainter extends CustomPainter {
       begin: Alignment.topRight,
       end: Alignment.bottomLeft,
       colors: [
-        AppColors.background,
-        Color.lerp(AppColors.background, Colors.white, .3)!,
+        appColors.background,
+        Color.lerp(appColors.background, Colors.white, .3)!,
       ],
     ).createShader(Offset.zero & size);
     final g2 = RadialGradient(
@@ -1109,11 +1117,11 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         width = focused ? 1.8 : 1.4;
         break;
       case _FieldStatus.checking:
-        color = AppColors.light;
+        color = appColors.light;
         break;
       case _FieldStatus.idle:
       default:
-        color = AppColors.light;
+        color = appColors.light;
     }
     return OutlineInputBorder(
       borderRadius: const BorderRadius.all(Radius.circular(14)),
@@ -1500,7 +1508,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             '❌ خطأ غير متوقع (${e.code})',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1515,7 +1523,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       // يشمل permission-denied من Firestore وغيره
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             '❌ تعذّر إنشاء الحساب (${e.toString()})',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1561,13 +1569,13 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                         right: 24 + 10 * math.sin(2 * math.pi * t),
                         top: 64 + 16 * math.cos(2 * math.pi * t),
                         size: 160,
-                        color: AppColors.primary.withOpacity(.10),
+                        color: appColors.primary.withOpacity(.10),
                       ),
                       _blob(
                         left: -36 + 24 * math.cos(2 * math.pi * (t + .35)),
                         bottom: -8 + 20 * math.sin(2 * math.pi * (t + .35)),
                         size: 200,
-                        color: AppColors.light.withOpacity(.10),
+                        color: appColors.light.withOpacity(.10),
                       ),
                     ],
                   );
@@ -1615,7 +1623,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                       Text(
                                         'إنشاء حساب جديد',
                                         style: TextStyle(
-                                          color: AppColors.dark.withOpacity(.9),
+                                          color: appColors.dark.withOpacity(.9),
                                           fontSize: 20,
                                           fontWeight: FontWeight.w700,
                                         ),
@@ -1813,7 +1821,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                                       : Icons
                                                             .visibility_off_outlined,
                                                   color: _obscure
-                                                      ? AppColors.primary
+                                                      ? appColors.primary
                                                       : Colors.grey,
                                                 ),
                                               ),
@@ -1903,7 +1911,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                                       : Icons
                                                             .visibility_off_outlined,
                                                   color: _obscureConfirm
-                                                      ? AppColors.primary
+                                                      ? appColors.primary
                                                       : Colors.grey,
                                                 ),
                                               ),
@@ -2013,7 +2021,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                                 borderRadius:
                                                     BorderRadius.circular(14),
                                                 border: Border.all(
-                                                  color: AppColors.light,
+                                                  color: appColors.light,
                                                   width: 1.2,
                                                 ),
                                               ),
@@ -2194,7 +2202,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
       // ✅ رسالة قصيرة بأسلوب Slack message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.primary,
+          backgroundColor: slackMesseges.primary,
           content: Text(
             '✉️ تم إعادة إرسال رسالة التحقق',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -2221,7 +2229,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             '❌ $msg',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -2260,7 +2268,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
         // ✅ رسالة قصيرة وواضحة
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: AppColors.primary,
+            backgroundColor: slackMesseges.primary,
             content: Text(
               '✅ تم تأكيد التحقق وتحديث الحساب',
               style: GoogleFonts.ibmPlexSansArabic(
@@ -2289,7 +2297,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
         // ⚠️ مستخدم ضغط "تحققت الآن" لكن البريد لسه مو متحقق
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor: slackMesseges.red,
             content: Text(
               '⚠️ لم يتم التحقق من البريد الإلكتروني بعد',
               style: GoogleFonts.ibmPlexSansArabic(
@@ -2304,7 +2312,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             '❌ حدث خطأ أثناء التحقق',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -2343,7 +2351,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
         leading: IconButton(
           tooltip: 'إغلاق',
           icon: const Icon(Icons.close),
-          color: AppColors.dark,
+          color: appColors.dark,
           onPressed: () async {
             // 1) تسجيل خروج علشان ما يرجعك LaunchDecider لصفحة التحقق
             await FirebaseAuth.instance.signOut();
@@ -2384,9 +2392,9 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                             colors: [
-                              AppColors.primary,
-                              AppColors.primary,
-                              AppColors.mint,
+                              appColors.primary,
+                              appColors.primary,
+                              appColors.mint,
                             ],
                             stops: [0.0, 0.5, 1.0],
                           ).createShader(rect),
@@ -2402,7 +2410,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
                           style: GoogleFonts.ibmPlexSansArabic(
                             fontWeight: FontWeight.w700,
                             fontSize: 20,
-                            color: AppColors.dark,
+                            color: appColors.dark,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -2512,9 +2520,9 @@ class _AnimatedGradientButtonState extends State<_AnimatedGradientButton>
                 begin: Alignment(-1 + _shift.value, 0),
                 end: Alignment(1 + _shift.value, 0),
                 colors: const [
-                  AppColors.primary,
-                  AppColors.primary,
-                  AppColors.mint,
+                  appColors.primary,
+                  appColors.primary,
+                  appColors.mint,
                 ],
                 stops: const [0.0, 0.5, 1.0],
               ),
@@ -2592,7 +2600,7 @@ class _AnimatedGradientOutlineButtonState
     final gradient = LinearGradient(
       begin: Alignment(-1 + _shift.value, 0),
       end: Alignment(1 + _shift.value, 0),
-      colors: const [AppColors.primary, AppColors.primary, AppColors.mint],
+      colors: const [appColors.primary, appColors.primary, appColors.mint],
       stops: const [0.0, 0.5, 1.0],
     );
 
@@ -2623,7 +2631,7 @@ class _AnimatedGradientOutlineButtonState
               ),
               child: TextButton(
                 style: TextButton.styleFrom(
-                  foregroundColor: AppColors.dark,
+                  foregroundColor: appColors.dark,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(borderRadius - 1),
                   ),
@@ -2664,10 +2672,10 @@ class _GenderChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = selected
-        ? AppColors.primary.withOpacity(.12)
+        ? appColors.primary.withOpacity(.12)
         : Colors.transparent;
-    final border = selected ? AppColors.primary : AppColors.light;
-    final fg = selected ? AppColors.dark : Colors.black.withOpacity(.7);
+    final border = selected ? appColors.primary : appColors.light;
+    final fg = selected ? appColors.dark : Colors.black.withOpacity(.7);
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -2683,7 +2691,7 @@ class _GenderChip extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 20, color: AppColors.primary),
+            Icon(icon, size: 20, color: appColors.primary),
             const SizedBox(width: 6),
             Text(
               label,

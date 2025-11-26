@@ -21,20 +21,7 @@ import 'admin_reports.dart' as report;
 import 'profile.dart';
 import 'services/connection.dart';
 import 'package:Nameer/secret/api.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-  static const red = Colors.red;
-}
+import '../services/app_colors.dart';
 
 class AdminMapPage extends StatefulWidget {
   const AdminMapPage({super.key});
@@ -317,7 +304,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor: slackMesseges.red,
             content: Text(
               'تعذر تحميل المواقع من السحابة',
               style: GoogleFonts.ibmPlexSansArabic(
@@ -403,7 +390,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor: slackMesseges.red,
             content: Text(
               'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
               style: GoogleFonts.ibmPlexSansArabic(
@@ -1124,7 +1111,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                         'حسب النوع',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                     ),
@@ -1136,11 +1123,11 @@ class _AdminMapPageState extends State<AdminMapPage> {
                         return FilterChip(
                           label: Text(type),
                           selected: selected,
-                          selectedColor: AppColors.primary.withOpacity(.15),
+                          selectedColor: appColors.primary.withOpacity(.15),
                           labelStyle: TextStyle(
                             color: selected
-                                ? AppColors.primary
-                                : AppColors.dark,
+                                ? appColors.primary
+                                : appColors.dark,
                             fontWeight: FontWeight.w700,
                           ),
                           onSelected: (v) => setSt(() {
@@ -1163,7 +1150,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                         'حسب الحالة',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                     ),
@@ -1178,11 +1165,11 @@ class _AdminMapPageState extends State<AdminMapPage> {
                         return FilterChip(
                           label: Text(label),
                           selected: selected,
-                          selectedColor: AppColors.primary.withOpacity(.15),
+                          selectedColor: appColors.primary.withOpacity(.15),
                           labelStyle: TextStyle(
                             color: selected
-                                ? AppColors.primary
-                                : AppColors.dark,
+                                ? appColors.primary
+                                : appColors.dark,
                             fontWeight: FontWeight.w700,
                           ),
                           onSelected: (v) => setSt(() {
@@ -1201,7 +1188,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     // زر تطبيق
                     FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: appColors.primary,
                       ),
                       onPressed: () {
                         Navigator.pop(context);
@@ -1327,15 +1314,15 @@ class _AdminMapPageState extends State<AdminMapPage> {
       errorStyle: const TextStyle(fontSize: 12, height: 1.2),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: home.AppColors.primary),
+        borderSide: const BorderSide(color: appColors.primary),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: home.AppColors.primary),
+        borderSide: const BorderSide(color: appColors.primary),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: home.AppColors.dark, width: 1.2),
+        borderSide: const BorderSide(color: appColors.dark, width: 1.2),
       ),
     );
   }
@@ -1370,7 +1357,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   });
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: slackMesseges.primary,
                       content: Text(
                         'تمت إضافة "${_lastAddedName!}" بنجاح ✅',
                         style: GoogleFonts.ibmPlexSansArabic(
@@ -1389,7 +1376,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     msg += '• تحديد الموقع على الخريطة 📍';
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      backgroundColor: Colors.redAccent,
+                      backgroundColor: slackMesseges.red,
                       content: Text(
                         msg,
                         style: GoogleFonts.ibmPlexSansArabic(
@@ -1708,7 +1695,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     icon: const Icon(Icons.delete_outline_rounded),
                     label: const Text('تأكيد الحذف'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: home.AppColors.primary,
+                      backgroundColor: appColors.primary,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -1732,7 +1719,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                         if (mounted) Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            backgroundColor: Colors.redAccent,
+                            backgroundColor: slackMesseges.red,
                             content: Text(
                               'فشل حذف السحابة',
                               style: GoogleFonts.ibmPlexSansArabic(
@@ -1823,7 +1810,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
       debugPrint('❌ خطأ في الحفظ: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             'حدث خطأ أثناء حفظ البيانات',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -2087,7 +2074,7 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      backgroundColor: AppColors.primary,
+                                      backgroundColor: slackMesseges.primary,
                                       content: Text(
                                         'تمت إضافة الموقع بنجاح ✅',
                                         style: GoogleFonts.ibmPlexSansArabic(
@@ -2102,7 +2089,7 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                               } catch (_) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    backgroundColor: Colors.redAccent,
+                                    backgroundColor: slackMesseges.red,
                                     content: Text(
                                       'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
                                       style: GoogleFonts.ibmPlexSansArabic(
@@ -2210,9 +2197,9 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                         borderRadius: BorderRadius.circular(14),
                         gradient: const LinearGradient(
                           colors: [
-                            AppColors.mint,
-                            AppColors.primary,
-                            AppColors.primary,
+                            appColors.mint,
+                            appColors.primary,
+                            appColors.primary,
                           ],
                           begin: Alignment.centerRight,
                           end: Alignment.centerLeft,
@@ -2310,15 +2297,15 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
       errorStyle: const TextStyle(fontSize: 12, height: 1.2),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: home.AppColors.primary),
+        borderSide: const BorderSide(color: appColors.primary),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: home.AppColors.primary),
+        borderSide: const BorderSide(color: appColors.primary),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: home.AppColors.dark, width: 1.2),
+        borderSide: const BorderSide(color: appColors.dark, width: 1.2),
       ),
     );
   }
@@ -2377,7 +2364,7 @@ class _SearchBar extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.tune, color: home.AppColors.dark),
+            child: const Icon(Icons.tune, color: appColors.dark),
           ),
         ),
       ],
@@ -2445,7 +2432,7 @@ class _RoundBtn extends StatelessWidget {
                   padding: EdgeInsets.all(12),
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Icon(icon, color: home.AppColors.dark),
+              : Icon(icon, color: appColors.dark),
         ),
       ),
     );
@@ -2485,13 +2472,13 @@ class _HeaderUser extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    home.AppColors.primary.withOpacity(.2),
-                    home.AppColors.primary.withOpacity(.08),
+                    appColors.primary.withOpacity(.2),
+                    appColors.primary.withOpacity(.08),
                   ],
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: home.AppColors.primary.withOpacity(.18),
+                    color: appColors.primary.withOpacity(.18),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -2504,7 +2491,7 @@ class _HeaderUser extends StatelessWidget {
                 child: (avatarImage == null)
                     ? const Icon(
                         Icons.person_outline,
-                        color: home.AppColors.primary,
+                        color: appColors.primary,
                         size: 22,
                       )
                     : null,
@@ -2669,10 +2656,10 @@ class _LocationOptionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = selected
-        ? AppColors.primary.withOpacity(0.12)
+        ? appColors.primary.withOpacity(0.12)
         : Colors.transparent;
-    final border = selected ? AppColors.primary : AppColors.light;
-    final fg = selected ? AppColors.dark : Colors.black.withOpacity(.7);
+    final border = selected ? appColors.primary : appColors.light;
+    final fg = selected ? appColors.dark : Colors.black.withOpacity(.7);
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -2688,7 +2675,7 @@ class _LocationOptionButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: AppColors.primary),
+            Icon(icon, size: 18, color: appColors.primary),
             const SizedBox(width: 6),
             Text(
               label,

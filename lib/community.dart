@@ -10,19 +10,7 @@ import 'services/background_container.dart';
 import 'services/bottom_nav.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 void main() {
   runApp(const MyApp());
@@ -140,7 +128,7 @@ class _communityPageState extends State<communityPage> {
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                     const SizedBox(height: 15),
@@ -163,7 +151,7 @@ class _communityPageState extends State<communityPage> {
                               style: GoogleFonts.ibmPlexSansArabic(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.dark,
+                                color: appColors.dark,
                               ),
                               textAlign: TextAlign.center,
                             ),

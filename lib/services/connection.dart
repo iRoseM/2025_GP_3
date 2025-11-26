@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../main.dart'; // للوصول إلى AppColors مثلاً
+import '../services/app_colors.dart';
 
 /// ✅ دالة فحص الاتصال بالإنترنت
 Future<bool> hasInternetConnection() async {
@@ -42,7 +42,7 @@ void showNoInternetDialog(BuildContext context) {
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.dark,
+                  color: appColors.dark,
                 ),
               ),
               const SizedBox(height: 8),
@@ -53,14 +53,14 @@ void showNoInternetDialog(BuildContext context) {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 15,
-                  color: AppColors.dark.withOpacity(0.7),
+                  color: appColors.dark.withOpacity(0.7),
                 ),
               ),
               const SizedBox(height: 16),
 
               // ✅ مؤشّر تحميل فقط (بدون أزرار)
               const CircularProgressIndicator(
-                color: AppColors.primary,
+                color: appColors.primary,
                 strokeWidth: 3,
               ),
               const SizedBox(height: 8),

@@ -6,20 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 
 import 'services/background_container.dart';
-import 'services/title_header.dart'; // ✅ هيدر نمير
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import 'services/title_header.dart';
+import '../services/app_colors.dart';
 
 class RewardsPage extends StatefulWidget {
   const RewardsPage({super.key});
@@ -168,7 +156,7 @@ class _RewardsPageState extends State<RewardsPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.primary,
+          backgroundColor: slackMesseges.primary,
           content: Text(
             'تم استبدال "$rewardTitle" بنجاح 🎉',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -181,17 +169,16 @@ class _RewardsPageState extends State<RewardsPage> {
     } catch (e) {
       final scaffoldContext = context;
 
-      String message =
-          'تعذر تنفيذ الاستبدال مؤقتًا، حاول مرة أخرى بعد لحظات 🔄';
+      String message = 'تعذر تنفيذ الاستبدال مؤقتًا، حاول مرة أخرى بعد لحظات ';
       if (e.toString().contains('رصيدك لا يكفي')) {
-        message = 'رصيدك الحالي لا يكفي لاستبدال هذه المكافأة 💰';
+        message = 'رصيدك الحالي لا يكفي لاستبدال هذه المكافأة ';
       } else if (e.toString().contains('المستخدم غير موجود')) {
         message = 'حدث خلل في حسابك، يرجى تسجيل الدخول من جديد.';
       }
 
       ScaffoldMessenger.of(scaffoldContext).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             message,
             style: GoogleFonts.ibmPlexSansArabic(
@@ -265,7 +252,7 @@ class _RewardsPageState extends State<RewardsPage> {
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: remaining.inSeconds > 0
-                          ? AppColors.accent
+                          ? appColors.accent
                           : Colors.grey,
                       letterSpacing: 1.2,
                     ),
@@ -276,7 +263,7 @@ class _RewardsPageState extends State<RewardsPage> {
                       children: [
                         const Text(
                           ': الوقت المتبقي لاستخدام الكود',
-                          style: TextStyle(color: AppColors.dark),
+                          style: TextStyle(color: appColors.dark),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -284,7 +271,7 @@ class _RewardsPageState extends State<RewardsPage> {
                           style: const TextStyle(
                             fontSize: 30,
                             fontWeight: FontWeight.w900,
-                            color: AppColors.primary,
+                            color: appColors.primary,
                           ),
                         ),
                       ],
@@ -293,7 +280,7 @@ class _RewardsPageState extends State<RewardsPage> {
                     const Text(
                       'انتهى الوقت ❌',
                       style: TextStyle(
-                        color: Colors.redAccent,
+                        color: slackMesseges.red,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -305,7 +292,7 @@ class _RewardsPageState extends State<RewardsPage> {
                   icon: const Icon(Icons.copy, color: Colors.white, size: 18),
                   style: FilledButton.styleFrom(
                     backgroundColor: remaining.inSeconds > 0
-                        ? AppColors.primary
+                        ? appColors.primary
                         : Colors.grey,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -318,7 +305,7 @@ class _RewardsPageState extends State<RewardsPage> {
                           );
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              backgroundColor: AppColors.primary,
+                              backgroundColor: slackMesseges.primary,
                               content: Text(
                                 'تم نسخ الكود إلى الحافظة ✅',
                                 style: GoogleFonts.ibmPlexSansArabic(
@@ -391,7 +378,7 @@ class _RewardsPageState extends State<RewardsPage> {
                         style: GoogleFonts.ibmPlexSansArabic(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -456,7 +443,7 @@ class _RewardsPageState extends State<RewardsPage> {
                                         Container(
                                           height: 200,
                                           decoration: const BoxDecoration(
-                                            color: AppColors.primary33,
+                                            color: appColors.primary33,
                                             borderRadius: BorderRadius.only(
                                               topLeft: Radius.circular(16),
                                               topRight: Radius.circular(16),
@@ -464,7 +451,7 @@ class _RewardsPageState extends State<RewardsPage> {
                                           ),
                                           child: const Icon(
                                             Icons.card_giftcard,
-                                            color: AppColors.primary,
+                                            color: appColors.primary,
                                             size: 60,
                                           ),
                                         ),
@@ -479,7 +466,7 @@ class _RewardsPageState extends State<RewardsPage> {
                                               style: const TextStyle(
                                                 fontSize: 20,
                                                 fontWeight: FontWeight.w700,
-                                                color: AppColors.dark,
+                                                color: appColors.dark,
                                               ),
                                             ),
                                             const SizedBox(height: 8),
@@ -487,7 +474,7 @@ class _RewardsPageState extends State<RewardsPage> {
                                               data['description'] ?? '',
                                               style: const TextStyle(
                                                 fontSize: 15,
-                                                color: AppColors.dark,
+                                                color: appColors.dark,
                                               ),
                                             ),
                                             const SizedBox(height: 12),
@@ -500,7 +487,7 @@ class _RewardsPageState extends State<RewardsPage> {
                                                   children: [
                                                     const Icon(
                                                       Icons.star_rate_rounded,
-                                                      color: AppColors.accent,
+                                                      color: appColors.accent,
                                                       size: 20,
                                                     ),
                                                     const SizedBox(width: 6),
@@ -509,7 +496,7 @@ class _RewardsPageState extends State<RewardsPage> {
                                                       style: const TextStyle(
                                                         fontWeight:
                                                             FontWeight.w600,
-                                                        color: AppColors.sea,
+                                                        color: appColors.sea,
                                                         fontSize: 15,
                                                       ),
                                                     ),
@@ -524,9 +511,9 @@ class _RewardsPageState extends State<RewardsPage> {
                                                     BorderRadius.circular(14),
                                                 gradient: const LinearGradient(
                                                   colors: [
-                                                    AppColors.mint,
-                                                    AppColors.primary,
-                                                    AppColors.primary,
+                                                    appColors.mint,
+                                                    appColors.primary,
+                                                    appColors.primary,
                                                   ],
                                                   begin: Alignment.centerRight,
                                                   end: Alignment.centerLeft,
@@ -618,7 +605,7 @@ class _RewardsPageState extends State<RewardsPage> {
                                                         FilledButton(
                                                           style: FilledButton.styleFrom(
                                                             backgroundColor:
-                                                                AppColors
+                                                                appColors
                                                                     .primary,
                                                             shape: RoundedRectangleBorder(
                                                               borderRadius:

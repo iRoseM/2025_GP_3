@@ -2,8 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:ui';
-import '../main.dart'; // for AppColors and _GradientBackgroundPainter
+import '../main.dart';
 import '../onboarding.dart';
+import '../services/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -81,13 +82,13 @@ class _SplashScreenState extends State<SplashScreen>
                       right: 20 + 10 * math.sin(2 * math.pi * t),
                       top: 80 + 20 * math.cos(2 * math.pi * t),
                       size: 180,
-                      color: AppColors.primary.withOpacity(.12),
+                      color: appColors.primary.withOpacity(.12),
                     ),
                     _blob(
                       left: -40 + 30 * math.cos(2 * math.pi * (t + .3)),
                       bottom: -10 + 25 * math.sin(2 * math.pi * (t + .3)),
                       size: 220,
-                      color: AppColors.light.withOpacity(.10),
+                      color: appColors.light.withOpacity(.10),
                     ),
                   ],
                 );

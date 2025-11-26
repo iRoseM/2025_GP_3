@@ -11,19 +11,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'services/map_pick_route.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 class CompleteTaskSheet extends StatefulWidget {
   final Map<String, dynamic> taskData;
@@ -850,7 +838,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                           children: [
                             const Icon(
                               Icons.format_list_numbered,
-                              color: AppColors.primary,
+                              color: appColors.primary,
                             ),
                             const SizedBox(width: 8),
                             Text(
@@ -858,7 +846,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                               style: GoogleFonts.ibmPlexSansArabic(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.dark,
+                                color: appColors.dark,
                               ),
                             ),
                           ],
@@ -933,7 +921,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 onPressed: () => Navigator.of(ctx).pop(null),
                                 style: OutlinedButton.styleFrom(
                                   side: const BorderSide(
-                                    color: AppColors.primary,
+                                    color: appColors.primary,
                                     width: 2,
                                   ),
                                   shape: RoundedRectangleBorder(
@@ -946,7 +934,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 child: Text(
                                   'إلغاء',
                                   style: GoogleFonts.ibmPlexSansArabic(
-                                    color: AppColors.primary,
+                                    color: appColors.primary,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
@@ -966,7 +954,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   Navigator.of(ctx).pop(safe);
                                 },
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
+                                  backgroundColor: appColors.primary,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -1051,7 +1039,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.dark,
+                      color: appColors.dark,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1060,7 +1048,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
+                      color: appColors.primary,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -1068,7 +1056,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                     children: [
                       const Icon(
                         Icons.star_border,
-                        color: AppColors.primary,
+                        color: appColors.primary,
                         size: 20,
                       ),
                       const SizedBox(width: 6),
@@ -1076,7 +1064,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                         '$pts نقطة',
                         style: GoogleFonts.ibmPlexSansArabic(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
+                          color: appColors.primary,
                         ),
                       ),
                     ],
@@ -1536,7 +1524,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                             fontWeight:
                                                                 FontWeight.w700,
                                                             color:
-                                                                AppColors.dark,
+                                                                appColors.dark,
                                                           ),
                                                     ),
                                                     const SizedBox(height: 12),
@@ -1550,7 +1538,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                             fontWeight:
                                                                 FontWeight.w500,
                                                             color:
-                                                                AppColors.dark,
+                                                                appColors.dark,
                                                           ),
                                                     ),
                                                     const SizedBox(height: 24),
@@ -1559,7 +1547,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                       child: ElevatedButton(
                                                         style: ElevatedButton.styleFrom(
                                                           backgroundColor:
-                                                              AppColors.primary,
+                                                              appColors.primary,
                                                           shape: RoundedRectangleBorder(
                                                             borderRadius:
                                                                 BorderRadius.circular(
@@ -1622,19 +1610,19 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                           OutlinedButton.icon(
                             icon: const Icon(
                               Icons.refresh,
-                              color: AppColors.primary,
+                              color: appColors.primary,
                             ),
                             label: Text(
                               'إعادة التقاط',
                               style: GoogleFonts.ibmPlexSansArabic(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 15,
-                                color: AppColors.primary,
+                                color: appColors.primary,
                               ),
                             ),
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(
-                                color: AppColors.primary,
+                                color: appColors.primary,
                                 width: 2,
                               ),
                               shape: RoundedRectangleBorder(
@@ -1786,7 +1774,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [AppColors.primary, AppColors.mint],
+            colors: [appColors.primary, appColors.mint],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),
@@ -1814,8 +1802,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.mint.withOpacity(0.15),
-        border: Border.all(color: AppColors.mint, width: 1.5),
+        color: appColors.mint.withOpacity(0.15),
+        border: Border.all(color: appColors.mint, width: 1.5),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -1825,7 +1813,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             children: [
               const Icon(
                 Icons.camera_alt_outlined,
-                color: AppColors.primary,
+                color: appColors.primary,
                 size: 22,
               ),
               const SizedBox(width: 8),
@@ -1834,7 +1822,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.dark,
+                  color: appColors.dark,
                 ),
               ),
             ],
@@ -1874,14 +1862,14 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.08),
+          color: appColors.primary.withOpacity(0.08),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: AppColors.primary.withOpacity(0.45),
+            color: appColors.primary.withOpacity(0.45),
             width: 1.3,
           ),
         ),
-        child: Icon(icon, size: 22, color: AppColors.primary),
+        child: Icon(icon, size: 22, color: appColors.primary),
       ),
     );
   }

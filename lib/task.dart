@@ -17,20 +17,8 @@ import 'services/bottom_nav.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
-import 'complete_task.dart'; // يحتوي على CompleteTaskSheet
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98); // شفافية خفيفة
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import 'complete_task.dart';
+import '../services/app_colors.dart';
 
 class taskPage extends StatefulWidget {
   const taskPage({super.key});
@@ -44,11 +32,9 @@ class _taskPageState extends State<taskPage> {
 
   bool _isInitializing = true;
 
-  // ✅ فحص تمهيدي لمنع الدوران اللانهائي
   bool _precheckDone = false;
   String? _precheckError;
 
-  // ✅ تحميل الشهر المعروض (lazy)
   bool _isMonthLoading = false;
 
   void _onTap(int i) {
@@ -627,7 +613,7 @@ class _taskPageState extends State<taskPage> {
             'لا توجد مهام مُتاحة لهذا الشهر.',
             style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
-          backgroundColor: AppColors.primary,
+          backgroundColor: appColors.primary,
         ),
       );
       return;
@@ -697,7 +683,7 @@ class _taskPageState extends State<taskPage> {
               'تعذّر تحميل مهمة قراءة الخبر البيئي. يرجى المحاولة لاحقًا.',
               style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
             ),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: slackMesseges.red,
           ),
         );
         return;
@@ -883,18 +869,18 @@ class _taskPageState extends State<taskPage> {
   Widget build(BuildContext context) {
     if (_isInitializing) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: appColors.background,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: AppColors.primary),
+              CircularProgressIndicator(color: appColors.primary),
               const SizedBox(height: 20),
               Text(
                 'جاري تحميل المهام...',
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 16,
-                  color: AppColors.dark,
+                  color: appColors.dark,
                 ),
               ),
             ],
@@ -931,7 +917,7 @@ class _taskPageState extends State<taskPage> {
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                     const SizedBox(height: 15),
@@ -952,7 +938,7 @@ class _taskPageState extends State<taskPage> {
                             child: Padding(
                               padding: EdgeInsets.symmetric(vertical: 40),
                               child: CircularProgressIndicator(
-                                color: AppColors.primary,
+                                color: appColors.primary,
                               ),
                             ),
                           )
@@ -971,7 +957,7 @@ class _taskPageState extends State<taskPage> {
                             child: Padding(
                               padding: EdgeInsets.symmetric(vertical: 40),
                               child: CircularProgressIndicator(
-                                color: AppColors.primary,
+                                color: appColors.primary,
                               ),
                             ),
                           )
@@ -984,7 +970,7 @@ class _taskPageState extends State<taskPage> {
                                   child: Padding(
                                     padding: EdgeInsets.symmetric(vertical: 40),
                                     child: CircularProgressIndicator(
-                                      color: AppColors.primary,
+                                      color: appColors.primary,
                                     ),
                                   ),
                                 );
@@ -1065,7 +1051,7 @@ class _taskPageState extends State<taskPage> {
                                             vertical: 40,
                                           ),
                                           child: CircularProgressIndicator(
-                                            color: AppColors.primary,
+                                            color: appColors.primary,
                                           ),
                                         ),
                                       );
@@ -1152,7 +1138,7 @@ class _taskPageState extends State<taskPage> {
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.dark,
+                  color: appColors.dark,
                 ),
               ),
               const Spacer(),
@@ -1222,7 +1208,7 @@ class _taskPageState extends State<taskPage> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.primary, width: 2),
+            border: Border.all(color: appColors.primary, width: 2),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x11000000),
@@ -1245,17 +1231,17 @@ class _taskPageState extends State<taskPage> {
               formatButtonVisible: false,
               titleCentered: true,
               titleTextStyle: GoogleFonts.ibmPlexSansArabic(
-                color: AppColors.dark,
+                color: appColors.dark,
                 fontWeight: FontWeight.w800,
                 fontSize: 18,
               ),
               leftChevronIcon: const Icon(
                 Icons.chevron_left,
-                color: AppColors.primary,
+                color: appColors.primary,
               ),
               rightChevronIcon: const Icon(
                 Icons.chevron_right,
-                color: AppColors.primary,
+                color: appColors.primary,
               ),
             ),
             selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
@@ -1276,7 +1262,7 @@ class _taskPageState extends State<taskPage> {
                 shape: BoxShape.circle,
               ),
               selectedDecoration: const BoxDecoration(
-                color: AppColors.primary,
+                color: appColors.primary,
                 shape: BoxShape.circle,
               ),
               selectedTextStyle: GoogleFonts.ibmPlexSansArabic(
@@ -1284,7 +1270,7 @@ class _taskPageState extends State<taskPage> {
                 fontWeight: FontWeight.w700,
               ),
               todayTextStyle: GoogleFonts.ibmPlexSansArabic(
-                color: AppColors.dark,
+                color: appColors.dark,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1305,7 +1291,7 @@ class _taskPageState extends State<taskPage> {
                             width: 36,
                             height: 36,
                             decoration: const BoxDecoration(
-                              color: AppColors.primary33,
+                              color: appColors.primary33,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -1314,7 +1300,7 @@ class _taskPageState extends State<taskPage> {
                         child: Text(
                           '${day.day}',
                           style: GoogleFonts.ibmPlexSansArabic(
-                            color: AppColors.dark,
+                            color: appColors.dark,
                             fontWeight: FontWeight.w600,
                             fontSize: 13.5,
                           ),
@@ -1342,7 +1328,7 @@ class _taskPageState extends State<taskPage> {
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: AppColors.primary,
+                      color: appColors.primary,
                     ),
                   ),
                 ),
@@ -1377,7 +1363,7 @@ class _taskPageState extends State<taskPage> {
             style: GoogleFonts.ibmPlexSansArabic(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: AppColors.dark,
+              color: appColors.dark,
             ),
           ),
           if (subtitle != null) ...[
@@ -1446,7 +1432,7 @@ class _taskPageState extends State<taskPage> {
               child: OutlinedButton.icon(
                 icon: const Icon(
                   Icons.refresh,
-                  color: AppColors.primary,
+                  color: appColors.primary,
                   size: 18,
                 ),
                 label: Text(
@@ -1454,11 +1440,11 @@ class _taskPageState extends State<taskPage> {
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
-                    color: AppColors.primary,
+                    color: appColors.primary,
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.primary, width: 1.5),
+                  side: const BorderSide(color: appColors.primary, width: 1.5),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(999),
                   ),
@@ -1504,7 +1490,7 @@ class _taskPageState extends State<taskPage> {
             style: GoogleFonts.ibmPlexSansArabic(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: AppColors.dark,
+              color: appColors.dark,
             ),
           ),
           const SizedBox(height: 8),
@@ -1513,7 +1499,7 @@ class _taskPageState extends State<taskPage> {
             style: GoogleFonts.ibmPlexSansArabic(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: AppColors.primary,
+              color: appColors.primary,
             ),
           ),
           const SizedBox(height: 6),
@@ -1527,13 +1513,13 @@ class _taskPageState extends State<taskPage> {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.star_border, color: AppColors.primary, size: 20),
+              const Icon(Icons.star_border, color: appColors.primary, size: 20),
               const SizedBox(width: 6),
               Text(
                 '$points نقطة',
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
+                  color: appColors.primary,
                   fontSize: 14,
                 ),
               ),
@@ -1599,10 +1585,10 @@ class _taskPageState extends State<taskPage> {
                   borderRadius: BorderRadius.circular(14),
                   color: (isSubmitted || !canPerform)
                       ? Colors.grey.shade300
-                      : (isCompleted ? AppColors.primary33 : null),
+                      : (isCompleted ? appColors.primary33 : null),
                   gradient: (!isCompleted && !isSubmitted && canPerform)
                       ? const LinearGradient(
-                          colors: [AppColors.primary, AppColors.mint],
+                          colors: [appColors.primary, appColors.mint],
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                         )
@@ -1623,7 +1609,7 @@ class _taskPageState extends State<taskPage> {
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
                       color: (isCompleted || isSubmitted || !canPerform)
-                          ? AppColors.dark
+                          ? appColors.dark
                           : Colors.white,
                     ),
                   ),

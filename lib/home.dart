@@ -17,20 +17,7 @@ import 'services/fcm_service.dart';
 import 'services/bottom_nav.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
-
-// لوحة الألوان (هوية Nameer)
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 class homePage extends StatefulWidget {
   const homePage({super.key});
@@ -303,15 +290,15 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                               shape: BoxShape.circle,
                                               gradient: LinearGradient(
                                                 colors: [
-                                                  AppColors.primary.withOpacity(
+                                                  appColors.primary.withOpacity(
                                                     .2,
                                                   ),
-                                                  AppColors.sea.withOpacity(.1),
+                                                  appColors.sea.withOpacity(.1),
                                                 ],
                                               ),
                                               boxShadow: [
                                                 BoxShadow(
-                                                  color: AppColors.primary
+                                                  color: appColors.primary
                                                       .withOpacity(.2),
                                                   blurRadius: 12,
                                                   offset: const Offset(0, 4),
@@ -324,7 +311,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                   Colors.transparent,
                                               child: Icon(
                                                 Icons.person_outline,
-                                                color: AppColors.primary,
+                                                color: appColors.primary,
                                                 size: 28,
                                               ),
                                             ),
@@ -344,14 +331,14 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                               style: TextStyle(
                                                 fontSize: 20,
                                                 fontWeight: FontWeight.w800,
-                                                color: AppColors.dark,
+                                                color: appColors.dark,
                                               ),
                                             ),
                                             Text(
                                               'لنجعل اليوم مميزاً!',
                                               style: TextStyle(
                                                 fontSize: 13,
-                                                color: AppColors.sea,
+                                                color: appColors.sea,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -386,7 +373,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                         children: const [
                                           Icon(
                                             Icons.person_outline,
-                                            color: AppColors.primary,
+                                            color: appColors.primary,
                                             size: 48,
                                           ),
                                           SizedBox(width: 12),
@@ -400,14 +387,14 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                   style: TextStyle(
                                                     fontSize: 20,
                                                     fontWeight: FontWeight.w800,
-                                                    color: AppColors.dark,
+                                                    color: appColors.dark,
                                                   ),
                                                 ),
                                                 Text(
                                                   'تحقق من اتصالك بالإنترنت',
                                                   style: TextStyle(
                                                     fontSize: 13,
-                                                    color: AppColors.sea,
+                                                    color: appColors.sea,
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
@@ -432,7 +419,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                       child: Row(
                                         children: [
                                           CircularProgressIndicator(
-                                            color: AppColors.primary,
+                                            color: appColors.primary,
                                           ),
                                           SizedBox(width: 16),
                                           Text(
@@ -440,7 +427,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             style: TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.w600,
-                                              color: AppColors.dark,
+                                              color: appColors.dark,
                                             ),
                                           ),
                                         ],
@@ -608,7 +595,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                             child: const Text(
                                                               'تخطي الجولة',
                                                               style: TextStyle(
-                                                                color: AppColors
+                                                                color: appColors
                                                                     .primary,
                                                                 fontWeight:
                                                                     FontWeight
@@ -643,15 +630,15 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                       shape: BoxShape.circle,
                                                       gradient: LinearGradient(
                                                         colors: [
-                                                          AppColors.primary
+                                                          appColors.primary
                                                               .withOpacity(.2),
-                                                          AppColors.mint
+                                                          appColors.mint
                                                               .withOpacity(.1),
                                                         ],
                                                       ),
                                                       boxShadow: [
                                                         BoxShadow(
-                                                          color: AppColors
+                                                          color: appColors
                                                               .primary
                                                               .withOpacity(.2),
                                                           blurRadius: 12,
@@ -677,7 +664,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                           ? const Icon(
                                                               Icons
                                                                   .person_outline,
-                                                              color: AppColors
+                                                              color: appColors
                                                                   .primary,
                                                               size: 28,
                                                             )
@@ -704,7 +691,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                   style: TextStyle(
                                                     fontSize: 20,
                                                     fontWeight: FontWeight.w800,
-                                                    color: AppColors.dark,
+                                                    color: appColors.dark,
                                                   ),
                                                 )
                                               else
@@ -715,14 +702,14 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                   style: const TextStyle(
                                                     fontSize: 20,
                                                     fontWeight: FontWeight.w800,
-                                                    color: AppColors.dark,
+                                                    color: appColors.dark,
                                                   ),
                                                 ),
                                               const Text(
                                                 'لنجعل اليوم مميزاً!',
                                                 style: TextStyle(
                                                   fontSize: 13,
-                                                  color: AppColors.sea,
+                                                  color: appColors.sea,
                                                   fontWeight: FontWeight.w600,
                                                 ),
                                               ),
@@ -807,7 +794,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                                           .w800,
                                                                   fontSize: 16,
                                                                   color:
-                                                                      AppColors
+                                                                      appColors
                                                                           .dark,
                                                                 ),
                                                               ),
@@ -835,7 +822,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                                   child: const Text(
                                                                     'تخطي الجولة',
                                                                     style: TextStyle(
-                                                                      color: AppColors
+                                                                      color: appColors
                                                                           .primary,
                                                                       fontWeight:
                                                                           FontWeight
@@ -926,7 +913,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                           style: TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 16,
-                                            color: AppColors.dark,
+                                            color: appColors.dark,
                                           ),
                                         ),
 
@@ -955,7 +942,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             child: const Text(
                                               'تخطي الجولة',
                                               style: TextStyle(
-                                                color: AppColors.primary,
+                                                color: appColors.primary,
                                                 fontWeight: FontWeight.w800,
                                               ),
                                             ),
@@ -993,7 +980,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                     borderRadius: BorderRadius.circular(16),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: AppColors.primary.withOpacity(
+                                        color: appColors.primary.withOpacity(
                                           .20,
                                         ),
                                         blurRadius: 12,
@@ -1013,7 +1000,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                           style: TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 16,
-                                            color: AppColors.dark,
+                                            color: appColors.dark,
                                           ),
                                         ),
                                         const SizedBox(height: 8),
@@ -1040,7 +1027,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             child: const Text(
                                               'تخطي الجولة',
                                               style: TextStyle(
-                                                color: AppColors.primary,
+                                                color: appColors.primary,
                                                 fontWeight: FontWeight.w800,
                                               ),
                                             ),
@@ -1104,7 +1091,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             style: TextStyle(
                                               fontWeight: FontWeight.w800,
                                               fontSize: 16,
-                                              color: AppColors.dark,
+                                              color: appColors.dark,
                                             ),
                                           ),
                                           const SizedBox(height: 8),
@@ -1132,7 +1119,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                               child: const Text(
                                                 'تخطي الجولة',
                                                 style: TextStyle(
-                                                  color: AppColors.primary,
+                                                  color: appColors.primary,
                                                   fontWeight: FontWeight.w800,
                                                 ),
                                               ),
@@ -1171,14 +1158,14 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                           Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
-                                              color: AppColors.primary
+                                              color: appColors.primary
                                                   .withOpacity(.1),
                                               borderRadius:
                                                   BorderRadius.circular(12),
                                             ),
                                             child: const Icon(
                                               Icons.terrain_rounded,
-                                              color: AppColors.primary,
+                                              color: appColors.primary,
                                               size: 24,
                                             ),
                                           ),
@@ -1189,7 +1176,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                               style: TextStyle(
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.w900,
-                                                color: AppColors.dark,
+                                                color: appColors.dark,
                                               ),
                                             ),
                                           ),
@@ -1204,9 +1191,9 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                           rows: 6,
                                           cols: 6,
                                           height: 150,
-                                          topColor: AppColors.mint,
-                                          sideColor: AppColors.tealSoft,
-                                          gridColor: AppColors.sea,
+                                          topColor: appColors.mint,
+                                          sideColor: appColors.tealSoft,
+                                          gridColor: appColors.sea,
                                           gridOpacity: .08,
                                         ),
                                       ),
@@ -1257,7 +1244,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                           style: TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 16,
-                                            color: AppColors.dark,
+                                            color: appColors.dark,
                                           ),
                                         ),
                                         const SizedBox(height: 8),
@@ -1284,7 +1271,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             child: const Text(
                                               'تخطي الجولة',
                                               style: TextStyle(
-                                                color: AppColors.primary,
+                                                color: appColors.primary,
                                                 fontWeight: FontWeight.w800,
                                               ),
                                             ),
@@ -1351,7 +1338,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                           style: TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 16,
-                                            color: AppColors.dark,
+                                            color: appColors.dark,
                                           ),
                                         ),
                                         const SizedBox(height: 8),
@@ -1378,7 +1365,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             child: const Text(
                                               'تخطي الجولة',
                                               style: TextStyle(
-                                                color: AppColors.primary,
+                                                color: appColors.primary,
                                                 fontWeight: FontWeight.w800,
                                               ),
                                             ),
@@ -1395,12 +1382,12 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                   Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withOpacity(.1),
+                                      color: appColors.primary.withOpacity(.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: const Icon(
                                       Icons.group,
-                                      color: AppColors.primary,
+                                      color: appColors.primary,
                                       size: 20,
                                     ),
                                   ),
@@ -1411,7 +1398,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                       style: TextStyle(
                                         fontSize: 19,
                                         fontWeight: FontWeight.w800,
-                                        color: AppColors.dark,
+                                        color: appColors.dark,
                                       ),
                                     ),
                                   ),
@@ -1431,7 +1418,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                     ),
                                     label: const Text('عرض الكل'),
                                     style: TextButton.styleFrom(
-                                      foregroundColor: AppColors.primary,
+                                      foregroundColor: appColors.primary,
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 12,
                                         vertical: 8,
@@ -1521,7 +1508,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 16,
-                color: AppColors.dark,
+                color: appColors.dark,
               ),
             ),
             SizedBox(height: 8),
@@ -1561,7 +1548,7 @@ class _PointsChip extends StatelessWidget {
         decoration: BoxDecoration(
           // ✅ gradient حقك (نفس ستايل البانر)
           gradient: const LinearGradient(
-            colors: [AppColors.primary, AppColors.primary, AppColors.mint],
+            colors: [appColors.primary, appColors.primary, appColors.mint],
             stops: [0.0, 0.5, 1.0],
             begin: Alignment.bottomLeft,
             end: Alignment.topRight,
@@ -1569,7 +1556,7 @@ class _PointsChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(100),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withOpacity(.25),
+              color: appColors.primary.withOpacity(.25),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -1613,7 +1600,7 @@ class _InlineBanner extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.primary, AppColors.mint],
+          colors: [appColors.primary, appColors.primary, appColors.mint],
           stops: [0.0, 0.5, 1.0],
           begin: Alignment.bottomLeft,
           end: Alignment.topRight,
@@ -1621,7 +1608,7 @@ class _InlineBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(.20),
+            color: appColors.primary.withOpacity(.20),
             blurRadius: 16,
             offset: const Offset(0, 8),
           ),
@@ -1677,7 +1664,7 @@ class _InlineBanner extends StatelessWidget {
                       Text(
                         'جديد',
                         style: TextStyle(
-                          color: AppColors.accent,
+                          color: appColors.accent,
                           fontWeight: FontWeight.w900,
                           fontSize: 12,
                         ),
@@ -1806,192 +1793,188 @@ class _CarbonFootprintCard extends StatelessWidget {
     );
   }
 
-Widget _buildRow(
-  BuildContext context, {
-  required String title,
-  required String valueText,
-  required String unit,
-  required bool loading,
-}) {
-  return Directionality(
-    textDirection: TextDirection.rtl,
-    child: Row(
-      children: [
-        // النصوص
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // العنوان + زر المعلومات (Dialog)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      title,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.dark,
+  Widget _buildRow(
+    BuildContext context, {
+    required String title,
+    required String valueText,
+    required String unit,
+    required bool loading,
+  }) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Row(
+        children: [
+          // النصوص
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // العنوان + زر المعلومات (Dialog)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: appColors.dark,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
+                    const SizedBox(width: 6),
 
-                  // 👇 زر المعلومات (يظهر Dialog جميل)
-                  GestureDetector(
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) {
-                          return Dialog(
-                            backgroundColor: Colors.white,
-                            insetPadding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 24,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(18),
-                              child: Directionality(
-                                textDirection: TextDirection.rtl,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      "ما هو إجمالي خفض الكربون؟",
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.dark,
+                    // 👇 زر المعلومات (يظهر Dialog جميل)
+                    GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) {
+                            return Dialog(
+                              backgroundColor: Colors.white,
+                              insetPadding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 24,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Directionality(
+                                  textDirection: TextDirection.rtl,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "ما هو إجمالي خفض الكربون؟",
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                          color: appColors.dark,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 12),
+                                      const SizedBox(height: 12),
 
-                                    const Text(
-                                      "يوضّح هذا الرقم مقدار الانبعاثات التي تجنّبتها بإنجاز مهامك، "
-                                      "مقاسة بالكيلوغرام من مكافئ ثاني أكسيد الكربون (kg CO₂e). "
-                                      "كلما زاد الرقم، كان تأثيرك الإيجابي على البيئة أكبر 🌿🌍.",
-                                      style: TextStyle(
-                                        fontSize: 13.5,
-                                        height: 1.6,
-                                        color: Colors.black87,
+                                      const Text(
+                                        "يوضّح هذا الرقم مقدار الانبعاثات التي تجنّبتها بإنجاز مهامك، "
+                                        "مقاسة بالكيلوغرام من مكافئ ثاني أكسيد الكربون (kg CO₂e). "
+                                        "كلما زاد الرقم، كان تأثيرك الإيجابي على البيئة أكبر 🌿🌍.",
+                                        style: TextStyle(
+                                          fontSize: 13.5,
+                                          height: 1.6,
+                                          color: Colors.black87,
+                                        ),
                                       ),
-                                    ),
 
-                                    const SizedBox(height: 20),
+                                      const SizedBox(height: 20),
 
-                                    Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: TextButton(
-                                        onPressed: () => Navigator.pop(ctx),
-                                        child: const Text(
-                                          "حسنًا",
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.primary,
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: TextButton(
+                                          onPressed: () => Navigator.pop(ctx),
+                                          child: const Text(
+                                            "حسنًا",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              color: appColors.primary,
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                    child: const Icon(
-                      Icons.info_outline,
-                      size: 18,
-                      color: AppColors.sea,
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 8),
-
-              // القيمة + الوحدة
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (loading)
-                    const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.primary,
-                      ),
-                    )
-                  else
-                    Text(
-                      valueText,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.primary,
-                        height: 1.0,
+                            );
+                          },
+                        );
+                      },
+                      child: const Icon(
+                        Icons.info_outline,
+                        size: 18,
+                        color: appColors.sea,
                       ),
                     ),
+                  ],
+                ),
 
-                  const SizedBox(width: 8),
+                const SizedBox(height: 8),
 
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: Text(
-                      unit,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black.withOpacity(.6),
+                // القيمة + الوحدة
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (loading)
+                      const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: appColors.primary,
+                        ),
+                      )
+                    else
+                      Text(
+                        valueText,
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
+                          color: appColors.primary,
+                          height: 1.0,
+                        ),
+                      ),
+
+                    const SizedBox(width: 8),
+
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        unit,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black.withOpacity(.6),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(width: 12),
-
-        // أيقونة الكرت
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.primary, AppColors.mint],
-              begin: Alignment.bottomLeft,
-              end: Alignment.topRight,
+                  ],
+                ),
+              ],
             ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withOpacity(.25),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-              ),
-            ],
           ),
-          child: const Icon(
-            Icons.eco_rounded,
-            color: Colors.white,
-            size: 28,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-}
 
+          const SizedBox(width: 12),
+
+          // أيقونة الكرت
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [appColors.primary, appColors.mint],
+                begin: Alignment.bottomLeft,
+                end: Alignment.topRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: appColors.primary.withOpacity(.25),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.eco_rounded, color: Colors.white, size: 28),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// 🟢 تستدعى مثلاً داخل homePage.initState()
 Future<void> ensureUserCarbonFields() async {
@@ -2049,12 +2032,12 @@ class _DailyProgressCard extends StatelessWidget {
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [AppColors.primary, AppColors.sea],
+              colors: [appColors.primary, appColors.sea],
             ),
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(.3),
+                color: appColors.primary.withOpacity(.3),
                 blurRadius: 24,
                 offset: const Offset(0, 12),
               ),
@@ -2072,8 +2055,8 @@ class _DailyProgressCard extends StatelessWidget {
             ],
           );
 
-    final baseTextColor = colored ? Colors.white : AppColors.dark;
-    final iconColor = colored ? Colors.white : AppColors.primary;
+    final baseTextColor = colored ? Colors.white : appColors.dark;
+    final iconColor = colored ? Colors.white : appColors.primary;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -2088,7 +2071,7 @@ class _DailyProgressCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: colored
                       ? Colors.white.withOpacity(.2)
-                      : AppColors.primary.withOpacity(.1),
+                      : appColors.primary.withOpacity(.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -2126,7 +2109,7 @@ class _DailyProgressCard extends StatelessWidget {
                       Icon(
                         Icons.check_circle,
                         size: 20,
-                        color: colored ? AppColors.accent : AppColors.primary,
+                        color: colored ? appColors.accent : appColors.primary,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -2151,12 +2134,12 @@ class _DailyProgressCard extends StatelessWidget {
               icon: Icon(
                 Icons.arrow_back,
                 size: 16,
-                color: colored ? Colors.white : AppColors.primary,
+                color: colored ? Colors.white : appColors.primary,
               ),
               label: Text(
                 'عرض التفاصيل',
                 style: TextStyle(
-                  color: colored ? Colors.white : AppColors.primary,
+                  color: colored ? Colors.white : appColors.primary,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -2190,9 +2173,9 @@ class _AnimatedRing extends StatelessWidget {
                 value: v,
                 strokeWidth: 7,
                 strokeCap: StrokeCap.round,
-                backgroundColor: AppColors.light.withOpacity(.25),
+                backgroundColor: appColors.light.withOpacity(.25),
                 valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppColors.accent,
+                  appColors.accent,
                 ),
               ),
             ),
@@ -2201,7 +2184,7 @@ class _AnimatedRing extends StatelessWidget {
               style: const TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 16,
-                color: AppColors.dark,
+                color: appColors.dark,
               ),
             ),
           ],
@@ -2264,7 +2247,7 @@ class _FriendCard extends StatelessWidget {
                 child: const CircleAvatar(
                   radius: 22,
                   backgroundColor: Colors.transparent,
-                  child: Icon(Icons.person, color: AppColors.dark, size: 24),
+                  child: Icon(Icons.person, color: appColors.dark, size: 24),
                 ),
               ),
               const SizedBox(width: 8),
@@ -2275,7 +2258,7 @@ class _FriendCard extends StatelessWidget {
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
-                    color: AppColors.dark,
+                    color: appColors.dark,
                   ),
                 ),
               ),
@@ -2285,7 +2268,7 @@ class _FriendCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: AppColors.accent.withOpacity(.12),
+              color: appColors.accent.withOpacity(.12),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Row(
@@ -2296,7 +2279,7 @@ class _FriendCard extends StatelessWidget {
                 Text(
                   '$streak يوم',
                   style: const TextStyle(
-                    color: AppColors.accent,
+                    color: appColors.accent,
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
                   ),
@@ -2310,14 +2293,14 @@ class _FriendCard extends StatelessWidget {
               const Icon(
                 Icons.stars_rounded,
                 size: 18,
-                color: AppColors.primary,
+                color: appColors.primary,
               ),
               const SizedBox(width: 6),
               Text(
                 '$points نقطة',
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: AppColors.dark,
+                  color: appColors.dark,
                   fontSize: 14,
                 ),
               ),
@@ -2607,13 +2590,13 @@ class _SkipTourButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: const [
-              Icon(Icons.close, size: 18, color: AppColors.dark),
+              Icon(Icons.close, size: 18, color: appColors.dark),
               SizedBox(width: 6),
               Text(
                 'تخطي الجولة',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.dark,
+                  color: appColors.dark,
                 ),
               ),
             ],

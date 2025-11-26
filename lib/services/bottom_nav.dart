@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/app_colors.dart';
 
 class BottomNavPage extends StatelessWidget {
   final int currentIndex;
@@ -55,7 +56,7 @@ class BottomNavPage extends StatelessWidget {
                         width: 60,
                         height: 60,
                         decoration: const BoxDecoration(
-                          color: AppColors.primary,
+                          color: appColors.primary,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
@@ -81,7 +82,7 @@ class BottomNavPage extends StatelessWidget {
 
               // العناصر الجانبية
               final iconData = selected ? it.filled : it.outlined;
-              final color = selected ? AppColors.primary : Colors.black54;
+              final color = selected ? appColors.primary : Colors.black54;
 
               return Expanded(
                 child: InkWell(
@@ -125,16 +126,4 @@ class _NavItem {
     this.label, {
     this.isCenter = false,
   });
-}
-
-// ألوان الهوية (نفس المستخدمة في الصفحة)
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
 }

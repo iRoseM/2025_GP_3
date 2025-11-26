@@ -11,19 +11,7 @@ import 'admin_map.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 // =====================================================
 // 🔰 حساب وربط عوامل الانبعاث + التسجيل عند الاعتماد
@@ -516,7 +504,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                             style: GoogleFonts.ibmPlexSansArabic(
                               fontSize: 24,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.dark,
+                              color: appColors.dark,
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -552,7 +540,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                       style: GoogleFonts.ibmPlexSansArabic(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
-                                        color: AppColors.dark,
+                                        color: appColors.dark,
                                       ),
                                     ),
                                     const SizedBox(height: 12),
@@ -596,7 +584,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                       style: GoogleFonts.ibmPlexSansArabic(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
-                                        color: AppColors.dark,
+                                        color: appColors.dark,
                                       ),
                                       textAlign: TextAlign.center,
                                     ),
@@ -655,7 +643,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                           style: GoogleFonts.ibmPlexSansArabic(
                                             fontWeight: FontWeight.w700,
                                             fontSize: 16,
-                                            color: AppColors.dark,
+                                            color: appColors.dark,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
@@ -830,12 +818,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                               child: FilledButton.icon(
                                                 style: FilledButton.styleFrom(
                                                   backgroundColor:
-                                                      const Color.fromARGB(
-                                                        255,
-                                                        220,
-                                                        92,
-                                                        83,
-                                                      ), // أحمر
+                                                      slackMesseges.red, // أحمر
                                                   disabledBackgroundColor:
                                                       Colors.grey[300],
                                                   foregroundColor: Colors.white,
@@ -902,7 +885,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             'يحتاج صلاحية أدمن لاعتماد الطلب',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -924,7 +907,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             'تعذّر تنفيذ الطلب — بيانات أساسية مفقودة',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1094,7 +1077,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.primary,
+          backgroundColor: slackMesseges.primary,
           content: Text(
             'تم اعتماد الطلب بنجاح ✅',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1109,7 +1092,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             'خطأ: $e',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1130,7 +1113,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             'يحتاج صلاحية أدمن لرفض الطلب',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1211,7 +1194,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.primary,
+          backgroundColor: slackMesseges.primary,
           content: Text(
             'تم رفض الطلب ✅',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1226,7 +1209,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             'خطأ: $e',
             style: GoogleFonts.ibmPlexSansArabic(

@@ -5,18 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'task.dart';
 import 'services/title_header.dart';
 import 'services/background_container.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 class ShortTestVerificationPage extends StatefulWidget {
   final String userTaskDocId;
@@ -48,7 +37,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: appColors.background,
         appBar: const NameerAppBar(showBack: true, showTitleInBar: false),
         body: Padding(
           padding: EdgeInsets.fromLTRB(
@@ -65,7 +54,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 24,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.dark,
+                  color: appColors.dark,
                 ),
               ),
               const SizedBox(height: 24),
@@ -75,7 +64,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
+                  color: appColors.primary,
                 ),
               ),
 
@@ -99,15 +88,15 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: AppColors.primary.withOpacity(0.3),
+                        color: appColors.primary.withOpacity(0.3),
                         width: 1.5,
                       ),
                       gradient: isSelected
                           ? const LinearGradient(
                               colors: [
-                                AppColors.mint,
-                                AppColors.tealSoft,
-                                AppColors.primary,
+                                appColors.mint,
+                                appColors.tealSoft,
+                                appColors.primary,
                               ],
                               begin: Alignment.centerRight,
                               end: Alignment.centerLeft,
@@ -119,7 +108,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
                       opt,
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 16,
-                        color: isSelected ? Colors.white : AppColors.dark,
+                        color: isSelected ? Colors.white : appColors.dark,
                       ),
                     ),
                   ),
@@ -147,7 +136,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
                       gradient: selected == null
                           ? null
                           : const LinearGradient(
-                              colors: [AppColors.primary, AppColors.tealSoft],
+                              colors: [appColors.primary, appColors.tealSoft],
                               begin: Alignment.centerRight,
                               end: Alignment.centerLeft,
                             ),
@@ -172,7 +161,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
                                 fontWeight: FontWeight.w700,
                                 fontSize: 16,
                                 color: selected == null
-                                    ? AppColors.dark
+                                    ? appColors.dark
                                     : Colors.white,
                               ),
                             ),
@@ -220,7 +209,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.dark,
+                      color: appColors.dark,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -230,7 +219,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.dark,
+                      color: appColors.dark,
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -238,7 +227,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
                     width: 140,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: appColors.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -285,7 +274,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
             "إجابة خاطئة — عاودي قراءة المقال وحاولي مرة أخرى",
             style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
         ),
       );
 
@@ -317,7 +306,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
 
         await userRef.update({
           'completedTask': FieldValue.increment(1),
-          'points': FieldValue.increment(taskPoints),  // ← من الفايربيس
+          'points': FieldValue.increment(taskPoints), // ← من الفايربيس
           'lastCompletedTaskType': "quiz",
           'lastQuizAnswer': selected,
         });
@@ -328,8 +317,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
 
       Navigator.pop(context);
       Navigator.pop(context);
-
-    }catch (e) {
+    } catch (e) {
       debugPrint("❌ ERROR IN SUBMIT: $e");
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -338,7 +326,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
             "حدث خطأ غير متوقع. حاول مرة أخرى.",
             style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
         ),
       );
     } finally {

@@ -13,20 +13,8 @@ import 'admin_map.dart';
 import 'profile.dart';
 import 'services/background_container.dart';
 import 'services/title_header.dart';
-import 'admin_task_check.dart'; // ✅ لفتح صفحة مراجعة المهام
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import 'admin_task_check.dart';
+import '../services/app_colors.dart';
 
 class AdminHomePage extends StatefulWidget {
   const AdminHomePage({super.key});
@@ -111,7 +99,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         ),
         child: Scaffold(
           extendBody: true,
-          backgroundColor: AppColors.background,
+          backgroundColor: appColors.background,
           body: AnimatedBackgroundContainer(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(18),
@@ -164,13 +152,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                   shape: BoxShape.circle,
                                   gradient: LinearGradient(
                                     colors: [
-                                      AppColors.primary.withOpacity(.2),
-                                      AppColors.sea.withOpacity(.1),
+                                      appColors.primary.withOpacity(.2),
+                                      appColors.sea.withOpacity(.1),
                                     ],
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: AppColors.primary.withOpacity(.2),
+                                      color: appColors.primary.withOpacity(.2),
                                       blurRadius: 12,
                                       offset: const Offset(0, 4),
                                     ),
@@ -196,7 +184,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                     child: (avatarPath == null || isLoading)
                                         ? const Icon(
                                             Icons.person_outline,
-                                            color: AppColors.primary,
+                                            color: appColors.primary,
                                             size: 26,
                                           )
                                         : null,
@@ -217,7 +205,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                           style: GoogleFonts.ibmPlexSansArabic(
                                             fontSize: 20,
                                             fontWeight: FontWeight.w800,
-                                            color: AppColors.dark,
+                                            color: appColors.dark,
                                           ),
                                         ),
                                         TextSpan(
@@ -225,7 +213,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                           style: GoogleFonts.ibmPlexSansArabic(
                                             fontSize: 20,
                                             fontWeight: FontWeight.w800,
-                                            color: AppColors.dark,
+                                            color: appColors.dark,
                                           ),
                                         ),
                                         const TextSpan(text: " 👋"),
@@ -238,7 +226,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                     style: GoogleFonts.ibmPlexSansArabic(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.sea,
+                                      color: appColors.sea,
                                     ),
                                   ),
                                 ],
@@ -282,7 +270,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             style: GoogleFonts.ibmPlexSansArabic(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.dark,
+                              color: appColors.dark,
                             ),
                           ),
                         );
@@ -378,7 +366,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                               style: GoogleFonts.ibmPlexSansArabic(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.dark,
+                                color: appColors.dark,
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -455,7 +443,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                               ),
                             ],
                             border: Border.all(
-                              color: AppColors.primary.withOpacity(0.2),
+                              color: appColors.primary.withOpacity(0.2),
                               width: 1.5,
                             ),
                           ),
@@ -466,12 +454,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                 width: 42,
                                 height: 42,
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withOpacity(.12),
+                                  color: appColors.primary.withOpacity(.12),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.fact_check_outlined,
-                                  color: AppColors.primary,
+                                  color: appColors.primary,
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -486,7 +474,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                       style: GoogleFonts.ibmPlexSansArabic(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w700,
-                                        color: AppColors.dark,
+                                        color: appColors.dark,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -514,7 +502,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withOpacity(.12),
+                                      color: appColors.primary.withOpacity(.12),
                                       borderRadius: BorderRadius.circular(999),
                                     ),
                                     child: Text(
@@ -522,14 +510,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                       style: GoogleFonts.ibmPlexSansArabic(
                                         fontSize: 13.5,
                                         fontWeight: FontWeight.w700,
-                                        color: AppColors.primary,
+                                        color: appColors.primary,
                                       ),
                                     ),
                                   ),
                                   const SizedBox(width: 10),
                                   const Icon(
                                     Icons.chevron_left,
-                                    color: AppColors.primary,
+                                    color: appColors.primary,
                                   ),
                                 ],
                               ),
@@ -561,7 +549,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
           style: GoogleFonts.ibmPlexSansArabic(
             fontSize: 15,
             fontWeight: FontWeight.w600,
-            color: AppColors.dark,
+            color: appColors.dark,
           ),
         ),
         Text(
@@ -569,7 +557,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
           style: GoogleFonts.ibmPlexSansArabic(
             fontSize: 15,
             fontWeight: FontWeight.w400,
-            color: AppColors.sea,
+            color: appColors.sea,
           ),
         ),
       ],

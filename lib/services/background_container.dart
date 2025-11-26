@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import '../home.dart'; // for AppColors and BgPainter
+import '../home.dart';
+import '../services/app_colors.dart';
 
 class AnimatedBackgroundContainer extends StatefulWidget {
   final Widget child;
@@ -74,14 +75,14 @@ class _BgPainter extends CustomPainter {
     final base = const LinearGradient(
       begin: Alignment.topRight,
       end: Alignment.bottomLeft,
-      colors: [AppColors.background, Color(0xFFF6FBF9), Color(0xFFFFFFFF)],
+      colors: [appColors.background, Color(0xFFF6FBF9), Color(0xFFFFFFFF)],
       stops: [0.0, 0.6, 1.0],
     ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, Paint()..shader = base);
 
     // تأثير خفيف جداً: بقعتان ناعمتان شبه شفافتين تتحركان ببطء
-    final blob1 = Paint()..color = AppColors.primary.withOpacity(0.06);
-    final blob2 = Paint()..color = AppColors.accent.withOpacity(0.04);
+    final blob1 = Paint()..color = appColors.primary.withOpacity(0.06);
+    final blob2 = Paint()..color = appColors.accent.withOpacity(0.04);
 
     final cx1 = size.width * (0.18 + 0.02 * math.sin(t * 2 * math.pi));
     final cy1 = size.height * (0.22 + 0.02 * math.cos(t * 2 * math.pi));

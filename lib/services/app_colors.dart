@@ -13,6 +13,7 @@ class appColors {
   static const mint = Color(0xFFB6E9C1);
   static const tealSoft = Color(0xFF75BCAF);
   static const red = const Color.fromARGB(255, 220, 92, 83);
+  static const orangeWarm = Color(0xFFE68A2E);
 }
 
 class slackMesseges {

@@ -1,19 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -43,7 +31,6 @@ class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ زر الرجوع (يظهر فقط لو مفعّل)
     final leading = showBack
         ? IconButton(
             icon: const Icon(
@@ -76,10 +63,10 @@ class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            AppColors.primary,
-            AppColors.primary.withOpacity(.7),
-            AppColors.primary.withOpacity(.1),
-            AppColors.background,
+            appColors.primary,
+            appColors.primary.withOpacity(.7),
+            appColors.primary.withOpacity(.1),
+            appColors.background,
           ],
           stops: const [0.0, 0.55, 1.0, 1.0],
         ),
@@ -100,8 +87,8 @@ class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
-      automaticallyImplyLeading: false, // نتحكم يدويًا بزر الرجوع
-      leading: leading, // ✅ زر الرجوع هنا
+      automaticallyImplyLeading: false,
+      leading: leading,
       centerTitle: centerTitle,
       toolbarHeight: height,
       actions: actions,

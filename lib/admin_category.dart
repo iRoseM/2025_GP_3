@@ -5,19 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'services/background_container.dart';
 import 'services/title_header.dart';
 import 'admin_task.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 class AdminCategoryPage extends StatefulWidget {
   final String? initialCategoryName; // عشان لو جاي من كرت مهمة
@@ -150,7 +138,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                               style: GoogleFonts.ibmPlexSansArabic(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.dark,
+                                color: appColors.dark,
                               ),
                             ),
                             const SizedBox(height: 14),
@@ -175,7 +163,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
     return Padding(
       padding: const EdgeInsets.only(right: 300, bottom: 10),
       child: FloatingActionButton(
-        backgroundColor: AppColors.primary,
+        backgroundColor: appColors.primary,
         shape: const CircleBorder(),
         onPressed: _showAddOptionsSheet,
         child: const Icon(Icons.add, color: Colors.white, size: 28),
@@ -212,7 +200,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
               Text(
                 'إضافة عنصر جديد',
                 style: GoogleFonts.ibmPlexSansArabic(
-                  color: AppColors.dark,
+                  color: appColors.dark,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                 ),
@@ -223,7 +211,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
               _gradientActionButton(
                 icon: Icons.check_circle_outline,
                 label: 'إضافة مهمة جديدة',
-                colors: const [AppColors.primary, AppColors.mint],
+                colors: const [appColors.primary, appColors.mint],
                 onTap: () async {
                   Navigator.pop(context);
 
@@ -251,7 +239,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
               _gradientActionButton(
                 icon: Icons.category_outlined,
                 label: 'إضافة فئة جديدة',
-                colors: const [AppColors.mint, AppColors.primary],
+                colors: const [appColors.mint, appColors.primary],
                 onTap: () async {
                   Navigator.pop(context);
                   final updated = await Navigator.push(
@@ -318,7 +306,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
               onChanged: (v) => setState(() => searchQuery = v),
               decoration: const InputDecoration(
                 hintText: 'ابحث عن فئة...',
-                prefixIcon: Icon(Icons.search, color: AppColors.primary),
+                prefixIcon: Icon(Icons.search, color: appColors.primary),
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 12,
@@ -345,7 +333,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                 ),
               ],
             ),
-            child: const Icon(Icons.tune, color: AppColors.dark),
+            child: const Icon(Icons.tune, color: appColors.dark),
           ),
         ),
       ],
@@ -371,7 +359,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
               style: GoogleFonts.ibmPlexSansArabic(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: AppColors.dark,
+                color: appColors.dark,
               ),
               textAlign: TextAlign.center,
             ),
@@ -381,7 +369,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
     }
 
     return RefreshIndicator(
-      color: AppColors.primary,
+      color: appColors.primary,
       onRefresh: _fetchCategories,
       child: ListView.builder(
         // 🔹 زودنا المسافة تحت عشان ما يتصادم مع الـ FAB
@@ -414,7 +402,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isHighlighted ? AppColors.primary : Colors.grey.shade200,
+          color: isHighlighted ? appColors.primary : Colors.grey.shade200,
           width: isHighlighted ? 1.6 : 1.2,
         ),
         boxShadow: [
@@ -444,7 +432,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                     const Icon(
                       Icons.category_outlined,
                       size: 20,
-                      color: AppColors.primary,
+                      color: appColors.primary,
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -453,7 +441,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                     ),
@@ -489,7 +477,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                 // الوصف
                 Text(
                   cat['description']?.toString() ?? '',
-                  style: const TextStyle(fontSize: 14, color: AppColors.dark),
+                  style: const TextStyle(fontSize: 14, color: appColors.dark),
                 ),
 
                 const SizedBox(height: 10),
@@ -522,7 +510,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                             ? Icons.visibility_rounded
                             : Icons.visibility_off_rounded,
                         color: cat['status'] == 'hidden'
-                            ? AppColors.primary
+                            ? appColors.primary
                             : Colors.redAccent,
                       ),
                       onPressed: () {
@@ -599,7 +587,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
       children: [
         Row(
           children: [
-            Icon(Icons.timer_outlined, color: AppColors.primary),
+            Icon(Icons.timer_outlined, color: appColors.primary),
             const SizedBox(width: 8),
             Text(
               'متبقّي على إخفاء الفئة:',
@@ -632,10 +620,10 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
           padding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.primary60, width: 1.3),
+            border: Border.all(color: appColors.primary60, width: 1.3),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary33,
+                color: appColors.primary33,
                 blurRadius: 4,
                 offset: Offset(0, 2),
               ),
@@ -644,7 +632,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
           child: Text(
             value,
             style: GoogleFonts.ibmPlexSansArabic(
-              color: AppColors.dark,
+              color: appColors.dark,
               fontSize: 16,
               fontWeight: FontWeight.w800,
             ),
@@ -654,7 +642,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
         Text(
           label,
           style: GoogleFonts.ibmPlexSansArabic(
-            color: AppColors.dark,
+            color: appColors.dark,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -679,7 +667,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
             'إخفاء الفئة',
             style: GoogleFonts.ibmPlexSansArabic(
               fontWeight: FontWeight.w800,
-              color: AppColors.dark,
+              color: appColors.dark,
             ),
           ),
           content: Text(
@@ -705,7 +693,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: appColors.primary,
               ),
               onPressed: () async {
                 Navigator.pop(context);
@@ -744,7 +732,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                           children: const [
                             Icon(
                               Icons.schedule_rounded,
-                              color: AppColors.primary,
+                              color: appColors.primary,
                               size: 28,
                             ),
                             SizedBox(width: 8),
@@ -755,7 +743,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                           'سيتم تطبيق إخفاء هذه الفئة تلقائيًا في بداية الشهر القادم ($nextMonthKey).\n'
                           'لن تظهر في القوائم الشهرية الجديدة بعد ذلك.',
                           style: GoogleFonts.ibmPlexSansArabic(
-                            color: AppColors.dark,
+                            color: appColors.dark,
                             fontWeight: FontWeight.w600,
                             fontSize: 14,
                           ),
@@ -769,7 +757,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                             child: Text(
                               'تم',
                               style: GoogleFonts.ibmPlexSansArabic(
-                                color: AppColors.primary,
+                                color: appColors.primary,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -782,7 +770,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      backgroundColor: Colors.redAccent,
+                      backgroundColor: slackMesseges.red,
                       content: Text(
                         'حدث خطأ أثناء جدولة إخفاء الفئة',
                         style: GoogleFonts.ibmPlexSansArabic(
@@ -819,7 +807,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
             'إعادة إظهار الفئة',
             style: GoogleFonts.ibmPlexSansArabic(
               fontWeight: FontWeight.w800,
-              color: AppColors.dark,
+              color: appColors.dark,
             ),
           ),
           content: Text(
@@ -832,14 +820,14 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
               child: Text(
                 'إلغاء',
                 style: GoogleFonts.ibmPlexSansArabic(
-                  color: Colors.redAccent,
+                  color: slackMesseges.red,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: appColors.primary,
               ),
               onPressed: () async {
                 Navigator.pop(context);
@@ -851,7 +839,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: slackMesseges.primary,
                       content: Text(
                         'تم إعادة تفعيل الفئة ✅',
                         style: GoogleFonts.ibmPlexSansArabic(
@@ -909,9 +897,9 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                       return FilterChip(
                         label: Text(s),
                         selected: selected,
-                        selectedColor: AppColors.primary.withOpacity(.15),
+                        selectedColor: appColors.primary.withOpacity(.15),
                         labelStyle: TextStyle(
-                          color: selected ? AppColors.primary : AppColors.dark,
+                          color: selected ? appColors.primary : appColors.dark,
                           fontWeight: FontWeight.w700,
                         ),
                         onSelected: (v) {
@@ -927,7 +915,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
                   const SizedBox(height: 20),
                   FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: appColors.primary,
                     ),
                     onPressed: () {
                       Navigator.pop(context);

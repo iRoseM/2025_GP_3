@@ -22,16 +22,7 @@ import 'profile.dart';
 import 'services/bottom_nav.dart';
 import 'services/connection.dart';
 import 'package:Nameer/secret/api.dart';
-
-/// ================== ألوان الواجهة ==================
-class AppColors {
-  static const primary = Color(0xFF009688);
-  static const dark = Color(0xFF00695C);
-  static const light = Color(0xFF4DB6AC);
-  static const background = Color(0xFFFAFCFB);
-  static const mint = Color(0xFFB6E9C1);
-  static const sea = Color(0xFF1F7A8C);
-}
+import '../services/app_colors.dart';
 
 /// نموذج مبسّط لعنصر Facility
 class Facility {
@@ -377,7 +368,7 @@ class _mapPageState extends State<mapPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor: slackMesseges.red,
             content: Text(
               'تعذّر تحميل نقاط الخريطة',
               style: GoogleFonts.ibmPlexSansArabic(
@@ -466,7 +457,7 @@ class _mapPageState extends State<mapPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -496,7 +487,7 @@ class _mapPageState extends State<mapPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -562,7 +553,7 @@ class _mapPageState extends State<mapPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor: slackMesseges.red,
             content: Text(
               'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
               style: GoogleFonts.ibmPlexSansArabic(
@@ -965,7 +956,7 @@ class _mapPageState extends State<mapPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.primary,
+          backgroundColor: appColors.primary,
           content: Text(
             message,
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1201,7 +1192,7 @@ class _mapPageState extends State<mapPage> {
                     const Icon(
                       Icons.factory_outlined,
                       size: 18,
-                      color: AppColors.dark,
+                      color: appColors.dark,
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -1221,7 +1212,7 @@ class _mapPageState extends State<mapPage> {
                       const Icon(
                         Icons.place_outlined,
                         size: 18,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                       const SizedBox(width: 6),
                       Expanded(
@@ -1265,7 +1256,7 @@ class _mapPageState extends State<mapPage> {
                       child: FilledButton.icon(
                         icon: const Icon(Icons.report_gmailerrorred_outlined),
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primary,
+                          backgroundColor: appColors.primary,
                         ),
                         onPressed: () {
                           Navigator.pop(context);
@@ -1422,7 +1413,7 @@ class _mapPageState extends State<mapPage> {
                             Expanded(
                               child: FilledButton(
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
+                                  backgroundColor: appColors.primary,
                                 ),
                                 onPressed: () async {
                                   setSt(() => showValidation = true);
@@ -1505,7 +1496,7 @@ class _mapPageState extends State<mapPage> {
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1515,7 +1506,7 @@ class _mapPageState extends State<mapPage> {
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -1524,7 +1515,7 @@ class _mapPageState extends State<mapPage> {
                         width: 140,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
+                            backgroundColor: appColors.primary,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -1557,7 +1548,7 @@ class _mapPageState extends State<mapPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             'تعذّر إرسال البلاغ، حاول لاحقًا',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1871,7 +1862,7 @@ class _mapPageState extends State<mapPage> {
                         'حسب نوع الحاوية',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                     ),
@@ -1883,11 +1874,11 @@ class _mapPageState extends State<mapPage> {
                         return FilterChip(
                           label: Text(type),
                           selected: selected,
-                          selectedColor: AppColors.primary.withOpacity(.15),
+                          selectedColor: appColors.primary.withOpacity(.15),
                           labelStyle: TextStyle(
                             color: selected
-                                ? AppColors.primary
-                                : AppColors.dark,
+                                ? appColors.primary
+                                : appColors.dark,
                             fontWeight: FontWeight.w700,
                           ),
                           onSelected: (v) => setSt(() {
@@ -1903,7 +1894,7 @@ class _mapPageState extends State<mapPage> {
                     const SizedBox(height: 20),
                     FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: appColors.primary,
                       ),
                       onPressed: () {
                         Navigator.pop(context);
@@ -2039,7 +2030,7 @@ class _SearchBar extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.tune, color: AppColors.dark),
+            child: const Icon(Icons.tune, color: appColors.dark),
           ),
         ),
       ],
@@ -2086,7 +2077,7 @@ class _RoundBtn extends StatelessWidget {
                   padding: EdgeInsets.all(12),
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Icon(icon, color: AppColors.dark),
+              : Icon(icon, color: appColors.dark),
         ),
       ),
     );
@@ -2132,13 +2123,13 @@ class _HeaderUser extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    AppColors.primary.withOpacity(.2),
-                    AppColors.sea.withOpacity(.1),
+                    appColors.primary.withOpacity(.2),
+                    appColors.sea.withOpacity(.1),
                   ],
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(.2),
+                    color: appColors.primary.withOpacity(.2),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -2153,7 +2144,7 @@ class _HeaderUser extends StatelessWidget {
                 child: (avatarPath == null || avatarPath!.isEmpty)
                     ? const Icon(
                         Icons.person_outline,
-                        color: AppColors.primary,
+                        color: appColors.primary,
                         size: 22,
                       )
                     : null,
@@ -2176,9 +2167,9 @@ class _HeaderUser extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [
-                    AppColors.primary,
-                    AppColors.primary,
-                    AppColors.mint,
+                    appColors.primary,
+                    appColors.primary,
+                    appColors.mint,
                   ],
                   stops: [0.0, 0.5, 1.0],
                   begin: Alignment.bottomLeft,
@@ -2187,7 +2178,7 @@ class _HeaderUser extends StatelessWidget {
                 borderRadius: BorderRadius.circular(100),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(.35),
+                    color: appColors.primary.withOpacity(.35),
                     blurRadius: 14,
                     offset: const Offset(0, 6),
                   ),

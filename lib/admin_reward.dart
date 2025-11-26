@@ -13,19 +13,7 @@ import 'admin_map.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 class AdminRewardsPage extends StatefulWidget {
   const AdminRewardsPage({super.key});
@@ -73,7 +61,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
   bool _isActive = true;
 
   // 🎨 حالة زر رفع الصورة داخل الدايالوج
-  Color _uploadBtnColor = AppColors.primary;
+  Color _uploadBtnColor = appColors.primary;
   String _uploadBtnText = 'اختيار الصورة';
   IconData _uploadBtnIcon = Icons.image_outlined;
 
@@ -132,7 +120,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
             : 'تم تحديث المكافأة بنجاح ✏️';
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
-            backgroundColor: AppColors.primary,
+            backgroundColor: appColors.primary,
             content: Text(
               message,
               style: GoogleFonts.ibmPlexSansArabic(
@@ -151,7 +139,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
       Future.microtask(() {
         ScaffoldMessenger.of(scaffoldContext).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor: slackMesseges.red,
             content: Text(
               'خطأ أثناء الإضافة: $e',
               style: GoogleFonts.ibmPlexSansArabic(
@@ -181,13 +169,13 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
               ListTile(
                 leading: const Icon(
                   Icons.photo_library,
-                  color: AppColors.primary,
+                  color: appColors.primary,
                 ),
                 title: const Text('اختيار من الصور'),
                 onTap: () => Navigator.pop(ctx, 'gallery'),
               ),
               ListTile(
-                leading: const Icon(Icons.folder, color: AppColors.primary),
+                leading: const Icon(Icons.folder, color: appColors.primary),
                 title: const Text('اختيار من الملفات'),
                 onTap: () => Navigator.pop(ctx, 'files'),
               ),
@@ -235,7 +223,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
     String? docId,
   }) {
     setState(() {
-      _uploadBtnColor = AppColors.primary;
+      _uploadBtnColor = appColors.primary;
       _uploadBtnText = 'اختيار الصورة';
       _uploadBtnIcon = Icons.image_outlined;
     });
@@ -248,8 +236,8 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
       _isActive = existingData['isActive'] ?? true;
 
       _uploadBtnColor = _imgCtrl.text.isNotEmpty
-          ? Colors.green
-          : AppColors.primary;
+          ? slackMesseges.primary
+          : appColors.primary;
       _uploadBtnText = _imgCtrl.text.isNotEmpty
           ? 'تم رفع الصورة بنجاح'
           : 'اختيار الصورة';
@@ -262,7 +250,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
       _pointsCtrl.clear();
       _imgCtrl.clear();
       _isActive = true;
-      _uploadBtnColor = AppColors.primary;
+      _uploadBtnColor = appColors.primary;
       _uploadBtnText = 'اختيار الصورة';
       _uploadBtnIcon = Icons.image_outlined;
     }
@@ -447,7 +435,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                   });
                                 } else {
                                   setSt(() {
-                                    _uploadBtnColor = Colors.red;
+                                    _uploadBtnColor = slackMesseges.red;
                                     _uploadBtnText = 'لم يتم اختيار صورة';
                                     _uploadBtnIcon = Icons.error_outline;
                                   });
@@ -471,9 +459,9 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                 borderRadius: BorderRadius.circular(14),
                                 gradient: const LinearGradient(
                                   colors: [
-                                    AppColors.mint,
-                                    AppColors.primary,
-                                    AppColors.primary,
+                                    appColors.mint,
+                                    appColors.primary,
+                                    appColors.primary,
                                   ],
                                   begin: Alignment.centerRight,
                                   end: Alignment.centerLeft,
@@ -541,15 +529,15 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
       prefixIcon: prefixIcon,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.primary),
+        borderSide: const BorderSide(color: appColors.primary),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.primary),
+        borderSide: const BorderSide(color: appColors.primary),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.dark, width: 1.2),
+        borderSide: const BorderSide(color: appColors.dark, width: 1.2),
       ),
     );
   }
@@ -557,7 +545,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
   Widget _buildAddFab() {
     return FloatingActionButton(
       onPressed: _showAddRewardDialog,
-      backgroundColor: AppColors.primary,
+      backgroundColor: appColors.primary,
       shape: const CircleBorder(),
       child: const Icon(Icons.add, color: Colors.white, size: 28),
     );
@@ -611,7 +599,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                         style: GoogleFonts.ibmPlexSansArabic(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -682,7 +670,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                         Container(
                                           height: 160,
                                           decoration: const BoxDecoration(
-                                            color: AppColors.primary33,
+                                            color: appColors.primary33,
                                             borderRadius: BorderRadius.only(
                                               topLeft: Radius.circular(16),
                                               topRight: Radius.circular(16),
@@ -690,7 +678,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                           ),
                                           child: const Icon(
                                             Icons.card_giftcard,
-                                            color: AppColors.primary,
+                                            color: appColors.primary,
                                             size: 50,
                                           ),
                                         ),
@@ -715,7 +703,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                                       fontSize: 18,
                                                       fontWeight:
                                                           FontWeight.w600,
-                                                      color: AppColors.dark,
+                                                      color: appColors.dark,
                                                     ),
                                                     overflow:
                                                         TextOverflow.ellipsis,
@@ -879,7 +867,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                                                         ),
                                                                         style: FilledButton.styleFrom(
                                                                           backgroundColor:
-                                                                              AppColors.primary,
+                                                                              appColors.primary,
                                                                           padding: const EdgeInsets.symmetric(
                                                                             vertical:
                                                                                 14,
@@ -909,7 +897,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                                                               context,
                                                                             ).showSnackBar(
                                                                               SnackBar(
-                                                                                backgroundColor: AppColors.primary,
+                                                                                backgroundColor: slackMesseges.primary,
                                                                                 content: Text(
                                                                                   'تم حذف المكافآة بنجاح 🗑️',
                                                                                   style: GoogleFonts.ibmPlexSansArabic(
@@ -931,7 +919,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                                                               context,
                                                                             ).showSnackBar(
                                                                               SnackBar(
-                                                                                backgroundColor: Colors.redAccent,
+                                                                                backgroundColor: slackMesseges.red,
                                                                                 content: Text(
                                                                                   'فشل حذف المكافأة ❌',
                                                                                   style: GoogleFonts.ibmPlexSansArabic(

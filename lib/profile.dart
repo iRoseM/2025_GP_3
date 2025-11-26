@@ -12,19 +12,7 @@ import 'services/bottom_nav.dart';
 import 'notifications.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 class profilePage extends StatelessWidget {
   const profilePage({super.key});
@@ -41,7 +29,7 @@ class profilePage extends StatelessWidget {
         if (authSnap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
+              child: CircularProgressIndicator(color: appColors.primary),
             ),
           );
         }
@@ -85,7 +73,7 @@ class profilePage extends StatelessWidget {
                               style: GoogleFonts.ibmPlexSansArabic(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.dark,
+                                color: appColors.dark,
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -105,7 +93,7 @@ class profilePage extends StatelessWidget {
                                     height: 120,
                                     child: Center(
                                       child: CircularProgressIndicator(
-                                        color: AppColors.primary,
+                                        color: appColors.primary,
                                       ),
                                     ),
                                   );
@@ -187,7 +175,7 @@ class profilePage extends StatelessWidget {
                                         children: [
                                           Container(
                                             decoration: const BoxDecoration(
-                                              color: AppColors.light,
+                                              color: appColors.light,
                                               shape: BoxShape.circle,
                                             ),
                                             child: CircleAvatar(
@@ -227,7 +215,7 @@ class profilePage extends StatelessWidget {
                                                         fontSize: 18,
                                                         fontWeight:
                                                             FontWeight.w700,
-                                                        color: AppColors.dark,
+                                                        color: appColors.dark,
                                                       ),
                                                 ),
                                                 const SizedBox(height: 4),
@@ -238,7 +226,7 @@ class profilePage extends StatelessWidget {
                                                   style:
                                                       GoogleFonts.ibmPlexSansArabic(
                                                         fontSize: 14,
-                                                        color: AppColors.dark
+                                                        color: appColors.dark
                                                             .withOpacity(.7),
                                                       ),
                                                 ),
@@ -259,9 +247,9 @@ class profilePage extends StatelessWidget {
                                           ),
                                           gradient: const LinearGradient(
                                             colors: [
-                                              AppColors.mint,
-                                              AppColors.primary,
-                                              AppColors.primary,
+                                              appColors.mint,
+                                              appColors.primary,
+                                              appColors.primary,
                                             ],
                                             stops: [0.0, 0.6, 1.0],
                                             begin: Alignment.centerRight,
@@ -501,7 +489,7 @@ class profilePage extends StatelessWidget {
                                             'العربية',
                                             style:
                                                 GoogleFonts.ibmPlexSansArabic(
-                                                  color: AppColors.dark
+                                                  color: appColors.dark
                                                       .withOpacity(.8),
                                                   fontWeight: FontWeight.w600,
                                                 ),
@@ -576,7 +564,7 @@ class profilePage extends StatelessWidget {
                                                         fontSize: 18,
                                                         fontWeight:
                                                             FontWeight.w600,
-                                                        color: AppColors.dark,
+                                                        color: appColors.dark,
                                                       ),
                                                 ),
                                                 const SizedBox(height: 24),
@@ -587,7 +575,7 @@ class profilePage extends StatelessWidget {
                                                         style: OutlinedButton.styleFrom(
                                                           side:
                                                               const BorderSide(
-                                                                color: AppColors
+                                                                color: appColors
                                                                     .primary,
                                                               ),
                                                           shape: RoundedRectangleBorder(
@@ -609,7 +597,7 @@ class profilePage extends StatelessWidget {
                                                           'إلغاء',
                                                           style:
                                                               GoogleFonts.ibmPlexSansArabic(
-                                                                color: AppColors
+                                                                color: appColors
                                                                     .primary,
                                                                 fontWeight:
                                                                     FontWeight
@@ -624,7 +612,7 @@ class profilePage extends StatelessWidget {
                                                       child: ElevatedButton(
                                                         style: ElevatedButton.styleFrom(
                                                           backgroundColor:
-                                                              AppColors.primary,
+                                                              appColors.primary,
                                                           shape: RoundedRectangleBorder(
                                                             borderRadius:
                                                                 BorderRadius.circular(
@@ -727,14 +715,14 @@ class profilePage extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.lock_outline, color: AppColors.primary),
+                    const Icon(Icons.lock_outline, color: appColors.primary),
                     const SizedBox(width: 8),
                     Text(
                       'الخصوصية والأمان',
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                   ],
@@ -760,7 +748,7 @@ class profilePage extends StatelessWidget {
                     icon: const Icon(Icons.check, size: 18),
                     label: const Text('تم'),
                     style: TextButton.styleFrom(
-                      foregroundColor: AppColors.primary,
+                      foregroundColor: appColors.primary,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 8,
@@ -835,14 +823,14 @@ class profilePage extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.support_agent, color: AppColors.primary),
+                    const Icon(Icons.support_agent, color: appColors.primary),
                     const SizedBox(width: 8),
                     Text(
                       'المساعدة والدعم',
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                   ],
@@ -867,7 +855,7 @@ class profilePage extends StatelessWidget {
                   children: [
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: appColors.primary,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -916,7 +904,7 @@ class profilePage extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.verified_user, size: 18, color: AppColors.primary),
+          const Icon(Icons.verified_user, size: 18, color: appColors.primary),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -924,7 +912,7 @@ class profilePage extends StatelessWidget {
               style: GoogleFonts.ibmPlexSansArabic(
                 fontSize: 14,
                 height: 1.5,
-                color: AppColors.dark,
+                color: appColors.dark,
               ),
             ),
           ),
@@ -948,14 +936,14 @@ class profilePage extends StatelessWidget {
             q,
             style: GoogleFonts.ibmPlexSansArabic(
               fontWeight: FontWeight.w800,
-              color: AppColors.dark,
+              color: appColors.dark,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             a,
             style: GoogleFonts.ibmPlexSansArabic(
-              color: AppColors.dark.withOpacity(.8),
+              color: appColors.dark.withOpacity(.8),
               height: 1.5,
             ),
           ),
@@ -967,7 +955,7 @@ class profilePage extends StatelessWidget {
   static void _showSnack(BuildContext context, String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: Colors.redAccent,
+        backgroundColor: slackMesseges.red,
         content: Text(
           msg,
 
@@ -1034,17 +1022,17 @@ class _SettingTile extends StatelessWidget {
         height: 40,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: AppColors.light.withOpacity(.2),
+          color: appColors.light.withOpacity(.2),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(icon, color: iconColor ?? AppColors.primary),
+        child: Icon(icon, color: iconColor ?? appColors.primary),
       ),
       title: Text(
         title,
         style: GoogleFonts.ibmPlexSansArabic(
           fontSize: 15,
           fontWeight: FontWeight.w600,
-          color: titleColor ?? AppColors.dark,
+          color: titleColor ?? appColors.dark,
         ),
       ),
       trailing:
@@ -1143,21 +1131,21 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Widget _lockedTag() => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
     decoration: BoxDecoration(
-      color: AppColors.primary.withOpacity(.12),
+      color: appColors.primary.withOpacity(.12),
       borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: AppColors.primary.withOpacity(.3)),
+      border: Border.all(color: appColors.primary.withOpacity(.3)),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: const [
-        Icon(Icons.lock, size: 12, color: AppColors.primary),
+        Icon(Icons.lock, size: 12, color: appColors.primary),
         SizedBox(width: 3),
         Text(
           'غير قابل للتعديل',
           style: TextStyle(
             fontSize: 10.5,
             fontWeight: FontWeight.w700,
-            color: AppColors.primary,
+            color: appColors.primary,
           ),
         ),
       ],
@@ -1173,7 +1161,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       hintText: hint,
       prefixIcon: Icon(icon),
       filled: true,
-      fillColor: AppColors.primary.withOpacity(.10), // ✅ تظليل أخضر
+      fillColor: appColors.primary.withOpacity(.10), // ✅ تظليل أخضر
       suffixIcon: Padding(
         padding: const EdgeInsetsDirectional.only(end: 8),
         child: _lockedTag(),
@@ -1181,13 +1169,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
       enabledBorder: OutlineInputBorder(
         borderRadius: const BorderRadius.all(Radius.circular(14)),
         borderSide: BorderSide(
-          color: AppColors.primary.withOpacity(.65),
+          color: appColors.primary.withOpacity(.65),
           width: 1.4,
         ),
       ),
       focusedBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.all(Radius.circular(14)),
-        borderSide: BorderSide(color: AppColors.primary, width: 1.6),
+        borderSide: BorderSide(color: appColors.primary, width: 1.6),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
@@ -1219,7 +1207,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             'لا يوجد مستخدم مسجّل.',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1267,7 +1255,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.primary,
+          backgroundColor: slackMesseges.primary,
           content: Text(
             'تم حفظ التغييرات ✅',
             style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w700),
@@ -1292,7 +1280,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: slackMesseges.red,
           content: Text(
             '❌ خطأ غير متوقع: $e',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -1332,14 +1320,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.image_outlined, color: AppColors.primary),
+                    const Icon(Icons.image_outlined, color: appColors.primary),
                     const SizedBox(width: 8),
                     Text(
                       'اختر صورة الحساب',
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontWeight: FontWeight.w800,
                         fontSize: 18,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                   ],
@@ -1368,8 +1356,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           CircleAvatar(
                             radius: 36,
                             backgroundColor: selected
-                                ? AppColors.primary
-                                : AppColors.light.withOpacity(.25),
+                                ? appColors.primary
+                                : appColors.light.withOpacity(.25),
                             child: CircleAvatar(
                               radius: 32,
                               backgroundImage: AssetImage(_avatars[i]),
@@ -1385,7 +1373,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 backgroundColor: Colors.white,
                                 child: Icon(
                                   Icons.check_circle,
-                                  color: AppColors.primary,
+                                  color: appColors.primary,
                                   size: 18,
                                 ),
                               ),
@@ -1415,7 +1403,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       children: [
         Container(
           decoration: const BoxDecoration(
-            color: AppColors.light,
+            color: appColors.light,
             shape: BoxShape.circle,
           ),
           child: CircleAvatar(
@@ -1444,7 +1432,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
               child: Container(
                 padding: const EdgeInsets.all(6),
                 decoration: const BoxDecoration(
-                  color: AppColors.primary,
+                  color: appColors.primary,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
@@ -1465,7 +1453,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: appColors.background,
         extendBodyBehindAppBar: true,
         appBar: const NameerAppBar(
           showTitleInBar: false,
@@ -1491,7 +1479,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                     const SizedBox(height: 15),
@@ -1726,9 +1714,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           borderRadius: BorderRadius.circular(14),
                           gradient: const LinearGradient(
                             colors: [
-                              AppColors.mint,
-                              AppColors.primary,
-                              AppColors.primary,
+                              appColors.mint,
+                              appColors.primary,
+                              appColors.primary,
                             ],
                             begin: Alignment.centerRight,
                             end: Alignment.centerLeft,
@@ -1782,7 +1770,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       text,
       style: GoogleFonts.ibmPlexSansArabic(
         fontWeight: FontWeight.w700,
-        color: AppColors.dark.withOpacity(.9),
+        color: appColors.dark.withOpacity(.9),
       ),
     ),
   );
@@ -1804,10 +1792,10 @@ class _GenderChipEdit extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = selected
-        ? AppColors.primary.withOpacity(.12)
+        ? appColors.primary.withOpacity(.12)
         : Colors.transparent;
-    final border = selected ? AppColors.primary : AppColors.light;
-    final fg = selected ? AppColors.dark : Colors.black.withOpacity(.7);
+    final border = selected ? appColors.primary : appColors.light;
+    final fg = selected ? appColors.dark : Colors.black.withOpacity(.7);
 
     return InkWell(
       borderRadius: BorderRadius.circular(12),
@@ -1823,7 +1811,7 @@ class _GenderChipEdit extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 20, color: AppColors.primary),
+            Icon(icon, size: 20, color: appColors.primary),
             const SizedBox(width: 6),
             Text(
               label,

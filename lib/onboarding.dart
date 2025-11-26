@@ -3,8 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// نستخدم الألوان والبنتر من main.dart
-import 'main.dart'; // AppColors, GradientBackgroundPainter, RegisterPage
+import 'main.dart';
+import '../services/app_colors.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -100,13 +100,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         right: 20 + 10 * math.sin(2 * math.pi * t),
                         top: 80 + 20 * math.cos(2 * math.pi * t),
                         size: 180,
-                        color: AppColors.primary.withOpacity(.12),
+                        color: appColors.primary.withOpacity(.12),
                       ),
                       _blob(
                         left: -40 + 30 * math.cos(2 * math.pi * (t + .3)),
                         bottom: -10 + 25 * math.sin(2 * math.pi * (t + .3)),
                         size: 220,
-                        color: AppColors.light.withOpacity(.10),
+                        color: appColors.light.withOpacity(.10),
                       ),
                     ],
                   );
@@ -131,7 +131,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               onPressed: _prev,
                               icon: const Icon(
                                 Icons.arrow_forward_ios_rounded,
-                                color: AppColors.dark,
+                                color: appColors.dark,
                               ),
                             ),
                     ),
@@ -168,7 +168,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                   strokeWidth: 3.0,
                                   valueColor:
                                       const AlwaysStoppedAnimation<Color>(
-                                        AppColors.orange,
+                                        appColors.orangeWarm,
                                       ),
                                   backgroundColor: Colors.transparent,
                                 ),
@@ -179,7 +179,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             decoration: const BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: LinearGradient(
-                                colors: [AppColors.mint, AppColors.primary],
+                                colors: [appColors.mint, appColors.primary],
                                 begin: Alignment.topRight,
                                 end: Alignment.bottomLeft,
                               ),
@@ -319,8 +319,8 @@ class _Dots extends StatelessWidget {
             width: isActive ? 22 : 8,
             decoration: BoxDecoration(
               color: isActive
-                  ? AppColors.orange
-                  : AppColors.primary.withOpacity(0.7),
+                  ? appColors.orangeWarm
+                  : appColors.primary.withOpacity(0.7),
               borderRadius: BorderRadius.circular(8),
             ),
           );

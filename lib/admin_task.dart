@@ -10,19 +10,7 @@ import 'admin_map.dart';
 import 'services/background_container.dart';
 import 'services/title_header.dart';
 import 'admin_category.dart';
-
-class AppColors {
-  static const primary = Color(0xFF4BAA98);
-  static const dark = Color(0xFF3C3C3B);
-  static const accent = Color(0xFFF4A340);
-  static const sea = Color(0xFF1F7A8C);
-  static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98);
-  static const light = Color(0xFF79D0BE);
-  static const background = Color(0xFFF3FAF7);
-  static const mint = Color(0xFFB6E9C1);
-  static const tealSoft = Color(0xFF75BCAF);
-}
+import '../services/app_colors.dart';
 
 class AdminTasksPage extends StatefulWidget {
   const AdminTasksPage({super.key});
@@ -209,7 +197,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                               style: GoogleFonts.ibmPlexSansArabic(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w700,
-                                color: AppColors.dark,
+                                color: appColors.dark,
                               ),
                             ),
                             const SizedBox(height: 15),
@@ -251,7 +239,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               onChanged: (v) => setState(() => searchQuery = v),
               decoration: const InputDecoration(
                 hintText: 'ابحث عن مهمة...',
-                prefixIcon: Icon(Icons.search, color: AppColors.primary),
+                prefixIcon: Icon(Icons.search, color: appColors.primary),
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 12,
@@ -278,7 +266,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                 ),
               ],
             ),
-            child: const Icon(Icons.tune, color: AppColors.dark),
+            child: const Icon(Icons.tune, color: appColors.dark),
           ),
         ),
       ],
@@ -300,7 +288,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               style: GoogleFonts.ibmPlexSansArabic(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: AppColors.dark,
+                color: appColors.dark,
               ),
             ),
           ],
@@ -309,7 +297,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
     }
 
     return RefreshIndicator(
-      color: AppColors.primary,
+      color: appColors.primary,
       onRefresh: _fetchTasks,
       child: ListView.builder(
         padding: const EdgeInsets.only(bottom: 200),
@@ -371,7 +359,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                 // 👇 أيقونة المهمة (نفس أيقونة الفورم لعنوان المهمة)
                 leading: const Icon(
                   Icons.task_alt_outlined,
-                  color: AppColors.primary,
+                  color: appColors.primary,
                 ),
 
                 title: Text(
@@ -379,7 +367,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.dark,
+                    color: appColors.dark,
                   ),
                 ),
 
@@ -402,14 +390,14 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                       const Icon(
                         Icons.category_outlined,
                         size: 18,
-                        color: AppColors.sea,
+                        color: appColors.sea,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         task['category'] ?? '',
                         style: const TextStyle(
                           fontSize: 13,
-                          color: AppColors.sea,
+                          color: appColors.sea,
                           fontWeight: FontWeight.w600,
                           decoration: TextDecoration.underline,
                         ),
@@ -430,7 +418,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                         isExpanded
                             ? Icons.keyboard_arrow_up
                             : Icons.keyboard_arrow_down,
-                        color: AppColors.primary,
+                        color: appColors.primary,
                       ),
                       onPressed: () {
                         setState(() {
@@ -488,13 +476,13 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               const Icon(
                 Icons.description_outlined,
                 size: 20,
-                color: AppColors.dark,
+                color: appColors.dark,
               ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   task['description'] ?? '',
-                  style: const TextStyle(fontSize: 14, color: AppColors.dark),
+                  style: const TextStyle(fontSize: 14, color: appColors.dark),
                 ),
               ),
             ],
@@ -507,7 +495,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               const Icon(
                 Icons.verified_outlined,
                 size: 20,
-                color: AppColors.sea,
+                color: appColors.sea,
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -516,7 +504,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.sea,
+                    color: appColors.sea,
                   ),
                 ),
               ),
@@ -530,7 +518,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               const Icon(
                 Icons.stars_rounded,
                 size: 20,
-                color: AppColors.primary,
+                color: appColors.primary,
               ),
               const SizedBox(width: 6),
               Text(
@@ -538,7 +526,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
+                  color: appColors.primary,
                 ),
               ),
             ],
@@ -596,7 +584,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                       ? Icons.visibility_rounded
                       : Icons.visibility_off_rounded,
                   color: task['status'] == 'hidden'
-                      ? AppColors.primary
+                      ? appColors.primary
                       : Colors.redAccent,
                 ),
                 onPressed: () {
@@ -649,7 +637,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       children: [
         Row(
           children: [
-            Icon(Icons.timer_outlined, color: AppColors.primary),
+            Icon(Icons.timer_outlined, color: appColors.primary),
             const SizedBox(width: 8),
             Text(
               "متبقّي على بدء تطبيق إخفاء المهمة:",
@@ -686,10 +674,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           padding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.primary60, width: 1.3),
+            border: Border.all(color: appColors.primary60, width: 1.3),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary33,
+                color: appColors.primary33,
                 blurRadius: 4,
                 offset: Offset(0, 2),
               ),
@@ -698,7 +686,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
           child: Text(
             value,
             style: GoogleFonts.ibmPlexSansArabic(
-              color: AppColors.dark,
+              color: appColors.dark,
               fontSize: 16,
               fontWeight: FontWeight.w800,
             ),
@@ -708,7 +696,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
         Text(
           label,
           style: GoogleFonts.ibmPlexSansArabic(
-            color: AppColors.dark,
+            color: appColors.dark,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -734,7 +722,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
             'إخفاء المهمة',
             style: GoogleFonts.ibmPlexSansArabic(
               fontWeight: FontWeight.w800,
-              color: AppColors.dark,
+              color: appColors.dark,
             ),
           ),
           content: Text(
@@ -747,14 +735,14 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               child: Text(
                 'إلغاء',
                 style: GoogleFonts.ibmPlexSansArabic(
-                  color: Colors.redAccent,
+                  color: slackMesseges.red,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: appColors.primary,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -784,7 +772,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                           children: const [
                             Icon(
                               Icons.schedule_rounded,
-                              color: AppColors.primary,
+                              color: appColors.primary,
                               size: 28,
                             ),
                             SizedBox(width: 8),
@@ -794,7 +782,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                         content: Text(
                           'سيتم تطبيق الإخفاء تلقائيًا في بداية الشهر القادم ($nextMonthKey).',
                           style: GoogleFonts.ibmPlexSansArabic(
-                            color: AppColors.dark,
+                            color: appColors.dark,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -807,7 +795,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                             child: Text(
                               'تم',
                               style: GoogleFonts.ibmPlexSansArabic(
-                                color: AppColors.primary,
+                                color: appColors.primary,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -846,7 +834,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
       if (catData['status'] == 'hidden') {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor: slackMesseges.red,
             content: Text(
               'لا يمكن إعادة إظهار هذه المهمة لأن الفئة التابعة لها مخفية ❌',
               style: GoogleFonts.ibmPlexSansArabic(
@@ -869,7 +857,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
             'إعادة إظهار المهمة',
             style: GoogleFonts.ibmPlexSansArabic(
               fontWeight: FontWeight.w800,
-              color: AppColors.dark,
+              color: appColors.dark,
             ),
           ),
           content: Text(
@@ -889,7 +877,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: appColors.primary,
               ),
               onPressed: () async {
                 Navigator.pop(context);
@@ -903,7 +891,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                 _fetchTasks();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    backgroundColor: AppColors.primary,
+                    backgroundColor: appColors.primary,
                     content: Text(
                       'تم إعادة إظهار المهمة ✅',
                       style: GoogleFonts.ibmPlexSansArabic(
@@ -933,7 +921,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   Widget _buildAddFab() {
     return FloatingActionButton(
       onPressed: _showAddOptionsSheet,
-      backgroundColor: AppColors.primary,
+      backgroundColor: appColors.primary,
       shape: const CircleBorder(),
       child: const Icon(Icons.add, color: Colors.white, size: 28),
     );
@@ -969,7 +957,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               Text(
                 'إضافة عنصر جديد',
                 style: GoogleFonts.ibmPlexSansArabic(
-                  color: AppColors.dark,
+                  color: appColors.dark,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                 ),
@@ -979,7 +967,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               _gradientActionButton(
                 icon: Icons.check_circle_outline,
                 label: 'إضافة مهمة جديدة',
-                colors: const [AppColors.primary, AppColors.mint],
+                colors: const [appColors.primary, appColors.mint],
                 onTap: () async {
                   Navigator.pop(context);
                   final updated = await Navigator.push(
@@ -995,7 +983,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
               _gradientActionButton(
                 icon: Icons.category_outlined,
                 label: 'إضافة فئة جديدة',
-                colors: const [AppColors.mint, AppColors.primary],
+                colors: const [appColors.mint, appColors.primary],
                 onTap: () async {
                   Navigator.pop(context);
                   final updated = await Navigator.push(
@@ -1085,7 +1073,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                         'حسب الفئة',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                     ),
@@ -1097,11 +1085,11 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                         return FilterChip(
                           label: Text(cat),
                           selected: selected,
-                          selectedColor: AppColors.primary.withOpacity(.15),
+                          selectedColor: appColors.primary.withOpacity(.15),
                           labelStyle: TextStyle(
                             color: selected
-                                ? AppColors.primary
-                                : AppColors.dark,
+                                ? appColors.primary
+                                : appColors.dark,
                             fontWeight: FontWeight.w700,
                           ),
                           onSelected: (v) => setSt(
@@ -1121,7 +1109,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                         'حسب الحالة',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                     ),
@@ -1133,11 +1121,11 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                         return FilterChip(
                           label: Text(s),
                           selected: selected,
-                          selectedColor: AppColors.primary.withOpacity(.15),
+                          selectedColor: appColors.primary.withOpacity(.15),
                           labelStyle: TextStyle(
                             color: selected
-                                ? AppColors.primary
-                                : AppColors.dark,
+                                ? appColors.primary
+                                : appColors.dark,
                             fontWeight: FontWeight.w700,
                           ),
                           onSelected: (v) => setSt(
@@ -1153,7 +1141,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 
                     FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: appColors.primary,
                       ),
                       onPressed: () {
                         Navigator.pop(context);
@@ -1552,7 +1540,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
         textDirection: TextDirection.rtl,
         child: Scaffold(
           extendBodyBehindAppBar: true,
-          backgroundColor: AppColors.background,
+          backgroundColor: appColors.background,
           appBar: const NameerAppBar(
             showTitleInBar: false,
             showBack: false,
@@ -1576,7 +1564,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -1655,7 +1643,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                       : 'اختر الفئة',
                                   prefixIcon: const Icon(
                                     Icons.category_outlined,
-                                    color: AppColors.primary,
+                                    color: appColors.primary,
                                   ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -1703,7 +1691,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                     triggerMode: TooltipTriggerMode.tap,
                                     child: const Icon(
                                       Icons.info_outline,
-                                      color: AppColors.primary,
+                                      color: appColors.primary,
                                       size: 18,
                                     ),
                                   ),
@@ -1718,7 +1706,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   hintText: 'اختر طريقة التحقق',
                                   prefixIcon: Icon(
                                     Icons.verified_outlined,
-                                    color: AppColors.primary,
+                                    color: appColors.primary,
                                   ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.all(
@@ -1791,7 +1779,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   ),
                                   decoration: BoxDecoration(
                                     border: Border.all(
-                                      color: AppColors.light.withOpacity(.7),
+                                      color: appColors.light.withOpacity(.7),
                                     ),
                                     borderRadius: BorderRadius.circular(12),
                                     color: Colors.white,
@@ -1805,13 +1793,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                             ? 'اختر شهر الانتهاء (اختياري)'
                                             : _expiryMonth!,
                                         style: GoogleFonts.ibmPlexSansArabic(
-                                          color: AppColors.dark,
+                                          color: appColors.dark,
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
                                       const Icon(
                                         Icons.calendar_month,
-                                        color: AppColors.primary,
+                                        color: appColors.primary,
                                       ),
                                     ],
                                   ),
@@ -1889,7 +1877,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontWeight: FontWeight.w800,
                         fontSize: 20,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1907,7 +1895,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       width: double.infinity,
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [AppColors.primary, AppColors.mint],
+                          colors: [appColors.primary, appColors.mint],
                           begin: Alignment.bottomLeft,
                           end: Alignment.topRight,
                         ),
@@ -1993,7 +1981,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
       if (existing.docs.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor: slackMesseges.red,
             content: Text(
               'اسم المهمة "$title" مستخدم بالفعل',
               style: GoogleFonts.ibmPlexSansArabic(
@@ -2108,7 +2096,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.primary,
+          backgroundColor: appColors.primary,
           content: Text(
             widget.task == null ? 'تم حفظ المهمة ✅' : 'تم تحديث المهمة ✅',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -2192,7 +2180,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                           icon: const Icon(
                             Icons.chevron_left,
                             size: 28,
-                            color: AppColors.dark,
+                            color: appColors.dark,
                           ),
                         ),
                         Text(
@@ -2200,7 +2188,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                           style: GoogleFonts.ibmPlexSansArabic(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
-                            color: AppColors.dark,
+                            color: appColors.dark,
                           ),
                         ),
                         IconButton(
@@ -2209,7 +2197,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                           icon: const Icon(
                             Icons.chevron_right,
                             size: 28,
-                            color: AppColors.dark,
+                            color: appColors.dark,
                           ),
                         ),
                       ],
@@ -2273,15 +2261,15 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                     : isSelected
                                     ? const LinearGradient(
                                         colors: [
-                                          AppColors.primary,
-                                          AppColors.mint,
+                                          appColors.primary,
+                                          appColors.mint,
                                         ],
                                       )
                                     : null,
                                 border: isSelected || disabled
                                     ? null
                                     : Border.all(
-                                        color: AppColors.light.withOpacity(.7),
+                                        color: appColors.light.withOpacity(.7),
                                       ),
                                 color: (disabled || isSelected)
                                     ? null
@@ -2296,7 +2284,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                       ? Colors.grey
                                       : isSelected
                                       ? Colors.white
-                                      : AppColors.dark,
+                                      : appColors.dark,
                                 ),
                               ),
                             ),
@@ -2339,7 +2327,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                           child: Container(
                             decoration: const BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [AppColors.primary, AppColors.mint],
+                                colors: [appColors.primary, appColors.mint],
                               ),
                               borderRadius: BorderRadius.all(
                                 Radius.circular(12),
@@ -2392,7 +2380,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
         text: text,
         style: GoogleFonts.ibmPlexSansArabic(
           fontWeight: FontWeight.w700,
-          color: AppColors.dark.withOpacity(.9),
+          color: appColors.dark.withOpacity(.9),
           fontSize: 14,
         ),
         children: required
@@ -2416,7 +2404,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }) {
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [AppColors.primary, AppColors.mint]),
+        gradient: LinearGradient(colors: [appColors.primary, appColors.mint]),
         borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       child: ElevatedButton(
@@ -2547,7 +2535,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontWeight: FontWeight.w800,
                         fontSize: 20,
-                        color: AppColors.dark,
+                        color: appColors.dark,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -2565,7 +2553,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                       width: double.infinity,
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [AppColors.primary, AppColors.mint],
+                          colors: [appColors.primary, appColors.mint],
                         ),
                         borderRadius: BorderRadius.all(Radius.circular(14)),
                       ),
@@ -2642,7 +2630,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
         textDirection: TextDirection.rtl,
         child: Scaffold(
           extendBodyBehindAppBar: true,
-          backgroundColor: AppColors.background,
+          backgroundColor: appColors.background,
           appBar: NameerAppBar(
             showTitleInBar: false,
             showBack: false,
@@ -2668,7 +2656,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                         style: GoogleFonts.ibmPlexSansArabic(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.dark,
+                          color: appColors.dark,
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -2778,7 +2766,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
       if (dup.docs.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: Colors.redAccent,
+            backgroundColor: slackMesseges.red,
             content: Text(
               '⚠️ اسم الفئة "${_nameCtrl.text.trim()}" مستخدم بالفعل، يرجى اختيار اسم آخر',
               style: GoogleFonts.ibmPlexSansArabic(
@@ -2811,7 +2799,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.primary,
+          backgroundColor: slackMesseges.primary,
           content: Text(
             widget.category == null
                 ? 'تمت إضافة الفئة بنجاح ✅'
@@ -2837,7 +2825,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
         text: text,
         style: GoogleFonts.ibmPlexSansArabic(
           fontWeight: FontWeight.w700,
-          color: AppColors.dark.withOpacity(.9),
+          color: appColors.dark.withOpacity(.9),
           fontSize: 14,
         ),
         children: required
@@ -2861,7 +2849,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
   }) {
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(colors: [AppColors.primary, AppColors.mint]),
+        gradient: LinearGradient(colors: [appColors.primary, appColors.mint]),
         borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       child: ElevatedButton(
