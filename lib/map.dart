@@ -1472,7 +1472,7 @@ class _mapPageState extends State<mapPage> {
         'facilityID': facility.id,
         'reportedBy': uid,
         //'managedBy': '',
-        //'createdAt': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
