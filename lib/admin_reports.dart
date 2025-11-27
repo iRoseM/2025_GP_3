@@ -175,7 +175,7 @@ class _AdminReportPageState extends State<AdminReportPage> {
                           style: GoogleFonts.ibmPlexSansArabic(
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
-                            color: slackMesseges.sea,
+                            color: appColors.dark,
                           ),
                         ),
                         const SizedBox(height: 15),
