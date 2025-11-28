@@ -20,7 +20,7 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 ✨ Gamified tasks with rewards  
 ✨ Eco-impact tracking dashboard  
 ✨ Recycling bin locator (Riyadh)  
-✨ AI-powered validation (image recognition & quiz validation)  
+✨ AI-powered validation (image recognition & quiz generation)  
 
 ---
 
