@@ -20,7 +20,7 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 ✨ Gamified tasks with rewards  
 ✨ Eco-impact tracking dashboard  
 ✨ Recycling bin locator (Riyadh)  
-✨ AI-powered validation (image recognition & auto-read tracking)  
+✨ AI-powered validation (image recognition & quiz validation)  
 
 ---
 
@@ -28,7 +28,7 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 - **Frontend**: Flutter (Dart)  
 - **Backend / Database**:  NoSQL database 
 - **Machine Learning**: Python 
-- **Tools**: GitHub, Google Colab  
+- **Tools**: GitHub , VSC ,  Android studio
 
 ---
 
