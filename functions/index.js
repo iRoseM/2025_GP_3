@@ -1,7 +1,3 @@
-// ================== تحميل المتغيرات من ملف .env (ما نحتاجه الآن) ==================
-// require("dotenv").config();
-
-// ================== إعداد Firebase Functions & Admin ==================
 const functions = require("firebase-functions/v1"); // ✅ v1 (عشان auth.user().onCreate & region)
 const { onCall, HttpsError } = require("firebase-functions/v2/https"); // ✅ v2 callable
 const { setGlobalOptions } = require("firebase-functions/v2/options");
@@ -10,13 +6,11 @@ const { defineString } = require("firebase-functions/params"); // ✅ للـ par
 
 admin.initializeApp();
 
-// ✅ إعداد الخيارات العامة للـ v2 functions
 setGlobalOptions({
   region: "us-central1",
   maxInstances: 10,
 });
 
-// ✅ تعريف param جديد بإسم صحيح (كلها حروف كبيرة + أندر سكور)
 const GEMINI_API_KEY = defineString("GEMINI_API_KEY");
 
 /** Helper: normalize safely */
@@ -62,91 +56,7 @@ exports.createUserDoc = functions
     console.log(`✅ users/${uid} created (role=${baseData.role})`);
   });
 
-/* ============================================================
- * reserveUsername (Callable) - v2  (معلّقة حاليًا)
- * ============================================================ */
-// exports.reserveUsername = onCall(async (request) => {
-//   const auth = request.auth;
-//   if (!auth || !auth.uid) {
-//     throw new HttpsError("unauthenticated", "UNAUTHENTICATED");
-//   }
 
-//   const uid = auth.uid;
-//   const usernameRaw = (request.data?.username || "").trim();
-//   const username = toLowerSafe(usernameRaw);
-
-//   const re = /^[a-z0-9._-]{3,24}$/;
-//   if (!re.test(username)) {
-//     throw new HttpsError("invalid-argument", "INVALID_USERNAME");
-//   }
-
-//   const db = admin.firestore();
-//   const usernameRef = db.collection("usernames").doc(username);
-//   const userRef = db.collection("users").doc(uid);
-
-//   await db.runTransaction(async (tx) => {
-//     const snap = await tx.get(usernameRef);
-
-//     if (snap.exists) {
-//       const existing = snap.data();
-//       if (existing && existing.uid && existing.uid !== uid) {
-//         throw new HttpsError("failed-precondition", "USERNAME_TAKEN");
-//       }
-//     }
-
-//     tx.set(
-//       usernameRef,
-//       {
-//         uid,
-//         reservedAt: admin.firestore.FieldValue.serverTimestamp(),
-//       },
-//       { merge: true }
-//     );
-
-//     tx.set(
-//       userRef,
-//       {
-//         username: username,
-//         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-//       },
-//       { merge: true }
-//     );
-//   });
-
-//   return { ok: true, username };
-// });
-
-/* ============================================================
- * markVerified (Callable) - v2  (معلّقة حاليًا)
- * ============================================================ */
-// exports.markVerified = onCall(async (request) => {
-//   const auth = request.auth;
-//   if (!auth || !auth.uid) {
-//     throw new HttpsError("unauthenticated", "UNAUTHENTICATED");
-//   }
-//   const uid = auth.uid;
-
-//   const userRec = await admin.auth().getUser(uid);
-//   if (!userRec.emailVerified) {
-//     return { ok: false, reason: "NOT_VERIFIED" };
-//   }
-
-//   const db = admin.firestore();
-//   await db.collection("users").doc(uid).set(
-//     {
-//       isVerified: true,
-//       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-//     },
-//     { merge: true }
-//   );
-
-//   return { ok: true };
-// });
-
-/* ============================================================
- * generateShortTestVerification (Callable) - v2
- * توليد "تحقق عبر اختبار قصير" لمقال استدامة
- * ============================================================ */
 exports.generateShortTestVerification = onCall(async (request) => {
   const auth = request.auth;
   if (!auth || !auth.uid) {

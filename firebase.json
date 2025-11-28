@@ -31,10 +31,7 @@
       "predeploy": [
         "npm --prefix \"$RESOURCE_DIR\" run lint"
       ],
-      "source": "functions",
-      "environmentVariables": {
-        "GEMINI_API_KEY": "AIzaSyAmhwuQj9QDRatvsE6HpctsbrAHP2-7kGA"
-      }
+      "source": "functions"
     },
     {
       "source": "autoexpire",

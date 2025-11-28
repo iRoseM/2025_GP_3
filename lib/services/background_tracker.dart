@@ -1,11 +1,7 @@
-// ignore_for_file: avoid_print
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:geolocator/geolocator.dart';
 
-/// تتبّع بسيط للمسار باستخدام Geolocator.
-/// - يعمل أثناء فتح التطبيق أو عند تصغيره (foreground/background).
-/// - لا يعمل إذا تم "إنهاء" التطبيق (terminated).
 class BackgroundTracker {
   BackgroundTracker._();
   static final BackgroundTracker instance = BackgroundTracker._();

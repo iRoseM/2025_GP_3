@@ -17,7 +17,7 @@ import 'services/bottom_nav.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
-import 'complete_task.dart'; // يحتوي على CompleteTaskSheet
+import 'complete_task.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -25,7 +25,7 @@ class AppColors {
   static const accent = Color(0xFFF4A340);
   static const sea = Color(0xFF1F7A8C);
   static const primary60 = Color(0x994BAA98);
-  static const primary33 = Color(0x544BAA98); // شفافية خفيفة
+  static const primary33 = Color(0x544BAA98);
   static const light = Color(0xFF79D0BE);
   static const background = Color(0xFFF3FAF7);
   static const mint = Color(0xFFB6E9C1);
@@ -44,11 +44,9 @@ class _taskPageState extends State<taskPage> {
 
   bool _isInitializing = true;
 
-  // ✅ فحص تمهيدي لمنع الدوران اللانهائي
   bool _precheckDone = false;
   String? _precheckError;
 
-  // ✅ تحميل الشهر المعروض (lazy)
   bool _isMonthLoading = false;
 
   void _onTap(int i) {
@@ -117,83 +115,10 @@ class _taskPageState extends State<taskPage> {
     });
   }
 
-  // List<String> _remainingTaskIds = [];
 
   DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
   DateTime _monthEnd(DateTime d) => DateTime(d.year, d.month + 1, 0);
 
-  // ====================
-  // جلب خبر جديد للمستخدم (مقال ما قد انعرض له من قبل)
-  // ====================
-  // Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
-  //   try {
-  //     // 1) نجلب آخر 30 مقال من كولكشن المقالات (مصدر الأخبار)
-  //     final snap = await FirebaseFirestore.instance
-  //         .collection('articles')
-  //         .orderBy('createdAt', descending: true)
-  //         .limit(30)
-  //         .get();
-
-  //     if (snap.docs.isEmpty) return null;
-
-  //     // 2) نجلب كل مهام الأخبار اللي سبق نُسبت لهذا المستخدم
-  //     //    سواء كانت "pending" أو "completed" أو أي حالة
-  //     final usedSnap = await FirebaseFirestore.instance
-  //         .collection('userTasks')
-  //         .where('userId', isEqualTo: uid)
-  //         .where(
-  //           'taskType',
-  //           isEqualTo: 'news',
-  //         ) // إحنا كنا نضبطها في إنشاء المهمة
-  //         .get();
-
-  //     // نكوّن set بكل الروابط اللي سبق استخدمناها
-  //     final usedUrls = usedSnap.docs
-  //         .map((d) => d.data()['articleUrl'])
-  //         .where((u) => u != null && u.toString().isNotEmpty)
-  //         .map((u) => u.toString())
-  //         .toSet();
-
-  //     // 3) نرجّع أول مقال جديد وصالح
-  //     for (var doc in snap.docs) {
-  //       final data = doc.data();
-  //       final url = (data['url'] ?? '').toString();
-  //       final contentRaw = (data['content'] ?? '').toString();
-  //       final content = contentRaw.trim();
-  //       final lower = content.toLowerCase();
-
-  //       if (url.isEmpty) continue;
-
-  //       // ⛔ لا نريد مقالات سبق ظهرت في userTasks لهذا المستخدم
-  //       if (usedUrls.contains(url)) {
-  //         continue;
-  //       }
-
-  //       // ⛔ استبعاد المقالات المدفوعة / paywalled
-  //       if (lower.contains('only paid') ||
-  //           lower.contains('paid subscribers') ||
-  //           lower.contains('subscription required')) {
-  //         continue;
-  //       }
-  //       // ⛔ استبعاد المقالات القصيرة جدًا (واضح إنها مو نص حقيقي)
-  //       if (content.length < 80) {
-  //         continue;
-  //       }
-
-  //       // ✅ أول مقال مناسب
-  //       return {'docId': doc.id, ...data};
-  //     }
-
-  //     // لو ما لقينا أي مقال مناسب
-  //     return null;
-  //   } catch (e) {
-  //     return null;
-  //   }
-  // }
-
-  /// =======================================================
-  /// 1) جلب مقال جديد للمستخدم (لا يُكرر + يسحب من API عند الحاجة)
-  /// =======================================================
   Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
     final firestore = FirebaseFirestore.instance;
 

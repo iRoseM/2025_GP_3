@@ -11,7 +11,7 @@ class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
   final PreferredSizeWidget? bottom;
   final bool frosted;
   final bool showTitleInBar;
-  final bool showBack; // ✅ زر الرجوع
+  final bool showBack;
 
   const NameerAppBar({
     super.key,
@@ -22,7 +22,7 @@ class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.bottom,
     this.frosted = false,
     this.showTitleInBar = false,
-    this.showBack = false, // 🔹 افتراضيًا غير ظاهر
+    this.showBack = false,
   });
 
   @override

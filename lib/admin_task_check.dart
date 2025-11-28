@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
-// 🧭 نفس ستايل صفحات الأدمن
 import 'services/admin_bottom_nav.dart';
 import 'admin_home.dart';
 import 'admin_task.dart';
@@ -13,17 +11,12 @@ import 'services/connection.dart';
 import 'services/title_header.dart';
 import '../services/app_colors.dart';
 
-// =====================================================
-// 🔰 حساب وربط عوامل الانبعاث + التسجيل عند الاعتماد
-// =====================================================
-
 final _fs = FirebaseFirestore.instance;
 
 // ——— إعدادات موحّدة لمجموعة العوامل ———
 const String _efCollection = 'emissionFactors';
-const String _efValueField = 'ef_kgco2_per_unit'; // الحقل الأساسي للقيمة
+const String _efValueField = 'ef_kgco2_per_unit';
 
-/// ✅ baseline الافتراضي لوسائل النقل: سيارة بنزين لكل كيلومتر
 const String kDefaultTransportBaselineRef = 'transportCarGasolinePerKm';
 
 class CarbonCalcResult {

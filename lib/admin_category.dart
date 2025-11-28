@@ -8,7 +8,7 @@ import 'admin_task.dart';
 import '../services/app_colors.dart';
 
 class AdminCategoryPage extends StatefulWidget {
-  final String? initialCategoryName; // عشان لو جاي من كرت مهمة
+  final String? initialCategoryName;
 
   const AdminCategoryPage({super.key, this.initialCategoryName});
 

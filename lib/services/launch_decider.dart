@@ -4,10 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../home.dart'; // واجهة المستخدم العادي
-import '../admin_home.dart'; // واجهة الأدمن
-import '../onboarding.dart'; // شاشة Onboarding
-import '../main.dart'; // تحتوي RegisterPage و VerifyEmailPage
+import '../home.dart';
+import '../admin_home.dart';
+import '../onboarding.dart'; 
+import '../main.dart'; 
 
 enum _Target { onboarding, register, verifyEmail, adminHome, userHome }
 

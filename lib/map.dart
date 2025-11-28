@@ -9,11 +9,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:url_launcher/url_launcher.dart'; // 👈 فتح الخرائط
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-
-// صفحات أخرى
 import 'home.dart';
 import 'task.dart';
 import 'community.dart';
@@ -24,16 +22,16 @@ import 'services/connection.dart';
 import 'package:Nameer/secret/api.dart';
 import '../services/app_colors.dart';
 
-/// نموذج مبسّط لعنصر Facility
+/// Facility
 class Facility {
   final String id;
   final double lat;
   final double lng;
-  final String type; // مثل: RVM أو حاوية ملابس...
-  final String provider; // من الداتابيس
+  final String type;
+  final String provider;
   //final String city;
   final String address;
-  final String status; // 'نشط' أو 'متوقف'
+  final String status;
 
   Facility({
     required this.id,

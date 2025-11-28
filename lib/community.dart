@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-//  استيراد الصفحات
 import 'home.dart' show homePage;
 import 'map.dart' show mapPage;
 import 'task.dart' show taskPage;

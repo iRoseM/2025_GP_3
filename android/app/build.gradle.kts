@@ -24,7 +24,7 @@ android {
             isShrinkResources = false
         }
         getByName("release") {
-            isMinifyEnabled = false   // أو true مع isShrinkResources=true إذا تبين
+            isMinifyEnabled = false  
             isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -56,12 +56,9 @@ dependencies {
     // Firebase Cloud Messaging
     implementation("com.google.firebase:firebase-messaging")
 
-    // ✅ تفعيل مكتبة desugaring المطلوبة
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
 
 
-  // Add the dependencies for any other desired Firebase products
-  // https://firebase.google.com/docs/android/setup#available-libraries
 }
 
 flutter { source = "../.." }

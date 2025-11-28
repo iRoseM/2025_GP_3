@@ -22,11 +22,9 @@ import 'home.dart';
 import 'admin_home.dart';
 import '../services/app_colors.dart';
 
-// تهيئة الإشعارات المحلية
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
-// دالة لتجهيز إعدادات الإشعار
 Future<void> setupFlutterNotifications() async {
   const AndroidInitializationSettings initSettingsAndroid =
       AndroidInitializationSettings('@mipmap/ic_launcher');

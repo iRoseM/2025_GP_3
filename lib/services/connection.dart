@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/app_colors.dart';
 
-/// ✅ دالة فحص الاتصال بالإنترنت
 Future<bool> hasInternetConnection() async {
   try {
     final result = await InternetAddress.lookup('google.com');
@@ -13,7 +12,6 @@ Future<bool> hasInternetConnection() async {
   }
 }
 
-/// ✅ دالة عرض الـ Popup عند انقطاع الاتصال
 void showNoInternetDialog(BuildContext context) {
   showDialog(
     context: context,

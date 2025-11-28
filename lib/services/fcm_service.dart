@@ -1,4 +1,3 @@
-// lib/services/fcm_service.dart
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -8,7 +7,6 @@ import 'package:http/http.dart' as http;
 class FCMService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
-  /// 🔔 طلب الإذن للإشعارات + طباعة الحالة
   static Future<void> requestPermissionAndSaveToken() async {
     NotificationSettings settings = await _messaging.requestPermission(
       alert: true,
