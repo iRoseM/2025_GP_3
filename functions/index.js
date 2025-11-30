@@ -11,7 +11,9 @@ setGlobalOptions({
   maxInstances: 10,
 });
 
+// ✅ مفاتيح الـ params (من .env أو من إعدادات Firebase)
 const GEMINI_API_KEY = defineString("GEMINI_API_KEY");
+const MAPS_API_KEY = defineString("MAPS_API_KEY"); // ⬅️ أضفنا هذا
 
 /** Helper: normalize safely */
 function toLowerSafe(s) {
@@ -56,7 +58,9 @@ exports.createUserDoc = functions
     console.log(`✅ users/${uid} created (role=${baseData.role})`);
   });
 
-
+/* ============================================================
+ * generateShortTestVerification → Gemini quiz generation
+ * ============================================================ */
 exports.generateShortTestVerification = onCall(async (request) => {
   const auth = request.auth;
   if (!auth || !auth.uid) {
@@ -165,4 +169,24 @@ ${articleText}
       `AI_GENERATION_FAILED: ${err.message || err.toString()}`
     );
   }
+});
+
+/* ============================================================
+ * getMapsKey → ترجع Google Maps API key بشكل آمن
+ * ============================================================ */
+exports.getMapsKey = onCall((request) => {
+  const auth = request.auth;
+  if (!auth || !auth.uid) {
+    throw new HttpsError("unauthenticated", "User not logged in");
+  }
+
+  const apiKey = MAPS_API_KEY.value();
+
+  if (!apiKey) {
+    console.error("❌ MAPS_API_KEY is missing in params!");
+    throw new HttpsError("failed-precondition", "MAPS_API_KEY_MISSING");
+  }
+
+  // 🎯 نرجع الكي للعميل بدون ما يكون مكتوب في الكود
+  return { apiKey };
 });

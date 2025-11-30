@@ -5,8 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_place_plus/google_place_plus.dart';
 import 'package:geolocator/geolocator.dart';
-
-import 'package:Nameer/secret/api.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class MapRoutePickResult {
   final LatLng start;
@@ -37,12 +36,16 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
   final _endController = TextEditingController();
 
   // Google Places
-  late GooglePlace _places;
+  GooglePlace? _places;           
+  String? _mapsApiKey;            
+  bool _isLoadingPlaces = false;  
+
   final _debounce = _Debouncer(const Duration(milliseconds: 280));
   List<AutocompletePrediction> _startPreds = [];
   List<AutocompletePrediction> _endPreds = [];
   String? _sessionStart;
   String? _sessionEnd;
+
 
   LatLng _biasCenter = _riyadhCenter;
   static const int _biasRadiusMeters = 5000;
@@ -58,15 +61,15 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
   void initState() {
     super.initState();
 
-    _places = GooglePlace(kMapsApiKey);
-
     _start = widget.initialStart;
     _end = widget.initialEnd;
     _sessionStart = _newSessionToken();
     _sessionEnd = _newSessionToken();
 
-    _initGpsAndCenter();
+    _loadPlacesClient();     
+    _initGpsAndCenter();     
   }
+
 
   @override
   void dispose() {
@@ -83,6 +86,35 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
       SnackBar(content: Text(msg, textDirection: TextDirection.rtl)),
     );
   }
+
+
+    Future<void> _loadPlacesClient() async {
+    setState(() => _isLoadingPlaces = true);
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('getMapsKey');
+      final result = await callable();
+      final key = result.data['apiKey'] as String?;
+
+      if (key == null || key.isEmpty) {
+        debugPrint('❌ MAPS API key is empty from getMapsKey');
+        return;
+      }
+
+      setState(() {
+        _mapsApiKey = key;
+        _places = GooglePlace(key);
+      });
+
+      debugPrint('✅ GooglePlace client initialized with Cloud Functions key');
+    } catch (e, st) {
+      debugPrint('❌ Failed to init GooglePlace: $e\n$st');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingPlaces = false);
+      }
+    }
+  }
+
 
   // ===== GPS & تمركز أولي =====
   Future<void> _initGpsAndCenter() async {
@@ -194,9 +226,14 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
   }) async {
     if (query.trim().isEmpty) return;
 
+    if (_places == null) {
+      _showError('خدمة البحث عن الأماكن غير متاحة حاليًا، حاولي بعد لحظات.');
+      return;
+    }
+
     setState(() => _isLoadingPlace = true);
     try {
-      final ac = await _places.autocomplete.get(
+      final ac = await _places!.autocomplete.get(
         query,
         language: 'ar',
         components: [Component('country', 'sa')],
@@ -224,7 +261,7 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
       }
 
       final first = ac.predictions!.first;
-      final det = await _places.details.get(
+      final det = await _places!.details.get(
         first.placeId!,
         language: 'ar',
         sessionToken: (which == 'start') ? _sessionStart : _sessionEnd,
@@ -268,8 +305,12 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
 
   // اسم ودّي لموقع (lat,lng) بدون إحداثيات صِرفة
   Future<String> _nameForLatLng(LatLng p) async {
+    if (_places == null) {
+      // لو لسه الكي ما تحمل، نرجع اسم عام
+      return 'الموقع على الخريطة';
+    }
     try {
-      final res = await _places.search.getNearBySearch(
+      final res = await _places!.search.getNearBySearch(
         Location(lat: p.latitude, lng: p.longitude),
         80,
         language: 'ar',
@@ -288,6 +329,7 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     return 'الموقع على الخريطة';
   }
 
+
   // ======= Places Autocomplete (متحيز حول _biasCenter) =======
   void _onStartChanged(String value) {
     _debounce.run(() async {
@@ -295,8 +337,9 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         setState(() => _startPreds = []);
         return;
       }
+      if (_places == null) return; // لسه ما اتحمّل الكلاينت
       try {
-        final res = await _places.autocomplete.get(
+        final res = await _places!.autocomplete.get(
           value,
           language: 'ar',
           components: [Component('country', 'sa')],
@@ -317,8 +360,10 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         setState(() => _endPreds = []);
         return;
       }
+      if (_places == null) return; // ⬅️ أضيفي هذا
+
       try {
-        final res = await _places.autocomplete.get(
+        final res = await _places!.autocomplete.get(
           value,
           language: 'ar',
           components: [Component('country', 'sa')],
@@ -333,14 +378,21 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     });
   }
 
-  Future<void> _pickStartFromPrediction(AutocompletePrediction p) async {
-    setState(() => _isLoadingPlace = true);
-    try {
-      final det = await _places.details.get(
-        p.placeId!,
-        language: 'ar',
-        sessionToken: _sessionStart,
-      );
+
+Future<void> _pickStartFromPrediction(AutocompletePrediction p) async {
+  if (_places == null) {
+    _showError('خدمة الأماكن غير جاهزة بعد، حاولي مرة أخرى بعد لحظات.');
+    return;
+  }
+
+  setState(() => _isLoadingPlace = true);
+  try {
+    final det = await _places!.details.get(
+      p.placeId!,
+      language: 'ar',
+      sessionToken: _sessionStart,
+    );
+
       final loc = det?.result?.geometry?.location;
 
       if (loc == null) {
@@ -374,14 +426,20 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     }
   }
 
-  Future<void> _pickEndFromPrediction(AutocompletePrediction p) async {
-    setState(() => _isLoadingPlace = true);
-    try {
-      final det = await _places.details.get(
-        p.placeId!,
-        language: 'ar',
-        sessionToken: _sessionEnd,
-      );
+Future<void> _pickEndFromPrediction(AutocompletePrediction p) async {
+  if (_places == null) {
+    _showError('خدمة الأماكن غير جاهزة بعد، حاولي مرة أخرى بعد لحظات.');
+    return;
+  }
+
+  setState(() => _isLoadingPlace = true);
+  try {
+    final det = await _places!.details.get(
+      p.placeId!,
+      language: 'ar',
+      sessionToken: _sessionEnd,
+    );
+
       final loc = det?.result?.geometry?.location;
 
       if (loc == null) {

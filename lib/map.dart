@@ -1,4 +1,3 @@
-// lib/pages/map_page.dart
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -19,8 +18,9 @@ import 'levels.dart';
 import 'profile.dart';
 import 'services/bottom_nav.dart';
 import 'services/connection.dart';
-import 'package:Nameer/secret/api.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../services/app_colors.dart';
+
 
 /// Facility
 class Facility {
@@ -119,9 +119,14 @@ class _mapPageState extends State<mapPage> {
   bool _showEmptyOverlay = false;
   Timer? _emptyTimer;
 
+  String? _mapsApiKey;
+  bool _isLoadingMapsKey = false;
+
+
   @override
   void initState() {
     super.initState();
+    _loadMapsApiKey();
     _init();
   }
 
@@ -566,6 +571,34 @@ class _mapPageState extends State<mapPage> {
       if (mounted) setState(() => _isLoadingLocation = false);
     }
   }
+
+
+    Future<void> _loadMapsApiKey() async {
+    setState(() => _isLoadingMapsKey = true);
+    try {
+      final callable =
+          FirebaseFunctions.instance.httpsCallable('getMapsKey');
+      final result = await callable();
+      final key = result.data['apiKey'] as String?;
+
+      if (key == null || key.isEmpty) {
+        debugPrint('❌ MAPS API key is empty from getMapsKey');
+        return;
+      }
+
+      setState(() {
+        _mapsApiKey = key;
+      });
+      debugPrint('✅ Loaded Maps API key from Cloud Functions');
+    } catch (e) {
+      debugPrint('❌ Failed to load Maps API key: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingMapsKey = false);
+      }
+    }
+  }
+
 
   Future<void> _onSearchSubmitted(String query) async {
     if (!await hasInternetConnection()) {
@@ -1085,9 +1118,15 @@ class _mapPageState extends State<mapPage> {
     }
 
     // ===== المرحلة 2 — إذا Firestore ما لقى شيء، نجرب نفهمه كموقع عبر Google Places =====
+    
+        if (_mapsApiKey == null) {
+      debugPrint('⚠️ Maps API key not loaded, skipping Google Places fallback');
+      return;
+    }
+
     final url = Uri.parse(
       "https://maps.googleapis.com/maps/api/place/autocomplete/json"
-      "?input=$query&language=ar&components=country:sa&key=$kMapsApiKey",
+      "?input=$query&language=ar&components=country:sa&key=$_mapsApiKey",
     );
 
     final response = await http.get(url);
@@ -1098,7 +1137,7 @@ class _mapPageState extends State<mapPage> {
 
       final detailsUrl = Uri.parse(
         "https://maps.googleapis.com/maps/api/place/details/json"
-        "?place_id=$placeId&key=$kMapsApiKey",
+        "?place_id=$placeId&key=$_mapsApiKey",
       );
 
       final detailsRes = await http.get(detailsUrl);
