@@ -12,7 +12,28 @@
           "package_name": "com.nameer.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "188455017517-8e0uuhej6nd3p8mdbmn0is95avt5c1je.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nameer.app",
+            "certificate_hash": "c137b0fee93d83c7914adcb2ac828bc5c00c612c"
+          }
+        },
+        {
+          "client_id": "188455017517-f2pdfr2rltdruclo35vdhff1pmoltf4l.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nameer.app",
+            "certificate_hash": "7fba3c3e643acbffb51679d03788fccc267b0a25"
+          }
+        },
+        {
+          "client_id": "188455017517-v9uum88d89lj96lbd54a9f6seskvo0vj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB4od8BFTgWbEzKAzKbazPMRvHRc15TtLg"
@@ -20,7 +41,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "188455017517-v9uum88d89lj96lbd54a9f6seskvo0vj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

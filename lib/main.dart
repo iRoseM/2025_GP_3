@@ -1,13 +1,10 @@
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +18,7 @@ import 'services/splash.dart';
 import 'home.dart';
 import 'admin_home.dart';
 import '../services/app_colors.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -187,8 +185,14 @@ class _RegisterPageState extends State<RegisterPage>
     with TickerProviderStateMixin {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _usernameCtrl = TextEditingController();
+  final _ageCtrl = TextEditingController();
+  String _gender = 'male';
+
   final _formKey = GlobalKey<FormState>();
   bool _obscure = true;
+  bool _googleNewUserMode = false;
+  String? _googleUid;
 
   late final AnimationController _bgCtrl; // خلفية متحركة
   late final AnimationController _introCtrl; // دخول متدرج
@@ -222,11 +226,124 @@ class _RegisterPageState extends State<RegisterPage>
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
+    _usernameCtrl.dispose();
+    _ageCtrl.dispose();
     _bgCtrl.dispose();
     _introCtrl.dispose();
     _shakeCtrl.dispose();
     _pressCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _completeGoogleRegistration() async {
+    if (!await hasInternetConnection()) {
+      showNoInternetDialog(context);
+      return;
+    }
+
+    // ✅ فعّل فاليديشن حق الفورم (اللي حطيته بالحقول)
+    final ok = _formKey.currentState?.validate() ?? false;
+    if (!ok) {
+      _shakeCtrl
+        ..reset()
+        ..forward();
+      return;
+    }
+
+    if (_googleUid == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('حدث خطأ، أعد المحاولة')));
+      return;
+    }
+
+    final uid = _googleUid!;
+    final email = _emailCtrl.text.trim().toLowerCase();
+    final usernameRaw = _usernameCtrl.text.trim();
+    final username = usernameRaw.toLowerCase();
+    final age = int.tryParse(_ageCtrl.text.trim());
+    final gender = _gender;
+
+    // نفس ريجيكس حقك (يبدأ بحرف + طول 3-24)
+    final re = RegExp(r'^[a-z][a-z0-9._-]{2,23}$');
+    if (!re.hasMatch(username)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('اسم المستخدم غير صالح')));
+      return;
+    }
+    if (age == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('أدخل عمر صحيح')));
+      return;
+    }
+
+    try {
+      final db = FirebaseFirestore.instance;
+      final usernameRef = db.collection('usernames').doc(username);
+      final userRef = db.collection('users').doc(uid);
+
+      await db.runTransaction((tx) async {
+        final snap = await tx.get(usernameRef);
+        if (snap.exists) {
+          throw 'USERNAME_TAKEN';
+        }
+
+        // ✅ نفس إنشاء الحساب: usernames/{username} = { uid }
+        tx.set(usernameRef, {'uid': uid});
+
+        // ✅ نفس إنشاء الحساب: users/{uid} كل نفس الحقول
+        tx.set(userRef, {
+          'email': email,
+          'username': username,
+          'age': age,
+          'gender': gender,
+          'role': 'regular',
+          'isVerified': true,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      });
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const homePage()),
+        (_) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      if (e.toString().contains('USERNAME_TAKEN')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: slackMesseges.red,
+            content: Text(
+              '❌ اسم المستخدم محجوز، جرّب اسمًا آخر',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: slackMesseges.red,
+          content: Text(
+            '❌ تعذر إكمال التسجيل',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   // دخول متدرّج
@@ -348,6 +465,112 @@ class _RegisterPageState extends State<RegisterPage>
             style: GoogleFonts.ibmPlexSansArabic(
               fontWeight: FontWeight.w700,
               color: Colors.white,
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    if (!await hasInternetConnection()) {
+      showNoInternetDialog(context);
+      return;
+    }
+
+    try {
+      final googleSignIn = GoogleSignIn();
+
+      // هذا يخلي Google كل مرة يعرض اختيار الحساب
+      await googleSignIn.signOut();
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) return; // المستخدم كنسل
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCred = await FirebaseAuth.instance.signInWithCredential(
+        credential,
+      );
+
+      final user = userCred.user;
+      if (user == null) throw Exception('No user');
+
+      // 🔹 هنا نجيب الرول من Firestore
+      final role = await _fetchUserRole(user.uid);
+
+      if (!mounted) return;
+
+      // ✅ إذا أدمن → صفحة الأدمن
+      if (role == 'admin') {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AdminHomePage()),
+          (r) => false,
+        );
+        return;
+      }
+
+      // 🔹 غير أدمن → نكمّل منطق اليوزر (جديد / قديم)
+      final isNew = await _isNewUser(user.uid);
+
+      if (isNew) {
+        setState(() {
+          _googleNewUserMode = true;
+          _googleUid = user.uid;
+          _emailCtrl.text = user.email ?? '';
+
+          // نفضّي حقول إكمال التسجيل
+          _usernameCtrl.clear();
+          _ageCtrl.clear();
+          _gender = 'male';
+        });
+
+        _passCtrl.clear(); // لأن Google ما يستخدم كلمة مرور
+        return;
+      }
+
+      // مستخدم قديم عادي
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const homePage()),
+        (r) => false,
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: slackMesseges.red,
+          content: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Text(
+              '❌ تعذّر تسجيل الدخول بجوجل (${e.code})',
+              textAlign: TextAlign.right,
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: slackMesseges.red,
+          content: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Text(
+              '❌ خطأ غير متوقع أثناء تسجيل الدخول بجوجل',
+              textAlign: TextAlign.right,
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
@@ -537,6 +760,14 @@ class _RegisterPageState extends State<RegisterPage>
     }
   }
 
+  Future<bool> _isNewUser(String uid) async {
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    return !doc.exists;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -671,75 +902,217 @@ class _RegisterPageState extends State<RegisterPage>
 
                                 const SizedBox(height: 18),
 
-                                _stagger(
-                                  start: .45,
-                                  child: Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      'كلمة المرور',
-                                      style: TextStyle(
-                                        color: Colors.black.withOpacity(0.75),
-                                        fontWeight: FontWeight.w600,
+                                if (!_googleNewUserMode) ...[
+                                  _stagger(
+                                    start: .45,
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        'كلمة المرور',
+                                        style: TextStyle(
+                                          color: Colors.black.withOpacity(0.75),
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
+                                  const SizedBox(height: 8),
 
-                                _stagger(
-                                  start: .5,
-                                  child: _shakeOnError(
-                                    child: TextFormField(
-                                      controller: _passCtrl,
-                                      obscureText: _obscure,
-                                      textInputAction: TextInputAction.done,
-                                      onFieldSubmitted: (_) => _submit(),
-                                      decoration: InputDecoration(
-                                        prefixIcon: const Icon(
-                                          Icons.lock_outline,
-                                        ),
-                                        hintText: '••••••••',
-                                        errorMaxLines: 3,
-                                        suffixIcon: IconButton(
-                                          onPressed: () => setState(
-                                            () => _obscure = !_obscure,
+                                  _stagger(
+                                    start: .5,
+                                    child: _shakeOnError(
+                                      child: TextFormField(
+                                        controller: _passCtrl,
+                                        obscureText: _obscure,
+                                        textInputAction: TextInputAction.done,
+                                        onFieldSubmitted: (_) => _submit(),
+                                        decoration: InputDecoration(
+                                          prefixIcon: const Icon(
+                                            Icons.lock_outline,
                                           ),
-                                          icon: Icon(
-                                            _obscure
-                                                ? Icons.visibility_outlined
-                                                : Icons.visibility_off_outlined,
-                                            color: _obscure
-                                                ? appColors.primary
-                                                : Colors.grey,
+                                          hintText: '••••••••',
+                                          errorMaxLines: 3,
+                                          suffixIcon: IconButton(
+                                            onPressed: () => setState(
+                                              () => _obscure = !_obscure,
+                                            ),
+                                            icon: Icon(
+                                              _obscure
+                                                  ? Icons.visibility_outlined
+                                                  : Icons
+                                                        .visibility_off_outlined,
+                                              color: _obscure
+                                                  ? appColors.primary
+                                                  : Colors.grey,
+                                            ),
                                           ),
                                         ),
+                                        validator: (v) {
+                                          if (v == null || v.isEmpty) {
+                                            return 'أدخل كلمة المرور';
+                                          }
+
+                                          final hasUpper = RegExp(
+                                            r'[A-Z]',
+                                          ).hasMatch(v);
+                                          final hasLower = RegExp(
+                                            r'[a-z]',
+                                          ).hasMatch(v);
+                                          final longEnough = v.length >= 8;
+
+                                          if (!hasUpper ||
+                                              !hasLower ||
+                                              !longEnough) {
+                                            return 'يجب أن تحتوي كلمة المرور على:\n'
+                                                '• حرف كبير وحرف صغير على الأقل\n'
+                                                '• ٨ أحرف على الأقل';
+                                          }
+
+                                          return null;
+                                        },
                                       ),
-                                      validator: (v) {
-                                        if (v == null || v.isEmpty) {
-                                          return 'أدخل كلمة المرور';
-                                        }
-
-                                        final hasUpper = RegExp(
-                                          r'[A-Z]',
-                                        ).hasMatch(v);
-                                        final hasLower = RegExp(
-                                          r'[a-z]',
-                                        ).hasMatch(v);
-                                        final longEnough = v.length >= 8;
-
-                                        if (!hasUpper ||
-                                            !hasLower ||
-                                            !longEnough) {
-                                          return 'يجب أن تحتوي كلمة المرور على:\n'
-                                              '• حرف كبير وحرف صغير على الأقل\n'
-                                              '• ٨ أحرف على الأقل';
-                                        }
-
-                                        return null;
-                                      },
                                     ),
                                   ),
-                                ),
+                                ] else ...[
+                                  _stagger(
+                                    start: .45,
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        'اسم المستخدم',
+                                        style: TextStyle(
+                                          color: Colors.black.withOpacity(0.75),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+
+                                  _stagger(
+                                    start: .5,
+                                    child: _shakeOnError(
+                                      child: TextFormField(
+                                        controller: _usernameCtrl,
+                                        textInputAction: TextInputAction.next,
+                                        decoration: const InputDecoration(
+                                          prefixIcon: Icon(
+                                            Icons.person_outline,
+                                          ),
+                                          hintText: 'nameer_user',
+                                        ),
+                                        validator: (v) {
+                                          if (!_googleNewUserMode) return null;
+
+                                          final val = (v ?? '')
+                                              .trim()
+                                              .toLowerCase();
+                                          if (val.isEmpty)
+                                            return 'أدخل اسم المستخدم';
+                                          if (val.length < 3)
+                                            return 'اسم المستخدم لازم يكون 3 أحرف على الأقل';
+                                          if (val.length > 24)
+                                            return 'اسم المستخدم طويل جدًا';
+
+                                          // نفس SignUpPage بالضبط
+                                          final re = RegExp(
+                                            r'^[a-z][a-z0-9._-]{2,23}$',
+                                          );
+                                          if (!re.hasMatch(val))
+                                            return 'اسم المستخدم غير صالح';
+
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 16),
+
+                                  _stagger(
+                                    start: .55,
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextFormField(
+                                            controller: _ageCtrl,
+                                            keyboardType: TextInputType.number,
+                                            inputFormatters: [
+                                              FilteringTextInputFormatter
+                                                  .digitsOnly,
+                                            ],
+                                            decoration: const InputDecoration(
+                                              prefixIcon: Icon(
+                                                Icons.cake_outlined,
+                                              ),
+                                              hintText: 'العمر (مثال: 18)',
+                                            ),
+                                            validator: (v) {
+                                              if (!_googleNewUserMode)
+                                                return null;
+                                              if (v == null || v.trim().isEmpty)
+                                                return 'أدخل العمر';
+                                              final n = int.tryParse(v.trim());
+                                              if (n == null)
+                                                return 'أدخل رقمًا صحيحًا';
+                                              if (n < 7 || n > 120)
+                                                return 'العمر غير مناسب';
+                                              return null;
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: DecoratedBox(
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: appColors.light,
+                                                width: 1.2,
+                                              ),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 6,
+                                                  ),
+                                              child: Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: _GenderChip(
+                                                      selected:
+                                                          _gender == 'male',
+                                                      icon: Icons.male,
+                                                      label: 'ذكر',
+                                                      onTap: () => setState(
+                                                        () => _gender = 'male',
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: _GenderChip(
+                                                      selected:
+                                                          _gender == 'female',
+                                                      icon: Icons.female,
+                                                      label: 'أنثى',
+                                                      onTap: () => setState(
+                                                        () =>
+                                                            _gender = 'female',
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
 
                                 const SizedBox(height: 26),
 
@@ -760,8 +1133,12 @@ class _RegisterPageState extends State<RegisterPage>
                                           return Transform.scale(
                                             scale: scale,
                                             child: _AnimatedGradientButton(
-                                              label: 'تسجيل دخول',
-                                              onPressed: _submit,
+                                              label: _googleNewUserMode
+                                                  ? 'إكمال التسجيل'
+                                                  : 'تسجيل دخول',
+                                              onPressed: _googleNewUserMode
+                                                  ? _completeGoogleRegistration
+                                                  : _submit,
                                             ),
                                           );
                                         },
@@ -771,35 +1148,103 @@ class _RegisterPageState extends State<RegisterPage>
                                 ),
 
                                 const SizedBox(height: 8),
+                                // ✅ رابط الرجوع لتسجيل الدخول (يظهر فقط في وضع Google New User)
+                                if (_googleNewUserMode) ...[
+                                  _stagger(
+                                    start: .78,
+                                    child: _BouncyLink(
+                                      label: 'لدي حساب بالفعل — تسجيل دخول',
+                                      onTap: () async {
+                                        // تسجيل خروج من Google عشان يعرض اختيار الحساب مرة ثانية
+                                        try {
+                                          await GoogleSignIn().signOut();
+                                        } catch (_) {}
 
-                                // زر نسيت كلمة المرور
-                                _stagger(
-                                  start: .78,
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: TextButton(
-                                      onPressed: _resetPassword,
-                                      child: const Text('نسيت كلمة المرور؟'),
+                                        // تسجيل خروج من Firebase
+                                        try {
+                                          await FirebaseAuth.instance.signOut();
+                                        } catch (_) {}
+
+                                        if (!mounted) return;
+
+                                        setState(() {
+                                          _googleNewUserMode = false;
+                                          _googleUid = null;
+                                          _emailCtrl.clear();
+                                          _usernameCtrl.clear();
+                                          _ageCtrl.clear();
+                                          _gender = 'male';
+                                        });
+                                      },
                                     ),
                                   ),
-                                ),
+                                  const SizedBox(height: 8),
+                                ],
 
-                                const SizedBox(height: 8),
-
-                                _stagger(
-                                  start: .85,
-                                  child: _BouncyLink(
-                                    label: ' انشاء حساب جديد',
-                                    onTap: () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) => const SignUpPage(),
+                                if (!_googleNewUserMode) ...[
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 54,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _signInWithGoogle,
+                                      // مؤقت
+                                      icon: Image.asset(
+                                        'assets/img/google.png',
+                                        width: 22,
+                                        height: 22,
+                                      ),
+                                      label: Text(
+                                        'متابعة باستخدام Google',
+                                        style: GoogleFonts.ibmPlexSansArabic(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 16,
+                                          color: appColors.dark,
                                         ),
-                                      );
-                                    },
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        backgroundColor: Colors.white,
+                                        side: const BorderSide(
+                                          color: appColors.light,
+                                          width: 1.2,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            28,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ),
-
+                                ],
+                                // زر نسيت كلمة المرور
+                                if (!_googleNewUserMode) ...[
+                                  _stagger(
+                                    start: .78,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: TextButton(
+                                        onPressed: _resetPassword,
+                                        child: const Text('نسيت كلمة المرور؟'),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                if (!_googleNewUserMode) ...[
+                                  _stagger(
+                                    start: .85,
+                                    child: _BouncyLink(
+                                      label: ' انشاء حساب جديد',
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => const SignUpPage(),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(height: 8),
                               ],
                             ),
@@ -1154,7 +1599,8 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       _usernameError = null;
     });
 
-    final v = _usernameCtrl.text.trim();
+    final v = _usernameCtrl.text.trim().toLowerCase(); // ✅ lowercase من البداية
+
     if (v.isEmpty) {
       setState(() {
         _usernameStatus = _FieldStatus.invalid;
@@ -1162,14 +1608,15 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       });
       return;
     }
+
     if (v.length < 3) {
       setState(() {
         _usernameStatus = _FieldStatus.invalid;
-        _usernameError =
-            'اسم المستخدم يجب أن لا يقل عن 3 حروف ويجب أن يبدأ بحرف';
+        _usernameError = 'اسم المستخدم يجب أن لا يقل عن 3 أحرف';
       });
       return;
     }
+
     if (v.length > 24) {
       setState(() {
         _usernameStatus = _FieldStatus.invalid;
@@ -1177,12 +1624,13 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       });
       return;
     }
-    final re = RegExp(r'^[A-Za-z][A-Za-z0-9._-]{2,23}$');
+
+    // ✅ نفس الريجيكس اللي تستخدمينه بالحجز
+    final re = RegExp(r'^[a-z][a-z0-9._-]{2,23}$');
     if (!re.hasMatch(v)) {
       setState(() {
         _usernameStatus = _FieldStatus.invalid;
-        _usernameError =
-            'اسم المستخدم يجب أن لا يقل عن 3 حروف ويجب أن يبدأ بحرف';
+        _usernameError = 'اسم المستخدم غير صالح (ابدأ بحرف، وبدون مسافات)';
       });
       return;
     }
@@ -1190,8 +1638,9 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     try {
       final doc = await FirebaseFirestore.instance
           .collection('usernames')
-          .doc(v.toLowerCase())
+          .doc(v) // ✅ خلاص v أصلاً lowercase
           .get();
+
       final taken = doc.exists;
       setState(() {
         if (taken) {
@@ -1682,25 +2131,31 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                           ),
                                         ),
                                         validator: (v) {
-                                          final val = v?.trim() ?? '';
-                                          if (val.isEmpty)
+                                          final val = (v ?? '')
+                                              .trim()
+                                              .toLowerCase();
+
+                                          if (val.isEmpty) {
                                             return 'أدخل اسم المستخدم';
+                                          }
 
-                                          // ✅ أول شيء نتحقق من الطول
-                                          if (val.length < 3)
-                                            return 'اسم المستخدم يجب أن لا يقل عن 3 حروف ويجب أن يبدأ بحرف';
-                                          if (val.length > 24)
+                                          if (val.length < 3) {
+                                            return 'اسم المستخدم يجب أن لا يقل عن 3 أحرف';
+                                          }
+
+                                          if (val.length > 24) {
                                             return 'اسم المستخدم طويل جدًا (الحد الأقصى 24 حرفًا)';
+                                          }
 
-                                          // ✅ بعدين نتحقق من النمط (يبدأ بحرف فقط)
+                                          // نفس الريجيكس المستخدم في Google + Firestore
                                           final re = RegExp(
-                                            r'^[A-Za-z][A-Za-z0-9._-]*$',
+                                            r'^[a-z][a-z0-9._-]{2,23}$',
                                           );
-                                          if (!re.hasMatch(val))
-                                            return 'اسم المستخدم يجب أن لا يقل عن 3 حروف ويجب أن يبدأ بحرف';
+                                          if (!re.hasMatch(val)) {
+                                            return 'اسم المستخدم غير صالح (يجب أن يبدأ بحرف وبدون مسافات)';
+                                          }
 
-                                          // ✅ إذا كل شيء تمام نرجع null (يعني صالح)
-                                          return null;
+                                          return null; // ✅ صالح
                                         },
                                       ),
                                     ],
