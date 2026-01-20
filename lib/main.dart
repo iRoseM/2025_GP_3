@@ -1003,7 +1003,6 @@ class _RegisterPageState extends State<RegisterPage>
                                         ),
                                         validator: (v) {
                                           if (!_googleNewUserMode) return null;
-
                                           final val = (v ?? '')
                                               .trim()
                                               .toLowerCase();
@@ -1013,14 +1012,11 @@ class _RegisterPageState extends State<RegisterPage>
                                             return 'اسم المستخدم لازم يكون 3 أحرف على الأقل';
                                           if (val.length > 24)
                                             return 'اسم المستخدم طويل جدًا';
-
-                                          // نفس SignUpPage بالضبط
                                           final re = RegExp(
                                             r'^[a-z][a-z0-9._-]{2,23}$',
                                           );
                                           if (!re.hasMatch(val))
                                             return 'اسم المستخدم غير صالح';
-
                                           return null;
                                         },
                                       ),
@@ -1034,79 +1030,125 @@ class _RegisterPageState extends State<RegisterPage>
                                     child: Row(
                                       children: [
                                         Expanded(
-                                          child: TextFormField(
-                                            controller: _ageCtrl,
-                                            keyboardType: TextInputType.number,
-                                            inputFormatters: [
-                                              FilteringTextInputFormatter
-                                                  .digitsOnly,
-                                            ],
-                                            decoration: const InputDecoration(
-                                              prefixIcon: Icon(
-                                                Icons.cake_outlined,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              Align(
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                child: Text(
+                                                  'العمر',
+                                                  style: TextStyle(
+                                                    color: Colors.black
+                                                        .withOpacity(0.75),
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
                                               ),
-                                              hintText: 'العمر (مثال: 18)',
-                                            ),
-                                            validator: (v) {
-                                              if (!_googleNewUserMode)
-                                                return null;
-                                              if (v == null || v.trim().isEmpty)
-                                                return 'أدخل العمر';
-                                              final n = int.tryParse(v.trim());
-                                              if (n == null)
-                                                return 'أدخل رقمًا صحيحًا';
-                                              if (n < 7 || n > 120)
-                                                return 'العمر غير مناسب';
-                                              return null;
-                                            },
+                                              const SizedBox(height: 8),
+                                              TextFormField(
+                                                controller: _ageCtrl,
+                                                keyboardType:
+                                                    TextInputType.number,
+                                                inputFormatters: [
+                                                  FilteringTextInputFormatter
+                                                      .digitsOnly,
+                                                ],
+                                                decoration:
+                                                    const InputDecoration(
+                                                      prefixIcon: Icon(
+                                                        Icons.cake_outlined,
+                                                      ),
+                                                      hintText:
+                                                          'العمر (مثال: 18)',
+                                                    ),
+                                                validator: (v) {
+                                                  if (!_googleNewUserMode)
+                                                    return null;
+                                                  if (v == null ||
+                                                      v.trim().isEmpty)
+                                                    return 'أدخل العمر';
+                                                  final n = int.tryParse(
+                                                    v.trim(),
+                                                  );
+                                                  if (n == null)
+                                                    return 'أدخل رقمًا صحيحًا';
+                                                  if (n < 7 || n > 120)
+                                                    return 'العمر غير مناسب';
+                                                  return null;
+                                                },
+                                              ),
+                                            ],
                                           ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
-                                          child: DecoratedBox(
-                                            decoration: BoxDecoration(
-                                              borderRadius:
-                                                  BorderRadius.circular(14),
-                                              border: Border.all(
-                                                color: appColors.light,
-                                                width: 1.2,
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: [
+                                              Align(
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                child: Text(
+                                                  'الجنس',
+                                                  style: TextStyle(
+                                                    color: Colors.black
+                                                        .withOpacity(0.75),
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
                                               ),
-                                            ),
-                                            child: Padding(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 6,
+                                              const SizedBox(height: 8),
+                                              DecoratedBox(
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(14),
+                                                  border: Border.all(
+                                                    color: appColors.light,
+                                                    width: 1.2,
                                                   ),
-                                              child: Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: _GenderChip(
-                                                      selected:
-                                                          _gender == 'male',
-                                                      icon: Icons.male,
-                                                      label: 'ذكر',
-                                                      onTap: () => setState(
-                                                        () => _gender = 'male',
+                                                ),
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 6,
                                                       ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: _GenderChip(
-                                                      selected:
-                                                          _gender == 'female',
-                                                      icon: Icons.female,
-                                                      label: 'أنثى',
-                                                      onTap: () => setState(
-                                                        () =>
-                                                            _gender = 'female',
+                                                  child: Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: _GenderChip(
+                                                          selected:
+                                                              _gender == 'male',
+                                                          icon: Icons.male,
+                                                          label: 'ذكر',
+                                                          onTap: () => setState(
+                                                            () => _gender =
+                                                                'male',
+                                                          ),
+                                                        ),
                                                       ),
-                                                    ),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: _GenderChip(
+                                                          selected:
+                                                              _gender ==
+                                                              'female',
+                                                          icon: Icons.female,
+                                                          label: 'أنثى',
+                                                          onTap: () => setState(
+                                                            () => _gender =
+                                                                'female',
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
-                                                ],
+                                                ),
                                               ),
-                                            ),
+                                            ],
                                           ),
                                         ),
                                       ],
