@@ -519,18 +519,41 @@ class _RegisterPageState extends State<RegisterPage>
       final isNew = await _isNewUser(user.uid);
 
       if (isNew) {
+        final email = (user.email ?? '').trim().toLowerCase();
+
+        // 1) خذ الجزء قبل @
+        String base = email.contains('@') ? email.split('@').first : '';
+
+        // 2) نظّف الاسم عشان يناسب الريجيكس حقك:
+        //   - خليها a-z / 0-9 / . _ -
+        //   - واحذف أي شيء ثاني
+        base = base.replaceAll(RegExp(r'[^a-z0-9._-]'), '');
+
+        // 3) لازم يبدأ بحرف (حسب ريجكسك)
+        if (base.isNotEmpty && !RegExp(r'^[a-z]').hasMatch(base)) {
+          base = 'u$base';
+        }
+
+        // 4) الطول 3-24
+        if (base.length < 3) base = (base + 'user').substring(0, 3);
+        if (base.length > 24) base = base.substring(0, 24);
+
+        // 5) لو صار فاضي لأي سبب، حط default
+        if (base.isEmpty) base = 'nameeruser';
+
         setState(() {
           _googleNewUserMode = true;
           _googleUid = user.uid;
-          _emailCtrl.text = user.email ?? '';
+          _emailCtrl.text = email;
 
-          // نفضّي حقول إكمال التسجيل
-          _usernameCtrl.clear();
+          // ✅ هنا نحط اليوزرنيم التلقائي بدل clear
+          _usernameCtrl.text = base;
+
           _ageCtrl.clear();
           _gender = 'male';
         });
 
-        _passCtrl.clear(); // لأن Google ما يستخدم كلمة مرور
+        _passCtrl.clear();
         return;
       }
 
