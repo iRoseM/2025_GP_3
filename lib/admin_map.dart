@@ -68,18 +68,149 @@ class _AdminMapPageState extends State<AdminMapPage> {
   bool _showEmptyOverlay = false;
   Timer? _emptyTimer;
   String? _selectedLocationType;
+  bool _reportsViewed = false;
+  DateTime? _lastReportsVisit;
+
+  /// 🔔 إشعارات البلاغات الجديدة
+  bool _hasNewReports = false;
+  bool _isLoadingNotifications = false;
+  StreamSubscription? _reportsSubscription;
+  Set<String> _unreadReportIds = {};
 
   @override
   void initState() {
     super.initState();
     _initAdminMap();
     _loadMapsApiKey();
+    _startListeningForNewReports();
   }
 
   @override
   void dispose() {
+    _reportsSubscription?.cancel();
     _emptyTimer?.cancel();
     super.dispose();
+  }
+
+  void _startListeningForNewReports() {
+    if (!mounted) return;
+
+    setState(() => _isLoadingNotifications = true);
+
+    debugPrint('🔔 بدء الاستماع للبلاغات الجديدة...');
+
+    _reportsSubscription = FirebaseFirestore.instance
+        .collection('facilityReports')
+        .where('decision', isEqualTo: 'pending')
+        .snapshots()
+        .listen(
+          (snapshot) {
+            if (!mounted) return;
+
+            final hasPending = snapshot.docs.isNotEmpty;
+
+            // ✅ نتحقق: هل هناك بلاغات جديدة بعد آخر زيارة؟
+            bool shouldShowNotification = false;
+
+            if (_lastReportsVisit != null) {
+              // نتفقد إذا كان هناك أي بلاغات تم إنشاؤها بعد آخر زيارة
+              bool hasNewReportsAfterVisit = false;
+              for (final doc in snapshot.docs) {
+                final timestamp = doc['createdAt'] as Timestamp?;
+                if (timestamp != null) {
+                  final reportTime = timestamp.toDate();
+                  if (reportTime.isAfter(_lastReportsVisit!)) {
+                    hasNewReportsAfterVisit = true;
+                    break;
+                  }
+                }
+              }
+              shouldShowNotification = hasNewReportsAfterVisit;
+            } else {
+              // إذا لم نزُر التقارير مطلقاً، نعرض النقطة
+              shouldShowNotification = hasPending;
+            }
+
+            debugPrint(
+              '🔔 هناك ${snapshot.docs.length} بلاغ pending، '
+              'آخر زيارة: $_lastReportsVisit، '
+              'نعرض الإشعار: $shouldShowNotification',
+            );
+
+            setState(() {
+              _hasNewReports = shouldShowNotification;
+              _isLoadingNotifications = false;
+            });
+
+            if (shouldShowNotification) {
+              debugPrint('🔔 إظهار إشعار جديد!');
+            }
+          },
+          onError: (error) {
+            debugPrint('❌ خطأ في الاستماع للبلاغات: $error');
+            if (mounted) {
+              setState(() => _isLoadingNotifications = false);
+            }
+          },
+        );
+  }
+
+  // ✅ دالة لمسح البلاغات المقروءة (نستدعيها عند الدخول للتقارير)
+  void _markReportsAsRead() {
+    setState(() {
+      _unreadReportIds.clear();
+      _hasNewReports = false;
+    });
+    debugPrint('✅ تم مسح البلاغات غير المقروءة');
+  }
+
+  Future<void> _checkForNewReports() async {
+    if (!mounted) return;
+
+    setState(() => _isLoadingNotifications = true);
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('facilityReports')
+          .where('decision', isEqualTo: 'pending')
+          .get();
+
+      final hasPending = snapshot.docs.isNotEmpty;
+
+      bool shouldShowNotification = false;
+
+      if (_lastReportsVisit != null) {
+        // نتفقد البلاغات الجديدة بعد آخر زيارة
+        bool hasNewReportsAfterVisit = false;
+        for (final doc in snapshot.docs) {
+          final timestamp = doc['createdAt'] as Timestamp?;
+          if (timestamp != null) {
+            final reportTime = timestamp.toDate();
+            if (reportTime.isAfter(_lastReportsVisit!)) {
+              hasNewReportsAfterVisit = true;
+              break;
+            }
+          }
+        }
+        shouldShowNotification = hasNewReportsAfterVisit;
+      } else {
+        shouldShowNotification = hasPending;
+      }
+
+      setState(() {
+        _hasNewReports = shouldShowNotification;
+        _isLoadingNotifications = false;
+      });
+
+      debugPrint(
+        '🔔 تفقد البلاغات: هناك $hasPending بلاغ، نعرض: $shouldShowNotification',
+      );
+    } catch (error) {
+      debugPrint('❌ خطأ في تفقد البلاغات: $error');
+      if (mounted) {
+        setState(() => _isLoadingNotifications = false);
+      }
+    }
   }
 
   Future<void> _initAdminMap() async {
@@ -982,17 +1113,51 @@ class _AdminMapPageState extends State<AdminMapPage> {
               ),
 
               // 📄 زر التقارير
+              // 📄 زر التقارير
               Positioned(
                 left: 8,
                 bottom: 140,
-                child: _RoundBtn(
+                child: _NotificationButton(
                   icon: Icons.article_rounded,
                   tooltip: 'عرض التقارير',
+                  hasNotification: _hasNewReports,
+                  isLoading: _isLoadingNotifications,
                   onTap: () {
+                    // ✅ عند الدخول للتقارير، نسجل وقت الزيارة
+                    setState(() {
+                      _lastReportsVisit = DateTime.now();
+                      _hasNewReports = false; // نخفي النقطة الحمراء فوراً
+                      _reportsViewed = true;
+                    });
+
+                    debugPrint('⏰ وقت زيارة التقارير: ${_lastReportsVisit}');
+
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => const report.AdminReportPage(),
+                      ),
+                    ).then((_) {
+                      // ✅ عندما نرجع من صفحة التقارير
+                      if (mounted) {
+                        _checkForNewReports(); // نتفقد إذا جاءت بلاغات جديدة
+                      }
+                    });
+                  },
+                  onLongPress: () {
+                    // ✅ عند الضغط الطويل، نتفقد البلاغات يدوياً
+                    _checkForNewReports();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'جاري تفقد البلاغات الجديدة...',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        duration: const Duration(seconds: 1),
+                        backgroundColor: appColors.primary,
                       ),
                     );
                   },
@@ -1112,6 +1277,8 @@ class _AdminMapPageState extends State<AdminMapPage> {
       ),
     );
   }
+
+  // في _startListeningForNewReports، أضف:
 
   void _showFiltersBottomSheet() {
     showModalBottomSheet(
@@ -3080,6 +3247,86 @@ class _LocationOptionButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _NotificationButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final bool hasNotification;
+  final bool isLoading;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+
+  const _NotificationButton({
+    required this.icon,
+    required this.tooltip,
+    required this.hasNotification,
+    required this.isLoading,
+    required this.onTap,
+    this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // ✅ الزر الأساسي
+        Tooltip(
+          message: tooltip,
+          child: InkResponse(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            radius: 32,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x22000000),
+                    blurRadius: 12,
+                    offset: Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: isLoading
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(icon, color: appColors.dark),
+            ),
+          ),
+        ),
+
+        // ✅ النقطة الحمراء (فقط إذا كان هناك إشعارات)
+        if (hasNotification && !isLoading)
+          Positioned(
+            top: -4,
+            right: -4,
+            child: Container(
+              width: 16, // أصغر قليلاً
+              height: 16,
+              decoration: BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.4),
+                    blurRadius: 6,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
