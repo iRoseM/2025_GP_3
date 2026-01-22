@@ -13,6 +13,7 @@ import 'notifications.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
 import '../services/app_colors.dart';
+import 'support_page.dart';
 
 class profilePage extends StatelessWidget {
   const profilePage({super.key});
@@ -510,8 +511,14 @@ class profilePage extends StatelessWidget {
                                         _SettingTile(
                                           title: 'المساعدة والدعم',
                                           icon: Icons.help_outline,
-                                          onTap: () =>
-                                              _showSupportSheet(context),
+                                          onTap: () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const SupportPage(),
+                                              ),
+                                            );
+                                          },
                                         ),
                                       ],
                                     ),

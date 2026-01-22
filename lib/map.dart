@@ -21,7 +21,6 @@ import 'services/connection.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../services/app_colors.dart';
 
-
 /// Facility
 class Facility {
   final String id;
@@ -46,7 +45,10 @@ class Facility {
 }
 
 class mapPage extends StatefulWidget {
-  const mapPage({super.key});
+  final bool reportMode; // ✅ وضع الإبلاغ
+
+  const mapPage({super.key, this.reportMode = false});
+
   @override
   State<mapPage> createState() => _mapPageState();
 }
@@ -121,11 +123,12 @@ class _mapPageState extends State<mapPage> {
 
   String? _mapsApiKey;
   bool _isLoadingMapsKey = false;
-
+  bool _reportMode = false;
 
   @override
   void initState() {
     super.initState();
+    _reportMode = widget.reportMode;
     _loadMapsApiKey();
     _init();
   }
@@ -572,12 +575,10 @@ class _mapPageState extends State<mapPage> {
     }
   }
 
-
-    Future<void> _loadMapsApiKey() async {
+  Future<void> _loadMapsApiKey() async {
     setState(() => _isLoadingMapsKey = true);
     try {
-      final callable =
-          FirebaseFunctions.instance.httpsCallable('getMapsKey');
+      final callable = FirebaseFunctions.instance.httpsCallable('getMapsKey');
       final result = await callable();
       final key = result.data['apiKey'] as String?;
 
@@ -598,7 +599,6 @@ class _mapPageState extends State<mapPage> {
       }
     }
   }
-
 
   Future<void> _onSearchSubmitted(String query) async {
     if (!await hasInternetConnection()) {
@@ -1118,8 +1118,8 @@ class _mapPageState extends State<mapPage> {
     }
 
     // ===== المرحلة 2 — إذا Firestore ما لقى شيء، نجرب نفهمه كموقع عبر Google Places =====
-    
-        if (_mapsApiKey == null) {
+
+    if (_mapsApiKey == null) {
       debugPrint('⚠️ Maps API key not loaded, skipping Google Places fallback');
       return;
     }
@@ -1561,7 +1561,19 @@ class _mapPageState extends State<mapPage> {
                               vertical: 10,
                             ),
                           ),
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: () {
+                            Navigator.pop(context); // يقفل الديالوج
+                            if (!mounted) return;
+
+                            setState(() {
+                              _reportMode = false; // ✅ يرجع الوضع الطبيعي
+                              // اختياري: لا تمس الفلاتر عشان ترجع مثل ما كانت
+                              // _allowedTypes ما تلمسه
+                            });
+
+                            _applyCurrentFilters(); // ✅ يعيد عرض الماركرز حسب الفلاتر الحالية
+                          },
+
                           child: Text(
                             'تم',
                             style: GoogleFonts.ibmPlexSansArabic(
@@ -1633,6 +1645,7 @@ class _mapPageState extends State<mapPage> {
   @override
   Widget build(BuildContext context) {
     final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    final bool reportMode = _reportMode;
 
     final themeWithIbmPlex = Theme.of(context).copyWith(
       textTheme: GoogleFonts.ibmPlexSansArabicTextTheme(
@@ -1675,100 +1688,133 @@ class _mapPageState extends State<mapPage> {
               _buildEmptyStateOverlay(),
 
               // Header + Search
+              // Header + Search (or Report Mode Hint)
               SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                   child: Column(
                     children: [
-                      (_authUser == null)
-                          ? const SizedBox.shrink()
-                          : StreamBuilder<
-                              DocumentSnapshot<Map<String, dynamic>>
-                            >(
-                              stream: FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(_authUser.uid)
-                                  .snapshots(),
-                              builder: (context, snap) {
-                                final isLoading =
-                                    snap.connectionState ==
-                                    ConnectionState.waiting;
-                                final data = snap.data?.data() ?? {};
+                      // ✅ الجزء العلوي: يا تعليمات البلاغ يا هيدر اليوزر
+                      if (reportMode)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x14000000),
+                                blurRadius: 16,
+                                offset: Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: const Text(
+                            'اختار الحاوية ثم اضغط على "الإبلاغ عن مشكلة"',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        )
+                      else
+                        (_authUser == null)
+                            ? const SizedBox.shrink()
+                            : StreamBuilder<
+                                DocumentSnapshot<Map<String, dynamic>>
+                              >(
+                                stream: FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(_authUser.uid)
+                                    .snapshots(),
+                                builder: (context, snap) {
+                                  final isLoading =
+                                      snap.connectionState ==
+                                      ConnectionState.waiting;
+                                  final data = snap.data?.data() ?? {};
 
-                                final username = (data['username'] ?? 'مستخدم')
-                                    .toString();
-                                final points = (data['points'] is int)
-                                    ? data['points'] as int
-                                    : int.tryParse('${data['points'] ?? 0}') ??
-                                          0;
+                                  final username =
+                                      (data['username'] ?? 'مستخدم').toString();
+                                  final points = (data['points'] is int)
+                                      ? data['points'] as int
+                                      : int.tryParse(
+                                              '${data['points'] ?? 0}',
+                                            ) ??
+                                            0;
 
-                                final int? pfpIndex = (data['pfpIndex'] is int)
-                                    ? data['pfpIndex'] as int
-                                    : int.tryParse('${data['pfpIndex'] ?? ''}');
-                                final String? avatarPath =
-                                    (pfpIndex != null &&
-                                        pfpIndex >= 0 &&
-                                        pfpIndex < 8)
-                                    ? 'assets/pfp/pfp${pfpIndex + 1}.png'
-                                    : null;
+                                  final int? pfpIndex =
+                                      (data['pfpIndex'] is int)
+                                      ? data['pfpIndex'] as int
+                                      : int.tryParse(
+                                          '${data['pfpIndex'] ?? ''}',
+                                        );
+                                  final String? avatarPath =
+                                      (pfpIndex != null &&
+                                          pfpIndex >= 0 &&
+                                          pfpIndex < 8)
+                                      ? 'assets/pfp/pfp${pfpIndex + 1}.png'
+                                      : null;
 
-                                if (isLoading) {
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                      boxShadow: const [
-                                        BoxShadow(
-                                          color: Color(0x14000000),
-                                          blurRadius: 16,
-                                          offset: Offset(0, 8),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const CircleAvatar(
-                                          radius: 18,
-                                          backgroundColor: Color(0x11009688),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Container(
-                                            height: 14,
+                                  if (isLoading) {
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            color: Color(0x14000000),
+                                            blurRadius: 16,
+                                            offset: Offset(0, 8),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const CircleAvatar(
+                                            radius: 18,
+                                            backgroundColor: Color(0x11009688),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Container(
+                                              height: 14,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0x11000000),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            width: 98,
+                                            height: 30,
                                             decoration: BoxDecoration(
                                               color: const Color(0x11000000),
                                               borderRadius:
-                                                  BorderRadius.circular(6),
+                                                  BorderRadius.circular(100),
                                             ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          width: 98,
-                                          height: 30,
-                                          decoration: BoxDecoration(
-                                            color: const Color(0x11000000),
-                                            borderRadius: BorderRadius.circular(
-                                              100,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }
+                                        ],
+                                      ),
+                                    );
+                                  }
 
-                                return _HeaderUser(
-                                  name: username,
-                                  points: points,
-                                  avatarPath: avatarPath,
-                                );
-                              },
-                            ),
+                                  return _HeaderUser(
+                                    name: username,
+                                    points: points,
+                                    avatarPath: avatarPath,
+                                  );
+                                },
+                              ),
+
+                      // ✅ السيرتش والفلتر: يطلعون دايم بالحالتين
                       const SizedBox(height: 10),
                       _SearchBar(
                         controller: _searchCtrl,
@@ -1850,7 +1896,7 @@ class _mapPageState extends State<mapPage> {
               ),
             ],
           ),
-          bottomNavigationBar: isKeyboardOpen
+          bottomNavigationBar: (isKeyboardOpen || reportMode)
               ? null
               : BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),
         ),
