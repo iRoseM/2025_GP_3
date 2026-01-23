@@ -5,6 +5,7 @@ import 'map.dart';
 import '../services/app_colors.dart';
 import 'services/title_header.dart'; // NameerAppBar
 import 'services/background_container.dart'; // AnimatedBackgroundContainer
+import 'ReportTaskPage.dart';
 
 class SupportPage extends StatefulWidget {
   const SupportPage({super.key});
@@ -346,18 +347,16 @@ void _showReportSheet(BuildContext context) {
               const SizedBox(height: 12),
 
               _gradientActionButton(
-                icon: Icons.flag_outlined, // تقدرين تغيّرينها
+                icon: Icons.flag_outlined,
                 label: 'إبلاغ عن مهمة',
                 colors: const [appColors.mint, appColors.primary],
                 onTap: () async {
-                  Navigator.pop(ctx);
+                  Navigator.pop(ctx); // يقفل البوتوم شيت
 
-                  // TODO: هنا نوديه لصفحة/نموذج إبلاغ المهمة
-                  // مثال:
-                  // await Navigator.push(
-                  //   context,
-                  //   MaterialPageRoute(builder: (_) => const ReportTaskPage()),
-                  // );
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ReportTaskPage()),
+                  );
                 },
               ),
             ],

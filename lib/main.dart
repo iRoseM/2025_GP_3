@@ -198,6 +198,7 @@ class _RegisterPageState extends State<RegisterPage>
   late final AnimationController _introCtrl; // دخول متدرج
   late final AnimationController _shakeCtrl; // اهتزاز خطأ
   late final AnimationController _pressCtrl; // ضغط الزر
+  late final AnimationController _pressGoogleCtrl;
 
   @override
   void initState() {
@@ -220,6 +221,12 @@ class _RegisterPageState extends State<RegisterPage>
       upperBound: 0.06,
       duration: const Duration(milliseconds: 140),
     );
+    _pressGoogleCtrl = AnimationController(
+      vsync: this,
+      lowerBound: 0.0,
+      upperBound: 0.06,
+      duration: const Duration(milliseconds: 140),
+    );
   }
 
   @override
@@ -232,6 +239,7 @@ class _RegisterPageState extends State<RegisterPage>
     _introCtrl.dispose();
     _shakeCtrl.dispose();
     _pressCtrl.dispose();
+    _pressGoogleCtrl.dispose();
     super.dispose();
   }
 
@@ -1245,42 +1253,65 @@ class _RegisterPageState extends State<RegisterPage>
                                   ),
                                   const SizedBox(height: 8),
                                 ],
-
                                 if (!_googleNewUserMode) ...[
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 54,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _signInWithGoogle,
-                                      // مؤقت
-                                      icon: Image.asset(
-                                        'assets/img/google.png',
-                                        width: 22,
-                                        height: 22,
-                                      ),
-                                      label: Text(
-                                        'متابعة باستخدام Google',
-                                        style: GoogleFonts.ibmPlexSansArabic(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 16,
-                                          color: appColors.dark,
-                                        ),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        backgroundColor: Colors.white,
-                                        side: const BorderSide(
-                                          color: appColors.light,
-                                          width: 1.2,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            28,
-                                          ),
+                                  _stagger(
+                                    start: .74,
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      height: 54,
+                                      child: GestureDetector(
+                                        onTapDown: (_) =>
+                                            _pressGoogleCtrl.forward(),
+                                        onTapCancel: () =>
+                                            _pressGoogleCtrl.reverse(),
+                                        onTapUp: (_) =>
+                                            _pressGoogleCtrl.reverse(),
+                                        child: AnimatedBuilder(
+                                          animation: _pressGoogleCtrl,
+                                          builder: (_, __) {
+                                            final scale =
+                                                1 - _pressGoogleCtrl.value;
+                                            return Transform.scale(
+                                              scale: scale,
+                                              child: OutlinedButton.icon(
+                                                onPressed: _signInWithGoogle,
+                                                icon: Image.asset(
+                                                  'assets/img/google.png',
+                                                  width: 22,
+                                                  height: 22,
+                                                ),
+                                                label: Text(
+                                                  'متابعة باستخدام Google',
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 16,
+                                                        color: appColors.dark,
+                                                      ),
+                                                ),
+                                                style: OutlinedButton.styleFrom(
+                                                  backgroundColor: Colors.white,
+                                                  side: const BorderSide(
+                                                    color: appColors.light,
+                                                    width: 1.2,
+                                                  ),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          28,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
                                         ),
                                       ),
                                     ),
                                   ),
                                 ],
+
                                 // زر نسيت كلمة المرور
                                 if (!_googleNewUserMode) ...[
                                   _stagger(
