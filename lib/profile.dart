@@ -14,6 +14,7 @@ import 'services/connection.dart';
 import 'services/title_header.dart';
 import '../services/app_colors.dart';
 import 'support_page.dart';
+import 'admin_faq_page.dart';
 
 class profilePage extends StatelessWidget {
   const profilePage({super.key});
@@ -512,10 +513,14 @@ class profilePage extends StatelessWidget {
                                           title: 'المساعدة والدعم',
                                           icon: Icons.help_outline,
                                           onTap: () {
+                                            final role =
+                                                (data?['role'] ?? 'user')
+                                                    .toString();
                                             Navigator.of(context).push(
                                               MaterialPageRoute(
-                                                builder: (_) =>
-                                                    const SupportPage(),
+                                                builder: (_) => role == 'admin'
+                                                    ? const AdminFaqPage()
+                                                    : const SupportPage(),
                                               ),
                                             );
                                           },

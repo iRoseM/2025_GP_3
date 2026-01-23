@@ -6,6 +6,7 @@ import '../services/app_colors.dart';
 import 'services/title_header.dart'; // NameerAppBar
 import 'services/background_container.dart'; // AnimatedBackgroundContainer
 import 'ReportTaskPage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SupportPage extends StatefulWidget {
   const SupportPage({super.key});
@@ -16,26 +17,6 @@ class SupportPage extends StatefulWidget {
 
 class _SupportPageState extends State<SupportPage> {
   bool _showFaq = false;
-
-  final faqs = const <_FaqItem>[
-    _FaqItem(
-      q: 'كيف أستعيد كلمة المرور؟',
-      a: 'أعد تعيين كلمة المرور عبر حسابك الشخصي أو من شاشة تسجيل الدخول اختر "نسيت كلمة المرور" واتبع التعليمات لإعادة التعيين.',
-    ),
-    _FaqItem(
-      q: 'كيف أكسب نقاط من المهام؟',
-      a: 'يمكنك كسب النقاط من خلال الدخول إلى صفحة المهام، وتنفيذ المهمة المطلوبة، ثم رفع الإثبات المناسب (صورة أو باركود حسب نوع المهمة)، ليتم احتساب النقاط بعد التحقق.',
-    ),
-    _FaqItem(
-      q: 'لماذا لا تظهر لي مواقع إعادة التدوير على الخريطة؟',
-      a: 'تأكد من تفعيل خدمة الموقع (GPS) ومنح التطبيق صلاحية الوصول إلى الموقع، بالإضافة إلى التأكد من توفر اتصال بالإنترنت.',
-    ),
-
-    _FaqItem(
-      q: 'كيف أتواصل مع الدعم؟',
-      a: 'أرسل لنا رسالة عبر تواصل معنا : الإعدادات > المساعدة والدعم > تواصل معنا.',
-    ),
-  ];
 
   Future<void> _openSupportEmail() async {
     final Uri emailUri = Uri(
@@ -80,42 +61,82 @@ class _SupportPageState extends State<SupportPage> {
           ),
         ],
       ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: faqs.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
-        itemBuilder: (context, i) {
-          final item = faqs[i];
-          return Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 4,
+      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('faqs')
+            .orderBy('createdAt', descending: false)
+            .snapshots(),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.all(18),
+              child: Center(
+                child: CircularProgressIndicator(color: appColors.primary),
               ),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-              leading: const Icon(Icons.help_outline, color: appColors.primary),
-              title: Text(
-                item.q,
+            );
+          }
+
+          if (!snap.hasData || snap.data!.docs.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'لا توجد أسئلة شائعة حالياً.',
                 style: GoogleFonts.ibmPlexSansArabic(
-                  fontWeight: FontWeight.w800,
-                  color: appColors.dark,
+                  fontWeight: FontWeight.w700,
+                  color: appColors.dark.withOpacity(.8),
                 ),
               ),
-              children: [
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    item.a,
+            );
+          }
+
+          final docs = snap.data!.docs;
+
+          return ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: docs.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, i) {
+              final d = docs[i].data();
+              final q = (d['q'] ?? '').toString();
+              final a = (d['a'] ?? '').toString();
+
+              return Theme(
+                data: Theme.of(
+                  context,
+                ).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                  leading: const Icon(
+                    Icons.help_outline,
+                    color: appColors.primary,
+                  ),
+                  title: Text(
+                    q,
                     style: GoogleFonts.ibmPlexSansArabic(
-                      color: appColors.dark.withOpacity(.85),
-                      height: 1.6,
+                      fontWeight: FontWeight.w800,
+                      color: appColors.dark,
                     ),
                   ),
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        a,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: appColors.dark.withOpacity(.85),
+                          height: 1.6,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           );
         },
       ),
@@ -517,10 +538,4 @@ class _HintCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _FaqItem {
-  final String q;
-  final String a;
-  const _FaqItem({required this.q, required this.a});
 }
