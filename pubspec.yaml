@@ -46,6 +46,9 @@ dependencies:
   flutter_tts: ^3.8.5
   showcaseview: ^5.0.1
 
+  fl_chart: ^0.64.0 
+  syncfusion_flutter_charts: ^24.1.46
+
 
 dev_dependencies:
   webview_flutter: ^4.4.2
