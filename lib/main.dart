@@ -198,6 +198,7 @@ class _RegisterPageState extends State<RegisterPage>
   late final AnimationController _introCtrl; // دخول متدرج
   late final AnimationController _shakeCtrl; // اهتزاز خطأ
   late final AnimationController _pressCtrl; // ضغط الزر
+  late final AnimationController _pressGoogleCtrl;
 
   @override
   void initState() {
@@ -220,6 +221,12 @@ class _RegisterPageState extends State<RegisterPage>
       upperBound: 0.06,
       duration: const Duration(milliseconds: 140),
     );
+    _pressGoogleCtrl = AnimationController(
+      vsync: this,
+      lowerBound: 0.0,
+      upperBound: 0.06,
+      duration: const Duration(milliseconds: 140),
+    );
   }
 
   @override
@@ -232,6 +239,7 @@ class _RegisterPageState extends State<RegisterPage>
     _introCtrl.dispose();
     _shakeCtrl.dispose();
     _pressCtrl.dispose();
+    _pressGoogleCtrl.dispose();
     super.dispose();
   }
 
@@ -519,18 +527,41 @@ class _RegisterPageState extends State<RegisterPage>
       final isNew = await _isNewUser(user.uid);
 
       if (isNew) {
+        final email = (user.email ?? '').trim().toLowerCase();
+
+        // 1) خذ الجزء قبل @
+        String base = email.contains('@') ? email.split('@').first : '';
+
+        // 2) نظّف الاسم عشان يناسب الريجيكس حقك:
+        //   - خليها a-z / 0-9 / . _ -
+        //   - واحذف أي شيء ثاني
+        base = base.replaceAll(RegExp(r'[^a-z0-9._-]'), '');
+
+        // 3) لازم يبدأ بحرف (حسب ريجكسك)
+        if (base.isNotEmpty && !RegExp(r'^[a-z]').hasMatch(base)) {
+          base = 'u$base';
+        }
+
+        // 4) الطول 3-24
+        if (base.length < 3) base = (base + 'user').substring(0, 3);
+        if (base.length > 24) base = base.substring(0, 24);
+
+        // 5) لو صار فاضي لأي سبب، حط default
+        if (base.isEmpty) base = 'nameeruser';
+
         setState(() {
           _googleNewUserMode = true;
           _googleUid = user.uid;
-          _emailCtrl.text = user.email ?? '';
+          _emailCtrl.text = email;
 
-          // نفضّي حقول إكمال التسجيل
-          _usernameCtrl.clear();
+          // ✅ هنا نحط اليوزرنيم التلقائي بدل clear
+          _usernameCtrl.text = base;
+
           _ageCtrl.clear();
           _gender = 'male';
         });
 
-        _passCtrl.clear(); // لأن Google ما يستخدم كلمة مرور
+        _passCtrl.clear();
         return;
       }
 
@@ -1222,42 +1253,65 @@ class _RegisterPageState extends State<RegisterPage>
                                   ),
                                   const SizedBox(height: 8),
                                 ],
-
                                 if (!_googleNewUserMode) ...[
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 54,
-                                    child: OutlinedButton.icon(
-                                      onPressed: _signInWithGoogle,
-                                      // مؤقت
-                                      icon: Image.asset(
-                                        'assets/img/google.png',
-                                        width: 22,
-                                        height: 22,
-                                      ),
-                                      label: Text(
-                                        'متابعة باستخدام Google',
-                                        style: GoogleFonts.ibmPlexSansArabic(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 16,
-                                          color: appColors.dark,
-                                        ),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        backgroundColor: Colors.white,
-                                        side: const BorderSide(
-                                          color: appColors.light,
-                                          width: 1.2,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            28,
-                                          ),
+                                  _stagger(
+                                    start: .74,
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      height: 54,
+                                      child: GestureDetector(
+                                        onTapDown: (_) =>
+                                            _pressGoogleCtrl.forward(),
+                                        onTapCancel: () =>
+                                            _pressGoogleCtrl.reverse(),
+                                        onTapUp: (_) =>
+                                            _pressGoogleCtrl.reverse(),
+                                        child: AnimatedBuilder(
+                                          animation: _pressGoogleCtrl,
+                                          builder: (_, __) {
+                                            final scale =
+                                                1 - _pressGoogleCtrl.value;
+                                            return Transform.scale(
+                                              scale: scale,
+                                              child: OutlinedButton.icon(
+                                                onPressed: _signInWithGoogle,
+                                                icon: Image.asset(
+                                                  'assets/img/google.png',
+                                                  width: 22,
+                                                  height: 22,
+                                                ),
+                                                label: Text(
+                                                  'متابعة باستخدام Google',
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 16,
+                                                        color: appColors.dark,
+                                                      ),
+                                                ),
+                                                style: OutlinedButton.styleFrom(
+                                                  backgroundColor: Colors.white,
+                                                  side: const BorderSide(
+                                                    color: appColors.light,
+                                                    width: 1.2,
+                                                  ),
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          28,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          },
                                         ),
                                       ),
                                     ),
                                   ),
                                 ],
+
                                 // زر نسيت كلمة المرور
                                 if (!_googleNewUserMode) ...[
                                   _stagger(

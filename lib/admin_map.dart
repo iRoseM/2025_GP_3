@@ -2399,7 +2399,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                     icon: const Icon(Icons.delete_outline_rounded),
                     label: const Text('تأكيد الحذف'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: appColors.primary,
+                      backgroundColor: Colors.red,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -2442,8 +2442,8 @@ class _AdminMapPageState extends State<AdminMapPage> {
                   width: double.infinity,
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
+                      foregroundColor: appColors.primary,
+                      side: const BorderSide(color: appColors.primary),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
