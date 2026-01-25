@@ -39,6 +39,74 @@ class _AdminHomePageState extends State<AdminHomePage> {
   List<FlSpot> _taskCompletionSpots = [];
   List<FlSpot> _pointsSpots = [];
   List<FlSpot> _carbonSpots = [];
+  DateTime _cursorDate = DateTime.now();
+  // 🔧 دوال الفترات الزمنية
+  List<String> _generatePeriodKeys(DateTime start, DateTime end, String range) {
+    final List<String> keys = [];
+    DateTime current = start;
+
+    switch (range) {
+      case 'اليوم':
+        for (int i = 0; i < 24; i++) {
+          keys.add(i.toString());
+        }
+        break;
+
+      case 'أسبوع':
+        for (int i = 0; i < 7; i++) {
+          keys.add(DateFormat('E').format(current));
+          current = current.add(const Duration(days: 1));
+        }
+        break;
+
+      case 'شهر':
+        for (int i = 0; i < 30; i++) {
+          keys.add(DateFormat('dd').format(current));
+          current = current.add(const Duration(days: 1));
+        }
+        break;
+
+      case 'سنة':
+        for (int i = 0; i < 12; i++) {
+          keys.add(DateFormat('MMM').format(DateTime(start.year, i + 1)));
+        }
+        break;
+    }
+
+    return keys;
+  }
+
+  String _getPeriodKey(DateTime date, String range) {
+    switch (range) {
+      case 'اليوم':
+        return date.hour.toString();
+      case 'أسبوع':
+        return DateFormat('E').format(date);
+      case 'شهر':
+        return DateFormat('dd').format(date);
+      case 'سنة':
+        return DateFormat('MMM').format(date);
+      default:
+        return date.toString();
+    }
+  }
+
+  DateTime _getEndDateForRange(String range) {
+    final d = _cursorDate;
+
+    switch (range) {
+      case 'اليوم':
+        return DateTime(d.year, d.month, d.day, 23, 59, 59);
+      case 'أسبوع':
+        return d.add(const Duration(days: 7));
+      case 'شهر':
+        return DateTime(d.year, d.month + 1, d.day);
+      case 'سنة':
+        return DateTime(d.year + 1, d.month, d.day);
+      default:
+        return d;
+    }
+  }
 
   @override
   void initState() {
@@ -76,52 +144,73 @@ class _AdminHomePageState extends State<AdminHomePage> {
     await _loadCarbonData();
   }
 
+  String get _rangeLabel {
+    switch (_selectedTimeRange) {
+      case 'سنة':
+        return 'سنة ${_cursorDate.year}';
+      case 'شهر':
+        return '${_cursorDate.month}/${_cursorDate.year}';
+      case 'أسبوع':
+        final week = ((_cursorDate.day - 1) / 7).floor() + 1;
+        return 'أسبوع $week';
+      case 'اليوم':
+        return DateFormat('dd/MM/yyyy').format(_cursorDate);
+      default:
+        return '';
+    }
+  }
+
   Future<void> _loadUserGrowthData() async {
     try {
       final startDate = _getStartDateForRange(_selectedTimeRange);
-      final days = _getDaysForRange(_selectedTimeRange);
+      final endDate = _getEndDateForRange(_selectedTimeRange);
 
-      final snapshot = await FirebaseFirestore.instance
+      // خيار 1: احصل على جميع المستخدمين ثم فلتر محلياً (أقل كفاءة)
+      final usersSnapshot = await FirebaseFirestore.instance
           .collection('users')
-          .where('isVerified', isEqualTo: true)
           .get();
 
-      // buckets حسب الفترة (ساعات لليوم، أيام لغيره)
-      final Map<int, int> buckets = {};
+      // أنشئ قائمة الأيام/الفترات
+      final Map<String, int> periodCounts = {};
+      final periodKeys = _generatePeriodKeys(
+        startDate,
+        endDate,
+        _selectedTimeRange,
+      );
 
-      final bucketCount = _selectedTimeRange == 'سنة'
-          ? 12
-          : (_selectedTimeRange == 'اليوم' ? 24 : days + 1);
-
-      for (int i = 0; i < bucketCount; i++) {
-        buckets[i] = 0;
+      for (final key in periodKeys) {
+        periodCounts[key] = 0;
       }
 
-      for (final doc in snapshot.docs) {
-        final ts = doc.data()['createdAt'];
-        if (ts is! Timestamp) continue;
+      // فلتر محلياً للمستخدمين المؤكدين في الفترة
+      for (final doc in usersSnapshot.docs) {
+        final data = doc.data();
+        final isVerified = data['isVerified'] == true;
+        final createdAt = data['createdAt'];
 
-        final date = ts.toDate();
+        if (isVerified && createdAt is Timestamp) {
+          final userDate = createdAt.toDate();
 
-        int index;
-        if (_selectedTimeRange == 'سنة') {
-          index = ts.toDate().month - 1;
-        } else {
-          index = ts.toDate().difference(startDate).inDays;
-        }
+          // تحقق إذا كان في الفترة المحددة
+          if (userDate.isAfter(startDate) && userDate.isBefore(endDate)) {
+            final periodKey = _getPeriodKey(userDate, _selectedTimeRange);
 
-        if (buckets.containsKey(index)) {
-          buckets[index] = buckets[index]! + 1;
+            if (periodCounts.containsKey(periodKey)) {
+              periodCounts[periodKey] = periodCounts[periodKey]! + 1;
+            }
+          }
         }
       }
 
-      // 📈 تراكمي
-      double cumulative = 0;
+      // حوّل إلى FlSpots
       final List<FlSpot> spots = [];
+      int index = 0;
+      double cumulative = 0;
 
-      for (final entry in buckets.entries) {
-        cumulative += entry.value;
-        spots.add(FlSpot(entry.key.toDouble(), cumulative));
+      for (final key in periodKeys) {
+        cumulative += periodCounts[key] ?? 0;
+        spots.add(FlSpot(index.toDouble(), cumulative));
+        index++;
       }
 
       setState(() {
@@ -129,6 +218,65 @@ class _AdminHomePageState extends State<AdminHomePage> {
       });
     } catch (e) {
       debugPrint('❌ User growth error: $e');
+    }
+  }
+
+  Widget _buildRangeNavigator() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.chevron_left), // 👈 صح في RTL
+          onPressed: () {
+            setState(() {
+              _cursorDate = _shiftDate(-1); // السابق
+            });
+            _loadChartData();
+          },
+        ),
+
+        Text(
+          _rangeLabel,
+          style: GoogleFonts.ibmPlexSansArabic(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
+          ),
+        ),
+
+        IconButton(
+          icon: const Icon(Icons.chevron_right), // 👈 صح في RTL
+          onPressed: () {
+            setState(() {
+              _cursorDate = _shiftDate(1); // التالي
+            });
+            _loadChartData();
+          },
+        ),
+      ],
+    );
+  }
+
+  DateTime _shiftDate(int direction) {
+    switch (_selectedTimeRange) {
+      case 'اليوم':
+        return _cursorDate.add(Duration(days: direction));
+      case 'أسبوع':
+        return _cursorDate.add(Duration(days: 7 * direction));
+      case 'شهر':
+        return DateTime(
+          _cursorDate.year,
+          _cursorDate.month + direction,
+          _cursorDate.day,
+        );
+      case 'سنة':
+        return DateTime(
+          _cursorDate.year + direction,
+          _cursorDate.month,
+          _cursorDate.day,
+        );
+      default:
+        return _cursorDate;
     }
   }
 
@@ -218,51 +366,58 @@ class _AdminHomePageState extends State<AdminHomePage> {
   Future<void> _loadTaskCompletionData() async {
     try {
       final startDate = _getStartDateForRange(_selectedTimeRange);
-      final days = _getDaysForRange(_selectedTimeRange);
+      final endDate = _getEndDateForRange(_selectedTimeRange);
 
-      final snapshot = await FirebaseFirestore.instance
+      // احصل على جميع التقديمات المعتمدة في الفترة
+      final submissionsSnapshot = await FirebaseFirestore.instance
           .collection('submissions')
           .where('status', isEqualTo: 'approved')
+          .where(
+            'createdAt',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+          )
+          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
           .get();
 
-      final Map<int, int> buckets = {};
+      // أنشئ قائمة الفترات
+      final Map<String, int> periodCounts = {};
+      final periodKeys = _generatePeriodKeys(
+        startDate,
+        endDate,
+        _selectedTimeRange,
+      );
 
-      if (_selectedTimeRange == 'اليوم') {
-        // 24 ساعة
-        for (int h = 0; h < 24; h++) {
-          buckets[h] = 0;
-        }
-      } else {
-        for (int i = 0; i <= days; i++) {
-          buckets[i] = 0;
+      for (final key in periodKeys) {
+        periodCounts[key] = 0;
+      }
+
+      // عد المهام لكل فترة
+      for (final doc in submissionsSnapshot.docs) {
+        final data = doc.data();
+        final createdAt = data['createdAt'];
+        if (createdAt is Timestamp) {
+          final taskDate = createdAt.toDate();
+          final periodKey = _getPeriodKey(taskDate, _selectedTimeRange);
+
+          if (periodCounts.containsKey(periodKey)) {
+            periodCounts[periodKey] = periodCounts[periodKey]! + 1;
+          }
         }
       }
 
-      for (final doc in snapshot.docs) {
-        final ts = doc.data()['createdAt'];
-        if (ts is! Timestamp) continue;
+      // حوّل إلى FlSpots
+      final List<FlSpot> spots = [];
+      int index = 0;
 
-        if (_selectedTimeRange == 'اليوم') {
-          final hour = ts.toDate().hour;
-          buckets[hour] = (buckets[hour] ?? 0) + 1;
-        } else {
-          int index;
-          if (_selectedTimeRange == 'سنة') {
-            index = ts.toDate().month - 1;
-          } else {
-            index = ts.toDate().difference(startDate).inDays;
-          }
-
-          if (buckets.containsKey(index)) {
-            buckets[index] = buckets[index]! + 1;
-          }
-        }
+      for (final key in periodKeys) {
+        spots.add(
+          FlSpot(index.toDouble(), (periodCounts[key] ?? 0).toDouble()),
+        );
+        index++;
       }
 
       setState(() {
-        _taskCompletionSpots = buckets.entries
-            .map((e) => FlSpot(e.key.toDouble(), e.value.toDouble()))
-            .toList();
+        _taskCompletionSpots = spots;
       });
     } catch (e) {
       debugPrint('❌ Task completion error: $e');
@@ -272,45 +427,54 @@ class _AdminHomePageState extends State<AdminHomePage> {
   Future<void> _loadPointsData() async {
     try {
       final startDate = _getStartDateForRange(_selectedTimeRange);
-      final days = _getDaysForRange(_selectedTimeRange);
+      final endDate = _getEndDateForRange(_selectedTimeRange);
 
-      final snapshot = await FirebaseFirestore.instance
+      final submissionsSnapshot = await FirebaseFirestore.instance
           .collection('submissions')
           .where('status', isEqualTo: 'approved')
+          .where(
+            'createdAt',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+          )
+          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
           .get();
 
-      final Map<int, double> buckets = {};
+      final Map<String, double> periodPoints = {};
+      final periodKeys = _generatePeriodKeys(
+        startDate,
+        endDate,
+        _selectedTimeRange,
+      );
 
-      final bucketCount = _selectedTimeRange == 'سنة' ? 12 : days + 1;
-      for (int i = 0; i < bucketCount; i++) {
-        buckets[i] = 0;
+      for (final key in periodKeys) {
+        periodPoints[key] = 0;
       }
 
-      for (final doc in snapshot.docs) {
-        final ts = doc.data()['createdAt'];
-        final pts = doc.data()['taskPoints'];
+      for (final doc in submissionsSnapshot.docs) {
+        final data = doc.data();
+        final createdAt = data['createdAt'];
+        final taskPoints = data['taskPoints'];
 
-        if (ts is! Timestamp || pts is! num) continue;
+        if (createdAt is Timestamp && taskPoints is num) {
+          final taskDate = createdAt.toDate();
+          final periodKey = _getPeriodKey(taskDate, _selectedTimeRange);
 
-        int index;
-        if (_selectedTimeRange == 'سنة') {
-          index = ts.toDate().month - 1;
-        } else {
-          index = ts.toDate().difference(startDate).inDays;
-        }
-
-        if (buckets.containsKey(index)) {
-          buckets[index] = buckets[index]! + pts.toDouble();
+          if (periodPoints.containsKey(periodKey)) {
+            periodPoints[periodKey] =
+                periodPoints[periodKey]! + taskPoints.toDouble();
+          }
         }
       }
 
-      // 📈 تراكمي
-      double cumulative = 0;
+      // تراكمي
       final List<FlSpot> spots = [];
+      int index = 0;
+      double cumulative = 0;
 
-      for (final entry in buckets.entries) {
-        cumulative += entry.value;
-        spots.add(FlSpot(entry.key.toDouble(), cumulative));
+      for (final key in periodKeys) {
+        cumulative += periodPoints[key] ?? 0;
+        spots.add(FlSpot(index.toDouble(), cumulative));
+        index++;
       }
 
       setState(() {
@@ -324,7 +488,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   Future<void> _loadCarbonData() async {
     try {
       final startDate = _getStartDateForRange(_selectedTimeRange);
-      final days = _getDaysForRange(_selectedTimeRange);
+      final endDate = _getEndDateForRange(_selectedTimeRange);
 
       final snapshot = await FirebaseFirestore.instance
           .collection('submissions')
@@ -333,31 +497,39 @@ class _AdminHomePageState extends State<AdminHomePage> {
             'createdAt',
             isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
           )
+          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
           .get();
 
-      final Map<String, double> daily = {};
-      for (int i = 0; i <= days; i++) {
-        final d = startDate.add(Duration(days: i));
-        daily[DateFormat('yyyy-MM-dd').format(d)] = 0;
-      }
+      final periodKeys = _generatePeriodKeys(
+        startDate,
+        endDate,
+        _selectedTimeRange,
+      );
+
+      final Map<String, double> periodCarbon = {
+        for (final k in periodKeys) k: 0,
+      };
 
       for (final doc in snapshot.docs) {
         final data = doc.data();
         final ts = data['createdAt'];
-        final carbon = data['carbonSaved']; // 👈 لازم يكون موجود
+        final carbon = data['carbonSaved'];
 
         if (ts is! Timestamp || carbon is! num) continue;
 
-        final key = DateFormat('yyyy-MM-dd').format(ts.toDate());
-        if (daily.containsKey(key)) {
-          daily[key] = daily[key]! + carbon.toDouble();
+        final date = ts.toDate();
+        final key = _getPeriodKey(date, _selectedTimeRange);
+
+        if (periodCarbon.containsKey(key)) {
+          periodCarbon[key] = periodCarbon[key]! + carbon.toDouble();
         }
       }
 
       final List<FlSpot> spots = [];
       int index = 0;
-      for (final value in daily.values) {
-        spots.add(FlSpot(index.toDouble(), value));
+
+      for (final key in periodKeys) {
+        spots.add(FlSpot(index.toDouble(), periodCarbon[key] ?? 0));
         index++;
       }
 
@@ -370,19 +542,29 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   DateTime _getStartDateForRange(String range) {
-    final now = DateTime.now();
+    final d = _cursorDate;
 
     switch (range) {
       case 'اليوم':
-        return DateTime(now.year, now.month, now.day); // بداية اليوم
+        return DateTime(d.year, d.month, d.day);
+
       case 'أسبوع':
-        return now.subtract(const Duration(days: 7));
+        // بداية الأسبوع (الأحد)
+        final weekday = d.weekday % 7;
+        return DateTime(
+          d.year,
+          d.month,
+          d.day,
+        ).subtract(Duration(days: weekday));
+
       case 'شهر':
-        return now.subtract(const Duration(days: 30));
+        return DateTime(d.year, d.month, 1);
+
       case 'سنة':
-        return now.subtract(const Duration(days: 365));
+        return DateTime(d.year, 1, 1);
+
       default:
-        return now.subtract(const Duration(days: 7));
+        return d;
     }
   }
 
@@ -474,189 +656,181 @@ class _AdminHomePageState extends State<AdminHomePage> {
     Color color,
     String timeRange,
   ) {
-    // حساب maxX بشكل مختصر وأكثر دقة
-    final double maxXValue = spots.isEmpty
-        ? 1
-        : spots.map((spot) => spot.x).reduce(math.max);
-
     final double maxY = _getMaxYValue(spots);
     final double average = spots.isNotEmpty
         ? spots.map((e) => e.y).reduce((a, b) => a + b) / spots.length
         : 0;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8), // قلل البادينج
+      padding: const EdgeInsets.all(16), // نفس البادينج
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12), // زوايا أصغر
-        boxShadow: [
+        borderRadius: BorderRadius.circular(20), // نفس الزوايا
+        boxShadow: const [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: Color(0x14000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
           ),
         ],
-        border: Border.all(color: color.withOpacity(0.2), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // العنوان + الفلتر - نسخة مضغوطة
+          /// العنوان + الفلتر (نفس التصميم)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 14, // أصغر
-                    fontWeight: FontWeight.w700,
-                    color: appColors.dark,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
                 ),
               ),
-              const SizedBox(width: 6), // أقل مسافة
-              _buildCompactTimeRangeSelector(), // فلتر أصغر
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: color.withOpacity(0.3)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedTimeRange,
+                    icon: Icon(Icons.arrow_drop_down, size: 20, color: color),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() {
+                          _selectedTimeRange = v;
+                        });
+                        _loadChartData();
+                      }
+                    },
+                    items: _timeRanges
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(
+                              e,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: appColors.dark,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ),
             ],
           ),
 
-          const SizedBox(height: 12), // أقل من 16
-          // الرسم أو رسالة عدم وجود بيانات
+          const SizedBox(height: 16),
+
+          /// 👇 الرسم البياني الخطي
           SizedBox(
-            height: 140, // قلل من 180 إلى 140
+            height: 160, // نفس الارتفاع
             child: spots.isEmpty
-                ? Center(
-                    child: Text(
-                      'لا توجد بيانات',
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  )
+                ? const Center(child: Text('لا توجد بيانات'))
                 : LineChart(
                     LineChartData(
-                      minX: 0,
-                      maxX: _selectedTimeRange == 'سنة'
-                          ? 11
-                          : math.max(1, maxXValue),
-
                       minY: 0,
-                      maxY: _getNiceMaxY(maxY, title),
-
+                      maxY: maxY == 0 ? 10 : null,
                       gridData: FlGridData(
                         show: true,
                         drawVerticalLine: false,
-                        horizontalInterval: _calculateSafeInterval(
-                          maxY,
-                          title,
-                        ), // ✅ صح
+                        horizontalInterval: maxY == 0
+                            ? 1
+                            : math.max(1, (maxY / 3).ceilToDouble()),
                       ),
-
-                      borderData: FlBorderData(
-                        show: true,
-                        border: Border.all(
-                          color: Colors.grey[300]!,
-                          width: 0.5,
-                        ),
-                      ),
-
                       titlesData: FlTitlesData(
                         show: true,
-                        topTitles: AxisTitles(
+                        topTitles: const AxisTitles(
                           sideTitles: SideTitles(showTitles: false),
                         ),
-                        rightTitles: AxisTitles(
+                        rightTitles: const AxisTitles(
                           sideTitles: SideTitles(showTitles: false),
                         ),
-
                         leftTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            interval: _calculateSafeInterval(
-                              maxY,
-                              title,
-                            ), // ✅ صح
-                            reservedSize: 30,
-                            getTitlesWidget: (value, meta) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 2.0),
-                                child: Text(
-                                  _formatCompactNumber(value),
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                    fontSize: 8,
-                                    color: Colors.grey[600],
-                                  ),
-                                  textAlign: TextAlign.right,
-                                ),
-                              );
-                            },
+                            reservedSize: 36,
+                            getTitlesWidget: _buildLeftTitle,
                           ),
                         ),
 
                         bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            reservedSize: 18, // أقل من 24
-                            interval: _getCompactXInterval(
-                              timeRange,
-                            ).toDouble(),
-                            getTitlesWidget: (value, meta) {
-                              final interval = _getCompactXInterval(timeRange);
-                              if (value.toInt() % interval != 0) {
-                                return const SizedBox.shrink();
-                              }
-                              return _buildCompactXAxisTitle(
-                                value.toInt(),
-                                maxXValue.toInt(),
-                                timeRange,
-                              );
+                            reservedSize: 36, // نفس الحجم
+                            interval: _getInterval(),
+                            getTitlesWidget: (value, _) {
+                              return _buildXAxisTitle(value.toInt());
                             },
                           ),
                         ),
                       ),
-
+                      borderData: FlBorderData(
+                        show: true,
+                        border: Border.all(color: Colors.grey[300]!, width: 1),
+                      ),
                       lineBarsData: [
                         LineChartBarData(
                           spots: spots,
                           isCurved: true,
-                          curveSmoothness: 0.3,
-                          barWidth: 2, // أرق
+                          barWidth: 3, // نفس السماكة
                           color: color,
-                          dotData: FlDotData(show: false), // إخفاء النقاط
+                          dotData: const FlDotData(show: false),
                           belowBarData: BarAreaData(
                             show: true,
-                            color: color.withOpacity(0.1),
+                            color: color.withOpacity(.15),
                           ),
                         ),
                       ],
+                      lineTouchData: LineTouchData(
+                        enabled: true,
+                        touchTooltipData: LineTouchTooltipData(
+                          tooltipBgColor: color,
+                          getTooltipItems: (spots) {
+                            return spots.map((spot) {
+                              return LineTooltipItem(
+                                '${spot.y.toInt()}',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              );
+                            }).toList();
+                          },
+                        ),
+                      ),
                     ),
                   ),
           ),
 
-          // 👇 الإحصائيات - نسخة مضغوطة
-          if (spots.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildCompactMiniStat('الأعلى', _formatCompactNumber(maxY)),
-                  _buildCompactMiniStat(
-                    'المتوسط',
-                    _formatCompactNumber(average),
-                  ),
-                  _buildCompactMiniStat(
-                    'الفترة',
-                    _getCompactPeriodName(timeRange),
-                  ),
-                ],
-              ),
+          const SizedBox(height: 8),
+          _buildRangeNavigator(),
+
+          /// 👇 الإحصائيات (نفس تشارت اليوزر)
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildCompactMiniStat('الأعلى', maxY.toInt().toString()),
+                _buildCompactMiniStat('المتوسط', average.toStringAsFixed(1)),
+                _buildCompactMiniStat('الفترة', _selectedTimeRange),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -724,30 +898,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
           }).toList(),
         ),
       ),
-    );
-  }
-
-  Widget _buildCompactMiniStat(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 10, // أصغر
-            height: 1.1,
-          ),
-        ),
-        const SizedBox(height: 2), // أقل مسافة
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 8, // أصغر
-            color: Colors.grey[600],
-            height: 1.1,
-          ),
-        ),
-      ],
     );
   }
 
@@ -882,6 +1032,23 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
+  // DateTime _getEndDateForRange(String range) {
+  //   final start = _getStartDateForRange(range);
+
+  //   switch (range) {
+  //     case 'اليوم':
+  //       return start.add(const Duration(days: 1));
+  //     case 'أسبوع':
+  //       return start.add(const Duration(days: 7));
+  //     case 'شهر':
+  //       return DateTime(start.year, start.month + 1, 1);
+  //     case 'سنة':
+  //       return DateTime(start.year + 1, 1, 1);
+  //     default:
+  //       return DateTime.now();
+  //   }
+  // }
+
   // 🔧 دالة لتقريب القيم الكبيرة
   String _formatLargeNumber(double value) {
     if (value >= 1000000) {
@@ -893,14 +1060,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
     } else {
       return value.toStringAsFixed(1);
     }
-  }
-
-  // 🔧 دالة لتحديد عرض البار حسب الفترة
-  double _getBarWidth(String timeRange, int spotCount) {
-    if (spotCount <= 10) return 12;
-    if (spotCount <= 20) return 8;
-    if (spotCount <= 30) return 6;
-    return 4;
   }
 
   // 👇 ميثود _buildMiniStat الأصلية التي تريد الاحتفاظ بها
@@ -915,96 +1074,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
         Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
       ],
     );
-  }
-
-  Widget _buildXAxisTitle(int value, int maxX, String timeRange) {
-    // عدم عرض تسميات كثيرة جداً
-    if (maxX > 50 && value % 10 != 0 && value != maxX.toInt()) {
-      return const SizedBox.shrink();
-    }
-
-    if (maxX > 100 && value % 20 != 0 && value != maxX.toInt()) {
-      return const SizedBox.shrink();
-    }
-
-    switch (timeRange) {
-      case 'اليوم':
-        if (value > 23) return const SizedBox.shrink();
-        if (value % 3 != 0 && value != 0 && value != 23) {
-          return const SizedBox.shrink();
-        }
-        return Padding(
-          padding: const EdgeInsets.only(top: 4.0),
-          child: Text(
-            '$value',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 8,
-              color: Colors.grey[600],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        );
-
-      case 'أسبوع':
-        if (value > 6) return const SizedBox.shrink();
-
-        const days = ['أحد', 'اثن', 'ثلث', 'أرب', 'خمي', 'جمع', 'سبت'];
-
-        return Padding(
-          padding: const EdgeInsets.only(top: 2.0),
-          child: Text(
-            days[value],
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 7,
-              color: Colors.grey[600],
-            ),
-          ),
-        );
-
-      case 'شهر':
-        if (value > 29) return const SizedBox.shrink();
-        // عرض فقط أيام محددة
-        final daysToShow = [0, 5, 10, 15, 20, 25, 29];
-        if (!daysToShow.contains(value)) {
-          return const SizedBox.shrink();
-        }
-        return Padding(
-          padding: const EdgeInsets.only(top: 4.0),
-          child: Text(
-            '${value + 1}',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 8,
-              color: Colors.grey[600],
-            ),
-          ),
-        );
-
-      case 'سنة':
-        if (value > 11) return const SizedBox.shrink();
-        // عرض فقط شهور محددة
-        if (value % 3 != 0) {
-          return const SizedBox.shrink();
-        }
-        const months = ['ينا', 'أبريل', 'يوليو', 'أكتوبر'];
-        final monthIndex = value ~/ 3;
-        if (monthIndex < months.length) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Text(
-              months[monthIndex],
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 8,
-                color: Colors.grey[600],
-              ),
-            ),
-          );
-        }
-        return const SizedBox.shrink();
-
-      default:
-        return const SizedBox.shrink();
-    }
   }
 
   Widget _buildChartStats(List<FlSpot> spots, double maxY) {
@@ -1063,182 +1132,186 @@ class _AdminHomePageState extends State<AdminHomePage> {
     String title,
     List<FlSpot> spots,
     Color color,
-    String timeRange, { // ← أضف هذه المعلمة
-    bool showStats = true,
-  }) {
+    String timeRange,
+  ) {
     final double maxY = _getMaxYValue(spots);
-    final double maxXValue = spots.isEmpty
-        ? 1
-        : spots.map((spot) => spot.x).reduce(math.max);
+    final double average = spots.isNotEmpty
+        ? spots.map((e) => e.y).reduce((a, b) => a + b) / spots.length
+        : 0;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8), // أصغر
+      padding: const EdgeInsets.all(16), // نفس البادينج
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
+        borderRadius: BorderRadius.circular(20), // نفس الزوايا
+        boxShadow: const [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: Color(0x14000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
           ),
         ],
-        border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          /// العنوان + الفلتر (نفس التصميم)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 14, // أصغر
-                    fontWeight: FontWeight.w700,
-                    color: appColors.dark,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
                 ),
               ),
-              const SizedBox(width: 6),
-              _buildCompactTimeRangeSelector(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: color.withOpacity(0.3)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedTimeRange,
+                    icon: Icon(Icons.arrow_drop_down, size: 20, color: color),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() {
+                          _selectedTimeRange = v;
+                        });
+                        _loadChartData();
+                      }
+                    },
+                    items: _timeRanges
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(
+                              e,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: appColors.dark,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ),
             ],
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
-          // 👇 لا حاجة للـ Scroll الآن
+          /// 👇 الرسم البياني العمودي
           SizedBox(
-            height: 140, // أصغر
+            height: 160, // نفس الارتفاع
             child: spots.isEmpty
-                ? Center(
-                    child: Text(
-                      'لا توجد بيانات',
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  )
+                ? const Center(child: Text('لا توجد بيانات'))
                 : BarChart(
                     BarChartData(
-                      alignment: BarChartAlignment.spaceBetween,
-
-                      groupsSpace: 2, // مسافة أقل
-
+                      minY: 0,
+                      maxY: maxY == 0 ? 3 : null,
                       gridData: FlGridData(
                         show: true,
                         drawVerticalLine: false,
-                        horizontalInterval: _calculateSafeInterval(maxY, title),
+                        horizontalInterval: maxY == 0
+                            ? 1
+                            : math.max(1, (maxY / 3).ceilToDouble()),
                       ),
-
                       titlesData: FlTitlesData(
                         show: true,
-                        topTitles: AxisTitles(
+                        topTitles: const AxisTitles(
                           sideTitles: SideTitles(showTitles: false),
                         ),
-                        rightTitles: AxisTitles(
+                        rightTitles: const AxisTitles(
                           sideTitles: SideTitles(showTitles: false),
                         ),
-
                         leftTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            reservedSize: 30,
-                            interval: _safeInterval(
-                              _getNiceMaxY(maxY, title) / 3,
-                            ),
-                            getTitlesWidget: (value, meta) {
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 2.0),
-                                child: Text(
-                                  _formatCompactNumber(value),
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                    fontSize: 8,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              );
-                            },
+                            reservedSize: 36,
+                            getTitlesWidget: _buildLeftTitle,
                           ),
                         ),
 
                         bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            reservedSize: 18,
-                            interval: _getCompactXInterval(
-                              timeRange,
-                            ).toDouble(),
-                            getTitlesWidget: (value, meta) {
-                              final interval = _getCompactXInterval(timeRange);
-                              if (value.toInt() % interval != 0) {
-                                return const SizedBox.shrink();
-                              }
-                              return _buildCompactXAxisTitle(
-                                value.toInt(),
-                                maxXValue.toInt(),
-                                timeRange,
-                              );
+                            reservedSize: 36, // نفس الحجم
+                            interval: _getInterval(),
+                            getTitlesWidget: (value, _) {
+                              return _buildXAxisTitle(value.toInt());
                             },
                           ),
                         ),
                       ),
-
                       borderData: FlBorderData(
                         show: true,
-                        border: Border.all(
-                          color: Colors.grey[300]!,
-                          width: 0.5,
-                        ),
+                        border: Border.all(color: Colors.grey[300]!, width: 1),
                       ),
-
                       barGroups: spots.map((spot) {
                         return BarChartGroupData(
                           x: spot.x.toInt(),
                           barRods: [
                             BarChartRodData(
                               toY: spot.y,
-                              width: 3, // أرق
-                              borderRadius: BorderRadius.circular(2),
-                              color: color,
+                              width: _getBarWidth(_selectedTimeRange),
+                              borderRadius: BorderRadius.circular(4),
+                              color: spot.y > 0 ? color : Colors.grey[300]!,
+                              backDrawRodData: BackgroundBarChartRodData(
+                                show: true,
+                                toY: spot.y + 0.5,
+                                color: Colors.grey[100]!,
+                              ),
                             ),
                           ],
                         );
                       }).toList(),
-
-                      minY: 0,
-                      maxY: _getNiceMaxY(maxY, title),
+                      barTouchData: BarTouchData(
+                        enabled: true,
+                        touchTooltipData: BarTouchTooltipData(
+                          tooltipBgColor: color,
+                          getTooltipItem: (group, _, rod, __) {
+                            return BarTooltipItem(
+                              '${rod.toY.toInt()}',
+                              const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
           ),
 
-          if (showStats && spots.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildCompactMiniStat('الأعلى', _formatCompactNumber(maxY)),
-                  _buildCompactMiniStat(
-                    'المتوسط',
-                    _formatCompactNumber(
-                      spots.map((e) => e.y).reduce((a, b) => a + b) /
-                          spots.length,
-                    ),
-                  ),
-                  _buildCompactMiniStat(
-                    'الفترة',
-                    _getCompactPeriodName(timeRange),
-                  ),
-                ],
-              ),
+          const SizedBox(height: 8),
+          _buildRangeNavigator(),
+
+          /// 👇 الإحصائيات (نفس تشارت اليوزر)
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildCompactMiniStat('الأعلى', maxY.toInt().toString()),
+                _buildCompactMiniStat('المتوسط', average.toStringAsFixed(1)),
+                _buildCompactMiniStat('الفترة', _selectedTimeRange),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -1812,7 +1885,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           totalCompletedTasks +=
                               num.tryParse(ct.toString()) ?? 0;
                       }
-
+                      final double totalPointsValue = totalPoints.toDouble();
+                      final double totalTasksValue = totalCompletedTasks
+                          .toDouble();
+                      final double totalCarbonValue = totalCarbon.toDouble();
                       return Column(
                         children: [
                           _buildCarbonOverviewCard(
@@ -1860,7 +1936,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           const SizedBox(height: 20),
 
                           SizedBox(
-                            height: 280,
+                            height: 400,
                             child: PageView(
                               children: [
                                 _buildChartCard(
@@ -1871,19 +1947,19 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                 ),
                                 _buildBarChartCard(
                                   'إكمال المهام',
-                                  _taskCompletionSpots,
+                                  _taskCompletionSpots, // استخدم البيانات الفعلية
                                   appColors.sea,
                                   _selectedTimeRange,
                                 ),
                                 _buildChartCard(
                                   'تراكم النقاط',
-                                  _pointsSpots,
+                                  _pointsSpots, // استخدم البيانات الفعلية
                                   appColors.accent,
                                   _selectedTimeRange,
                                 ),
                                 _buildBarChartCard(
                                   'توفير الكربون',
-                                  _carbonSpots,
+                                  _carbonSpots, // استخدم البيانات الفعلية
                                   appColors.tealSoft,
                                   _selectedTimeRange,
                                 ),
@@ -2432,6 +2508,104 @@ class _AdminHomePageState extends State<AdminHomePage> {
         color: Colors.grey[200],
         borderRadius: BorderRadius.circular(16),
       ),
+    );
+  }
+
+  // 🔧 دالة لتحديد عرض الأشرطة (نفس تشارت اليوزر)
+  double _getBarWidth(String range) {
+    switch (range) {
+      case 'اليوم':
+        return 8.0;
+      case 'أسبوع':
+        return 14.0;
+      case 'شهر':
+        return 4.0;
+      case 'سنة':
+        return 10.0;
+      default:
+        return 10.0;
+    }
+  }
+
+  // 🔧 دالة للفاصل الزمني (نفس تشارت اليوزر)
+  double _getInterval() {
+    switch (_selectedTimeRange) {
+      case 'اليوم':
+        return 3.0;
+      case 'أسبوع':
+        return 1.0;
+      case 'شهر':
+        return 5.0;
+      case 'سنة':
+        return 1.0;
+      default:
+        return 1.0;
+    }
+  }
+
+  // 🔧 دالة لعرض تسميات المحور X (نفس تشارت اليوزر)
+  Widget _buildXAxisTitle(int index) {
+    if (_selectedTimeRange == 'اليوم') {
+      final showHours = [0, 3, 6, 9, 12, 15, 18, 21, 23];
+      if (showHours.contains(index)) {
+        return Text('$index', style: const TextStyle(fontSize: 10));
+      }
+      return const SizedBox();
+    }
+
+    if (_selectedTimeRange == 'أسبوع') {
+      const days = ['أحد', 'إثن', 'ثلا', 'أرب', 'خم', 'جم', 'سبت'];
+      if (index >= 0 && index < 7) {
+        return Text(days[index], style: const TextStyle(fontSize: 10));
+      }
+      return const SizedBox();
+    }
+
+    if (_selectedTimeRange == 'شهر') {
+      final day = index + 1;
+      final lastDay = DateTime(_cursorDate.year, _cursorDate.month, 0).day;
+      final showDays = [1, 5, 10, 15, 20, 25, lastDay];
+      if (showDays.contains(day)) {
+        return Text(day.toString(), style: const TextStyle(fontSize: 10));
+      }
+      return const SizedBox();
+    }
+
+    const months = [
+      'ينا',
+      'فبر',
+      'مار',
+      'أبر',
+      'ماي',
+      'يون',
+      'يول',
+      'أغس',
+      'سبت',
+      'أكت',
+      'نوف',
+      'ديس',
+    ];
+    if (index >= 0 && index < 12) {
+      return Text(months[index], style: const TextStyle(fontSize: 10));
+    }
+    return const SizedBox();
+  }
+
+  // 🔧 إحصائيات مصغرة (نفس تشارت اليوزر)
+  Widget _buildCompactMiniStat(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: appColors.dark,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+      ],
     );
   }
 }

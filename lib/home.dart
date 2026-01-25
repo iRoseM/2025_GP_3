@@ -2673,7 +2673,11 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
       case 'شهر':
         return '${_cursorDate.month}/${_cursorDate.year}';
       case 'أسبوع':
-        return 'أسبوع ${_cursorDate.weekday}';
+        // 🔧 حساب صحيح للأسبوع يبدأ من الأحد
+        final weekday = _cursorDate.weekday;
+        final weekStart = _cursorDate.subtract(Duration(days: weekday % 7));
+        final weekEnd = weekStart.add(const Duration(days: 6));
+        return '${weekStart.day}/${weekStart.month} - ${weekEnd.day}/${weekEnd.month}';
       case 'اليوم':
         return '${_cursorDate.day}/${_cursorDate.month}/${_cursorDate.year}';
       default:
@@ -2718,13 +2722,17 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
 
   bool get _canGoNext {
     final now = DateTime.now();
+    final todayWeekStart = now.subtract(Duration(days: now.weekday % 7));
 
     if (_range == 'سنة') return _cursorDate.year < now.year;
     if (_range == 'شهر') {
       return _cursorDate.year < now.year || _cursorDate.month < now.month;
     }
     if (_range == 'أسبوع') {
-      return _cursorDate.isBefore(now.subtract(const Duration(days: 6)));
+      final cursorWeekStart = _cursorDate.subtract(
+        Duration(days: _cursorDate.weekday % 7),
+      );
+      return cursorWeekStart.isBefore(todayWeekStart);
     }
     return _cursorDate.isBefore(now);
   }
@@ -2813,6 +2821,7 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
           const SizedBox(height: 16),
 
           /// ---------- DATA ----------
+          /// ---------- DATA ----------
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _getTasksStream(uid),
             builder: (context, snap) {
@@ -2825,23 +2834,7 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
                 );
               }
 
-              if (!snap.hasData || snap.data!.docs.isEmpty) {
-                return _buildNoData('لا توجد مهام بعد');
-              }
-
-              final approvedDocs = snap.data!.docs
-                  .where((doc) => doc.data()['status'] == 'approved')
-                  .toList();
-
-              if (approvedDocs.isEmpty) {
-                return _buildNoData('لا توجد مهام معتمدة بعد');
-              }
-
-              final bars = _buildSpots(approvedDocs);
-
-              if (bars.isEmpty) {
-                return _buildNoData('لا توجد بيانات في الفترة المحددة');
-              }
+              final bars = _buildSpots(snap.data?.docs ?? []);
 
               final maxY = bars
                   .map((e) => e.barRods.first.toY)
@@ -2854,14 +2847,17 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
               return Column(
                 children: [
                   SizedBox(
-                    height: 160, // ⬅️ أصغر لتفادي overflow
+                    height: 160,
                     child: BarChart(
                       BarChartData(
                         minY: 0,
+                        maxY: maxY == 0 ? 3 : null, // حد أدنى للمحور Y
                         gridData: FlGridData(
                           show: true,
                           drawVerticalLine: false,
-                          horizontalInterval: 1,
+                          horizontalInterval: maxY == 0
+                              ? 1
+                              : math.max(1, (maxY / 3).ceilToDouble()),
                         ),
                         titlesData: _buildTitles(),
                         borderData: FlBorderData(
@@ -2948,26 +2944,46 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
         sideTitles: SideTitles(
           showTitles: true,
           reservedSize: 36,
+          interval: _getInterval(), // 🔹 إضافة تباعد
           getTitlesWidget: (value, _) {
+            final index = value.toInt();
+
             if (_range == 'اليوم') {
-              return Text(
-                '${value.toInt()}:00',
-                style: const TextStyle(fontSize: 10),
-              );
+              // 🔹 عرض ساعات مختارة فقط
+              final showHours = [0, 3, 6, 9, 12, 15, 18, 21, 23];
+              if (showHours.contains(index)) {
+                return Text('$index', style: const TextStyle(fontSize: 10));
+              }
+              return const SizedBox();
             }
+
             if (_range == 'أسبوع') {
               const days = ['أحد', 'إثن', 'ثلا', 'أرب', 'خم', 'جم', 'سبت'];
-              final i = value.toInt() - 1;
-              return i >= 0 && i < 7
-                  ? Text(days[i], style: const TextStyle(fontSize: 10))
-                  : const SizedBox();
+              if (index >= 0 && index < 7) {
+                return Text(days[index], style: const TextStyle(fontSize: 10));
+              }
+              return const SizedBox();
             }
+
             if (_range == 'شهر') {
-              return Text(
-                value.toInt().toString(),
-                style: const TextStyle(fontSize: 10),
-              );
+              final day = index + 1; // تحويل من 0-based إلى 1-based
+              // 🔹 عرض أيام مختارة فقط
+              final lastDay = DateTime(
+                _cursorDate.year,
+                _cursorDate.month,
+                0,
+              ).day;
+              final showDays = [1, 5, 10, 15, 20, 25, lastDay];
+              if (showDays.contains(day)) {
+                return Text(
+                  day.toString(),
+                  style: const TextStyle(fontSize: 10),
+                );
+              }
+              return const SizedBox();
             }
+
+            // 🔹 السنة
             const months = [
               'ينا',
               'فبر',
@@ -2982,10 +2998,10 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
               'نوف',
               'ديس',
             ];
-            final i = value.toInt() - 1;
-            return i >= 0 && i < 12
-                ? Text(months[i], style: const TextStyle(fontSize: 10))
-                : const SizedBox();
+            if (index >= 0 && index < 12) {
+              return Text(months[index], style: const TextStyle(fontSize: 10));
+            }
+            return const SizedBox();
           },
         ),
       ),
@@ -2993,15 +3009,34 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
         sideTitles: SideTitles(
           showTitles: true,
           reservedSize: 28,
-          getTitlesWidget: (value, _) => Text(
-            value.toInt().toString(),
-            style: const TextStyle(fontSize: 10),
-          ),
+          interval: 1,
+          getTitlesWidget: (value, _) {
+            return Text(
+              value.toInt().toString(),
+              style: const TextStyle(fontSize: 10),
+            );
+          },
         ),
       ),
       topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
       rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
     );
+  }
+
+  // 🔹 دالة تحدد التباعد المناسب لكل فترة
+  double _getInterval() {
+    switch (_range) {
+      case 'اليوم':
+        return 3.0; // كل 3 وحدات
+      case 'أسبوع':
+        return 1.0;
+      case 'شهر':
+        return 5.0; // كل 5 وحدات
+      case 'سنة':
+        return 1.0;
+      default:
+        return 1.0;
+    }
   }
 
   /// ---------- Empty ----------
@@ -3047,17 +3082,21 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
 
     DateTime startDate;
     DateTime endDate;
+    int totalBars;
 
+    // 🔹 تحديد عدد الأشرطة لكل فترة
     if (_range == 'سنة') {
+      totalBars = 12;
       startDate = DateTime(_cursorDate.year, 1, 1);
       endDate = DateTime(_cursorDate.year + 1, 1, 1);
     } else if (_range == 'شهر') {
+      totalBars = DateTime(_cursorDate.year, _cursorDate.month + 1, 0).day;
       startDate = DateTime(_cursorDate.year, _cursorDate.month, 1);
       endDate = DateTime(_cursorDate.year, _cursorDate.month + 1, 1);
     } else if (_range == 'أسبوع') {
-      final startOfWeek = _cursorDate.subtract(
-        Duration(days: _cursorDate.weekday - 1),
-      );
+      totalBars = 7;
+      final weekday = _cursorDate.weekday;
+      final startOfWeek = _cursorDate.subtract(Duration(days: weekday % 7));
       startDate = DateTime(
         startOfWeek.year,
         startOfWeek.month,
@@ -3065,6 +3104,7 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
       );
       endDate = startDate.add(const Duration(days: 7));
     } else {
+      totalBars = 24; // ساعات اليوم
       startDate = DateTime(
         _cursorDate.year,
         _cursorDate.month,
@@ -3073,6 +3113,12 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
       endDate = startDate.add(const Duration(days: 1));
     }
 
+    // 🔹 تهيئة جميع الأشرطة بصفر
+    for (int i = 0; i < totalBars; i++) {
+      buckets[i] = 0;
+    }
+
+    // 🔹 ملء البيانات الفعلية
     for (final doc in docs) {
       final data = doc.data();
       final Timestamp? ts = data['completedAt'] ?? data['createdAt'];
@@ -3080,39 +3126,70 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
 
       final date = ts.toDate();
 
-      // ✅ الفلترة الصحيحة
+      // ✅ تأكد من التاريخ ضمن النطاق
       if (date.isBefore(startDate) || date.isAfter(endDate)) continue;
 
-      final key = _range == 'اليوم'
-          ? date.hour
-          : _range == 'أسبوع'
-          ? date.weekday
-          : _range == 'شهر'
-          ? date.day
-          : date.month;
+      int key;
+      if (_range == 'اليوم') {
+        key = date.hour; // 0-23
+      } else if (_range == 'أسبوع') {
+        // 🔹 نحتاج لمعرفة اليوم بالنسبة لبداية الأسبوع
+        final diff = date.difference(startDate).inDays;
+        key = diff; // 0-6
+      } else if (_range == 'شهر') {
+        key = date.day - 1; // 0-30 (لأن days من 1-31)
+      } else {
+        key = date.month - 1; // 0-11
+      }
 
-      buckets[key] = (buckets[key] ?? 0) + 1;
+      // 🔹 تحقق من صحة الفهرس
+      if (key >= 0 && key < totalBars) {
+        buckets[key] = (buckets[key] ?? 0) + 1;
+      }
     }
 
-    return buckets.entries
-        .map(
-          (e) => BarChartGroupData(
-            x: e.key,
-            barRods: [
-              BarChartRodData(
-                toY: e.value.toDouble(),
-                width: 14,
-                borderRadius: BorderRadius.circular(6),
-                color: appColors.primary,
-                backDrawRodData: BackgroundBarChartRodData(
-                  show: true,
-                  toY: e.value.toDouble() + 0.5,
-                  color: Colors.grey[100]!,
-                ),
-              ),
-            ],
+    // 🔹 إنشاء الأشرطة مع إصلاح الخطأ
+    return List.generate(totalBars, (index) {
+      return BarChartGroupData(
+        x: index, // 🔹 تأكد من أن x هو double
+        barRods: [
+          BarChartRodData(
+            toY: (buckets[index] ?? 0).toDouble(),
+            width: _getBarWidth(), // 🔹 عرض شريط ديناميكي
+            borderRadius: BorderRadius.circular(4),
+            color: (buckets[index] ?? 0) > 0
+                ? appColors.primary
+                : Colors.grey[300]!,
+            backDrawRodData: BackgroundBarChartRodData(
+              show: true,
+              toY: (buckets[index] ?? 0).toDouble() + 0.5,
+              color: Colors.grey[100]!,
+            ),
           ),
-        )
-        .toList();
+        ],
+      );
+    });
+  }
+
+  // 🔹 تحديد عرض الشريط بناءً على الفترة
+  double _getBarWidth() {
+    switch (_range) {
+      case 'اليوم':
+        return 8.0; // 24 شريط → أضيق
+      case 'أسبوع':
+        return 14.0; // 7 أشرطة → أوسع
+      case 'شهر':
+        return 4.0; // 31 شريط → أضيق جداً
+      case 'سنة':
+        return 10.0; // 12 شريط → متوسط
+      default:
+        return 10.0;
+    }
+  }
+
+  // 🔧 دالة لتحويل اليوم إلى فهرس يبدأ من الأحد = 0
+  int _getDayIndex(DateTime date) {
+    // تحويل: الأحد = 0, الإثنين = 1, ..., السبت = 6
+    return date.weekday % 7;
   }
 }
