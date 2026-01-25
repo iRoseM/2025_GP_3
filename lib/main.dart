@@ -19,6 +19,7 @@ import 'home.dart';
 import 'admin_home.dart';
 import '../services/app_colors.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -118,6 +119,12 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Nameer Register',
       locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: scheme.copyWith(

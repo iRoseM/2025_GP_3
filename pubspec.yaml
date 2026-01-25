@@ -13,7 +13,8 @@ dependencies:
   http: ^1.2.0
   flutter:
     sdk: flutter
-
+  flutter_localizations:
+    sdk: flutter
   animations: ^2.0.11
   cupertino_icons: ^1.0.8
   flutter_cube: ^0.1.1
@@ -47,7 +48,7 @@ dependencies:
   showcaseview: ^5.0.1
 
   fl_chart: ^0.64.0 
-  syncfusion_flutter_charts: ^24.1.46
+  syncfusion_flutter_charts: 32.1.24
 
 
 dev_dependencies:

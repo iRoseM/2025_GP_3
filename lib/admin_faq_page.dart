@@ -177,11 +177,7 @@ class _AdminFaqPageState extends State<AdminFaqPage> {
                   await FirebaseFirestore.instance
                       .collection('faqs')
                       .doc(docId)
-                      .update({
-                        'q': q,
-                        'a': a,
-                        'updatedAt': FieldValue.serverTimestamp(),
-                      });
+                      .update({'q': q, 'a': a});
 
                   if (ctx.mounted) Navigator.pop(ctx);
                 },

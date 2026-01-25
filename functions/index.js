@@ -190,3 +190,86 @@ exports.getMapsKey = onCall((request) => {
   // 🎯 نرجع الكي للعميل بدون ما يكون مكتوب في الكود
   return { apiKey };
 });
+/* ============================================================
+ * 🔔 Reminder: باقي يوم على المهمة (userTasks.windowEnd)
+ * ============================================================ */
+exports.sendOneDayReminderForUserTasks = functions
+  .region("us-central1")
+  .pubsub.schedule("0 9 * * *") // 9:00 AM
+  .timeZone("Asia/Riyadh")
+  .onRun(async () => {
+    const db = admin.firestore();
+
+    const now = new Date();
+
+    // بكرة من 00:00 إلى 23:59
+    const startTomorrow = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      0,
+      0,
+      0,
+      0
+    );
+    const endTomorrow = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1,
+      23,
+      59,
+      59,
+      999
+    );
+
+    const startTs = admin.firestore.Timestamp.fromDate(startTomorrow);
+    const endTs = admin.firestore.Timestamp.fromDate(endTomorrow);
+
+    const snapshot = await db
+      .collection("userTasks")
+      .where("windowEnd", ">=", startTs)
+      .where("windowEnd", "<=", endTs)
+      .get();
+
+    if (snapshot.empty) return null;
+
+    const pad = (n) => String(n).padStart(2, "0");
+    const ymd = `${startTomorrow.getFullYear()}${pad(
+      startTomorrow.getMonth() + 1
+    )}${pad(startTomorrow.getDate())}`;
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const userId = data.userId;
+      if (!userId) continue;
+
+      // نتجاهل المكتملة
+      if ((data.status || "").toLowerCase() === "completed") continue;
+
+      const taskTitle = data.taskTitle || "مهمة";
+
+      // DocId ثابت يمنع التكرار
+      const notifId = `rem1d_${doc.id}_${ymd}`;
+      const notifRef = db.collection("notifications").doc(notifId);
+
+      const exists = await notifRef.get();
+      if (exists.exists) continue;
+
+      await notifRef.set({
+        type: "user_task_one_day_reminder",
+        userId: userId,
+        userTaskDocId: doc.id,
+        taskId: data.taskId || null,
+        taskTitle: taskTitle,
+
+    title: "تذكير ⏳",
+    body: `لا تنسى مهمتك "${taskTitle}"، باقي يوم واحد عليها.`,
+
+
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        seen: false,
+      });
+    }
+
+    return null;
+  });
