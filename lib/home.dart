@@ -7,6 +7,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/animation.dart';
 import 'rewards.dart';
 import 'package:showcaseview/showcaseview.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 import 'task.dart';
 import 'community.dart';
@@ -18,6 +19,7 @@ import 'services/bottom_nav.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
 import '../services/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class homePage extends StatefulWidget {
   const homePage({super.key});
@@ -41,6 +43,8 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   bool _tourRunning = false;
   bool _phase2Started = false; // علشان ما نكرر تشغيل المرحلة الثانية
   BuildContext? _scCtx; // نخزّن showcaseContext
+  bool _ecoLandExpanded = false;
+  DateTime _cursorDate = DateTime.now();
 
   void _onTap(int i) {
     if (i == _currentIndex) return;
@@ -205,6 +209,117 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
         {'fcmToken': token},
       );
     }
+  }
+
+  Widget _miniUserStat({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    String? suffix,
+  }) {
+    return Container(
+      height: 90,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(.15),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: color.withOpacity(.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 22),
+          const Spacer(),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: appColors.dark,
+                ),
+              ),
+              if (suffix != null) ...[
+                const SizedBox(width: 4),
+                Text(
+                  suffix,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ],
+          ),
+          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserChartCard(List<FlSpot> spots) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'تقدم إنجاز المهام',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: appColors.dark,
+            ),
+          ),
+
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 160,
+            child: spots.isEmpty
+                ? const Center(child: Text('لا توجد بيانات بعد'))
+                : LineChart(
+                    LineChartData(
+                      minY: 0,
+                      gridData: FlGridData(show: false),
+                      titlesData: FlTitlesData(show: false),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: spots,
+                          isCurved: true,
+                          barWidth: 3,
+                          color: appColors.primary,
+                          dotData: FlDotData(show: false),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: appColors.primary.withOpacity(.15),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -739,7 +854,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                               return SizedBox(
                                                 width: size.width,
                                                 height:
-                                                    320, // رفعنا الارتفاع عشان يسمح للنزلة
+                                                    300, // رفعنا الارتفاع عشان يسمح للنزلة
                                                 child: Stack(
                                                   clipBehavior: Clip.none,
                                                   children: [
@@ -875,6 +990,42 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                             },
                           ),
                         ),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            child: Align(
+                              alignment: Alignment.centerRight, // أو centerLeft
+                              child:
+                                  StreamBuilder<
+                                    QuerySnapshot<Map<String, dynamic>>
+                                  >(
+                                    stream: FirebaseFirestore.instance
+                                        .collection('submissions')
+                                        .where(
+                                          'userId',
+                                          isEqualTo: FirebaseAuth
+                                              .instance
+                                              .currentUser
+                                              ?.uid,
+                                        )
+                                        .where('status', isEqualTo: 'approved')
+                                        .snapshots(),
+                                    builder: (context, snap) {
+                                      if (!snap.hasData) {
+                                        return const SizedBox();
+                                      }
+
+                                      final streak = calculateStreak(
+                                        snap.data!.docs,
+                                      );
+
+                                      return _StreakBadge(days: streak);
+                                    },
+                                  ),
+                            ),
+                          ),
+                        ),
+
                         // === إجمالي خفض الكربون ===
                         SliverToBoxAdapter(
                           child: Padding(
@@ -961,99 +1112,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
 
                         const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
-                        // === Daily progress الداشبورد ===
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                            child: Showcase.withWidget(
-                              overlayColor: Colors.black.withOpacity(0.35),
-                              overlayOpacity: 0.35,
-                              blurValue: 0,
-                              key: _summaryKey,
-
-                              // 👇 نضيف Builder للحصول على ctx
-                              container: Builder(
-                                builder: (ctx) => Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: appColors.primary.withOpacity(
-                                          .20,
-                                        ),
-                                        blurRadius: 12,
-                                        offset: Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Directionality(
-                                    textDirection: TextDirection.rtl,
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'لوحة التحكم اليومية',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 16,
-                                            color: appColors.dark,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        const Text(
-                                          'هنا متابعة إنجازات اليوم: نسبة التقدّم، المهام المنجزة والمتبقية، وسلسلة الأيام المتتالية. استخدمها لمعرفة ما يلزمك اليوم.',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            height: 1.6,
-                                            color: Colors.black87,
-                                          ),
-                                        ),
-
-                                        const SizedBox(height: 16),
-
-                                        // ⭐ زر تخطي الجولة
-                                        Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: TextButton(
-                                            onPressed: () {
-                                              ShowCaseWidget.of(
-                                                _scCtx!,
-                                              ).dismiss();
-                                            },
-                                            child: const Text(
-                                              'تخطي الجولة',
-                                              style: TextStyle(
-                                                color: appColors.primary,
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              child: _DailyProgressCard(
-                                percent: .62,
-                                bullets: const [
-                                  'أنهيت مهمتين من قائمة اليوم',
-                                  'تبقّى: إعادة تدوير البلاستيك + قراءة مقال',
-                                  'سلسلة الاستدامة: 3 أيام متتالية!',
-                                ],
-                                onTapDetails: () {},
-                                colored: false,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
                         // === بلوك الأرض مع العنوان داخل نفس الحاوية ===
                         SliverToBoxAdapter(
                           child: Padding(
@@ -1066,7 +1124,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                 overlayOpacity: 0.35,
                                 blurValue: 0,
 
-                                // 👇 لازم Builder للحصول على ctx
+                                // 👇 محتوى البالون (الشرح)
                                 container: Builder(
                                   builder: (ctx) => Container(
                                     padding: const EdgeInsets.all(12),
@@ -1104,17 +1162,14 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                               color: Colors.black87,
                                             ),
                                           ),
-
                                           const SizedBox(height: 16),
-
-                                          // ⭐ زر تخطي الجولة
                                           Align(
                                             alignment: Alignment.centerLeft,
                                             child: TextButton(
                                               onPressed: () {
                                                 ShowCaseWidget.of(
                                                   _scCtx!,
-                                                ).dismiss();
+                                                )?.dismiss();
                                               },
                                               child: const Text(
                                                 'تخطي الجولة',
@@ -1131,79 +1186,111 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                   ),
                                 ),
 
-                                // 👇 البلوك القديم (بدون تعديل)
-                                child: Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(24),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Color(0x14000000),
-                                        blurRadius: 18,
-                                        offset: Offset(0, 8),
-                                      ),
-                                    ],
-                                    border: Border.all(
-                                      color: Color(0xFFE8F1EE),
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: appColors.primary
-                                                  .withOpacity(.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: const Icon(
-                                              Icons.terrain_rounded,
-                                              color: appColors.primary,
-                                              size: 24,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          const Expanded(
-                                            child: Text(
-                                              'أرضي في EcoLand',
-                                              style: TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.w900,
-                                                color: appColors.dark,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 14),
-
-                                      SizedBox(
-                                        width: double.infinity,
-                                        height: 170,
-                                        child: IsoLand(
-                                          rows: 6,
-                                          cols: 6,
-                                          height: 150,
-                                          topColor: appColors.mint,
-                                          sideColor: appColors.tealSoft,
-                                          gridColor: appColors.sea,
-                                          gridOpacity: .08,
+                                // 👇 الكرت الأساسي
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(20),
+                                  onTap: () {
+                                    setState(() {
+                                      _ecoLandExpanded = !_ecoLandExpanded;
+                                    });
+                                  },
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(20),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.grey.withOpacity(0.12),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // 🔹 الهيدر
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'EcoLand',
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: appColors.dark,
+                                                  ),
+                                            ),
+                                            Icon(
+                                              _ecoLandExpanded
+                                                  ? Icons.keyboard_arrow_up
+                                                  : Icons.keyboard_arrow_down,
+                                              color: appColors.primary,
+                                            ),
+                                          ],
+                                        ),
+
+                                        const SizedBox(height: 6),
+
+                                        Text(
+                                          'تابع تقدمك في إكمال المهام',
+                                          style: GoogleFonts.ibmPlexSansArabic(
+                                            fontSize: 13,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+
+                                        const SizedBox(height: 14),
+
+                                        // 🌍 EcoLand — ظاهرة دايم
+                                        const SizedBox(
+                                          width: double.infinity,
+                                          height: 170,
+                                          child: IsoLand(
+                                            rows: 6,
+                                            cols: 6,
+                                            height: 150,
+                                            thickness: 14,
+                                            topColor: appColors.mint,
+                                            sideColor: appColors.tealSoft,
+                                            gridColor: appColors.sea,
+                                            gridOpacity: .08,
+                                          ),
+                                        ),
+
+                                        // 👇 الاكسباند (التشارت فقط)
+                                        AnimatedSize(
+                                          duration: const Duration(
+                                            milliseconds: 320,
+                                          ),
+                                          curve: Curves.easeInOut,
+                                          child: _ecoLandExpanded
+                                              ? const Padding(
+                                                  padding: EdgeInsets.only(
+                                                    top: 16,
+                                                  ),
+                                                  child: SizedBox(
+                                                    height: 400,
+                                                    child:
+                                                        _UserTaskProgressCard(),
+                                                  ),
+                                                )
+                                              : const SizedBox.shrink(),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
                         ),
+
                         const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
                         // Banner
@@ -1482,6 +1569,58 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
     );
   }
 
+  int calculateStreak(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    final Set<DateTime> activeDays = {};
+
+    for (final doc in docs) {
+      final data = doc.data();
+
+      // ✅ نعتمد فقط على submissions.createdAt
+      final Timestamp? ts = data['createdAt'];
+      if (ts == null) continue;
+
+      final d = ts.toDate();
+      final dayOnly = DateTime(d.year, d.month, d.day);
+      activeDays.add(dayOnly);
+    }
+
+    int streak = 0;
+    DateTime cursor = DateTime.now();
+    cursor = DateTime(cursor.year, cursor.month, cursor.day);
+
+    while (activeDays.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    return streak;
+  }
+
+  void _showTaskProgressSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.65,
+          minChildSize: 0.5,
+          maxChildSize: 0.9,
+          builder: (_, controller) {
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: const _UserTaskProgressCard(),
+            );
+          },
+        );
+      },
+    );
+  }
+
   // 💬 بالون شرح شريط التنقل
   Widget _buildNavBarHelpBubble() {
     return Container(
@@ -1650,7 +1789,7 @@ class _InlineBanner extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
-                    vertical: 6,
+                    vertical: 4,
                   ),
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -1679,6 +1818,54 @@ class _InlineBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+DateTime getStartDateForRange(String range) {
+  final now = DateTime.now();
+
+  switch (range) {
+    case 'اليوم':
+      return DateTime(now.year, now.month, now.day);
+    case 'أسبوع':
+      return now.subtract(const Duration(days: 7));
+    case 'شهر':
+      return now.subtract(const Duration(days: 30));
+    case 'سنة':
+      return DateTime(now.year - 1, now.month, 1);
+    default:
+      return now.subtract(const Duration(days: 7));
+  }
+}
+
+List<FlSpot> buildSpotsFromDocs(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  String range,
+) {
+  final start = getStartDateForRange(range);
+  final Map<int, int> buckets = {};
+
+  for (final doc in docs) {
+    final ts = doc.data()['createdAt'];
+    if (ts is! Timestamp) continue;
+
+    final date = ts.toDate();
+    if (date.isBefore(start)) continue;
+
+    int key;
+    if (range == 'اليوم') {
+      key = date.hour;
+    } else if (range == 'سنة') {
+      key = date.month - 1;
+    } else {
+      key = date.difference(start).inDays;
+    }
+
+    buckets[key] = (buckets[key] ?? 0) + 1;
+  }
+
+  final keys = buckets.keys.toList()..sort();
+
+  return keys.map((k) => FlSpot(k.toDouble(), buckets[k]!.toDouble())).toList();
 }
 
 class _CarbonFootprintCard extends StatelessWidget {
@@ -2010,188 +2197,6 @@ Future<void> ensureUserCarbonFields() async {
   //   updates['updatedAt'] = FieldValue.serverTimestamp();
   //   await ref.set(updates, SetOptions(merge: true));
   // }
-}
-
-class _DailyProgressCard extends StatelessWidget {
-  final double percent;
-  final List<String> bullets;
-  final VoidCallback? onTapDetails;
-  final bool colored;
-
-  const _DailyProgressCard({
-    required this.percent,
-    required this.bullets,
-    this.onTapDetails,
-    this.colored = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final decoration = colored
-        ? BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [appColors.primary, appColors.sea],
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: appColors.primary.withOpacity(.3),
-                blurRadius: 24,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          )
-        : BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x14000000),
-                blurRadius: 18,
-                offset: Offset(0, 8),
-              ),
-            ],
-          );
-
-    final baseTextColor = colored ? Colors.white : appColors.dark;
-    final iconColor = colored ? Colors.white : appColors.primary;
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: decoration,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colored
-                      ? Colors.white.withOpacity(.2)
-                      : appColors.primary.withOpacity(.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.dashboard_customize_rounded,
-                  color: iconColor,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'لوحة التحكم اليومية 🎯',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: baseTextColor,
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: _AnimatedRing(percent: percent),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...bullets
-              .take(3)
-              .map(
-                (b) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.check_circle,
-                        size: 20,
-                        color: colored ? appColors.accent : appColors.primary,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          b,
-                          style: TextStyle(
-                            color: baseTextColor,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: onTapDetails,
-              icon: Icon(
-                Icons.arrow_back,
-                size: 16,
-                color: colored ? Colors.white : appColors.primary,
-              ),
-              label: Text(
-                'عرض التفاصيل',
-                style: TextStyle(
-                  color: colored ? Colors.white : appColors.primary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AnimatedRing extends StatelessWidget {
-  final double percent;
-  const _AnimatedRing({required this.percent});
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: percent.clamp(0, 1)),
-      duration: const Duration(milliseconds: 1200),
-      curve: Curves.easeOutBack,
-      builder: (_, v, __) => SizedBox(
-        width: 70,
-        height: 70,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            SizedBox(
-              width: 70,
-              height: 70,
-              child: CircularProgressIndicator(
-                value: v,
-                strokeWidth: 7,
-                strokeCap: StrokeCap.round,
-                backgroundColor: appColors.light.withOpacity(.25),
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  appColors.accent,
-                ),
-              ),
-            ),
-            Text(
-              '${(v * 100).round()}%',
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-                color: appColors.dark,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _FriendCard extends StatelessWidget {
@@ -2604,5 +2609,510 @@ class _SkipTourButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _StreakBadge extends StatelessWidget {
+  final int days;
+  const _StreakBadge({required this.days});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFF9800), Color(0xFFFF5722)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withOpacity(.4),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('🔥', style: TextStyle(fontSize: 16)),
+          const SizedBox(width: 6),
+          Text(
+            '$days يوم متتالي',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UserTaskProgressCard extends StatefulWidget {
+  const _UserTaskProgressCard();
+
+  @override
+  State<_UserTaskProgressCard> createState() => _UserTaskProgressCardState();
+}
+
+class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
+  String _range = 'أسبوع';
+  final ranges = ['اليوم', 'أسبوع', 'شهر', 'سنة'];
+  DateTime _cursorDate = DateTime.now();
+
+  String get _rangeLabel {
+    switch (_range) {
+      case 'سنة':
+        return 'سنة ${_cursorDate.year}';
+      case 'شهر':
+        return '${_cursorDate.month}/${_cursorDate.year}';
+      case 'أسبوع':
+        return 'أسبوع ${_cursorDate.weekday}';
+      case 'اليوم':
+        return '${_cursorDate.day}/${_cursorDate.month}/${_cursorDate.year}';
+      default:
+        return '';
+    }
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _getTasksStream(String uid) {
+    return FirebaseFirestore.instance
+        .collection('submissions')
+        .where('userId', isEqualTo: uid)
+        .snapshots();
+  }
+
+  void _goPrev() {
+    setState(() {
+      if (_range == 'سنة') {
+        _cursorDate = DateTime(_cursorDate.year - 1);
+      } else if (_range == 'شهر') {
+        _cursorDate = DateTime(_cursorDate.year, _cursorDate.month - 1);
+      } else if (_range == 'أسبوع') {
+        _cursorDate = _cursorDate.subtract(const Duration(days: 7));
+      } else {
+        _cursorDate = _cursorDate.subtract(const Duration(days: 1));
+      }
+    });
+  }
+
+  void _goNext() {
+    setState(() {
+      if (_range == 'سنة') {
+        _cursorDate = DateTime(_cursorDate.year + 1);
+      } else if (_range == 'شهر') {
+        _cursorDate = DateTime(_cursorDate.year, _cursorDate.month + 1);
+      } else if (_range == 'أسبوع') {
+        _cursorDate = _cursorDate.add(const Duration(days: 7));
+      } else {
+        _cursorDate = _cursorDate.add(const Duration(days: 1));
+      }
+    });
+  }
+
+  bool get _canGoNext {
+    final now = DateTime.now();
+
+    if (_range == 'سنة') return _cursorDate.year < now.year;
+    if (_range == 'شهر') {
+      return _cursorDate.year < now.year || _cursorDate.month < now.month;
+    }
+    if (_range == 'أسبوع') {
+      return _cursorDate.isBefore(now.subtract(const Duration(days: 6)));
+    }
+    return _cursorDate.isBefore(now);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return const Center(child: Text('غير مسجل'));
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          /// العنوان + الفلتر
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'تقدم إنجاز المهام',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: appColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: appColors.primary.withOpacity(0.3)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _range,
+                    icon: const Icon(
+                      Icons.arrow_drop_down,
+                      size: 20,
+                      color: appColors.primary,
+                    ),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() {
+                        _range = v;
+                        _cursorDate = DateTime.now(); // نرجع للفترة الحالية
+                      });
+                    },
+                    items: ranges
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(
+                              e,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: appColors.dark,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          /// ---------- DATA ----------
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _getTasksStream(uid),
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const SizedBox(
+                  height: 175,
+                  child: Center(
+                    child: CircularProgressIndicator(color: appColors.primary),
+                  ),
+                );
+              }
+
+              if (!snap.hasData || snap.data!.docs.isEmpty) {
+                return _buildNoData('لا توجد مهام بعد');
+              }
+
+              final approvedDocs = snap.data!.docs
+                  .where((doc) => doc.data()['status'] == 'approved')
+                  .toList();
+
+              if (approvedDocs.isEmpty) {
+                return _buildNoData('لا توجد مهام معتمدة بعد');
+              }
+
+              final bars = _buildSpots(approvedDocs);
+
+              if (bars.isEmpty) {
+                return _buildNoData('لا توجد بيانات في الفترة المحددة');
+              }
+
+              final maxY = bars
+                  .map((e) => e.barRods.first.toY)
+                  .reduce((a, b) => a > b ? a : b);
+
+              final average =
+                  bars.map((e) => e.barRods.first.toY).reduce((a, b) => a + b) /
+                  bars.length;
+
+              return Column(
+                children: [
+                  SizedBox(
+                    height: 160, // ⬅️ أصغر لتفادي overflow
+                    child: BarChart(
+                      BarChartData(
+                        minY: 0,
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          horizontalInterval: 1,
+                        ),
+                        titlesData: _buildTitles(),
+                        borderData: FlBorderData(
+                          show: true,
+                          border: Border.all(
+                            color: Colors.grey[300]!,
+                            width: 1,
+                          ),
+                        ),
+                        barGroups: bars,
+                        barTouchData: BarTouchData(
+                          enabled: true,
+                          touchTooltipData: BarTouchTooltipData(
+                            tooltipBgColor: appColors.primary,
+                            getTooltipItem: (group, _, rod, __) {
+                              return BarTooltipItem(
+                                '${rod.toY.toInt()} مهمة',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left),
+                        onPressed: _goPrev,
+                      ),
+                      Text(
+                        _rangeLabel,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right),
+                        onPressed: _canGoNext ? _goNext : null,
+                      ),
+                    ],
+                  ),
+
+                  /// ---------- MINI STATS ----------
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildCompactMiniStat(
+                          'الأعلى',
+                          maxY.toInt().toString(),
+                        ),
+                        _buildCompactMiniStat(
+                          'المتوسط',
+                          average.toStringAsFixed(1),
+                        ),
+                        _buildCompactMiniStat('الفترة', _range),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ---------- Titles ----------
+  FlTitlesData _buildTitles() {
+    return FlTitlesData(
+      bottomTitles: AxisTitles(
+        sideTitles: SideTitles(
+          showTitles: true,
+          reservedSize: 36,
+          getTitlesWidget: (value, _) {
+            if (_range == 'اليوم') {
+              return Text(
+                '${value.toInt()}:00',
+                style: const TextStyle(fontSize: 10),
+              );
+            }
+            if (_range == 'أسبوع') {
+              const days = ['أحد', 'إثن', 'ثلا', 'أرب', 'خم', 'جم', 'سبت'];
+              final i = value.toInt() - 1;
+              return i >= 0 && i < 7
+                  ? Text(days[i], style: const TextStyle(fontSize: 10))
+                  : const SizedBox();
+            }
+            if (_range == 'شهر') {
+              return Text(
+                value.toInt().toString(),
+                style: const TextStyle(fontSize: 10),
+              );
+            }
+            const months = [
+              'ينا',
+              'فبر',
+              'مار',
+              'أبر',
+              'ماي',
+              'يون',
+              'يول',
+              'أغس',
+              'سبت',
+              'أكت',
+              'نوف',
+              'ديس',
+            ];
+            final i = value.toInt() - 1;
+            return i >= 0 && i < 12
+                ? Text(months[i], style: const TextStyle(fontSize: 10))
+                : const SizedBox();
+          },
+        ),
+      ),
+      leftTitles: AxisTitles(
+        sideTitles: SideTitles(
+          showTitles: true,
+          reservedSize: 28,
+          getTitlesWidget: (value, _) => Text(
+            value.toInt().toString(),
+            style: const TextStyle(fontSize: 10),
+          ),
+        ),
+      ),
+      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+    );
+  }
+
+  /// ---------- Empty ----------
+  Widget _buildNoData(String text) {
+    return SizedBox(
+      height: 175,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.bar_chart_outlined, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text(text, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ---------- Mini stat ----------
+  Widget _buildCompactMiniStat(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: appColors.dark,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  /// ---------- Chart logic ----------
+  List<BarChartGroupData> _buildSpots(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final Map<int, int> buckets = {};
+
+    DateTime startDate;
+    DateTime endDate;
+
+    if (_range == 'سنة') {
+      startDate = DateTime(_cursorDate.year, 1, 1);
+      endDate = DateTime(_cursorDate.year + 1, 1, 1);
+    } else if (_range == 'شهر') {
+      startDate = DateTime(_cursorDate.year, _cursorDate.month, 1);
+      endDate = DateTime(_cursorDate.year, _cursorDate.month + 1, 1);
+    } else if (_range == 'أسبوع') {
+      final startOfWeek = _cursorDate.subtract(
+        Duration(days: _cursorDate.weekday - 1),
+      );
+      startDate = DateTime(
+        startOfWeek.year,
+        startOfWeek.month,
+        startOfWeek.day,
+      );
+      endDate = startDate.add(const Duration(days: 7));
+    } else {
+      startDate = DateTime(
+        _cursorDate.year,
+        _cursorDate.month,
+        _cursorDate.day,
+      );
+      endDate = startDate.add(const Duration(days: 1));
+    }
+
+    for (final doc in docs) {
+      final data = doc.data();
+      final Timestamp? ts = data['completedAt'] ?? data['createdAt'];
+      if (ts == null) continue;
+
+      final date = ts.toDate();
+
+      // ✅ الفلترة الصحيحة
+      if (date.isBefore(startDate) || date.isAfter(endDate)) continue;
+
+      final key = _range == 'اليوم'
+          ? date.hour
+          : _range == 'أسبوع'
+          ? date.weekday
+          : _range == 'شهر'
+          ? date.day
+          : date.month;
+
+      buckets[key] = (buckets[key] ?? 0) + 1;
+    }
+
+    return buckets.entries
+        .map(
+          (e) => BarChartGroupData(
+            x: e.key,
+            barRods: [
+              BarChartRodData(
+                toY: e.value.toDouble(),
+                width: 14,
+                borderRadius: BorderRadius.circular(6),
+                color: appColors.primary,
+                backDrawRodData: BackgroundBarChartRodData(
+                  show: true,
+                  toY: e.value.toDouble() + 0.5,
+                  color: Colors.grey[100]!,
+                ),
+              ),
+            ],
+          ),
+        )
+        .toList();
   }
 }
