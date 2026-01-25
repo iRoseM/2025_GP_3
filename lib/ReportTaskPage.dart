@@ -139,17 +139,18 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: slackMesseges.primary,
-          content: Text(
-            'تم إرسال البلاغ ✅',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
-        ),
+      _showThanksDialog(
+        title: 'شكرًا لك',
+        message:
+            'تم استلام بلاغك بنجاح\nسيتم مراجعته وسنقوم بإشعارك عند معالجته',
+        onDone: () {
+          // reset بعد ما يقفل الديالوج (نفس اللي عندك)
+          setState(() {
+            _descCtrl.clear();
+            _selectedTaskId = null;
+            _selectedTaskTitle = null;
+          });
+        },
       );
 
       // reset
@@ -175,6 +176,89 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  void _showThanksDialog({
+    required String title,
+    required String message,
+    VoidCallback? onDone,
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: SizedBox(
+            width: 340,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/img/nameerLove.png',
+                    height: 120,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: appColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: appColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: 140,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: appColors.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 10,
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        onDone?.call();
+                      },
+                      child: Text(
+                        'تم',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override

@@ -20,6 +20,7 @@ import 'services/background_container.dart';
 import 'services/title_header.dart';
 import 'admin_task_check.dart';
 import '../services/app_colors.dart';
+import 'admin_task_reports.dart';
 
 class AdminHomePage extends StatefulWidget {
   const AdminHomePage({super.key});
@@ -2015,6 +2016,126 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                   const Icon(
                                     Icons.chevron_left,
                                     color: appColors.primary,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 14),
+
+                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('taskReports')
+                        .where('decision', isEqualTo: 'pending')
+                        .snapshots(),
+                    builder: (context, snap) {
+                      final isLoading =
+                          snap.connectionState == ConnectionState.waiting;
+                      final count = (snap.data?.docs.length ?? 0);
+
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AdminTaskReportsPage(),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 16,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.grey.withOpacity(0.15),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                            border: Border.all(
+                              color: appColors.accent.withOpacity(0.25),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: appColors.accent.withOpacity(.14),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.report_gmailerrorred_rounded,
+                                  color: appColors.accent,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'بلاغات المهام للمراجعة',
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: appColors.dark,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      isLoading
+                                          ? 'جاري التحميل...'
+                                          : (count == 0
+                                                ? 'لا توجد بلاغات جديدة حالياً'
+                                                : 'لديك $count بلاغ${count == 1 ? '' : 'ات'} بانتظار المراجعة'),
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        fontSize: 13.5,
+                                        color: Colors.grey[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: appColors.accent.withOpacity(.14),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      isLoading ? '—' : '$count',
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: appColors.accent,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  const Icon(
+                                    Icons.chevron_left,
+                                    color: appColors.accent,
                                   ),
                                 ],
                               ),
