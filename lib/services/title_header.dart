@@ -82,27 +82,29 @@ class NameerAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
           )
         : const SizedBox.shrink();
-
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      automaticallyImplyLeading: false,
-      leading: leading,
-      centerTitle: centerTitle,
-      toolbarHeight: height,
-      actions: actions,
-      title: showTitleInBar ? titleWidget : null,
-      flexibleSpace: Stack(
-        fit: StackFit.expand,
-        children: [gradientBg, frostedLayer],
+    return Material(
+      type: MaterialType.transparency,
+      child: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        automaticallyImplyLeading: false,
+        leading: leading,
+        centerTitle: centerTitle,
+        toolbarHeight: height,
+        actions: actions,
+        title: showTitleInBar ? titleWidget : null,
+        flexibleSpace: Stack(
+          fit: StackFit.expand,
+          children: [gradientBg, frostedLayer],
+        ),
+        bottom:
+            bottom ??
+            const PreferredSize(
+              preferredSize: Size.fromHeight(0),
+              child: SizedBox.shrink(),
+            ),
       ),
-      bottom:
-          bottom ??
-          const PreferredSize(
-            preferredSize: Size.fromHeight(0),
-            child: SizedBox.shrink(),
-          ),
     );
   }
 }

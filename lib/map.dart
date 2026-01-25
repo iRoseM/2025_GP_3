@@ -1696,27 +1696,29 @@ class _mapPageState extends State<mapPage> {
                     children: [
                       // ✅ الجزء العلوي: يا تعليمات البلاغ يا هيدر اليوزر
                       if (reportMode)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x14000000),
-                                blurRadius: 16,
-                                offset: Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: const Text(
-                            'اختار الحاوية ثم اضغط على "الإبلاغ عن مشكلة"',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontWeight: FontWeight.w800),
+                        Align(
+                          alignment: Alignment.topRight,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 55,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x14000000),
+                                  blurRadius: 16,
+                                  offset: Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: const Text(
+                              'اختار الحاوية ثم اضغط على "الإبلاغ عن مشكلة"',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
                           ),
                         )
                       else
@@ -1868,6 +1870,7 @@ class _mapPageState extends State<mapPage> {
                       ),
                     ],
                   ),
+
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: const [
@@ -1894,6 +1897,31 @@ class _mapPageState extends State<mapPage> {
                   ),
                 ),
               ),
+              if (reportMode)
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  child: SafeArea(
+                    child: Material(
+                      color: Colors.white,
+                      shape: const CircleBorder(),
+                      elevation: 8,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () {
+                          setState(() => _reportMode = false);
+                          _applyCurrentFilters();
+                        },
+
+                        child: const SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: Icon(Icons.close, color: Colors.black87),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
           bottomNavigationBar: (isKeyboardOpen || reportMode)

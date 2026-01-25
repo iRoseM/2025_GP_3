@@ -4,9 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-import 'home.dart';
 import 'main.dart';
+import 'home.dart';
 import 'services/background_container.dart';
 import 'services/bottom_nav.dart';
 import 'notifications.dart';
@@ -651,7 +650,7 @@ class profilePage extends StatelessWidget {
                                                             ).pushAndRemoveUntil(
                                                               MaterialPageRoute(
                                                                 builder: (_) =>
-                                                                    const RegisterPage(),
+                                                                    RegisterPage(),
                                                               ),
                                                               (route) => false,
                                                             );

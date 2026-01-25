@@ -48,6 +48,535 @@ class _taskPageState extends State<taskPage> {
   String? _precheckError;
 
   bool _isMonthLoading = false;
+  bool _scheduleMode = false;
+  final Set<DateTime> _scheduledDays = {};
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+  bool _isScheduledDay(DateTime d) => _scheduledDays.contains(_dateOnly(d));
+  Widget _buildDayCell(
+    DateTime day, {
+    bool forceSelected = false,
+    bool isTodayOverride = false,
+  }) {
+    final d = _dayStart(day);
+    final bool isSel = forceSelected || isSameDay(d, _selectedDay);
+    final bool isToday =
+        isTodayOverride || isSameDay(d, _dayStart(DateTime.now()));
+    final bool isScheduled = _isScheduledDay(d);
+
+    final bool showCompleted = _isCompletedDay(d) && !isSel && !isToday;
+
+    return SizedBox.expand(
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // ✅ خلفية "مكتمل"
+          if (showCompleted)
+            Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                color: AppColors.primary33,
+                shape: BoxShape.circle,
+              ),
+            ),
+
+          // ✅ نفس لون "اليوم الحالي" اللي عندك في calendarStyle
+          if (isToday && !isSel)
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+            ),
+
+          // ✅ نفس لون "التحديد" اللي عندك (أخضر)
+          if (isSel)
+            Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+
+          // ✅ رقم اليوم (نخليه نفس ستايلك)
+          Text(
+            '${d.day}',
+            style: GoogleFonts.ibmPlexSansArabic(
+              color: isSel
+                  ? Colors.white
+                  : AppColors.dark, // زي الطبيعي فوق الأخضر أبيض
+              fontWeight: FontWeight.w600,
+              fontSize: 13.5,
+            ),
+          ),
+
+          // 🔔 الجرس — يطلع حتى لو اليوم محدد
+          // إذا تبينه يطلع حتى في today بعد: شيل شرط !isToday
+          if (isScheduled && !isToday)
+            Positioned(
+              top: 6,
+              right: 10,
+              child: Icon(
+                Icons.notifications_active,
+                size: 14,
+                color: AppColors.accent,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _openScheduleTaskPicker(DateTime selectedDay) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        String q = '';
+
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return Dialog(
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 24,
+              ),
+              backgroundColor: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x22000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 10),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: AppColors.primary.withOpacity(0.35),
+                    width: 1.2,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ===== Header =====
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'اختر المهمة',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          icon: const Icon(Icons.close, color: AppColors.dark),
+                          splashRadius: 18,
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // ===== Search (اختياري بس يطلع شكل مرتب) =====
+                    TextField(
+                      onChanged: (v) => setLocal(() => q = v.trim()),
+                      decoration: InputDecoration(
+                        hintText: 'ابحث عن مهمة…',
+                        hintStyle: GoogleFonts.ibmPlexSansArabic(
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: AppColors.primary,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.background.withOpacity(0.7),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(
+                            color: AppColors.primary,
+                            width: 1.6,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // ===== Body =====
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(ctx).size.height * 0.55,
+                      ),
+                      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: _activeTasksStream(),
+                        builder: (context, snap) {
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(18),
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            );
+                          }
+
+                          if (!snap.hasData || snap.data!.docs.isEmpty) {
+                            return Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Text(
+                                'لا توجد مهام متاحة لهذا الشهر',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          }
+
+                          final docs = snap.data!.docs;
+
+                          // فلترة بالبحث (عنوان + وصف)
+                          final filtered = q.isEmpty
+                              ? docs
+                              : docs.where((d) {
+                                  final m = d.data();
+                                  final title = (m['title'] ?? '')
+                                      .toString()
+                                      .toLowerCase();
+                                  final desc = (m['description'] ?? '')
+                                      .toString()
+                                      .toLowerCase();
+                                  final qq = q.toLowerCase();
+                                  return title.contains(qq) ||
+                                      desc.contains(qq);
+                                }).toList();
+
+                          if (filtered.isEmpty) {
+                            return Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Text(
+                                'لا يوجد مهام مطابقة للبحث.',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          }
+
+                          return ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) =>
+                                Divider(height: 1, color: Colors.grey.shade200),
+                            itemBuilder: (context, i) {
+                              final doc = filtered[i];
+                              final t = doc.data();
+
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(14),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  _confirmSchedule(
+                                    selectedDay: selectedDay,
+                                    taskId: doc.id,
+                                    taskTitle: (t['title'] ?? '').toString(),
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 10,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withOpacity(
+                                            0.12,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.task_alt,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              (t['title'] ?? '').toString(),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    fontWeight: FontWeight.w800,
+                                                    color: AppColors.dark,
+                                                    fontSize: 14.5,
+                                                  ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              (t['description'] ?? '')
+                                                  .toString(),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    fontSize: 12.5,
+                                                    color: Colors.grey.shade700,
+                                                    height: 1.3,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+
+                                      const SizedBox(width: 8),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _loadScheduledDaysForMonth(DateTime anyDayInMonth) async {
+    if (_uid == null) return;
+
+    final ms = DateTime(anyDayInMonth.year, anyDayInMonth.month, 1);
+    final me = DateTime(
+      anyDayInMonth.year,
+      anyDayInMonth.month + 1,
+      1,
+    ).subtract(const Duration(milliseconds: 1));
+
+    final qs = await FirebaseFirestore.instance
+        .collection('scheduledTasks')
+        .where('userId', isEqualTo: _uid)
+        .where('status', isEqualTo: 'scheduled')
+        .where('scheduledFor', isGreaterThanOrEqualTo: Timestamp.fromDate(ms))
+        .where('scheduledFor', isLessThanOrEqualTo: Timestamp.fromDate(me))
+        .get();
+
+    final newSet = <DateTime>{};
+    for (final doc in qs.docs) {
+      final ts = doc.data()['scheduledFor'];
+      if (ts is Timestamp) {
+        final d = ts.toDate();
+        newSet.add(DateTime(d.year, d.month, d.day));
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _scheduledDays
+        ..clear()
+        ..addAll(newSet);
+    });
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _activeTasksStream() {
+    final now = DateTime.now();
+    final nowKey = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+
+    return FirebaseFirestore.instance
+        .collection('tasks')
+        .where('status', isEqualTo: 'active')
+        .where('visible_from', isLessThanOrEqualTo: nowKey)
+        .orderBy('visible_from', descending: true)
+        .snapshots();
+  }
+
+  Future<void> _confirmSchedule({
+    required DateTime selectedDay,
+    required String taskId,
+    required String taskTitle,
+  }) async {
+    if (_uid == null) return;
+
+    final startOfDay = DateTime(
+      selectedDay.year,
+      selectedDay.month,
+      selectedDay.day,
+    );
+    final endOfDay = startOfDay
+        .add(const Duration(days: 1))
+        .subtract(const Duration(seconds: 1));
+
+    try {
+      // 1) تحقق هل فيه مهمة مجدولة لنفس اليوم
+      final existing = await FirebaseFirestore.instance
+          .collection('scheduledTasks')
+          .where('userId', isEqualTo: _uid)
+          .where('status', isEqualTo: 'scheduled')
+          .where(
+            'scheduledFor',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+          )
+          .where(
+            'scheduledFor',
+            isLessThanOrEqualTo: Timestamp.fromDate(endOfDay),
+          )
+          .limit(1)
+          .get();
+
+      String? existingScheduleDocId;
+      if (existing.docs.isNotEmpty) {
+        existingScheduleDocId = existing.docs.first.id;
+      }
+
+      final schedCol = FirebaseFirestore.instance.collection('scheduledTasks');
+
+      if (existingScheduleDocId != null) {
+        await schedCol.doc(existingScheduleDocId).update({
+          'userId': _uid,
+          'taskId': taskId,
+          'taskTitle': taskTitle,
+          'scheduledFor': Timestamp.fromDate(startOfDay),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'status': 'scheduled',
+        });
+      } else {
+        await schedCol.add({
+          'userId': _uid,
+          'taskId': taskId,
+          'taskTitle': taskTitle,
+          'scheduledFor': Timestamp.fromDate(startOfDay),
+          'createdAt': FieldValue.serverTimestamp(),
+          'status': 'scheduled',
+        });
+      }
+
+      // ✅ 3) (المهم) تحديث userTasks لنفس اليوم عشان الكرت تحت يتغير
+      final utKey = '${_uid!}_${_yyyyMMdd(selectedDay)}';
+      final utRef = FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(utKey);
+
+      // نجيب تفاصيل المهمة من tasks (نقاط/وصف/طريقة تحقق)
+      final taskSnap = await FirebaseFirestore.instance
+          .collection('tasks')
+          .doc(taskId)
+          .get();
+
+      final taskData = taskSnap.data() ?? {};
+
+      await utRef.set({
+        'userId': _uid,
+        'taskId': taskId,
+        'taskTitle': taskData['title'] ?? taskTitle,
+        'taskDescription': taskData['description'] ?? '',
+        'taskPoints': taskData['points'] ?? 0,
+        'taskValidation': taskData['validationStrategy'] ?? 'غير محددة',
+
+        'selectedAt': Timestamp.fromDate(startOfDay),
+        'windowStart': Timestamp.fromDate(startOfDay),
+        'windowEnd': Timestamp.fromDate(endOfDay),
+
+        'status': 'pending',
+        'completedAt': null,
+        'isScheduled': true,
+      }, SetOptions(merge: true));
+
+      // 4) علّم اليوم عشان تظهر الأيقونة
+      if (!mounted) return;
+      setState(() {
+        _scheduledDays.add(_dateOnly(selectedDay));
+      });
+
+      // ✅ 5) لو اليوم اللي جدولتِه هو نفسه المحدد الآن في الكالندر
+      // خلّي الكرت تحت يسمع له فورًا
+      if (_selectedDay != null && isSameDay(_selectedDay, selectedDay)) {
+        _attachUserTaskStreamFor(_dayStart(selectedDay));
+      }
+
+      // 6) Popup "تمت الجدولة"
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(
+            'تمت الجدولة ✅',
+            style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w800),
+          ),
+          content: Text(
+            'تمت جدولة المهمة ليوم ${selectedDay.day}/${selectedDay.month}/${selectedDay.year}',
+            style: GoogleFonts.ibmPlexSansArabic(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'تم',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+      // 7) رجّعه للوضع العادي
+      if (!mounted) return;
+      setState(() => _scheduleMode = false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'صار خطأ أثناء الجدولة: $e',
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
 
   void _onTap(int i) {
     if (i == _currentIndex) return;
@@ -100,7 +629,6 @@ class _taskPageState extends State<taskPage> {
   String _yyyyMMdd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
-  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
   bool _isCompletedDay(DateTime d) =>
       _monthStatuses[_dateOnly(d)] == 'completed';
 
@@ -114,7 +642,6 @@ class _taskPageState extends State<taskPage> {
       });
     });
   }
-
 
   DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
   DateTime _monthEnd(DateTime d) => DateTime(d.year, d.month + 1, 0);
@@ -282,6 +809,7 @@ class _taskPageState extends State<taskPage> {
       _uid = user?.uid;
       _selectedDay = _dayStart(DateTime.now());
       _focusedDay = _selectedDay!;
+      await _loadScheduledDaysForMonth(_selectedDay!);
 
       if (!await hasInternetConnection()) {
         if (mounted) showNoInternetDialog(context);
@@ -866,15 +1394,62 @@ class _taskPageState extends State<taskPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'مهامي',
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.dark,
-                      ),
+                    Row(
+                      children: [
+                        // 🟢 عنوان مهامي (يبقى على اليمين)
+                        Text(
+                          'مهامي',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.dark,
+                          ),
+                        ),
+
+                        // ⬅️ هذا السطر هو المفتاح
+                        const Spacer(),
+
+                        // 🟢 زر الجدولة (ينتقل لليسار)
+                        InkWell(
+                          borderRadius: BorderRadius.circular(999),
+                          onTap: () =>
+                              setState(() => _scheduleMode = !_scheduleMode),
+
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: AppColors.primary,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.calendar_month,
+                                  color: AppColors.primary,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'جدولة',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 15),
 
                     _buildGrowthIndicator(
                       levelName: 'بذرة',
@@ -884,38 +1459,97 @@ class _taskPageState extends State<taskPage> {
                     ),
 
                     const SizedBox(height: 15),
+
+                    // ✅ هنا حطي كود رسالة وضع الجدولة
+                    if (_scheduleMode) ...[
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 10, bottom: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.10),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: AppColors.primary,
+                            width: 1.2,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'تم تفعيل وضع الجدولة: الرجاء اختيار يوم يناسبك من التقويم👇',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.dark,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () =>
+                                  setState(() => _scheduleMode = false),
+                              child: Text(
+                                'إلغاء',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
                     _buildCalendar(),
                     const SizedBox(height: 8),
 
-                    (!_precheckDone)
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 40),
-                              child: CircularProgressIndicator(
-                                color: AppColors.primary,
+                    if (!_scheduleMode) ...[
+                      Builder(
+                        builder: (context) {
+                          if (!_precheckDone) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 40),
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
                               ),
-                            ),
-                          )
-                        : (_precheckError != null)
-                        ? _buildUnavailableCard(
-                            title: 'تعذّر تحميل مهمة اليوم',
-                            subtitle: (_precheckError == 'permission-denied')
-                                ? 'صلاحيات غير كافية لقراءة مهامك. تأكدي أنك مسجّلة دخولًا وأن قواعد Firestore تسمح لصاحب الوثيقة بالقراءة.'
-                                : (_precheckError!.contains('unavailable') ||
-                                      _precheckError!.contains('network'))
-                                ? 'مشكلة اتصال مؤقتة. تحقّقي من الإنترنت ثم جرّبي التحديث.'
-                                : 'خطأ: $_precheckError',
-                          )
-                        : (_userTaskStream == null)
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 40),
-                              child: CircularProgressIndicator(
-                                color: AppColors.primary,
+                            );
+                          }
+
+                          if (_precheckError != null) {
+                            return _buildUnavailableCard(
+                              title: 'تعذّر تحميل مهمة اليوم',
+                              subtitle: (_precheckError == 'permission-denied')
+                                  ? 'صلاحيات غير كافية لقراءة مهامك. تأكدي أنك مسجّلة دخولًا وأن قواعد Firestore تسمح لصاحب الوثيقة بالقراءة.'
+                                  : (_precheckError!.contains('unavailable') ||
+                                        _precheckError!.contains('network'))
+                                  ? 'مشكلة اتصال مؤقتة. تحقّقي من الإنترنت ثم جرّبي التحديث.'
+                                  : 'خطأ: $_precheckError',
+                            );
+                          }
+
+                          if (_userTaskStream == null) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 40),
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
                               ),
-                            ),
-                          )
-                        : StreamBuilder<DocumentSnapshot>(
+                            );
+                          }
+
+                          return StreamBuilder<DocumentSnapshot>(
                             stream: _userTaskStream!,
                             builder: (context, snap) {
                               if (snap.connectionState ==
@@ -970,7 +1604,6 @@ class _taskPageState extends State<taskPage> {
                                 );
                               }
 
-                              // ✅ نمرّر taskId + id (نفس القيمة) + باقي الحقول
                               final data = <String, dynamic>{
                                 'taskId': ut['taskId'] ?? '',
                                 'title': ut['taskTitle'] ?? '(بدون عنوان)',
@@ -980,12 +1613,8 @@ class _taskPageState extends State<taskPage> {
                                     ut['taskValidation'] ?? 'غير محددة',
                                 'id': ut['taskId'] ?? '',
                                 'status': ut['status'] ?? 'pending',
-
-                                // 'taskType': ut['taskType'],
-                                // 'articleContent': ut['articleContent'],
                               };
 
-                              // ✅ السماح بالإكمال لليوم والماضي فقط
                               final canPerformDay = !sel.isAfter(today);
 
                               if ((ut['taskTitle'] == null ||
@@ -1010,12 +1639,14 @@ class _taskPageState extends State<taskPage> {
                                         ),
                                       );
                                     }
+
                                     if (!tSnap.hasData || !tSnap.data!.exists) {
                                       return _buildUnavailableCard(
                                         title: 'المهمة غير متاحة',
                                         subtitle: 'قد تكون حُذفت من النظام.',
                                       );
                                     }
+
                                     final td =
                                         tSnap.data!.data()
                                             as Map<String, dynamic>;
@@ -1029,10 +1660,8 @@ class _taskPageState extends State<taskPage> {
                                           'غير محددة',
                                       'id': ut['taskId'],
                                       'status': ut['status'] ?? 'pending',
-
-                                      // 'taskType': ut['taskType'],
-                                      // 'articleContent': ut['articleContent'],
                                     };
+
                                     return _buildUserTaskCard(
                                       taskData: fData,
                                       canPerform: canPerformDay,
@@ -1046,7 +1675,10 @@ class _taskPageState extends State<taskPage> {
                                 canPerform: canPerformDay,
                               );
                             },
-                          ),
+                          );
+                        },
+                      ),
+                    ],
                   ],
                 ),
               );
@@ -1087,6 +1719,7 @@ class _taskPageState extends State<taskPage> {
                 color: Color(0xFF4BAA98),
               ),
               const SizedBox(width: 5),
+
               Text(
                 '$levelName – المستوى $level',
                 style: GoogleFonts.ibmPlexSansArabic(
@@ -1095,7 +1728,11 @@ class _taskPageState extends State<taskPage> {
                   color: AppColors.dark,
                 ),
               ),
+
+              const SizedBox(width: 6),
+
               const Spacer(),
+
               Text(
                 '$tasksPerDay مهمة يوميًا',
                 style: GoogleFonts.ibmPlexSansArabic(
@@ -1106,6 +1743,7 @@ class _taskPageState extends State<taskPage> {
               ),
             ],
           ),
+
           const SizedBox(height: 4),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
@@ -1171,11 +1809,26 @@ class _taskPageState extends State<taskPage> {
               ),
             ],
           ),
+
           child: TableCalendar(
+            enabledDayPredicate: (day) {
+              if (!_scheduleMode) return true;
+
+              final today = _dayStart(DateTime.now());
+              final d = _dayStart(day);
+
+              // بداية الشهر القادم = “الشهر الجاي ما انفتح”
+              final nextMonthStart = DateTime(today.year, today.month + 1, 1);
+
+              // وضع الجدولة: فقط الأيام القادمة داخل الشهر الحالي
+              return d.isAfter(today) && d.isBefore(nextMonthStart);
+            },
+
             onPageChanged: (focused) {
               _focusedDay = focused;
               // ✅ تحميل الشهر المعروض فقط
               _loadMonth(focused);
+              _loadScheduledDaysForMonth(focused);
             },
             focusedDay: _focusedDay,
             firstDay: DateTime.utc(2020),
@@ -1204,12 +1857,133 @@ class _taskPageState extends State<taskPage> {
                 _selectedDay = selected;
                 _focusedDay = focused;
               });
-              await _ensureUserTaskForDate(_dayStart(selected));
+
+              final sel = _dayStart(selected);
+              final today = _dayStart(DateTime.now());
+
+              // 2) لو وضع الجدولة شغال واختار يوم مستقبلي
+              if (_scheduleMode && sel.isAfter(today)) {
+                // ✅ 1) نفحص هل فيه جدولة مسبقاً لهذا اليوم
+                final startOfDay = DateTime(sel.year, sel.month, sel.day);
+                final endOfDay = startOfDay
+                    .add(const Duration(days: 1))
+                    .subtract(const Duration(seconds: 1));
+
+                final existing = await FirebaseFirestore.instance
+                    .collection('scheduledTasks')
+                    .where('userId', isEqualTo: _uid)
+                    .where('status', isEqualTo: 'scheduled')
+                    .where(
+                      'scheduledFor',
+                      isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+                    )
+                    .where(
+                      'scheduledFor',
+                      isLessThanOrEqualTo: Timestamp.fromDate(endOfDay),
+                    )
+                    .limit(1)
+                    .get();
+
+                // ✅ 2) إذا ما فيه جدولة → افتح اختيار المهمة مباشرة بدون رسالة
+                if (existing.docs.isEmpty) {
+                  _openScheduleTaskPicker(sel);
+                  return;
+                }
+
+                // ✅ 3) إذا فيه جدولة → اعرض رسالة الاستبدال
+                final proceed = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => Dialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 18,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'تنبيه',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'يوجد بالفعل مهمة مجدولة لهذا اليوم.\n'
+                            'المتابعة ستؤدي إلى استبدال المهمة الحالية. هل ترغب بالاستمرار؟',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 14.5,
+                              height: 1.6,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: Text(
+                                  'إلغاء',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 10,
+                                  ),
+                                  elevation: 0,
+                                ),
+                                child: Text(
+                                  'المتابعة',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+
+                if (proceed == true) {
+                  _openScheduleTaskPicker(sel);
+                }
+                return;
+              }
+
+              // ✅ منطقك الحالي لليوم والماضي
+              await _ensureUserTaskForDate(sel);
               _precheckDone = false;
               _precheckError = null;
               setState(() {});
               await _precheckTodayDoc();
             },
+
             calendarStyle: CalendarStyle(
               todayDecoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.08),
@@ -1229,39 +2003,34 @@ class _taskPageState extends State<taskPage> {
               ),
             ),
             calendarBuilders: CalendarBuilders(
-              defaultBuilder: (context, day, focusedDay) {
-                final bool isSel = isSameDay(day, _selectedDay);
-                final bool isToday = isSameDay(day, _dayStart(DateTime.now()));
-                final bool showCompleted =
-                    _isCompletedDay(day) && !isSel && !isToday;
-
-                return SizedBox.expand(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (showCompleted)
-                        Center(
-                          child: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: const BoxDecoration(
-                              color: AppColors.primary33,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                      Center(
-                        child: Text(
-                          '${day.day}',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            color: AppColors.dark,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13.5,
-                          ),
-                        ),
-                      ),
-                    ],
+              disabledBuilder: (context, day, focusedDay) {
+                return Center(
+                  child: Text(
+                    '${day.day}',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      color: Colors.grey.shade400,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                    ),
                   ),
+                );
+              },
+
+              // ✅ الأيام العادية
+              defaultBuilder: (context, day, focusedDay) {
+                return _buildDayCell(day);
+              },
+
+              selectedBuilder: (context, day, focusedDay) {
+                return _buildDayCell(day, forceSelected: true);
+              },
+
+              todayBuilder: (context, day, focusedDay) {
+                final isSel = isSameDay(day, _selectedDay);
+                return _buildDayCell(
+                  day,
+                  forceSelected: isSel,
+                  isTodayOverride: true,
                 );
               },
             ),
