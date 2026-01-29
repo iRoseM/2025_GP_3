@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'services/background_container.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -45,6 +46,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   BuildContext? _scCtx; // نخزّن showcaseContext
   bool _ecoLandExpanded = false;
   DateTime _cursorDate = DateTime.now();
+  bool _carbonExpanded = false;
 
   void _onTap(int i) {
     if (i == _currentIndex) return;
@@ -80,36 +82,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
         );
         break;
     }
-  }
-
-  // عرض زر تخطي الجولة
-  void _showSkipOverlay() {
-    if (_skipEntry != null) return;
-
-    _skipEntry = OverlayEntry(
-      builder: (ctx) {
-        return Positioned(
-          bottom: 80, // ← أفضل منطقة، فوق الـNavbar مباشرة
-          left: 16,
-          child: Material(
-            color: Colors.transparent,
-            child: _SkipTourButton(
-              onSkip: () {
-                final ctrl = (_scCtx != null)
-                    ? ShowCaseWidget.of(_scCtx!)
-                    : null;
-
-                ctrl?.dismiss();
-                _hideSkipOverlay();
-                setState(() => _tourRunning = false);
-              },
-            ),
-          ),
-        );
-      },
-    );
-
-    Navigator.of(context, rootNavigator: true).overlay!.insert(_skipEntry!);
   }
 
   // إخفاء زر تخطي الجولة
@@ -209,117 +181,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
         {'fcmToken': token},
       );
     }
-  }
-
-  Widget _miniUserStat({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-    String? suffix,
-  }) {
-    return Container(
-      height: 90,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(.15),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: color.withOpacity(.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 22),
-          const Spacer(),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  color: appColors.dark,
-                ),
-              ),
-              if (suffix != null) ...[
-                const SizedBox(width: 4),
-                Text(
-                  suffix,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-              ],
-            ],
-          ),
-          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUserChartCard(List<FlSpot> spots) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 14,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'تقدم إنجاز المهام',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: appColors.dark,
-            ),
-          ),
-
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 160,
-            child: spots.isEmpty
-                ? const Center(child: Text('لا توجد بيانات بعد'))
-                : LineChart(
-                    LineChartData(
-                      minY: 0,
-                      gridData: FlGridData(show: false),
-                      titlesData: FlTitlesData(show: false),
-                      borderData: FlBorderData(show: false),
-                      lineBarsData: [
-                        LineChartBarData(
-                          spots: spots,
-                          isCurved: true,
-                          barWidth: 3,
-                          color: appColors.primary,
-                          dotData: FlDotData(show: false),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            color: appColors.primary.withOpacity(.15),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -995,33 +856,14 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                             child: Align(
                               alignment: Alignment.centerRight, // أو centerLeft
-                              child:
-                                  StreamBuilder<
-                                    QuerySnapshot<Map<String, dynamic>>
-                                  >(
-                                    stream: FirebaseFirestore.instance
-                                        .collection('submissions')
-                                        .where(
-                                          'userId',
-                                          isEqualTo: FirebaseAuth
-                                              .instance
-                                              .currentUser
-                                              ?.uid,
-                                        )
-                                        .where('status', isEqualTo: 'approved')
-                                        .snapshots(),
-                                    builder: (context, snap) {
-                                      if (!snap.hasData) {
-                                        return const SizedBox();
-                                      }
-
-                                      final streak = calculateStreak(
-                                        snap.data!.docs,
-                                      );
-
-                                      return _StreakBadge(days: streak);
-                                    },
-                                  ),
+                              child: Builder(
+                                builder: (context) {
+                                  final uid =
+                                      FirebaseAuth.instance.currentUser?.uid;
+                                  if (uid == null) return const SizedBox();
+                                  return StreakTracker(userId: uid);
+                                },
+                              ),
                             ),
                           ),
                         ),
@@ -1036,44 +878,69 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                               overlayOpacity: 0.35,
                               blurValue: 0,
 
-                              // 👇 مهم: إضافة Builder للحصول على ctx
                               container: Builder(
                                 builder: (ctx) => Container(
-                                  padding: const EdgeInsets.all(12),
+                                  padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
                                     color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: BorderRadius.circular(20),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.12),
-                                        blurRadius: 12,
-                                        offset: const Offset(0, 6),
+                                        color: Colors.black.withOpacity(0.15),
+                                        blurRadius: 16,
+                                        offset: const Offset(0, 8),
                                       ),
                                     ],
+                                    border: Border.all(
+                                      color: appColors.primary.withOpacity(
+                                        0.15,
+                                      ),
+                                      width: 1.5,
+                                    ),
                                   ),
-
                                   child: Directionality(
                                     textDirection: TextDirection.rtl,
                                     child: Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Text(
-                                          'إجمالي خفض الكربون',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 16,
-                                            color: appColors.dark,
-                                          ),
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.all(6),
+                                              decoration: BoxDecoration(
+                                                color: appColors.primary
+                                                    .withOpacity(0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              child: const Icon(
+                                                Icons.info_outline,
+                                                color: appColors.primary,
+                                                size: 20,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            const Text(
+                                              'إجمالي خفض الكربون',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 18,
+                                                color: appColors.dark,
+                                              ),
+                                            ),
+                                          ],
                                         ),
 
-                                        const SizedBox(height: 8),
+                                        const SizedBox(height: 12),
 
                                         const Text(
-                                          'هذا المؤشر يوضح مجموع الأثر البيئي الذي حققته من كل مهامك (كجم CO₂e). كلما زاد الرقم زاد تأثيرك الإيجابي.',
+                                          'هذا المؤشر يوضح مجموع الأثر البيئي الذي حققته من كل مهامك، '
+                                          'مقاسة بالكيلوغرام من مكافئ ثاني أكسيد الكربون (kg CO₂e). '
+                                          'كلما زاد الرقم، كان تأثيرك الإيجابي على البيئة أكبر 🌿🌍.\n\n'
+                                          '💡 اضغط على الكارد لعرض التطور التفصيلي للكربون.',
                                           style: TextStyle(
-                                            fontSize: 13,
+                                            fontSize: 14,
                                             height: 1.6,
                                             color: Colors.black87,
                                           ),
@@ -1081,20 +948,24 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
 
                                         const SizedBox(height: 16),
 
-                                        // ⭐ زر تخطي الجولة داخل البالون
                                         Align(
                                           alignment: Alignment.centerLeft,
-                                          child: TextButton(
+                                          child: TextButton.icon(
                                             onPressed: () {
                                               ShowCaseWidget.of(
                                                 _scCtx!,
                                               ).dismiss();
                                             },
-                                            child: const Text(
+                                            icon: const Icon(
+                                              Icons.close,
+                                              size: 16,
+                                            ),
+                                            label: const Text(
                                               'تخطي الجولة',
                                               style: TextStyle(
                                                 color: appColors.primary,
                                                 fontWeight: FontWeight.w800,
+                                                fontSize: 14,
                                               ),
                                             ),
                                           ),
@@ -1105,6 +976,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                 ),
                               ),
 
+                              // ⬇️ بس هذا الكود فقط
                               child: const _CarbonFootprintCard(),
                             ),
                           ),
@@ -1571,16 +1443,80 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
 
   int calculateStreak(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     final Set<DateTime> activeDays = {};
+    DateTime lastActivityDate = DateTime(1970); // تاريخ افتراضي قديم
 
     for (final doc in docs) {
       final data = doc.data();
-
-      // ✅ نعتمد فقط على submissions.createdAt
       final Timestamp? ts = data['createdAt'];
       if (ts == null) continue;
 
       final d = ts.toDate();
       final dayOnly = DateTime(d.year, d.month, d.day);
+      activeDays.add(dayOnly);
+
+      // تحديث آخر تاريخ نشاط
+      if (d.isAfter(lastActivityDate)) {
+        lastActivityDate = d;
+      }
+    }
+
+    // إذا لم يكن هناك أي إنجازات، الستريك = 0
+    if (activeDays.isEmpty) return 0;
+
+    // حساب 24 ساعة من آخر نشاط
+    final now = DateTime.now();
+    final hoursSinceLastActivity = now.difference(lastActivityDate).inHours;
+
+    // إذا مرت أكثر من 24 ساعة منذ آخر نشاط، نعيد الستريك إلى الصفر
+    if (hoursSinceLastActivity > 24) {
+      return 0;
+    }
+
+    // حساب الستريك بشكل عادي
+    int streak = 0;
+    DateTime cursor = DateTime.now();
+    cursor = DateTime(cursor.year, cursor.month, cursor.day);
+
+    while (activeDays.contains(cursor)) {
+      streak++;
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+
+    return streak;
+  }
+
+  Future<int> calculateStreakWithLastActivity(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return 0;
+
+    // جلب آخر نشاط من user document
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    final lastActivity = userDoc.data()?['lastActivityAt'] as Timestamp?;
+    if (lastActivity == null) return 0;
+
+    final lastActivityDate = lastActivity.toDate();
+    final now = DateTime.now();
+
+    // إذا مرت أكثر من 24 ساعة
+    if (now.difference(lastActivityDate).inHours >= 24) {
+      return 0;
+    }
+
+    // حساب الستريك العادي
+    final activeDays = <DateTime>{};
+    for (final doc in docs) {
+      final ts =
+          (doc.data()['completedAt'] ?? doc.data()['createdAt']) as Timestamp;
+
+      if (ts == null) continue;
+      final date = ts.toDate();
+      final dayOnly = DateTime(date.year, date.month, date.day);
       activeDays.add(dayOnly);
     }
 
@@ -1667,6 +1603,145 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
         ),
       ),
     );
+  }
+}
+
+class StreakTracker extends StatefulWidget {
+  final String userId;
+  const StreakTracker({super.key, required this.userId});
+
+  @override
+  State<StreakTracker> createState() => _StreakTrackerState();
+}
+
+class _StreakTrackerState extends State<StreakTracker> {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('submissions')
+          .where('userId', isEqualTo: widget.userId)
+          .where('status', isEqualTo: 'approved')
+          .orderBy('createdAt', descending: true)
+          .limit(30) // 30 يوم كافية
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return _StreakBadge(days: 0);
+        }
+
+        final docs = snap.data!.docs;
+        if (docs.isEmpty) {
+          return _StreakBadge(days: 0);
+        }
+
+        // أخذ آخر إنجاز
+        final latestSubmission = docs.first;
+        final latestTimestamp =
+            latestSubmission.data()['createdAt'] as Timestamp;
+        final latestDate = latestTimestamp.toDate();
+
+        final now = DateTime.now();
+        final hoursSinceLast = now.difference(latestDate).inHours;
+
+        // إذا مر أكثر من 48 ساعة منذ آخر إنجاز
+        if (hoursSinceLast > 48) {
+          return _StreakBadge(days: 0);
+        }
+
+        // استخراج الأيام الفريدة
+        final uniqueDays = <DateTime>{};
+        for (final doc in docs) {
+          final ts = doc.data()['createdAt'] as Timestamp;
+          final date = ts.toDate();
+          final dayOnly = DateTime(date.year, date.month, date.day);
+          uniqueDays.add(dayOnly);
+        }
+
+        // حساب الستريك بسيط
+        int streak = 0;
+        final today = DateTime(now.year, now.month, now.day);
+        DateTime currentDay = today;
+
+        while (uniqueDays.contains(currentDay)) {
+          streak++;
+          currentDay = currentDay.subtract(const Duration(days: 1));
+        }
+
+        return _StreakBadge(days: streak);
+      },
+    );
+  }
+}
+
+class StreakService {
+  static Future<void> updateStreakOnTaskCompletion() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final userRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid);
+      final userDoc = await userRef.get();
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      final data = userDoc.data() ?? {};
+      final lastUpdate = data['lastStreakUpdate'] as Timestamp?;
+      int currentStreak = (data['currentStreak'] as int?) ?? 0;
+
+      if (lastUpdate == null) {
+        // أول مرة
+        await userRef.update({
+          'currentStreak': 1,
+          'lastStreakUpdate': FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      final lastUpdateDay = lastUpdate.toDate();
+      final lastUpdateDayOnly = DateTime(
+        lastUpdateDay.year,
+        lastUpdateDay.month,
+        lastUpdateDay.day,
+      );
+
+      final difference = today.difference(lastUpdateDayOnly).inDays;
+
+      if (difference == 0) {
+        // نفس اليوم - لا تغيير
+        return;
+      } else if (difference == 1) {
+        // اليوم التالي - زيادة الستريك
+        await userRef.update({
+          'currentStreak': currentStreak + 1,
+          'lastStreakUpdate': FieldValue.serverTimestamp(),
+        });
+      } else {
+        // فجوة أكثر من يوم - إعادة إلى 1
+        await userRef.update({
+          'currentStreak': 1,
+          'lastStreakUpdate': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      print('Error updating streak: $e');
+    }
+  }
+
+  static Future<int> getCurrentStreak() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return 0;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    final data = doc.data() ?? {};
+    return data['currentStreak'] as int? ?? 0;
   }
 }
 
@@ -1868,28 +1943,299 @@ List<FlSpot> buildSpotsFromDocs(
   return keys.map((k) => FlSpot(k.toDouble(), buckets[k]!.toDouble())).toList();
 }
 
-class _CarbonFootprintCard extends StatelessWidget {
-  const _CarbonFootprintCard({super.key});
+class _CarbonFootprintCard extends StatefulWidget {
+  const _CarbonFootprintCard();
 
-  // ✅ دالة عرض رقم الكربون بدقة ذكية
+  @override
+  State<_CarbonFootprintCard> createState() => _CarbonFootprintCardState();
+}
+
+class _CarbonFootprintCardState extends State<_CarbonFootprintCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+
+    return Column(
+      children: [
+        // 🔹 الجزء العلوي (الظاهر دائماً)
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _expanded = !_expanded;
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 18,
+                  offset: Offset(0, 8),
+                ),
+              ],
+              border: Border.all(color: Color(0xFFE8F1EE), width: 1.5),
+            ),
+            child: Row(
+              children: [
+                // النصوص والقيمة
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'إجمالي خفض الكربون',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: appColors.dark,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) {
+                                  return Dialog(
+                                    backgroundColor: Colors.white,
+                                    insetPadding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 24,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(18),
+                                      child: Directionality(
+                                        textDirection: TextDirection.rtl,
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              "ما هو إجمالي خفض الكربون؟",
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w800,
+                                                color: appColors.dark,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 12),
+
+                                            const Text(
+                                              "يوضّح هذا الرقم مقدار الانبعاثات التي تجنّبتها بإنجاز مهامك، "
+                                              "مقاسة بالكيلوغرام من مكافئ ثاني أكسيد الكربون (kg CO₂e). "
+                                              "كلما زاد الرقم، كان تأثيرك الإيجابي على البيئة أكبر 🌿🌍.",
+                                              style: TextStyle(
+                                                fontSize: 13.5,
+                                                height: 1.6,
+                                                color: Colors.black87,
+                                              ),
+                                            ),
+
+                                            const SizedBox(height: 20),
+
+                                            Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(ctx),
+                                                child: const Text(
+                                                  "حسنًا",
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w700,
+                                                    color: appColors.primary,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                            child: const Icon(
+                              Icons.info_outline,
+                              size: 18,
+                              color: appColors.sea,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (uid == null)
+                            Text(
+                              '0',
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                                color: appColors.primary,
+                                height: 1.0,
+                              ),
+                            )
+                          else
+                            StreamBuilder<
+                              DocumentSnapshot<Map<String, dynamic>>
+                            >(
+                              stream: FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(uid)
+                                  .snapshots(),
+                              builder: (context, snap) {
+                                if (snap.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: appColors.primary,
+                                    ),
+                                  );
+                                }
+
+                                if (snap.hasError ||
+                                    !snap.hasData ||
+                                    !snap.data!.exists) {
+                                  return Text(
+                                    '0',
+                                    style: const TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w900,
+                                      color: appColors.primary,
+                                      height: 1.0,
+                                    ),
+                                  );
+                                }
+
+                                final data = snap.data!.data();
+                                num totalKg = 0;
+                                if (data != null) {
+                                  final vNew = data['totalCarbonSaved'];
+                                  totalKg = _safeToNum(vNew);
+                                }
+
+                                if (totalKg.isNaN) totalKg = 0;
+                                if (totalKg < 0) totalKg = 0;
+
+                                return Text(
+                                  _fmtKg(totalKg),
+                                  style: const TextStyle(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w900,
+                                    color: appColors.primary,
+                                    height: 1.0,
+                                  ),
+                                );
+                              },
+                            ),
+                          const SizedBox(width: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            child: Text(
+                              'كجم CO₂e',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black.withOpacity(.6),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 🔹 أيقونة الكرت + السهم
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [appColors.primary, appColors.mint],
+                          begin: Alignment.bottomLeft,
+                          end: Alignment.topRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: appColors.primary.withOpacity(.25),
+                            blurRadius: 14,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.eco_rounded,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // السهم بداخل نفس الصف
+                    Icon(
+                      _expanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: appColors.primary,
+                      size: 24,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // 🔹 الجزء السفلي (يظهر عند التوسيع)
+        AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          child: _expanded
+              ? const Padding(
+                  padding: EdgeInsets.only(top: 16),
+                  child: _UserCarbonProgressCard(),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
+  // دالتين المساعدتين
   String _fmtKg(num? v) {
     final d = (v ?? 0).toDouble();
     if (d == 0) return '0';
-
-    // أرقام صغيرة جدًا: أظهر 3 منازل (مثل 0.037 -> 0.037)
     if (d < 0.1) return d.toStringAsFixed(3);
-
-    // أقل من 1: منزلتين (0.04 -> 0.04، 0.25 -> 0.25)
     if (d < 1) return d.toStringAsFixed(2);
-
-    // من 1 إلى أقل من 10: منزلة واحدة إذا لم يكن عددًا صحيحًا
     if (d < 10) {
       return (d == d.roundToDouble())
           ? d.toStringAsFixed(0)
           : d.toStringAsFixed(1);
     }
-
-    // 10 أو أكثر: بدون كسور إذا كان عددًا صحيحًا، وإلا منزلة واحدة
     return (d == d.roundToDouble())
         ? d.toStringAsFixed(0)
         : d.toStringAsFixed(1);
@@ -1899,267 +2245,6 @@ class _CarbonFootprintCard extends StatelessWidget {
     if (x is num) return x;
     if (x == null) return 0;
     return num.tryParse(x.toString()) ?? 0;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
-        border: Border.all(color: Color(0xFFE8F1EE), width: 1.5),
-      ),
-      child: uid == null
-          ? _buildRow(
-              context,
-              title: 'إجمالي خفض الكربون',
-              valueText: '0',
-              unit: 'كجم CO₂e',
-              loading: false,
-            )
-          : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(uid)
-                  .snapshots(),
-              builder: (context, snap) {
-                // 🔸 حالة التحميل
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return _buildRow(
-                    context,
-                    title: 'إجمالي خفض الكربون',
-                    valueText: '—',
-                    unit: 'كجم CO₂e',
-                    loading: true,
-                  );
-                }
-
-                // 🔸 خطأ أو لا توجد بيانات
-                if (snap.hasError || !snap.hasData || !snap.data!.exists) {
-                  return _buildRow(
-                    context,
-                    title: 'إجمالي خفض الكربون',
-                    valueText: '0',
-                    unit: 'كجم CO₂e',
-                    loading: false,
-                  );
-                }
-
-                final data = snap.data!.data();
-
-                // نقرأ الحقل الموحّد
-                num totalKg = 0;
-                if (data != null) {
-                  final vNew = data['totalCarbonSaved'];
-                  totalKg = _safeToNum(vNew);
-                }
-
-                // حماية من NaN أو القيم السالبة
-                if (totalKg.isNaN) totalKg = 0;
-                if (totalKg < 0) totalKg = 0;
-
-                return _buildRow(
-                  context,
-                  title: 'إجمالي خفض الكربون',
-                  valueText: _fmtKg(totalKg),
-                  unit: 'كجم CO₂e',
-                  loading: false,
-                );
-              },
-            ),
-    );
-  }
-
-  Widget _buildRow(
-    BuildContext context, {
-    required String title,
-    required String valueText,
-    required String unit,
-    required bool loading,
-  }) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Row(
-        children: [
-          // النصوص
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // العنوان + زر المعلومات (Dialog)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        title,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: appColors.dark,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-
-                    // 👇 زر المعلومات (يظهر Dialog جميل)
-                    GestureDetector(
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          builder: (ctx) {
-                            return Dialog(
-                              backgroundColor: Colors.white,
-                              insetPadding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 24,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(18),
-                                child: Directionality(
-                                  textDirection: TextDirection.rtl,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        "ما هو إجمالي خفض الكربون؟",
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w800,
-                                          color: appColors.dark,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-
-                                      const Text(
-                                        "يوضّح هذا الرقم مقدار الانبعاثات التي تجنّبتها بإنجاز مهامك، "
-                                        "مقاسة بالكيلوغرام من مكافئ ثاني أكسيد الكربون (kg CO₂e). "
-                                        "كلما زاد الرقم، كان تأثيرك الإيجابي على البيئة أكبر 🌿🌍.",
-                                        style: TextStyle(
-                                          fontSize: 13.5,
-                                          height: 1.6,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-
-                                      const SizedBox(height: 20),
-
-                                      Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: TextButton(
-                                          onPressed: () => Navigator.pop(ctx),
-                                          child: const Text(
-                                            "حسنًا",
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              color: appColors.primary,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      child: const Icon(
-                        Icons.info_outline,
-                        size: 18,
-                        color: appColors.sea,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 8),
-
-                // القيمة + الوحدة
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (loading)
-                      const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: appColors.primary,
-                        ),
-                      )
-                    else
-                      Text(
-                        valueText,
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w900,
-                          color: appColors.primary,
-                          height: 1.0,
-                        ),
-                      ),
-
-                    const SizedBox(width: 8),
-
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: Text(
-                        unit,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black.withOpacity(.6),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // أيقونة الكرت
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [appColors.primary, appColors.mint],
-                begin: Alignment.bottomLeft,
-                end: Alignment.topRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: appColors.primary.withOpacity(.25),
-                  blurRadius: 14,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: const Icon(Icons.eco_rounded, color: Colors.white, size: 28),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -2662,7 +2747,7 @@ class _UserTaskProgressCard extends StatefulWidget {
 }
 
 class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
-  String _range = 'أسبوع';
+  String _range = 'اليوم';
   final ranges = ['اليوم', 'أسبوع', 'شهر', 'سنة'];
   DateTime _cursorDate = DateTime.now();
 
@@ -2820,7 +2905,6 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
 
           const SizedBox(height: 16),
 
-          /// ---------- DATA ----------
           /// ---------- DATA ----------
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _getTasksStream(uid),
@@ -3191,5 +3275,531 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
   int _getDayIndex(DateTime date) {
     // تحويل: الأحد = 0, الإثنين = 1, ..., السبت = 6
     return date.weekday % 7;
+  }
+}
+
+class _UserCarbonProgressCard extends StatefulWidget {
+  const _UserCarbonProgressCard();
+
+  @override
+  State<_UserCarbonProgressCard> createState() =>
+      _UserCarbonProgressCardState();
+}
+
+class _UserCarbonProgressCardState extends State<_UserCarbonProgressCard> {
+  String _range = 'اليوم';
+  final ranges = ['اليوم', 'أسبوع', 'شهر', 'سنة'];
+  DateTime _cursorDate = DateTime.now();
+
+  String get _rangeLabel {
+    switch (_range) {
+      case 'سنة':
+        return 'سنة ${_cursorDate.year}';
+      case 'شهر':
+        return '${_cursorDate.month}/${_cursorDate.year}';
+      case 'أسبوع':
+        // 🔧 حساب صحيح للأسبوع يبدأ من الأحد
+        final weekday = _cursorDate.weekday;
+        final weekStart = _cursorDate.subtract(Duration(days: weekday % 7));
+        final weekEnd = weekStart.add(const Duration(days: 6));
+        return '${weekStart.day}/${weekStart.month} - ${weekEnd.day}/${weekEnd.month}';
+      case 'اليوم':
+        return '${_cursorDate.day}/${_cursorDate.month}/${_cursorDate.year}';
+      default:
+        return '';
+    }
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _getCarbonStream(String uid) {
+    return FirebaseFirestore.instance
+        .collection('submissions')
+        .where('userId', isEqualTo: uid)
+        .where('status', isEqualTo: 'approved')
+        .snapshots();
+  }
+
+  void _goPrev() {
+    setState(() {
+      if (_range == 'سنة') {
+        _cursorDate = DateTime(_cursorDate.year - 1);
+      } else if (_range == 'شهر') {
+        _cursorDate = DateTime(_cursorDate.year, _cursorDate.month - 1);
+      } else if (_range == 'أسبوع') {
+        _cursorDate = _cursorDate.subtract(const Duration(days: 7));
+      } else {
+        _cursorDate = _cursorDate.subtract(const Duration(days: 1));
+      }
+    });
+  }
+
+  void _goNext() {
+    setState(() {
+      if (_range == 'سنة') {
+        _cursorDate = DateTime(_cursorDate.year + 1);
+      } else if (_range == 'شهر') {
+        _cursorDate = DateTime(_cursorDate.year, _cursorDate.month + 1);
+      } else if (_range == 'أسبوع') {
+        _cursorDate = _cursorDate.add(const Duration(days: 7));
+      } else {
+        _cursorDate = _cursorDate.add(const Duration(days: 1));
+      }
+    });
+  }
+
+  bool get _canGoNext {
+    final now = DateTime.now();
+    final todayWeekStart = now.subtract(Duration(days: now.weekday % 7));
+
+    if (_range == 'سنة') return _cursorDate.year < now.year;
+    if (_range == 'شهر') {
+      return _cursorDate.year < now.year || _cursorDate.month < now.month;
+    }
+    if (_range == 'أسبوع') {
+      final cursorWeekStart = _cursorDate.subtract(
+        Duration(days: _cursorDate.weekday % 7),
+      );
+      return cursorWeekStart.isBefore(todayWeekStart);
+    }
+    return _cursorDate.isBefore(now);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return const Center(child: Text('غير مسجل'));
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          /// العنوان + الفلتر
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'تطور خفض الكربون',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: appColors.tealSoft.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: appColors.tealSoft.withOpacity(0.3),
+                  ),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _range,
+                    icon: Icon(
+                      Icons.arrow_drop_down,
+                      size: 20,
+                      color: appColors.tealSoft,
+                    ),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() {
+                        _range = v;
+                        _cursorDate = DateTime.now();
+                      });
+                    },
+                    items: ranges
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(
+                              e,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: appColors.dark,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          /// ---------- DATA ----------
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: _getCarbonStream(uid),
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const SizedBox(
+                  height: 175,
+                  child: Center(
+                    child: CircularProgressIndicator(color: appColors.tealSoft),
+                  ),
+                );
+              }
+
+              final bars = _buildSpots(snap.data?.docs ?? []);
+
+              final maxY = bars.isNotEmpty
+                  ? bars
+                        .map((e) => e.barRods.first.toY)
+                        .reduce((a, b) => a > b ? a : b)
+                  : 0;
+
+              final average = bars.isNotEmpty
+                  ? bars
+                            .map((e) => e.barRods.first.toY)
+                            .reduce((a, b) => a + b) /
+                        bars.length
+                  : 0;
+
+              return Column(
+                children: [
+                  SizedBox(
+                    height: 160,
+                    child: BarChart(
+                      BarChartData(
+                        minY: 0,
+                        maxY: maxY == 0 ? 3 : null,
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          horizontalInterval: maxY == 0
+                              ? 1
+                              : math.max(1, (maxY / 3).ceilToDouble()),
+                        ),
+                        titlesData: _buildTitles(),
+                        borderData: FlBorderData(
+                          show: true,
+                          border: Border.all(
+                            color: Colors.grey[300]!,
+                            width: 1,
+                          ),
+                        ),
+                        barGroups: bars,
+                        barTouchData: BarTouchData(
+                          enabled: true,
+                          touchTooltipData: BarTouchTooltipData(
+                            tooltipBgColor: appColors.tealSoft,
+                            getTooltipItem: (group, _, rod, __) {
+                              return BarTooltipItem(
+                                '${rod.toY.toStringAsFixed(1)} كجم',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left),
+                        onPressed: _goPrev,
+                      ),
+                      Text(
+                        _rangeLabel,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right),
+                        onPressed: _canGoNext ? _goNext : null,
+                      ),
+                    ],
+                  ),
+
+                  /// ---------- MINI STATS ----------
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildCompactMiniStat(
+                          'الأعلى',
+                          maxY.toStringAsFixed(1),
+                        ),
+                        _buildCompactMiniStat(
+                          'المتوسط',
+                          average.toStringAsFixed(1),
+                        ),
+                        _buildCompactMiniStat('الفترة', _range),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ---------- Titles ----------
+  FlTitlesData _buildTitles() {
+    return FlTitlesData(
+      bottomTitles: AxisTitles(
+        sideTitles: SideTitles(
+          showTitles: true,
+          reservedSize: 36,
+          interval: _getInterval(),
+          getTitlesWidget: (value, _) {
+            final index = value.toInt();
+
+            if (_range == 'اليوم') {
+              // 🔹 عرض ساعات مختارة فقط
+              final showHours = [0, 3, 6, 9, 12, 15, 18, 21, 23];
+              if (showHours.contains(index)) {
+                return Text('$index', style: const TextStyle(fontSize: 10));
+              }
+              return const SizedBox();
+            }
+
+            if (_range == 'أسبوع') {
+              const days = ['أحد', 'إثن', 'ثلا', 'أرب', 'خم', 'جم', 'سبت'];
+              if (index >= 0 && index < 7) {
+                return Text(days[index], style: const TextStyle(fontSize: 10));
+              }
+              return const SizedBox();
+            }
+
+            if (_range == 'شهر') {
+              final day = index + 1;
+              final lastDay = DateTime(
+                _cursorDate.year,
+                _cursorDate.month,
+                0,
+              ).day;
+              final showDays = [1, 5, 10, 15, 20, 25, lastDay];
+              if (showDays.contains(day)) {
+                return Text(
+                  day.toString(),
+                  style: const TextStyle(fontSize: 10),
+                );
+              }
+              return const SizedBox();
+            }
+
+            // 🔹 السنة
+            const months = [
+              'ينا',
+              'فبر',
+              'مار',
+              'أبر',
+              'ماي',
+              'يون',
+              'يول',
+              'أغس',
+              'سبت',
+              'أكت',
+              'نوف',
+              'ديس',
+            ];
+            if (index >= 0 && index < 12) {
+              return Text(months[index], style: const TextStyle(fontSize: 10));
+            }
+            return const SizedBox();
+          },
+        ),
+      ),
+      leftTitles: AxisTitles(
+        sideTitles: SideTitles(
+          showTitles: true,
+          reservedSize: 28,
+          interval: 1,
+          getTitlesWidget: (value, _) {
+            return Text(
+              value.toInt().toString(),
+              style: const TextStyle(fontSize: 10),
+            );
+          },
+        ),
+      ),
+      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+    );
+  }
+
+  // 🔹 دالة تحدد التباعد المناسب لكل فترة
+  double _getInterval() {
+    switch (_range) {
+      case 'اليوم':
+        return 3.0;
+      case 'أسبوع':
+        return 1.0;
+      case 'شهر':
+        return 5.0;
+      case 'سنة':
+        return 1.0;
+      default:
+        return 1.0;
+    }
+  }
+
+  /// ---------- Mini stat ----------
+  Widget _buildCompactMiniStat(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: appColors.dark,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  /// ---------- Chart logic ----------
+  List<BarChartGroupData> _buildSpots(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final Map<int, double> buckets = {};
+
+    DateTime startDate;
+    DateTime endDate;
+    int totalBars;
+
+    // 🔹 تحديد عدد الأشرطة لكل فترة
+    if (_range == 'سنة') {
+      totalBars = 12;
+      startDate = DateTime(_cursorDate.year, 1, 1);
+      endDate = DateTime(_cursorDate.year + 1, 1, 1);
+    } else if (_range == 'شهر') {
+      totalBars = DateTime(_cursorDate.year, _cursorDate.month + 1, 0).day;
+      startDate = DateTime(_cursorDate.year, _cursorDate.month, 1);
+      endDate = DateTime(_cursorDate.year, _cursorDate.month + 1, 1);
+    } else if (_range == 'أسبوع') {
+      totalBars = 7;
+      final weekday = _cursorDate.weekday;
+      final startOfWeek = _cursorDate.subtract(Duration(days: weekday % 7));
+      startDate = DateTime(
+        startOfWeek.year,
+        startOfWeek.month,
+        startOfWeek.day,
+      );
+      endDate = startDate.add(const Duration(days: 7));
+    } else {
+      totalBars = 24; // ساعات اليوم
+      startDate = DateTime(
+        _cursorDate.year,
+        _cursorDate.month,
+        _cursorDate.day,
+      );
+      endDate = startDate.add(const Duration(days: 1));
+    }
+
+    // 🔹 تهيئة جميع الأشرطة بصفر
+    for (int i = 0; i < totalBars; i++) {
+      buckets[i] = 0.0;
+    }
+
+    // 🔹 ملء البيانات الفعلية
+    for (final doc in docs) {
+      final data = doc.data();
+      final Timestamp? ts = data['completedAt'] ?? data['createdAt'];
+      final carbon = data['carbonSaved'] ?? 0;
+
+      if (ts == null || carbon == 0) continue;
+
+      final date = ts.toDate();
+
+      // ✅ تأكد من التاريخ ضمن النطاق
+      if (date.isBefore(startDate) || date.isAfter(endDate)) continue;
+
+      int key;
+      if (_range == 'اليوم') {
+        key = date.hour; // 0-23
+      } else if (_range == 'أسبوع') {
+        final diff = date.difference(startDate).inDays;
+        key = diff; // 0-6
+      } else if (_range == 'شهر') {
+        key = date.day - 1; // 0-30 (لأن days من 1-31)
+      } else {
+        key = date.month - 1; // 0-11
+      }
+
+      // 🔹 تحقق من صحة الفهرس
+      if (key >= 0 && key < totalBars) {
+        final current = buckets[key] ?? 0.0;
+        final carbonValue = (carbon is num) ? carbon.toDouble() : 0.0;
+        buckets[key] = current + carbonValue;
+      }
+    }
+
+    // 🔹 إنشاء الأشرطة
+    return List.generate(totalBars, (index) {
+      final carbonValue = buckets[index] ?? 0.0;
+      return BarChartGroupData(
+        x: index,
+        barRods: [
+          BarChartRodData(
+            toY: carbonValue,
+            width: _getBarWidth(),
+            borderRadius: BorderRadius.circular(4),
+            color: carbonValue > 0 ? appColors.tealSoft : Colors.grey[300]!,
+            backDrawRodData: BackgroundBarChartRodData(
+              show: true,
+              toY: carbonValue + 0.5,
+              color: Colors.grey[100]!,
+            ),
+          ),
+        ],
+      );
+    });
+  }
+
+  // 🔹 تحديد عرض الشريط بناءً على الفترة
+  double _getBarWidth() {
+    switch (_range) {
+      case 'اليوم':
+        return 8.0;
+      case 'أسبوع':
+        return 14.0;
+      case 'شهر':
+        return 4.0;
+      case 'سنة':
+        return 10.0;
+      default:
+        return 10.0;
+    }
   }
 }
