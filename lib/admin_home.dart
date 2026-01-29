@@ -40,6 +40,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   List<FlSpot> _pointsSpots = [];
   List<FlSpot> _carbonSpots = [];
   DateTime _cursorDate = DateTime.now();
+  bool _isCarbonExpanded = false;
   // 🔧 دوال الفترات الزمنية
   List<String> _generatePeriodKeys(DateTime start, DateTime end, String range) {
     final List<String> keys = [];
@@ -124,11 +125,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
       }
     });
 
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() {});
+    _refreshTimer = Timer.periodic(const Duration(hours: 1), (_) {
+      if (mounted) {
+        setState(() {});
+        _loadChartData(); // أضف هذه السطر لتحميل البيانات الجديدة
+      }
     });
-
-    _loadChartData();
   }
 
   @override
@@ -825,9 +827,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildCompactMiniStat('الأعلى', maxY.toInt().toString()),
+                _buildCompactMiniStat(
+                  'الإجمالي',
+                  spots.isNotEmpty
+                      ? spots
+                            .map((e) => e.y)
+                            .reduce((a, b) => a + b)
+                            .toStringAsFixed(1)
+                      : '0',
+                ),
                 _buildCompactMiniStat('المتوسط', average.toStringAsFixed(1)),
-                _buildCompactMiniStat('الفترة', _selectedTimeRange),
+                _buildCompactMiniStat('الأعلى', maxY.toInt().toString()),
               ],
             ),
           ),
@@ -1306,9 +1316,18 @@ class _AdminHomePageState extends State<AdminHomePage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildCompactMiniStat('الأعلى', maxY.toInt().toString()),
+                _buildCompactMiniStat(
+                  'الإجمالي',
+                  spots.isNotEmpty
+                      ? spots
+                            .map((e) => e.y)
+                            .reduce((a, b) => a + b)
+                            .toStringAsFixed(1)
+                      : '0',
+                ),
+
                 _buildCompactMiniStat('المتوسط', average.toStringAsFixed(1)),
-                _buildCompactMiniStat('الفترة', _selectedTimeRange),
+                _buildCompactMiniStat('الأعلى', maxY.toInt().toString()),
               ],
             ),
           ),
@@ -1541,104 +1560,313 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }) {
     final progress = (totalCarbon / 1000).clamp(0.0, 1.0);
 
+    return Column(
+      children: [
+        // الجزء العلوي - بطاقة الإجمالي (تم تصغيره)
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _isCarbonExpanded = !_isCarbonExpanded;
+            });
+          },
+          child: Stack(
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(
+                  14,
+                  12,
+                  14,
+                  12,
+                ), // قللنا البادينج
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16), // زوايا أقل
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.12),
+                      blurRadius: 8, // ظل أخف
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // 👇 تصغير دائرة التقدم
+                    SizedBox(
+                      width: 60, // قللنا العرض
+                      height: 60, // قللنا الارتفاع
+                      child: Stack(
+                        children: [
+                          CircularProgressIndicator(
+                            value: progress,
+                            strokeWidth: 6, // سماكة أقل
+                            backgroundColor: Colors.teal.withOpacity(0.2),
+                            color: Colors.teal,
+                          ),
+                          Center(
+                            child: Text(
+                              '${(progress * 100).toStringAsFixed(0)}%',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 12, // خط أصغر
+                                fontWeight: FontWeight.w800,
+                                color: Colors.teal,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(width: 12), // مسافة أقل
+                    // 📄 النص والمعلومات
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min, // ارتفاع أدنى
+                        children: [
+                          Text(
+                            'إجمالي توفير الكربون',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 14, // خط أصغر
+                              fontWeight: FontWeight.w700,
+                              color: appColors.dark,
+                            ),
+                          ),
+                          const SizedBox(height: 2), // مسافة أقل
+                          Text(
+                            '${totalCarbon.toStringAsFixed(1)} كجم',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 12, // خط أصغر
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // السهم في الزاوية اليمين العليا (تم تصغيره)
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Icon(
+                  _isCarbonExpanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  color: Colors.teal,
+                  size: 18, // أيقونة أصغر
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // الجزء السفلي - الرسم البياني (يظهر فقط عند التوسيع)
+        if (_isCarbonExpanded) ...[
+          const SizedBox(height: 8), // مسافة أقل
+          _buildExpandedCarbonChart(carbonSpots),
+        ],
+      ],
+    );
+  }
+
+  // دالة مساعدة لعرض الرسم البياني الموسع
+  Widget _buildExpandedCarbonChart(List<FlSpot> carbonSpots) {
+    final double maxY = _getMaxYValue(carbonSpots);
+    final double average = carbonSpots.isNotEmpty
+        ? carbonSpots.map((e) => e.y).reduce((a, b) => a + b) /
+              carbonSpots.length
+        : 0;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.12),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            color: Color(0x14000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 🔵 Gauge
-          SizedBox(
-            width: 90,
-            height: 90,
-            child: Stack(
-              children: [
-                CircularProgressIndicator(
-                  value: progress,
-                  strokeWidth: 8,
-                  backgroundColor: Colors.teal.withOpacity(0.2),
-                  color: Colors.teal,
+          /// العنوان + الفلتر
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'تطور توفير الكربون',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
                 ),
-                Center(
-                  child: Text(
-                    '${(progress * 100).toStringAsFixed(0)}%',
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedTimeRange,
+                    icon: Icon(
+                      Icons.arrow_drop_down,
+                      size: 20,
                       color: Colors.teal,
                     ),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() {
+                          _selectedTimeRange = v;
+                        });
+                        _loadChartData();
+                      }
+                    },
+                    items: _timeRanges
+                        .map(
+                          (e) => DropdownMenuItem(
+                            value: e,
+                            child: Text(
+                              e,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: appColors.dark,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
 
-          const SizedBox(width: 16),
+          const SizedBox(height: 16),
 
-          // 📄 Text + Chart
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'إجمالي توفير الكربون',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: appColors.dark,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${totalCarbon.toStringAsFixed(1)} كجم ',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 13,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                SizedBox(
-                  height: 50,
-                  child: LineChart(
-                    LineChartData(
-                      gridData: FlGridData(show: false),
-                      titlesData: FlTitlesData(show: false),
-                      borderData: FlBorderData(show: false),
-
-                      lineBarsData: [
-                        LineChartBarData(
-                          spots: carbonSpots.isNotEmpty
-                              ? carbonSpots
-                              : [
-                                  FlSpot(0, 2),
-                                  FlSpot(1, 4),
-                                  FlSpot(2, 3),
-                                  FlSpot(3, 6),
-                                  FlSpot(4, 5),
-                                ],
-                          isCurved: true,
-                          color: Colors.teal,
-                          barWidth: 2,
-                          dotData: FlDotData(show: false),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            color: Colors.teal.withOpacity(0.15),
+          /// 👇 الرسم البياني
+          SizedBox(
+            height: 160,
+            child: carbonSpots.isEmpty
+                ? const Center(child: Text('لا توجد بيانات'))
+                : BarChart(
+                    BarChartData(
+                      minY: 0,
+                      maxY: maxY == 0 ? 10 : null,
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: maxY == 0
+                            ? 1
+                            : math.max(1, (maxY / 3).ceilToDouble()),
+                      ),
+                      titlesData: FlTitlesData(
+                        show: true,
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 36,
+                            getTitlesWidget: _buildLeftTitle,
                           ),
                         ),
-                      ],
-                      minY: 0,
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 36,
+                            interval: _getInterval(),
+                            getTitlesWidget: (value, _) {
+                              return _buildXAxisTitle(value.toInt());
+                            },
+                          ),
+                        ),
+                      ),
+                      borderData: FlBorderData(
+                        show: true,
+                        border: Border.all(color: Colors.grey[300]!, width: 1),
+                      ),
+                      barGroups: carbonSpots.map((spot) {
+                        return BarChartGroupData(
+                          x: spot.x.toInt(),
+                          barRods: [
+                            BarChartRodData(
+                              toY: spot.y,
+                              width: _getBarWidth(_selectedTimeRange),
+                              borderRadius: BorderRadius.circular(4),
+                              color: spot.y > 0
+                                  ? Colors.teal
+                                  : Colors.grey[300]!,
+                              backDrawRodData: BackgroundBarChartRodData(
+                                show: true,
+                                toY: spot.y + 0.5,
+                                color: Colors.grey[100]!,
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                      barTouchData: BarTouchData(
+                        enabled: true,
+                        touchTooltipData: BarTouchTooltipData(
+                          tooltipBgColor: Colors.teal,
+                          getTooltipItem: (group, _, rod, __) {
+                            return BarTooltipItem(
+                              '${rod.toY.toInt()} كجم',
+                              const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
+          ),
+
+          const SizedBox(height: 8),
+          _buildRangeNavigator(),
+
+          /// 👇 الإحصائيات
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildCompactMiniStat(
+                  'الإجمالي',
+                  carbonSpots.isNotEmpty
+                      ? '${carbonSpots.map((e) => e.y).reduce((a, b) => a + b).toStringAsFixed(1)} كجم'
+                      : '0 كجم',
+                ),
+
+                _buildCompactMiniStat(
+                  'المتوسط',
+                  '${average.toStringAsFixed(1)} كجم',
+                ),
+                _buildCompactMiniStat(
+                  'الأعلى',
+                  '${_getMaxYValue(carbonSpots).toInt()} كجم',
                 ),
               ],
             ),
@@ -1896,86 +2124,38 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             carbonSpots: _carbonSpots,
                           ),
 
-                          const SizedBox(height: 16),
-
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FutureBuilder<int>(
-                                  future: _getActiveUsersCount(),
-                                  builder: (context, snap) {
-                                    final activeUsers = snap.data ?? 0;
-
-                                    return _buildStatCardSafe(
-                                      title: 'المستخدمون النشطون',
-                                      value: '$activeUsers',
-                                      subtitle: 'خلال $_selectedTimeRange',
-                                      icon: Icons.flash_on_rounded,
-                                      color: appColors.primary,
-                                      progress: totalUsers > 0
-                                          ? activeUsers / totalUsers
-                                          : 0,
-                                    );
-                                  },
-                                ),
-                              ),
-
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: _buildStatCardSafe(
-                                  title: 'إجمالي النقاط',
-                                  value: totalPoints.toStringAsFixed(0),
-                                  subtitle: '',
-                                  icon: Icons.star_rounded,
-                                  color: appColors.accent,
-                                ),
-                              ),
-                            ],
-                          ),
-
                           const SizedBox(height: 20),
 
                           SizedBox(
                             height: 400,
                             child: PageView(
                               children: [
+                                _buildBarChartCard(
+                                  'إكمال المهام',
+                                  _taskCompletionSpots,
+                                  appColors.sea,
+                                  _selectedTimeRange,
+                                ),
+                                _buildChartCard(
+                                  'تراكم النقاط',
+                                  _pointsSpots,
+                                  appColors.accent,
+                                  _selectedTimeRange,
+                                ),
                                 _buildChartCard(
                                   'نمو المستخدمين',
                                   _userGrowthSpots,
                                   appColors.primary,
                                   _selectedTimeRange,
                                 ),
-                                _buildBarChartCard(
-                                  'إكمال المهام',
-                                  _taskCompletionSpots, // استخدم البيانات الفعلية
-                                  appColors.sea,
-                                  _selectedTimeRange,
-                                ),
-                                _buildChartCard(
-                                  'تراكم النقاط',
-                                  _pointsSpots, // استخدم البيانات الفعلية
-                                  appColors.accent,
-                                  _selectedTimeRange,
-                                ),
-                                _buildBarChartCard(
-                                  'توفير الكربون',
-                                  _carbonSpots, // استخدم البيانات الفعلية
-                                  appColors.tealSoft,
-                                  _selectedTimeRange,
-                                ),
                               ],
                             ),
                           ),
 
-                          const SizedBox(height: 20),
-
-                          // ✅ استدعاء الميثود مع المعلمات الصحيحة
-                          _buildDetailedStatsTable(
-                            totalUsers, // هذا int
-                            totalCompletedTasks.toInt(), // أضف .toInt() هنا
-                            totalPoints.toInt(), // وأضف .toInt() هنا
-                            totalCarbon,
-                          ),
+                          const SizedBox(
+                            height: 16,
+                          ), // قللت من الـ SizedBox هنا
+                          // باقي الكود (طلبات المهام والبلاغات) يبقى كما هو...
                         ],
                       );
                     },
@@ -2241,170 +2421,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
       return 1.0;
     }
     return value;
-  }
-
-  Widget _buildDetailedStatsTable(
-    int totalUsers,
-    num totalTasks, // غير int إلى num
-    num totalPoints, // غير int إلى num
-    num totalCarbon,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '📊 إحصائيات مفصلة',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: appColors.dark,
-                ),
-              ),
-              IconButton(
-                onPressed: _loadChartData,
-                icon: const Icon(Icons.refresh, color: appColors.primary),
-                tooltip: 'تحديث البيانات',
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          Table(
-            columnWidths: const {
-              0: FlexColumnWidth(2),
-              1: FlexColumnWidth(1),
-              2: FlexColumnWidth(1),
-            },
-            children: [
-              TableRow(
-                decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
-                ),
-                children: [
-                  _buildTableCell('المؤشر', true),
-                  _buildTableCell('القيمة', true),
-                  _buildTableCell('النسبة %', true),
-                ],
-              ),
-
-              TableRow(
-                decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-                ),
-                children: [
-                  _buildTableCell('متوسط المهام لكل مستخدم', false),
-                  _buildTableCell(totalTasks.toStringAsFixed(0), false),
-                  _buildTableCell(
-                    '${totalUsers > 0 ? (totalTasks / totalUsers).toStringAsFixed(1) : 0}',
-                    false,
-                  ),
-                ],
-              ),
-              TableRow(
-                decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-                ),
-                children: [
-                  _buildTableCell('متوسط النقاط لكل مستخدم', false),
-                  _buildTableCell(totalPoints.toStringAsFixed(0), false),
-                  _buildTableCell(
-                    '${totalUsers > 0 ? (totalPoints / totalUsers).toStringAsFixed(0) : 0}',
-                    false,
-                  ),
-                ],
-              ),
-              TableRow(
-                children: [
-                  _buildTableCell('متوسط توفير الكربون', false),
-                  _buildTableCell(
-                    '${totalCarbon.toStringAsFixed(1)} كجم',
-                    false,
-                  ),
-                  _buildTableCell(
-                    '${totalUsers > 0 ? (totalCarbon / totalUsers).toStringAsFixed(2) : 0} كجم/مستخدم',
-                    false,
-                  ),
-                ],
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-
-          // ملخص بصري
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildMiniProgress(
-                'المهام',
-                totalUsers > 0 ? totalTasks / (totalUsers * 10) : 0,
-                Colors.green,
-              ),
-              _buildMiniProgress(
-                'التوفير',
-                totalUsers > 0 ? totalCarbon / (totalUsers * 100) : 0,
-                Colors.teal,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMiniProgress(String label, double value, Color color) {
-    return Column(
-      children: [
-        SizedBox(
-          width: 60,
-          height: 60,
-          child: Stack(
-            children: [
-              CircularProgressIndicator(
-                value: value.clamp(0.0, 1.0),
-                strokeWidth: 6,
-                backgroundColor: color.withOpacity(0.2),
-                color: color,
-              ),
-              Center(
-                child: Text(
-                  '${(value * 100).toStringAsFixed(0)}%',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: GoogleFonts.ibmPlexSansArabic(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildTableCell(String text, bool isHeader) {
