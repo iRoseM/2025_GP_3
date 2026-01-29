@@ -811,7 +811,7 @@ class _TaskReportCardState extends State<_TaskReportCard> {
                   child: Text(
                     taskTitle, // ✅ اسم المهمة هنا بدل "بلاغ مهمة"
                     style: GoogleFonts.ibmPlexSansArabic(
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                       fontSize: 16,
                       color: appColors.dark,
                     ),

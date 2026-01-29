@@ -122,20 +122,21 @@ class _AdminHomePageState extends State<AdminHomePage> {
       } else {
         FCMService.requestPermissionAndSaveToken();
         FCMService.listenToForegroundMessages();
+        await _loadTargetFromFirebase(); // 👈 أضف هذا السطر
       }
     });
 
     _refreshTimer = Timer.periodic(const Duration(hours: 1), (_) {
       if (mounted) {
         setState(() {});
-        _loadChartData(); // أضف هذه السطر لتحميل البيانات الجديدة
+        _loadChartData();
       }
     });
   }
 
-  @override
   void dispose() {
     _refreshTimer?.cancel();
+    _targetController.dispose();
     super.dispose();
   }
 
@@ -1554,15 +1555,92 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
+  bool _showTargetForm = false;
+  double _carbonTarget = 1000.0; // القيمة الافتراضية
+  final TextEditingController _targetController = TextEditingController();
+
+  void _openTargetForm() {
+    _targetController.text = _carbonTarget.toStringAsFixed(0);
+
+    showDialog(context: context, builder: (context) => _buildTargetPopup());
+  }
+
+  void _saveTarget() {
+    final newTarget = double.tryParse(_targetController.text);
+    if (newTarget != null && newTarget > 0) {
+      setState(() {
+        _carbonTarget = newTarget;
+      });
+
+      // إغلاق البوب أب
+      Navigator.of(context).pop();
+
+      // حفظ في Firebase (اختياري)
+      _saveTargetToFirebase(newTarget);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم تحديث الهدف إلى ${newTarget.toInt()} كجم'),
+          backgroundColor: Colors.teal,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('الرجاء إدخال قيمة صحيحة'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _saveTargetToFirebase(double target) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance
+            .collection('adminSettings')
+            .doc('carbonTarget')
+            .set({
+              'target': target,
+              'updatedBy': user.uid,
+              'updatedAt': Timestamp.now(),
+            });
+      }
+    } catch (e) {
+      debugPrint('❌ Error saving target: $e');
+    }
+  }
+
+  Future<void> _loadTargetFromFirebase() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('adminSettings')
+          .doc('carbonTarget')
+          .get();
+
+      if (doc.exists && doc.data() != null) {
+        final target = doc.data()!['target'];
+        if (target is num) {
+          setState(() {
+            _carbonTarget = target.toDouble();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading target: $e');
+    }
+  }
+
   Widget _buildCarbonOverviewCard({
     required num totalCarbon,
     required List<FlSpot> carbonSpots,
   }) {
-    final progress = (totalCarbon / 1000).clamp(0.0, 1.0);
+    final progress = (totalCarbon / _carbonTarget).clamp(0.0, 1.0);
 
     return Column(
       children: [
-        // الجزء العلوي - بطاقة الإجمالي (تم تصغيره)
+        // الجزء العلوي - بطاقة الإجمالي
         GestureDetector(
           onTap: () {
             setState(() {
@@ -1572,74 +1650,94 @@ class _AdminHomePageState extends State<AdminHomePage> {
           child: Stack(
             children: [
               Container(
-                padding: const EdgeInsets.fromLTRB(
-                  14,
-                  12,
-                  14,
-                  12,
-                ), // قللنا البادينج
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16), // زوايا أقل
+                  borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.grey.withOpacity(0.12),
-                      blurRadius: 8, // ظل أخف
+                      blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
                   ],
                 ),
                 child: Row(
                   children: [
-                    // 👇 تصغير دائرة التقدم
-                    SizedBox(
-                      width: 60, // قللنا العرض
-                      height: 60, // قللنا الارتفاع
-                      child: Stack(
-                        children: [
-                          CircularProgressIndicator(
-                            value: progress,
-                            strokeWidth: 6, // سماكة أقل
-                            backgroundColor: Colors.teal.withOpacity(0.2),
-                            color: Colors.teal,
-                          ),
-                          Center(
-                            child: Text(
-                              '${(progress * 100).toStringAsFixed(0)}%',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 12, // خط أصغر
-                                fontWeight: FontWeight.w800,
-                                color: Colors.teal,
+                    // 👇 دائرة التقدم مع إمكانية الضغط لتحديد الهدف
+                    GestureDetector(
+                      onTap: _openTargetForm, // 👈 هذا السطر الجديد
+                      child: SizedBox(
+                        width: 60,
+                        height: 60,
+                        child: Stack(
+                          children: [
+                            CircularProgressIndicator(
+                              value: progress,
+                              strokeWidth: 6,
+                              backgroundColor: Colors.teal.withOpacity(0.2),
+                              color: Colors.teal,
+                            ),
+                            Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    '${(progress * 100).toStringAsFixed(0)}%',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.teal,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'هدف',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontSize: 8,
+                                      color: Colors.teal.withOpacity(0.7),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
 
-                    const SizedBox(width: 12), // مسافة أقل
+                    const SizedBox(width: 12),
+
                     // 📄 النص والمعلومات
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min, // ارتفاع أدنى
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'إجمالي توفير الكربون',
+                            'توفير الكربون',
                             style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 14, // خط أصغر
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
                               color: appColors.dark,
                             ),
                           ),
-                          const SizedBox(height: 2), // مسافة أقل
+                          const SizedBox(height: 2),
                           Text(
-                            '${totalCarbon.toStringAsFixed(1)} كجم',
+                            '${totalCarbon.toStringAsFixed(1)} كجم / ${_carbonTarget.toInt()} كجم',
                             style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 12, // خط أصغر
+                              fontSize: 12,
                               fontWeight: FontWeight.w600,
                               color: Colors.grey[700],
                             ),
+                          ),
+                          const SizedBox(height: 4),
+                          LinearProgressIndicator(
+                            value: progress,
+                            backgroundColor: Colors.grey[200],
+                            color: Colors.teal,
+                            borderRadius: BorderRadius.circular(10),
+                            minHeight: 4,
                           ),
                         ],
                       ),
@@ -1648,7 +1746,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                 ),
               ),
 
-              // السهم في الزاوية اليمين العليا (تم تصغيره)
+              // السهم في الزاوية اليمين العليا
               Positioned(
                 top: 8,
                 left: 8,
@@ -1657,7 +1755,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                       ? Icons.keyboard_arrow_up_rounded
                       : Icons.keyboard_arrow_down_rounded,
                   color: Colors.teal,
-                  size: 18, // أيقونة أصغر
+                  size: 18,
                 ),
               ),
             ],
@@ -1666,10 +1764,170 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
         // الجزء السفلي - الرسم البياني (يظهر فقط عند التوسيع)
         if (_isCarbonExpanded) ...[
-          const SizedBox(height: 8), // مسافة أقل
+          const SizedBox(height: 8),
           _buildExpandedCarbonChart(carbonSpots),
         ],
       ],
+    );
+  }
+
+  // أضف دالة لعرض فورم تحديد الهدف
+  Widget _buildTargetPopup() {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: Colors.white,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.95,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'تحديد هدف الكربون',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: appColors.dark,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.teal.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.teal.withOpacity(0.2)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.flag, color: Colors.teal, size: 18),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'الهدف الحالي: ${_carbonTarget.toInt()} كجم',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.teal,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+            TextField(
+              controller: _targetController,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'الهدف الجديد',
+                labelStyle: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+                hintText: 'أدخل قيمة بالكيلوجرام',
+                hintStyle: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 12.5,
+                  color: Colors.grey[500],
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey[300]!),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.teal, width: 2),
+                ),
+                prefixIcon: const Icon(
+                  Icons.edit,
+                  color: Colors.teal,
+                  size: 20,
+                ),
+                suffixText: 'كجم',
+                suffixStyle: GoogleFonts.ibmPlexSansArabic(
+                  color: Colors.teal,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12.5,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
+              ),
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w600,
+                color: appColors.dark,
+              ),
+            ),
+
+            const SizedBox(height: 28),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      side: BorderSide(color: Colors.grey[400]!),
+                    ),
+                    child: Text(
+                      'إلغاء',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _saveTarget,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'حفظ',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
