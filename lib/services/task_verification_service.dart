@@ -156,7 +156,7 @@ static const String _baseUrl = 'https://verify-tasks-188455017517.us-central1.ru
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 60));
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
@@ -168,7 +168,7 @@ static const String _baseUrl = 'https://verify-tasks-188455017517.us-central1.ru
           error: json['error'] ?? 'خطأ في الخادم: ${response.statusCode}',
         );
       }
-    } catch (e) {
+    }catch (e) {
       return TaskVerificationResult(
         success: false,
         error: 'فشل الاتصال: $e',
