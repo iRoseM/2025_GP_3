@@ -11,6 +11,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'services/map_pick_route.dart';
+import 'services/task_verification_service.dart'; // ✅ أضيفي هذا
 import '../services/app_colors.dart';
 import '../../home.dart';
 
@@ -58,8 +59,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   LatLng? _manualEnd;
   double? _manualDistanceKm;
 
-  // ✅ عدد العناصر المدخَل في الـ popup
   int? _itemCount;
+
+  // ✅ متغيرات التحقق بالـ AI
+  TaskVerificationResult? _verificationResult;
+  bool _isVerifying = false;
 
   Map<String, dynamic> get _calcRequires {
     final v = widget.taskData['calc_requires'];
@@ -91,24 +95,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return kws.any((k) => s.contains(k));
   }
 
-  // bool get _isPerItemMode {
-  //   final raw = (_calcRequires['calcMode'] ?? widget.taskData['calcMode'] ?? '')
-  //       .toString()
-  //       .toLowerCase()
-  //       .trim();
-  //   return raw == 'peritem' || raw == 'deltaperitem';
-  // }
-
-  // bool get _askCountFlag =>
-  //     (_calcRequires['askCount'] == true) ||
-  //     (widget.taskData['askCount'] == true) ||
-  //     (widget.taskData['itemsEnabled'] == true) ||
-  //     (widget.taskData['perItem'] == true);
-
-  // 🚫 ما عاد نستخدم خانة "عدد العناصر" في الواجهة (لكن نستخدم popup)
-  //bool get _shouldAskCount => false;
-
-  // ✅ هل هذه المهمة تحتاج popup لعدد العناصر؟
   bool get _requiresItemDialog {
     final mode = (widget.taskData['calcMode'] ?? '')
         .toString()
@@ -121,6 +107,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
   double _deg2rad(double deg) => deg * math.pi / 180.0;
+  
   double _haversineKm(double lat1, double lon1, double lat2, double lon2) {
     const R = 6371.0;
     final dLat = _deg2rad(lat2 - lat1);
@@ -169,6 +156,40 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) setState(() => _inlineError = null);
     });
+  }
+
+  // ✅ دالة التحقق من الصورة بالـ AI
+  Future<TaskVerificationResult?> _verifyTaskImage(String imagePath) async {
+    if (!mounted) return null;
+    
+    setState(() => _isVerifying = true);
+    
+    try {
+      // الحصول على نوع المهمة المتوقع
+      final expectedTask = TaskVerificationService.mapTaskToCategory(widget.taskData);
+      
+      // التحقق من الصورة
+      final result = await TaskVerificationService.verifyFromFile(
+        File(imagePath),
+        expectedTask: expectedTask,
+        threshold: 0.7, // 70% نسبة الثقة المطلوبة
+      );
+      
+      if (mounted) {
+        setState(() {
+          _verificationResult = result;
+          _isVerifying = false;
+        });
+      }
+      
+      return result;
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isVerifying = false);
+        _showInlineError('فشل التحقق من الصورة');
+      }
+      return null;
+    }
   }
 
   Future<void> _ensureLocationPermission() async {
@@ -239,22 +260,16 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   Future<double?> _getEfPerUnit(String id, {String? valueFieldFromTask}) async {
     final d = await _getEfDoc(id);
-    if (d == null) {
-      return null;
-    }
+    if (d == null) return null;
 
     if (valueFieldFromTask != null && valueFieldFromTask.isNotEmpty) {
       final v = _asDouble(d[valueFieldFromTask]);
-      if (v != null) {
-        return v;
-      }
+      if (v != null) return v;
     }
     final vfInDoc = d['valueField'] ?? d['efValueField'];
     if (vfInDoc is String && vfInDoc.isNotEmpty) {
       final v = _asDouble(d[vfInDoc]);
-      if (v != null) {
-        return v;
-      }
+      if (v != null) return v;
     }
     final candidates = [
       'ef_kgco2_per_unit',
@@ -270,9 +285,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     ];
     for (final k in candidates) {
       final v = _asDouble(d[k]);
-      if (v != null) {
-        return v;
-      }
+      if (v != null) return v;
     }
     return null;
   }
@@ -296,23 +309,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         (widget.taskData['actualFactorRef'] ?? efDoc['actualFactorRef'])
             ?.toString();
 
-    // final dir = (widget.taskData['direction'] ?? efDoc['direction'] ?? '')
-    //     .toString()
-    //     .toLowerCase();
-    //final isSave = (dir.isEmpty || dir == 'save');
-
-    // if (calcMode == 'perkm' && km != null && km > 0) {
-    //   final perKmVal = await _getEfPerUnit(
-    //     efIdFromTask,
-    //     valueFieldFromTask: valueFieldFromTask,
-    //   );
-    //   if (perKmVal == null) {
-    //     return 0.0;
-    //   }
-    //   final res = (isSave ? perKmVal : 0.0) * km;
-    //   return res;
-    // }
-
     if (calcMode == 'deltaperkm' && km != null && km > 0) {
       final baseline = baseRef != null
           ? await _getEfPerUnit(baseRef, valueFieldFromTask: valueFieldFromTask)
@@ -331,18 +327,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       final res = (delta > 0 ? delta : 0.0) * km;
       return res;
     }
-
-    // if (calcMode == 'peritem' && items != null && items > 0) {
-    //   final perItemVal = await _getEfPerUnit(
-    //     efIdFromTask,
-    //     valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
-    //   );
-    //   if (perItemVal == null) {
-    //     return 0.0;
-    //   }
-    //   final res = (isSave ? perItemVal : 0.0) * items;
-    //   return res;
-    // }
 
     if (calcMode == 'deltaperitem' && items != null && items > 0) {
       const defaultField = 'ef_kgco2_per_unit';
@@ -366,9 +350,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         );
       }
 
-      if (baseline == null && actual == null) {
-        return 0.0;
-      }
+      if (baseline == null && actual == null) return 0.0;
 
       final delta = ((baseline ?? 0.0) - (actual ?? 0.0));
       final perItem = delta > 0 ? delta : 0.0;
@@ -376,29 +358,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return res;
     }
 
-    // if ((calcMode.isEmpty || calcMode == 'auto') &&
-    //     items != null &&
-    //     items > 0) {
-    //   final perItemVal = await _getEfPerUnit(
-    //     efIdFromTask,
-    //     valueFieldFromTask: valueFieldFromTask ?? 'ef_kgco2_per_unit',
-    //   );
-    //   // if (perItemVal != null) {
-    //   //   final res = (isSave ? perItemVal : 0.0) * items;
-    //   //   return res;
-    //   // }
-    // }
-
-    // if ((calcMode.isEmpty || calcMode == 'auto') && km != null && km > 0) {
-    //   final perKmVal = await _getEfPerUnit(
-    //     efIdFromTask,
-    //     valueFieldFromTask: valueFieldFromTask,
-    //   );
-    //   // if (perKmVal != null) {
-    //   //   final res = (isSave ? perKmVal : 0.0) * km;
-    //   //   return res;
-    //   // }
-    // }
     return 0.0;
   }
 
@@ -546,6 +505,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     if (itemCount != null) {
       extra['itemCount'] = itemCount;
     }
+    
     final efId =
         (widget.taskData['ef_ref'] ??
                 widget.taskData['efRef'] ??
@@ -560,6 +520,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     if (calcMode != null && calcMode.isNotEmpty) {
       extra['calcMode'] = calcMode;
     }
+
+    // ✅ إضافة نتيجة التحقق بالـ AI
+    if (_verificationResult != null) {
+      extra['aiVerification'] = {
+        'taskName': _verificationResult!.taskName,
+        'taskNameAr': _verificationResult!.taskNameAr,
+        'confidence': _verificationResult!.confidence,
+        'verified': _verificationResult!.verified,
+        'matchesExpected': _verificationResult!.matchesExpected,
+      };
+    }
+
     await subRef.set({
       'userId': uid,
       'userTaskDocId': widget.userTaskDocId,
@@ -569,20 +541,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       'status': 'pending',
       'imageUrls': [downloadUrl],
       'createdAt': FieldValue.serverTimestamp(),
-      //'processedAt': null,
-      //'processedBy': null,
       ...extra,
     });
+    
     await StreakService.updateStreakOnTaskCompletion();
+    
     await utRef.set({
       'userId': uid,
       'status': 'submitted',
-      //'submittedAt': FieldValue.serverTimestamp(),
       'evidence': {
         'type': 'photo',
         'url': downloadUrl,
         'storagePath': storageRef.fullPath,
-        //'uploadedAt': FieldValue.serverTimestamp(),
       },
       'taskTitle': widget.taskData['title'] ?? '',
       'taskPoints': taskPoints,
@@ -603,6 +573,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       _openingCamera = true;
       _capturedPath = null;
       _ready = false;
+      _verificationResult = null; // ✅ إعادة تعيين نتيجة التحقق
     });
 
     try {
@@ -790,20 +761,14 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
   }
 
-  // ======================================================
-  // ✅ Popup لإدخال عدد العناصر عند calcMode = deltaPerItem
-  //    بدون صورة — وبنفس ستايل ديالوج تسجيل الخروج
-  // ======================================================
   Future<void> _promptForItemCountIfNeeded() async {
     if (!_requiresItemDialog) return;
 
-    // نحاول نقرأ أقل وأعلى قيمة من الـ taskData (لو موجودة), وإلا افتراضيًا 1..999
     final minItems = _asInt(widget.taskData['minItems']) ?? 1;
     final maxItems = _asInt(widget.taskData['maxItems']) ?? 999;
 
     int clamp(int v) => v.clamp(minItems, maxItems);
 
-    // القيمة الافتراضية: آخر قيمة محفوظة، أو defaultItems من التاسك، أو minItems
     final def = (_itemCount != null && _itemCount! > 0)
         ? _itemCount!
         : (_asInt(widget.taskData['defaultItems']) ?? minItems);
@@ -834,7 +799,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // ===== العنوان + الأيقونة =====
                         Row(
                           children: [
                             const Icon(
@@ -853,8 +817,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                           ],
                         ),
                         const SizedBox(height: 12),
-
-                        // ===== أزرار - [TextField] + =====
                         Row(
                           children: [
                             _counterButton(
@@ -863,7 +825,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 final cur = _asInt(_itemCountCtrl.text) ?? def;
                                 final next = clamp(cur - 1);
                                 _itemCountCtrl.text = next.toString();
-                                // ما نحتاج setState رئيسي هنا، بس مافي ضرر
                                 setState(() {});
                               },
                             ),
@@ -900,8 +861,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                           ],
                         ),
                         const SizedBox(height: 8),
-
-                        // ===== نص الحد الأدنى والأقصى =====
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
@@ -913,8 +872,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                           ),
                         ),
                         const SizedBox(height: 16),
-
-                        // ===== أزرار إلغاء / حفظ =====
                         Row(
                           children: [
                             Expanded(
@@ -987,12 +944,102 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
     if (!mounted) return;
 
-    // حفظ النتيجة في _itemCount
     if (result != null && result > 0) {
       setState(() {
         _itemCount = clamp(result);
       });
     }
+  }
+
+  // ✅ ودجت عرض نتيجة التحقق بالـ AI
+  Widget _buildVerificationResult() {
+    if (_verificationResult == null && !_isVerifying) {
+      return const SizedBox.shrink();
+    }
+
+    if (_isVerifying) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.blue.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'جاري التحقق من الصورة...',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w600,
+                color: Colors.blue,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final isVerified = _verificationResult!.verified == true;
+    final matchesExpected = _verificationResult!.matchesExpected;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isVerified
+            ? Colors.green.withOpacity(0.1)
+            : Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isVerified ? Colors.green : Colors.orange,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isVerified ? Icons.check_circle : Icons.warning,
+            color: isVerified ? Colors.green : Colors.orange,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'نوع المهمة: ${_verificationResult!.taskNameAr ?? "غير معروف"}',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'نسبة الثقة: ${_verificationResult!.confidencePercent ?? "0%"}',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 13,
+                    color: Colors.black54,
+                  ),
+                ),
+                if (matchesExpected != null)
+                  Text(
+                    matchesExpected ? '✅ مطابق للمهمة' : '⚠️ غير مطابق للمهمة',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 13,
+                      color: matchesExpected ? Colors.green : Colors.orange,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1117,44 +1164,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 Positioned.fill(
                                   child: _capturedPath != null
                                       ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
+                                          borderRadius: BorderRadius.circular(16),
                                           child: Image.file(
                                             File(_capturedPath!),
                                             fit: BoxFit.cover,
                                           ),
                                         )
                                       : ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
+                                          borderRadius: BorderRadius.circular(16),
                                           child: FittedBox(
                                             fit: BoxFit.cover,
                                             child: SizedBox(
-                                              width:
-                                                  _controller!
-                                                      .value
-                                                      .previewSize
-                                                      ?.height ??
-                                                  w,
-                                              height:
-                                                  _controller!
-                                                      .value
-                                                      .previewSize
-                                                      ?.width ??
-                                                  h,
+                                              width: _controller!.value.previewSize?.height ?? w,
+                                              height: _controller!.value.previewSize?.width ?? h,
                                               child: GestureDetector(
-                                                behavior:
-                                                    HitTestBehavior.opaque,
-                                                onTapDown: (d) =>
-                                                    _setFocusAndExposurePoint(
-                                                      d,
-                                                      Size(w, h),
-                                                    ),
-                                                child: CameraPreview(
-                                                  _controller!,
-                                                ),
+                                                behavior: HitTestBehavior.opaque,
+                                                onTapDown: (d) => _setFocusAndExposurePoint(d, Size(w, h)),
+                                                child: CameraPreview(_controller!),
                                               ),
                                             ),
                                           ),
@@ -1169,10 +1195,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                       _roundedGlass(
                                         child: IconButton(
                                           tooltip: 'تبديل الكاميرا',
-                                          icon: const Icon(
-                                            Icons.cameraswitch_rounded,
-                                            color: Colors.white,
-                                          ),
+                                          icon: const Icon(Icons.cameraswitch_rounded, color: Colors.white),
                                           onPressed: _switchCamera,
                                         ),
                                       ),
@@ -1185,10 +1208,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                             _flashMode == FlashMode.off
                                                 ? Icons.flash_off_rounded
                                                 : _flashMode == FlashMode.auto
-                                                ? Icons.flash_auto_rounded
-                                                : _flashMode == FlashMode.always
-                                                ? Icons.flash_on_rounded
-                                                : Icons.highlight_rounded,
+                                                    ? Icons.flash_auto_rounded
+                                                    : _flashMode == FlashMode.always
+                                                        ? Icons.flash_on_rounded
+                                                        : Icons.highlight_rounded,
                                             color: Colors.white,
                                           ),
                                         ),
@@ -1220,39 +1243,28 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                     ],
                                   ),
                                 ),
-                                if (_requiresItemDialog &&
-                                    (_itemCount != null && _itemCount! > 0))
+                                if (_requiresItemDialog && (_itemCount != null && _itemCount! > 0))
                                   Positioned(
                                     top: 54,
                                     right: 12,
                                     child: _roundedGlass(
                                       child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 8,
-                                        ),
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Text(
-                                              'عدد العناصر: ${_itemCount}',
-                                              style:
-                                                  GoogleFonts.ibmPlexSansArabic(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
+                                              'عدد العناصر: $_itemCount',
+                                              style: GoogleFonts.ibmPlexSansArabic(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w700,
+                                              ),
                                             ),
                                             const SizedBox(width: 6),
                                             InkWell(
-                                              onTap:
-                                                  _promptForItemCountIfNeeded,
-                                              borderRadius:
-                                                  BorderRadius.circular(999),
-                                              child: const Icon(
-                                                Icons.edit,
-                                                size: 18,
-                                                color: Colors.white,
-                                              ),
+                                              onTap: _promptForItemCountIfNeeded,
+                                              borderRadius: BorderRadius.circular(999),
+                                              child: const Icon(Icons.edit, size: 18, color: Colors.white),
                                             ),
                                           ],
                                         ),
@@ -1263,10 +1275,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   Positioned(
                                     top: 12,
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 10,
-                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                       decoration: BoxDecoration(
                                         color: Colors.black.withOpacity(0.72),
                                         borderRadius: BorderRadius.circular(12),
@@ -1299,13 +1308,15 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                       ),
                     ),
                   const SizedBox(height: 12),
+                  
+                  // ✅ عرض نتيجة التحقق بالـ AI
+                  if (_capturedPath != null) _buildVerificationResult(),
+                  
                   const SizedBox(height: 10),
                   if (_ready) ...[
                     if (_capturedPath == null)
                       _gradientButton(
-                        label: _isCapturing
-                            ? 'جاري الالتقاط...'
-                            : 'التقاط صورة',
+                        label: _isCapturing ? 'جاري الالتقاط...' : 'التقاط صورة',
                         icon: Icons.camera,
                         onTap: _isCapturing
                             ? null
@@ -1315,23 +1326,22 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   _isCapturing = true;
                                   _flashOpacity = 0.9;
                                 });
-                                await Future.delayed(
-                                  const Duration(milliseconds: 90),
-                                );
-                                if (mounted) {
-                                  setState(() => _flashOpacity = 0.0);
-                                }
+                                await Future.delayed(const Duration(milliseconds: 90));
+                                if (mounted) setState(() => _flashOpacity = 0.0);
+                                
                                 final shot = await _safeTakePicture();
                                 if (!mounted) return;
+                                
                                 if (shot != null) {
                                   setState(() => _capturedPath = shot.path);
 
-                                  // ✅ بعد التصوير مباشرة، نسأل عن عدد العناصر لو المهمة deltaPerItem
+                                  // ✅ التحقق من الصورة بالـ AI تلقائياً
+                                  await _verifyTaskImage(shot.path);
+
+                                  // ✅ بعد التصوير، نسأل عن عدد العناصر لو المهمة deltaPerItem
                                   await _promptForItemCountIfNeeded();
                                 }
-                                if (mounted) {
-                                  setState(() => _isCapturing = false);
-                                }
+                                if (mounted) setState(() => _isCapturing = false);
                               },
                       )
                     else
@@ -1339,32 +1349,48 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           _gradientButton(
-                            label: _isUploading
-                                ? 'جاري الإرسال...'
-                                : 'إرسال للمراجعة',
+                            label: _isUploading ? 'جاري الإرسال...' : 'إرسال للمراجعة',
                             icon: Icons.cloud_upload,
                             onTap: _isUploading
                                 ? null
                                 : () async {
                                     if (_capturedPath == null) return;
 
-                                    // ✅ نجهّز عدد العناصر (من الـ popup)
+                                    // ✅ تحذير إذا التحقق فشل
+                                    if (_verificationResult != null && _verificationResult!.verified != true) {
+                                      final proceed = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          title: Text('تنبيه', style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.bold)),
+                                          content: Text(
+                                            'الصورة قد لا تكون مطابقة للمهمة.\nهل تريد المتابعة؟',
+                                            style: GoogleFonts.ibmPlexSansArabic(),
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(ctx, false),
+                                              child: Text('إلغاء', style: GoogleFonts.ibmPlexSansArabic(color: appColors.primary)),
+                                            ),
+                                            ElevatedButton(
+                                              onPressed: () => Navigator.pop(ctx, true),
+                                              style: ElevatedButton.styleFrom(backgroundColor: appColors.primary),
+                                              child: Text('متابعة', style: GoogleFonts.ibmPlexSansArabic(color: Colors.white)),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (proceed != true) return;
+                                    }
+
                                     int? safeItems = _itemCount;
+                                    final mode = (widget.taskData['calcMode'] ?? '').toString().toLowerCase();
 
-                                    final mode =
-                                        (widget.taskData['calcMode'] ?? '')
-                                            .toString()
-                                            .toLowerCase();
-
-                                    // ✅ لو المهمة deltaPerItem لازم يكون عندنا عدد عناصر
-                                    if (mode == 'deltaperitem' &&
-                                        (safeItems == null || safeItems <= 0)) {
+                                    if (mode == 'deltaperitem' && (safeItems == null || safeItems <= 0)) {
                                       await _promptForItemCountIfNeeded();
                                       safeItems = _itemCount;
                                       if (safeItems == null || safeItems <= 0) {
-                                        _showInlineError(
-                                          'يرجى إدخال عدد العناصر.',
-                                        );
+                                        _showInlineError('يرجى إدخال عدد العناصر.');
                                         return;
                                       }
                                     }
@@ -1373,9 +1399,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                     setState(() => _isUploading = true);
 
                                     try {
-                                      final isDistanceMode =
-                                          mode == 'perkm' ||
-                                          mode == 'deltaperkm';
+                                      final isDistanceMode = mode == 'perkm' || mode == 'deltaperkm';
                                       double? pickedKm;
 
                                       if (isDistanceMode) {
@@ -1385,93 +1409,55 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         if (_autoDistanceKmComputed != null &&
                                             _autoDistanceKmComputed!.isFinite &&
                                             _autoDistanceKmComputed! > 0) {
-                                          straightKm = double.parse(
-                                            _autoDistanceKmComputed!
-                                                .toStringAsFixed(3),
-                                          );
+                                          straightKm = double.parse(_autoDistanceKmComputed!.toStringAsFixed(3));
                                         }
                                         if (manualKm != null && manualKm > 0) {
                                           pickedKm = manualKm;
-                                        } else if (straightKm != null &&
-                                            straightKm > 0) {
+                                        } else if (straightKm != null && straightKm > 0) {
                                           pickedKm = straightKm;
                                         }
-                                        final askDistanceKm =
-                                            widget.taskData['askDistanceKm'] ==
-                                            true;
-                                        final defaultKmOnSubmit =
-                                            (widget.taskData['defaultKmOnSubmit']
-                                                is num)
-                                            ? (widget.taskData['defaultKmOnSubmit']
-                                                      as num)
-                                                  .toDouble()
+                                        
+                                        final askDistanceKm = widget.taskData['askDistanceKm'] == true;
+                                        final defaultKmOnSubmit = (widget.taskData['defaultKmOnSubmit'] is num)
+                                            ? (widget.taskData['defaultKmOnSubmit'] as num).toDouble()
                                             : null;
-                                        if (pickedKm == null &&
-                                            askDistanceKm &&
-                                            defaultKmOnSubmit != null) {
+                                        if (pickedKm == null && askDistanceKm && defaultKmOnSubmit != null) {
                                           pickedKm = defaultKmOnSubmit;
                                         }
+                                        
                                         double? minKm, maxKm;
                                         final mk = widget.taskData['minKm'];
                                         final xk = widget.taskData['maxKm'];
-                                        if (mk is num) {
-                                          minKm = mk.toDouble();
-                                        }
-                                        if (xk is num) {
-                                          maxKm = xk.toDouble();
-                                        }
+                                        if (mk is num) minKm = mk.toDouble();
+                                        if (xk is num) maxKm = xk.toDouble();
                                         if (pickedKm != null && pickedKm > 0) {
-                                          final clamped =
-                                              pickedKm.clamp(
-                                                    minKm ?? 0.2,
-                                                    maxKm ?? 50.0,
-                                                  )
-                                                  as num;
-                                          pickedKm = double.parse(
-                                            clamped.toStringAsFixed(3),
-                                          );
+                                          final clamped = pickedKm.clamp(minKm ?? 0.2, maxKm ?? 50.0) as num;
+                                          pickedKm = double.parse(clamped.toStringAsFixed(3));
                                         }
 
-                                        if (_manualStart != null &&
-                                            _manualEnd != null) {
-                                          _geoStart = GeoPoint(
-                                            _manualStart!.latitude,
-                                            _manualStart!.longitude,
-                                          );
-                                          _geoEnd = GeoPoint(
-                                            _manualEnd!.latitude,
-                                            _manualEnd!.longitude,
-                                          );
+                                        if (_manualStart != null && _manualEnd != null) {
+                                          _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
+                                          _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
                                         }
                                       }
 
                                       double? carbonSaved;
-                                      final efId =
-                                          (widget.taskData['ef_ref'] ??
-                                                  widget.taskData['efRef'] ??
-                                                  widget
-                                                      .taskData['emissionFactorRef'] ??
-                                                  widget
-                                                      .taskData['emission_factor_ref'])
-                                              ?.toString();
+                                      final efId = (widget.taskData['ef_ref'] ??
+                                              widget.taskData['efRef'] ??
+                                              widget.taskData['emissionFactorRef'] ??
+                                              widget.taskData['emission_factor_ref'])
+                                          ?.toString();
                                       final valueFieldFromTask =
-                                          (widget.taskData['ef_valueField'] ??
-                                                  widget.taskData['valueField'])
-                                              ?.toString();
+                                          (widget.taskData['ef_valueField'] ?? widget.taskData['valueField'])?.toString();
                                       if (efId != null && efId.isNotEmpty) {
-                                        final saved =
-                                            await _computeCarbonSavedFlexible(
-                                              efIdFromTask: efId,
-                                              km: pickedKm,
-                                              items: safeItems,
-                                              valueFieldFromTask:
-                                                  valueFieldFromTask,
-                                            );
-
+                                        final saved = await _computeCarbonSavedFlexible(
+                                          efIdFromTask: efId,
+                                          km: pickedKm,
+                                          items: safeItems,
+                                          valueFieldFromTask: valueFieldFromTask,
+                                        );
                                         if (saved.isFinite) {
-                                          carbonSaved = double.parse(
-                                            saved.toStringAsFixed(3),
-                                          );
+                                          carbonSaved = double.parse(saved.toStringAsFixed(3));
                                         }
                                       }
 
@@ -1491,23 +1477,14 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         useRootNavigator: true,
                                         builder: (context) {
                                           return Dialog(
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                            insetPadding:
-                                                const EdgeInsets.symmetric(
-                                                  horizontal: 24,
-                                                ),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
                                             child: SizedBox(
                                               width: 340,
                                               child: Padding(
-                                                padding: const EdgeInsets.all(
-                                                  20,
-                                                ),
+                                                padding: const EdgeInsets.all(20),
                                                 child: Column(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
+                                                  mainAxisSize: MainAxisSize.min,
                                                   children: [
                                                     Image.asset(
                                                       'assets/img/nameerCamera.png',
@@ -1517,65 +1494,42 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                     const SizedBox(height: 16),
                                                     Text(
                                                       '!تم تسجيل مشاركتك بنجاح',
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                      style:
-                                                          GoogleFonts.ibmPlexSansArabic(
-                                                            fontSize: 20,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            color:
-                                                                appColors.dark,
-                                                          ),
+                                                      textAlign: TextAlign.center,
+                                                      style: GoogleFonts.ibmPlexSansArabic(
+                                                        fontSize: 20,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: appColors.dark,
+                                                      ),
                                                     ),
                                                     const SizedBox(height: 12),
                                                     Text(
                                                       'جاري إرسالها للجنة المراجعة.\nعند الاعتماد، ستُضاف نقاطك تلقائيًا',
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                      style:
-                                                          GoogleFonts.ibmPlexSansArabic(
-                                                            fontSize: 16,
-                                                            fontWeight:
-                                                                FontWeight.w500,
-                                                            color:
-                                                                appColors.dark,
-                                                          ),
+                                                      textAlign: TextAlign.center,
+                                                      style: GoogleFonts.ibmPlexSansArabic(
+                                                        fontSize: 16,
+                                                        fontWeight: FontWeight.w500,
+                                                        color: appColors.dark,
+                                                      ),
                                                     ),
                                                     const SizedBox(height: 24),
                                                     SizedBox(
                                                       width: 140,
                                                       child: ElevatedButton(
                                                         style: ElevatedButton.styleFrom(
-                                                          backgroundColor:
-                                                              appColors.primary,
+                                                          backgroundColor: appColors.primary,
                                                           shape: RoundedRectangleBorder(
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  12,
-                                                                ),
+                                                            borderRadius: BorderRadius.circular(12),
                                                           ),
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 24,
-                                                                vertical: 10,
-                                                              ),
+                                                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                                                         ),
-                                                        onPressed: () =>
-                                                            Navigator.pop(
-                                                              context,
-                                                            ),
+                                                        onPressed: () => Navigator.pop(context),
                                                         child: Text(
                                                           'تم',
-                                                          style:
-                                                              GoogleFonts.ibmPlexSansArabic(
-                                                                color: Colors
-                                                                    .white,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700,
-                                                                fontSize: 16,
-                                                              ),
+                                                          style: GoogleFonts.ibmPlexSansArabic(
+                                                            color: Colors.white,
+                                                            fontWeight: FontWeight.w700,
+                                                            fontSize: 16,
+                                                          ),
                                                         ),
                                                       ),
                                                     ),
@@ -1590,9 +1544,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                       try {
                                         if (_capturedPath != null) {
                                           final f = File(_capturedPath!);
-                                          if (await f.exists()) {
-                                            await f.delete();
-                                          }
+                                          if (await f.exists()) await f.delete();
                                         }
                                       } catch (_) {}
                                       if (!mounted) return;
@@ -1601,18 +1553,13 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                       if (!mounted) return;
                                       _showInlineError(_friendlyError(e));
                                     } finally {
-                                      if (mounted) {
-                                        setState(() => _isUploading = false);
-                                      }
+                                      if (mounted) setState(() => _isUploading = false);
                                     }
                                   },
                           ),
                           const SizedBox(height: 10),
                           OutlinedButton.icon(
-                            icon: const Icon(
-                              Icons.refresh,
-                              color: appColors.primary,
-                            ),
+                            icon: const Icon(Icons.refresh, color: appColors.primary),
                             label: Text(
                               'إعادة التقاط',
                               style: GoogleFonts.ibmPlexSansArabic(
@@ -1622,13 +1569,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                               ),
                             ),
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
-                                color: appColors.primary,
-                                width: 2,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
+                              side: const BorderSide(color: appColors.primary, width: 2),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: () async {
@@ -1641,6 +1583,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                               if (mounted) {
                                 setState(() {
                                   _capturedPath = null;
+                                  _verificationResult = null; // ✅ إعادة تعيين نتيجة التحقق
                                 });
                               }
                             },
@@ -1725,9 +1668,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           SizedBox(
             width: 58,
             child: Text(
-              label == 'التقريب'
-                  ? '${value.toStringAsFixed(1)}x'
-                  : value.toStringAsFixed(1),
+              label == 'التقريب' ? '${value.toStringAsFixed(1)}x' : value.toStringAsFixed(1),
               textAlign: TextAlign.center,
               style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
             ),
@@ -1747,10 +1688,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         ? const SizedBox(
             height: 22,
             width: 22,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.white,
-            ),
+            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
           )
         : Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1812,11 +1750,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.camera_alt_outlined,
-                color: appColors.primary,
-                size: 22,
-              ),
+              const Icon(Icons.camera_alt_outlined, color: appColors.primary, size: 22),
               const SizedBox(width: 8),
               Text(
                 'تعليمات التصوير',
@@ -1865,10 +1799,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         decoration: BoxDecoration(
           color: appColors.primary.withOpacity(0.08),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: appColors.primary.withOpacity(0.45),
-            width: 1.3,
-          ),
+          border: Border.all(color: appColors.primary.withOpacity(0.45), width: 1.3),
         ),
         child: Icon(icon, size: 22, color: appColors.primary),
       ),

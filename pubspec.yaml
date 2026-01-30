@@ -48,7 +48,6 @@ dependencies:
   showcaseview: ^5.0.1
 
   fl_chart: ^0.64.0 
-  syncfusion_flutter_charts: 32.1.24
 
 
 dev_dependencies:
@@ -88,5 +87,8 @@ flutter_native_splash:
     branding: assets/logo.png
 
 
-
+dependency_overrides:
+  intl: ^0.20.2
+  syncfusion_flutter_core: ^28.1.38
+  syncfusion_flutter_charts: ^28.1.38
 

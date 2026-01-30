@@ -18,7 +18,7 @@
       }
     }
   },
-    "functions": [
+  "functions": [
     {
       "codebase": "default",
       "ignore": [
@@ -42,6 +42,17 @@
         "firebase-debug.log",
         "firebase-debug.*.log",
         "*.local"
+      ]
+    },
+    {
+      "source": "functions-python",
+      "codebase": "task-verification",
+      "runtime": "python311",
+      "ignore": [
+        "venv",
+        "__pycache__",
+        ".git",
+        "*.pyc"
       ]
     }
   ]
