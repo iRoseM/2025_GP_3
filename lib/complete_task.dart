@@ -12,6 +12,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'services/map_pick_route.dart';
 import '../services/app_colors.dart';
+import '../../home.dart';
 
 class CompleteTaskSheet extends StatefulWidget {
   final Map<String, dynamic> taskData;
@@ -572,7 +573,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       //'processedBy': null,
       ...extra,
     });
-
+    await StreakService.updateStreakOnTaskCompletion();
     await utRef.set({
       'userId': uid,
       'status': 'submitted',

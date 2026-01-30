@@ -41,6 +41,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
   List<FlSpot> _carbonSpots = [];
   DateTime _cursorDate = DateTime.now();
   bool _isCarbonExpanded = false;
+  List<Map<String, dynamic>> _topUsers = [];
+  bool _isLoadingTopUsers = false;
   // 🔧 دوال الفترات الزمنية
   List<String> _generatePeriodKeys(DateTime start, DateTime end, String range) {
     final List<String> keys = [];
@@ -122,7 +124,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
       } else {
         FCMService.requestPermissionAndSaveToken();
         FCMService.listenToForegroundMessages();
-        await _loadTargetFromFirebase(); // 👈 أضف هذا السطر
+        await _loadTargetFromFirebase();
+        _loadTopUsers();
       }
     });
 
@@ -138,6 +141,15 @@ class _AdminHomePageState extends State<AdminHomePage> {
     _refreshTimer?.cancel();
     _targetController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadTopUsers() async {
+    setState(() => _isLoadingTopUsers = true);
+    final topUsers = await _fetchTopUsers();
+    setState(() {
+      _topUsers = topUsers;
+      _isLoadingTopUsers = false;
+    });
   }
 
   Future<void> _loadChartData() async {
@@ -309,61 +321,324 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
-  // 🔧 دالة لإنشاء فترات زمنية متساوية للمحور X
-  List<String> _generateXLabels(int count, String timeRange) {
-    final labels = <String>[];
+  Widget _buildLeaderboardCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // العنوان
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'أعلى 3 مستخدمين إنجازًا',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: appColors.accent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.leaderboard,
+                      size: 14,
+                      color: appColors.accent,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'قائمة المتصدرين',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: appColors.accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
 
-    switch (timeRange) {
-      case 'اليوم':
-        for (int i = 0; i <= 23; i += 3) {
-          labels.add('$i:00');
-        }
-        break;
+          const SizedBox(height: 16),
 
-      case 'أسبوع':
-        final days = [
-          'الأحد',
-          'الاثنين',
-          'الثلاثاء',
-          'الأربعاء',
-          'الخميس',
-          'الجمعة',
-          'السبت',
-        ];
-        for (int i = 0; i < 7; i++) {
-          labels.add(days[i]);
-        }
-        break;
+          // المحتوى
+          if (_isLoadingTopUsers)
+            const Center(child: CircularProgressIndicator())
+          else if (_topUsers.isEmpty)
+            Center(
+              child: Text(
+                'لا توجد بيانات متاحة',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  color: Colors.grey[600],
+                  fontSize: 13,
+                ),
+              ),
+            )
+          else
+            // في _buildLeaderboardCard():
+            Column(
+              children: _topUsers.asMap().entries.map((entry) {
+                final index = entry.key; // 👈 نأخذ الفهرس
+                final user = entry.value;
 
-      case 'شهر':
-        // عرض كل 5 أيام
-        for (int i = 1; i <= 30; i += 5) {
-          labels.add('$i');
-        }
-        break;
+                return _buildLeaderboardItem(
+                  index: index, // 👈 نمرر الفهرس بدلاً من الرتبة
+                  username: user['username'],
+                  completedTasks: user['completedTasks'],
+                  points: user['points'],
+                  pfpIndex: user['pfpIndex'],
+                );
+              }).toList(),
+            ),
 
-      case 'سنة':
-        const months = [
-          'يناير',
-          'فبراير',
-          'مارس',
-          'أبريل',
-          'مايو',
-          'يونيو',
-          'يوليو',
-          'أغسطس',
-          'سبتمبر',
-          'أكتوبر',
-          'نوفمبر',
-          'ديسمبر',
-        ];
-        for (int i = 0; i < 12; i += 2) {
-          labels.add(months[i]);
-        }
+          // زر عرض المزيد (اختياري - يمكنك إزالته إذا أردت)
+          if (_topUsers.isNotEmpty && _topUsers.length >= 3)
+            Column(
+              children: [
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: GestureDetector(
+                    onTap: () {
+                      _showFullLeaderboard();
+                    },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'عرض القائمة الكاملة',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: appColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.chevron_left,
+                          size: 16,
+                          color: appColors.primary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeaderboardItem({
+    required int index,
+    required String username,
+    required int completedTasks,
+    required int points,
+    required int pfpIndex,
+  }) {
+    final rank = index + 1;
+
+    final Color rankColor;
+    final IconData? rankIcon;
+
+    switch (rank) {
+      case 1:
+        rankColor = const Color(0xFFFFD700);
+        rankIcon = Icons.emoji_events;
         break;
+      case 2:
+        rankColor = const Color(0xFFC0C0C0);
+        rankIcon = Icons.emoji_events;
+        break;
+      case 3:
+        rankColor = const Color(0xFFCD7F32);
+        rankIcon = Icons.emoji_events;
+        break;
+      default:
+        rankColor = Colors.grey[400]!;
+        rankIcon = null;
     }
 
-    return labels;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: index < 3 ? rankColor.withOpacity(0.05) : Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        border: index < 3
+            ? Border.all(color: rankColor.withOpacity(0.3), width: 1.5)
+            : null,
+      ),
+      child: Row(
+        children: [
+          // الرتبة
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: rankColor.withOpacity(index < 3 ? 0.2 : 0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: rankColor.withOpacity(0.3), width: 1),
+            ),
+            child: Center(
+              child: rankIcon != null && index < 3
+                  ? Icon(rankIcon, size: 16, color: rankColor)
+                  : Text(
+                      '$rank',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: rankColor,
+                      ),
+                    ),
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // الصورة الشخصية
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  appColors.primary.withOpacity(.1),
+                  appColors.sea.withOpacity(.05),
+                ],
+              ),
+            ),
+            child: CircleAvatar(
+              backgroundColor: Colors.transparent,
+              backgroundImage: AssetImage('assets/pfp/pfp${pfpIndex + 1}.png'),
+              child: pfpIndex >= 0 && pfpIndex < 8
+                  ? null
+                  : const Icon(
+                      Icons.person,
+                      size: 20,
+                      color: appColors.primary,
+                    ),
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // الاسم والإحصائيات
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  username,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: index < 3 ? appColors.dark : Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    // المهام المكتملة
+                    Row(
+                      children: [
+                        Icon(Icons.task_alt, size: 12, color: Colors.green),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$completedTasks',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green,
+                          ),
+                        ),
+                        Text(
+                          ' مهام',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 11,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // النقاط
+                    Row(
+                      children: [
+                        Icon(Icons.star, size: 12, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$points',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber,
+                          ),
+                        ),
+                        Text(
+                          ' نقطة',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 11,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // مؤشر التقدم (اختياري)
+          if (index == 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: rankColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'الأول',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: rankColor,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadTaskCompletionData() async {
@@ -2419,6 +2694,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     },
                   ),
 
+                  _buildLeaderboardCard(),
                   const SizedBox(height: 16),
 
                   StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -2674,25 +2950,177 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
-  double _safeInterval(double value) {
-    if (value.isNaN || value.isInfinite || value <= 0) {
-      return 1.0;
-    }
-    return value;
+  void _showFullLeaderboard() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.85,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(30),
+              topRight: Radius.circular(30),
+            ),
+          ),
+          child: Column(
+            children: [
+              // شريط السحب
+              Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 4),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // العنوان
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'قائمة المتصدرين',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: appColors.dark,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+
+              // القائمة الكاملة
+              Expanded(
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _fetchFullLeaderboard(), // دالة جديدة
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return Center(
+                        child: Text(
+                          'لا توجد بيانات',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      );
+                    }
+
+                    final allUsers = snapshot.data!;
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: allUsers.length,
+                      itemBuilder: (context, index) {
+                        final user = allUsers[index];
+                        return _buildLeaderboardItem(
+                          index: index,
+                          username: user['username'],
+                          completedTasks: user['completedTasks'],
+                          points: user['points'],
+                          pfpIndex: user['pfpIndex'],
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
-  Widget _buildTableCell(String text, bool isHeader) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Text(
-        text,
-        style: GoogleFonts.ibmPlexSansArabic(
-          fontSize: isHeader ? 14 : 13,
-          fontWeight: isHeader ? FontWeight.w700 : FontWeight.w500,
-          color: isHeader ? appColors.dark : Colors.grey[700],
-        ),
-      ),
-    );
+  Future<List<Map<String, dynamic>>> _fetchTopUsers() async {
+    try {
+      final usersSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('isVerified', isEqualTo: true)
+          .get();
+
+      final List<Map<String, dynamic>> usersData = [];
+
+      for (final doc in usersSnapshot.docs) {
+        final data = doc.data();
+        final completedTasks = data['completedTask'] ?? 0;
+        final points = data['points'] ?? 0;
+        final username = data['username'] ?? 'مستخدم';
+        final pfpIndex = data['pfpIndex'] ?? 0;
+
+        usersData.add({
+          'id': doc.id,
+          'username': username,
+          'completedTasks': completedTasks is num ? completedTasks.toInt() : 0,
+          'points': points is num ? points.toInt() : 0,
+          'pfpIndex': pfpIndex,
+          // ❌ لا نحتاج 'rank': 0 هنا
+        });
+      }
+
+      // ترتيب تنازلي حسب عدد المهام المكتملة
+      usersData.sort(
+        (a, b) => b['completedTasks'].compareTo(a['completedTasks']),
+      );
+
+      // ❌ لا نحتاج حلقة for لإضافة الرتبة
+
+      // أخذ أفضل 3 فقط
+      return usersData.take(3).toList();
+    } catch (e) {
+      debugPrint('❌ Leaderboard error: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchFullLeaderboard() async {
+    try {
+      final usersSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('isVerified', isEqualTo: true)
+          .get();
+
+      final List<Map<String, dynamic>> usersData = [];
+
+      for (final doc in usersSnapshot.docs) {
+        final data = doc.data();
+        final completedTasks = data['completedTask'] ?? 0;
+        final points = data['points'] ?? 0;
+        final username = data['username'] ?? 'مستخدم';
+        final pfpIndex = data['pfpIndex'] ?? 0;
+
+        usersData.add({
+          'username': username,
+          'completedTasks': completedTasks is num ? completedTasks.toInt() : 0,
+          'points': points is num ? points.toInt() : 0,
+          'pfpIndex': pfpIndex,
+        });
+      }
+
+      // ترتيب تنازلي
+      usersData.sort(
+        (a, b) => b['completedTasks'].compareTo(a['completedTasks']),
+      );
+
+      return usersData;
+    } catch (e) {
+      debugPrint('❌ Full leaderboard error: $e');
+      return [];
+    }
   }
 
   Widget _buildLoadingStats() {
