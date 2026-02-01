@@ -1360,6 +1360,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                       ),
                                     ),
                                   ),
+
                                   TextButton.icon(
                                     onPressed: () {
                                       hasInternetConnection().then((online) {
@@ -1368,6 +1369,12 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                           showNoInternetDialog(context);
                                           return;
                                         }
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => const communityPage(),
+                                          ),
+                                        );
                                       });
                                     },
                                     icon: const Icon(
@@ -1389,31 +1396,13 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                           ),
                         ),
                         const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: _FriendCard(
-                                    name: 'سارة',
-                                    points: 220,
-                                    streak: 4,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _FriendCard(
-                                    name: 'خالد',
-                                    points: 180,
-                                    streak: 2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
+                        // ✅ قسم الأصدقاء الديناميكي
+SliverToBoxAdapter(
+  child: Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: _DynamicFriendsSection(),
+  ),
+),
                         const SliverToBoxAdapter(child: SizedBox(height: 120)),
                       ],
                     ),
@@ -4594,6 +4583,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -4736,3 +4726,405 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
     );
   }
 }
+
+  
+class _DynamicFriendsSection extends StatefulWidget {
+  const _DynamicFriendsSection();
+
+  @override
+  State<_DynamicFriendsSection> createState() => _DynamicFriendsSectionState();
+}
+
+class _DynamicFriendsSectionState extends State<_DynamicFriendsSection> {
+  List<Map<String, dynamic>> _friends = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFriends();
+  }
+
+  Future<void> _loadFriends() async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // جلب قائمة الأصدقاء من المستخدم الحالي
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (!userDoc.exists) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final List<dynamic> followingIds = userDoc.data()?['following'] ?? [];
+
+      if (followingIds.isEmpty) {
+        setState(() {
+          _friends = [];
+          _isLoading = false;
+        });
+        return;
+      }
+
+      List<Map<String, dynamic>> friends = [];
+
+      // جلب بيانات أول صديقين فقط للعرض في الصفحة الرئيسية
+      final idsToFetch = followingIds.take(2).toList();
+
+      for (String friendId in idsToFetch) {
+        try {
+          final friendDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(friendId)
+              .get();
+
+          if (friendDoc.exists) {
+            final data = friendDoc.data()!;
+            friends.add({
+              'id': friendId,
+              'username': data['username'] ?? 'صديق',
+              'points': data['points'] ?? 0,
+              'currentStreak': data['currentStreak'] ?? 0,
+              'pfpIndex': data['pfpIndex'],
+            });
+          }
+        } catch (e) {
+          debugPrint('خطأ في جلب بيانات الصديق: $e');
+        }
+      }
+
+      // ترتيب حسب النقاط
+      friends.sort((a, b) => (b['points'] as int).compareTo(a['points'] as int));
+
+      setState(() {
+        _friends = friends;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('خطأ في تحميل الأصدقاء: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const SizedBox(
+        height: 140,
+        child: Center(
+          child: CircularProgressIndicator(color: appColors.primary),
+        ),
+      );
+    }
+
+    if (_friends.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return Row(
+      children: [
+        // الصديق الأول
+        Expanded(
+          child: _DynamicFriendCard(
+            name: _friends[0]['username'],
+            points: _friends[0]['points'],
+            streak: _friends[0]['currentStreak'],
+            pfpIndex: _friends[0]['pfpIndex'],
+          ),
+        ),
+        const SizedBox(width: 12),
+        // الصديق الثاني أو placeholder
+        Expanded(
+          child: _friends.length > 1
+              ? _DynamicFriendCard(
+                  name: _friends[1]['username'],
+                  points: _friends[1]['points'],
+                  streak: _friends[1]['currentStreak'],
+                  pfpIndex: _friends[1]['pfpIndex'],
+                )
+              : _buildAddFriendCard(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const communityPage()),
+        );
+      },
+      child: Container(
+        height: 140,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              appColors.primary.withOpacity(0.05),
+              appColors.mint.withOpacity(0.1),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: appColors.primary.withOpacity(0.2),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: appColors.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.person_add_rounded,
+                color: appColors.primary,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'أضف أصدقاءك الآن!',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: appColors.dark,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'تابع تقدمهم وتنافس معهم',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddFriendCard() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const communityPage()),
+        );
+      },
+      child: Container(
+        height: 140,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.white, Color(0xFFF9FBFC)],
+          ),
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 16,
+              offset: Offset(0, 6),
+            ),
+          ],
+          border: Border.all(
+            color: appColors.primary.withOpacity(0.15),
+            width: 1.5,
+            style: BorderStyle.solid,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: appColors.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.add_rounded,
+                color: appColors.primary,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'إضافة صديق',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: appColors.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ✅ بطاقة الصديق الديناميكية مع صورة البروفايل
+class _DynamicFriendCard extends StatelessWidget {
+  final String name;
+  final int points;
+  final int streak;
+  final dynamic pfpIndex;
+
+  const _DynamicFriendCard({
+    required this.name,
+    required this.points,
+    required this.streak,
+    this.pfpIndex,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // تحديد صورة الأفاتار
+    String? avatarPath;
+    if (pfpIndex != null && pfpIndex is int && pfpIndex >= 0 && pfpIndex < 8) {
+      avatarPath = 'assets/pfp/pfp${pfpIndex + 1}.png';
+    }
+
+    return Container(
+      height: 140,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, Color(0xFFF9FBFC)],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+        border: Border.all(color: const Color(0xFFE6EDF1), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // صورة البروفايل
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      appColors.primary.withOpacity(0.15),
+                      appColors.mint.withOpacity(0.1),
+                    ],
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x11000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: CircleAvatar(
+                  radius: 22,
+                  backgroundColor: Colors.transparent,
+                  backgroundImage: avatarPath != null
+                      ? AssetImage(avatarPath)
+                      : null,
+                  child: avatarPath == null
+                      ? const Icon(Icons.person, color: appColors.primary, size: 24)
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  name,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: appColors.dark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          
+          // شارة الـ Streak
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: streak > 0 
+                  ? appColors.accent.withOpacity(.12)
+                  : Colors.grey.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  streak > 0 ? '🔥' : '💤',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  streak > 0 ? '$streak يوم' : 'لا يوجد',
+                  style: TextStyle(
+                    color: streak > 0 ? appColors.accent : Colors.grey,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // النقاط
+          Row(
+            children: [
+              const Icon(
+                Icons.stars_rounded,
+                size: 18,
+                color: appColors.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$points نقطة',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: appColors.dark,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
