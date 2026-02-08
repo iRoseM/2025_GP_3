@@ -40,6 +40,30 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   bool _openingCamera = false;
   bool _isCapturing = false;
   bool _isUploading = false;
+  bool _isAiApproved(TaskVerificationResult? r) {
+    if (r?.success != true) return false;
+    if (r?.verified != true) return false;
+
+    final conf = (r?.confidence ?? 0.0);
+
+    // لو المودل قال صراحةً "غير مطابق" نرفض مهما كان الكونفدنس
+    if (r?.matchesExpected == false) return false;
+
+    // لو matchesExpected == true → نعتمد بعتبة 0.70
+    if (r?.matchesExpected == true) return conf >= 0.70;
+
+    // لو matchesExpected == null → نطلب كونفدنس عالي (حسب اتفاقنا)
+    return conf >= 0.85;
+  }
+  String _dayId(DateTime dt) {
+  String two(int v) => v.toString().padLeft(2, '0');
+    return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
+  }
+
+  String _fmtKgLocal(double kg) {
+    final v = ((kg * 100).roundToDouble() / 100.0);
+    return v.toStringAsFixed(v.truncateToDouble() == v ? 0 : 2);
+  }
 
   String? _inlineError;
   String? _capturedPath;
@@ -388,7 +412,184 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }
   }
 
-  Future<void> _createSubmissionAndMarkSubmitted({
+  // Future<void> _createSubmissionAndMarkSubmitted({
+  //   required String localPath,
+  //   required int taskPoints,
+  //   String? taskId,
+  //   double? distanceKm,
+  //   double? carbonSaved,
+  //   int? itemCount,
+  // }) async {
+  //   final user = FirebaseAuth.instance.currentUser;
+  //   if (user == null) {
+  //     throw Exception('يرجى تسجيل الدخول.');
+  //   }
+
+  //   final file = File(localPath);
+  //   if (!await file.exists()) {
+  //     throw Exception('لم يتم العثور على ملف الصورة.');
+  //   }
+
+  //   final uid = user.uid;
+  //   final dayKey = _yyyyMMdd(widget.selectedDay);
+  //   final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
+  //   final name = DateTime.now().millisecondsSinceEpoch.toString();
+
+  //   final storage = FirebaseStorage.instance;
+  //   final storageRef = storage.ref('$basePath/$name.jpg');
+
+  //   Future<void> tryUpload() async {
+  //     await storageRef
+  //         .putFile(
+  //           file,
+  //           SettableMetadata(
+  //             contentType: 'image/jpeg',
+  //             cacheControl: 'public,max-age=3600',
+  //           ),
+  //         )
+  //         .timeout(const Duration(seconds: 60));
+  //   }
+
+  //   try {
+  //     try {
+  //       await tryUpload();
+  //     } catch (_) {
+  //       await Future.delayed(const Duration(milliseconds: 300));
+  //       await tryUpload();
+  //     }
+  //   } on FirebaseException catch (e) {
+  //     throw FirebaseException(
+  //       plugin: e.plugin,
+  //       code: e.code,
+  //       message: _friendlyError(e),
+  //     );
+  //   } on TimeoutException {
+  //     throw Exception('انتهى وقت رفع الصورة.');
+  //   } catch (e) {
+  //     throw Exception(_friendlyError(e));
+  //   }
+
+  //   Future<String> getUrlWithRetry() async {
+  //     try {
+  //       return await storageRef.getDownloadURL().timeout(
+  //         const Duration(seconds: 20),
+  //       );
+  //     } on TimeoutException {
+  //       await Future.delayed(const Duration(milliseconds: 200));
+  //       return await storageRef.getDownloadURL().timeout(
+  //         const Duration(seconds: 20),
+  //       );
+  //     }
+  //   }
+
+  //   String downloadUrl;
+  //   try {
+  //     downloadUrl = await getUrlWithRetry();
+  //   } on FirebaseException catch (e) {
+  //     try {
+  //       await storageRef.delete();
+  //     } catch (_) {}
+  //     throw FirebaseException(
+  //       plugin: e.plugin,
+  //       code: e.code,
+  //       message: _friendlyError(e),
+  //     );
+  //   } on TimeoutException {
+  //     try {
+  //       await storageRef.delete();
+  //     } catch (_) {}
+  //     throw Exception('انتهى وقت جلب رابط الصورة.');
+  //   } catch (e) {
+  //     try {
+  //       await storageRef.delete();
+  //     } catch (_) {}
+  //     throw Exception(_friendlyError(e));
+  //   }
+
+  //   final subRef = FirebaseFirestore.instance.collection('submissions').doc();
+  //   final utRef = FirebaseFirestore.instance
+  //       .collection('userTasks')
+  //       .doc(widget.userTaskDocId);
+
+  //   final extra = <String, dynamic>{};
+
+  //   if (distanceKm != null) {
+  //     extra['distanceKm'] = distanceKm;
+  //   }
+
+  //   final double carbonForStore = (carbonSaved != null && carbonSaved.isFinite)
+  //       ? double.parse(carbonSaved.toStringAsFixed(3))
+  //       : 0.0;
+
+  //   extra['carbonSaved'] = carbonForStore;
+
+  //   if (_geoStart != null) extra['geoStart'] = _geoStart;
+  //   if (_geoEnd != null) extra['geoEnd'] = _geoEnd;
+
+  //   if (itemCount != null) {
+  //     extra['itemCount'] = itemCount;
+  //   }
+    
+  //   final efId =
+  //       (widget.taskData['ef_ref'] ??
+  //               widget.taskData['efRef'] ??
+  //               widget.taskData['emissionFactorRef'] ??
+  //               widget.taskData['emission_factor_ref'])
+  //           ?.toString();
+  //   if (efId != null && efId.isNotEmpty) {
+  //     extra['emissionFactorRef'] = efId;
+  //   }
+
+  //   final calcMode = widget.taskData['calcMode']?.toString();
+  //   if (calcMode != null && calcMode.isNotEmpty) {
+  //     extra['calcMode'] = calcMode;
+  //   }
+
+  //   // ✅ إضافة نتيجة التحقق بالـ AI
+  //   if (_verificationResult != null) {
+  //     extra['aiVerification'] = {
+  //       'taskName': _verificationResult!.taskName,
+  //       'taskNameAr': _verificationResult!.taskNameAr,
+  //       'confidence': _verificationResult!.confidence,
+  //       'verified': _verificationResult!.verified,
+  //       'matchesExpected': _verificationResult!.matchesExpected,
+  //     };
+  //   }
+
+  //   await subRef.set({
+  //     'userId': uid,
+  //     'userTaskDocId': widget.userTaskDocId,
+  //     'taskId': taskId ?? '',
+  //     'taskTitle': widget.taskData['title'] ?? '',
+  //     'taskPoints': taskPoints,
+  //     'status': 'pending',
+  //     'imageUrls': [downloadUrl],
+  //     'createdAt': FieldValue.serverTimestamp(),
+  //     ...extra,
+  //   });
+    
+  //   await StreakService.updateStreakOnTaskCompletion();
+    
+  //   await utRef.set({
+  //     'userId': uid,
+  //     'status': 'submitted',
+  //     'evidence': {
+  //       'type': 'photo',
+  //       'url': downloadUrl,
+  //       'storagePath': storageRef.fullPath,
+  //     },
+  //     'taskTitle': widget.taskData['title'] ?? '',
+  //     'taskPoints': taskPoints,
+  //     if (taskId != null) 'taskId': taskId,
+  //     if (distanceKm != null) 'distanceKm': distanceKm,
+  //     'carbonSaved': carbonForStore,
+  //     if (_geoStart != null) 'geoStart': _geoStart,
+  //     if (_geoEnd != null) 'geoEnd': _geoEnd,
+  //     if (itemCount != null) 'itemCount': itemCount,
+  //   }, SetOptions(merge: true));
+  // }
+
+  Future<void> _createSubmissionAndAutoApprove({
     required String localPath,
     required int taskPoints,
     String? taskId,
@@ -397,20 +598,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     int? itemCount,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception('يرجى تسجيل الدخول.');
-    }
+    if (user == null) throw Exception('يرجى تسجيل الدخول.');
 
     final file = File(localPath);
-    if (!await file.exists()) {
-      throw Exception('لم يتم العثور على ملف الصورة.');
-    }
+    if (!await file.exists()) throw Exception('لم يتم العثور على ملف الصورة.');
 
     final uid = user.uid;
     final dayKey = _yyyyMMdd(widget.selectedDay);
     final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
     final name = DateTime.now().millisecondsSinceEpoch.toString();
 
+    // 1) Upload to Storage (خارج الترانزاكشن)
     final storage = FirebaseStorage.instance;
     final storageRef = storage.ref('$basePath/$name.jpg');
 
@@ -433,137 +631,174 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         await Future.delayed(const Duration(milliseconds: 300));
         await tryUpload();
       }
-    } on FirebaseException catch (e) {
-      throw FirebaseException(
-        plugin: e.plugin,
-        code: e.code,
-        message: _friendlyError(e),
-      );
     } on TimeoutException {
       throw Exception('انتهى وقت رفع الصورة.');
+    } on FirebaseException catch (e) {
+      throw FirebaseException(plugin: e.plugin, code: e.code, message: _friendlyError(e));
     } catch (e) {
       throw Exception(_friendlyError(e));
     }
 
-    Future<String> getUrlWithRetry() async {
-      try {
-        return await storageRef.getDownloadURL().timeout(
-          const Duration(seconds: 20),
-        );
-      } on TimeoutException {
-        await Future.delayed(const Duration(milliseconds: 200));
-        return await storageRef.getDownloadURL().timeout(
-          const Duration(seconds: 20),
-        );
-      }
-    }
-
+    // 2) Get download URL (خارج الترانزاكشن)
     String downloadUrl;
     try {
-      downloadUrl = await getUrlWithRetry();
-    } on FirebaseException catch (e) {
-      try {
-        await storageRef.delete();
-      } catch (_) {}
-      throw FirebaseException(
-        plugin: e.plugin,
-        code: e.code,
-        message: _friendlyError(e),
-      );
+      downloadUrl = await storageRef.getDownloadURL().timeout(const Duration(seconds: 20));
     } on TimeoutException {
-      try {
-        await storageRef.delete();
-      } catch (_) {}
+      try { await storageRef.delete(); } catch (_) {}
       throw Exception('انتهى وقت جلب رابط الصورة.');
+    } on FirebaseException catch (e) {
+      try { await storageRef.delete(); } catch (_) {}
+      throw FirebaseException(plugin: e.plugin, code: e.code, message: _friendlyError(e));
     } catch (e) {
-      try {
-        await storageRef.delete();
-      } catch (_) {}
+      try { await storageRef.delete(); } catch (_) {}
       throw Exception(_friendlyError(e));
     }
 
-    final subRef = FirebaseFirestore.instance.collection('submissions').doc();
-    final utRef = FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(widget.userTaskDocId);
-
-    final extra = <String, dynamic>{};
-
-    if (distanceKm != null) {
-      extra['distanceKm'] = distanceKm;
-    }
-
+    // 3) تجهيز بيانات إضافية
     final double carbonForStore = (carbonSaved != null && carbonSaved.isFinite)
         ? double.parse(carbonSaved.toStringAsFixed(3))
         : 0.0;
 
-    extra['carbonSaved'] = carbonForStore;
+    final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
+    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(widget.userTaskDocId);
+    final subRef = FirebaseFirestore.instance.collection('submissions').doc(); // نحدد ID قبل الترانزاكشن
 
-    if (_geoStart != null) extra['geoStart'] = _geoStart;
-    if (_geoEnd != null) extra['geoEnd'] = _geoEnd;
+    final todayId = _dayId(DateTime.now());
+    final dayMarkRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('dayMarks')
+        .doc(todayId);
 
-    if (itemCount != null) {
-      extra['itemCount'] = itemCount;
+    final taskTitle = (widget.taskData['title'] ?? '').toString();
+
+    // 4) Transaction = نفس منطق الأدمن لكن بدون pending
+    try {
+      await FirebaseFirestore.instance.runTransaction((trx) async {
+        final utSnap = await trx.get(utRef);
+        if (!utSnap.exists) throw 'userTask غير موجود.';
+        final ut = utSnap.data() as Map<String, dynamic>;
+        final currentStatus = (ut['status'] as String?) ?? 'pending';
+        final canComplete = currentStatus != 'completed';
+
+        // 4.1) submissions: approved مباشرة
+        final subData = <String, dynamic>{
+          'userId': uid,
+          'userTaskDocId': widget.userTaskDocId,
+          'taskId': taskId ?? '',
+          'taskTitle': taskTitle,
+          'taskPoints': taskPoints,
+          'status': 'approved',
+          'imageUrls': [downloadUrl],
+          'createdAt': FieldValue.serverTimestamp(),
+
+          if (distanceKm != null) 'distanceKm': distanceKm,
+          'carbonSaved': carbonForStore,
+          if (itemCount != null) 'itemCount': itemCount,
+          if (_geoStart != null) 'geoStart': _geoStart,
+          if (_geoEnd != null) 'geoEnd': _geoEnd,
+
+          // AI result (موجود عندك أصلًا)
+          if (_verificationResult != null)
+            'aiVerification': {
+              'taskName': _verificationResult!.taskName,
+              'taskNameAr': _verificationResult!.taskNameAr,
+              'confidence': _verificationResult!.confidence,
+              'verified': _verificationResult!.verified,
+              'matchesExpected': _verificationResult!.matchesExpected,
+            },
+        };
+
+        trx.set(subRef, subData);
+
+        // 4.2) userTasks: completed مباشرة
+        final utUpdate = <String, dynamic>{
+          'userId': uid,
+          'status': 'completed',
+          'completedAt': FieldValue.serverTimestamp(),
+          'canRetry': false,
+          'evidence': {
+            'type': 'photo',
+            'url': downloadUrl,
+            'storagePath': storageRef.fullPath,
+          },
+          'taskTitle': taskTitle,
+          'taskPoints': taskPoints,
+          if (taskId != null) 'taskId': taskId,
+          if (distanceKm != null) 'distanceKm': distanceKm,
+          'carbonSaved': carbonForStore,
+          if (itemCount != null) 'itemCount': itemCount,
+          if (_geoStart != null) 'geoStart': _geoStart,
+          if (_geoEnd != null) 'geoEnd': _geoEnd,
+        };
+        trx.set(utRef, utUpdate, SetOptions(merge: true));
+
+        // 4.3) نقاط المستخدم (مرة واحدة فقط)
+        if (canComplete && taskPoints > 0) {
+          trx.update(usersRef, {
+            'points': FieldValue.increment(taskPoints),
+            'completedTask': FieldValue.increment(1),
+          });
+        }
+
+        // 4.4) history
+        final historyRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('history')
+            .doc();
+        final histData = <String, dynamic>{
+          'type': 'task_approved',
+          'userTaskDocId': widget.userTaskDocId,
+          'submissionId': subRef.id,
+          'points': taskPoints,
+          'at': FieldValue.serverTimestamp(),
+          'taskTitle': taskTitle,
+        };
+        if (carbonForStore > 0) histData['carbonSaved'] = carbonForStore;
+        if (itemCount != null && itemCount > 0) histData['itemCount'] = itemCount;
+        trx.set(historyRef, histData);
+
+        // 4.5) totalCarbonSaved + lastCarbonUpdateAt
+        trx.set(usersRef, {
+          'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+          if (carbonForStore > 0) 'totalCarbonSaved': FieldValue.increment(carbonForStore),
+        }, SetOptions(merge: true));
+
+        // 4.6) dayMarks
+        trx.set(dayMarkRef, {
+          'count': FieldValue.increment(1),
+          'lastAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        // 4.7) notifications
+        final notifRef = FirebaseFirestore.instance.collection('notifications').doc();
+        final carbonText = _fmtKgLocal(carbonForStore.isFinite && carbonForStore >= 0 ? carbonForStore : 0.0);
+        trx.set(notifRef, {
+          'type': 'submission_approved',
+          'userId': uid,
+          'submissionId': subRef.id,
+          'taskTitle': taskTitle,
+          'points': taskPoints,
+          if (distanceKm != null && distanceKm > 0) 'distanceKm': distanceKm,
+          if (itemCount != null && itemCount > 0) 'itemCount': itemCount,
+          'createdAt': FieldValue.serverTimestamp(),
+          'seen': false,
+          'title': 'تم اعتماد المهمة 🎉',
+          'body': 'أُضيفت $taskPoints نقطة • وفَّرت $carbonText كجم CO₂ 🌿',
+          'message': 'تم اعتماد طلبك لمهمة: $taskTitle — نقاط: $taskPoints • توفير: $carbonText كجم CO₂',
+        });
+      });
+
+      // ✅ (الستريك: اتركيه زي ما هو عندك؛ إذا كان سطره موجود في مكان ثاني لا تنقلينه الآن)
+      await StreakService.updateStreakOnTaskCompletion();
+    } catch (e) {
+      // لو فشل الترانزاكشن، نحاول نحذف الملف المرفوع عشان ما يعلق
+      try { await storageRef.delete(); } catch (_) {}
+      throw Exception('خطأ: $e');
     }
-    
-    final efId =
-        (widget.taskData['ef_ref'] ??
-                widget.taskData['efRef'] ??
-                widget.taskData['emissionFactorRef'] ??
-                widget.taskData['emission_factor_ref'])
-            ?.toString();
-    if (efId != null && efId.isNotEmpty) {
-      extra['emissionFactorRef'] = efId;
-    }
-
-    final calcMode = widget.taskData['calcMode']?.toString();
-    if (calcMode != null && calcMode.isNotEmpty) {
-      extra['calcMode'] = calcMode;
-    }
-
-    // ✅ إضافة نتيجة التحقق بالـ AI
-    if (_verificationResult != null) {
-      extra['aiVerification'] = {
-        'taskName': _verificationResult!.taskName,
-        'taskNameAr': _verificationResult!.taskNameAr,
-        'confidence': _verificationResult!.confidence,
-        'verified': _verificationResult!.verified,
-        'matchesExpected': _verificationResult!.matchesExpected,
-      };
-    }
-
-    await subRef.set({
-      'userId': uid,
-      'userTaskDocId': widget.userTaskDocId,
-      'taskId': taskId ?? '',
-      'taskTitle': widget.taskData['title'] ?? '',
-      'taskPoints': taskPoints,
-      'status': 'pending',
-      'imageUrls': [downloadUrl],
-      'createdAt': FieldValue.serverTimestamp(),
-      ...extra,
-    });
-    
-    await StreakService.updateStreakOnTaskCompletion();
-    
-    await utRef.set({
-      'userId': uid,
-      'status': 'submitted',
-      'evidence': {
-        'type': 'photo',
-        'url': downloadUrl,
-        'storagePath': storageRef.fullPath,
-      },
-      'taskTitle': widget.taskData['title'] ?? '',
-      'taskPoints': taskPoints,
-      if (taskId != null) 'taskId': taskId,
-      if (distanceKm != null) 'distanceKm': distanceKm,
-      'carbonSaved': carbonForStore,
-      if (_geoStart != null) 'geoStart': _geoStart,
-      if (_geoEnd != null) 'geoEnd': _geoEnd,
-      if (itemCount != null) 'itemCount': itemCount,
-    }, SetOptions(merge: true));
   }
+
 
   Future<void> _openCamera({int? index}) async {
     if (_openingCamera) return;
@@ -952,95 +1187,95 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   }
 
   // ✅ ودجت عرض نتيجة التحقق بالـ AI
-  Widget _buildVerificationResult() {
-    if (_verificationResult == null && !_isVerifying) {
-      return const SizedBox.shrink();
-    }
+  // Widget _buildVerificationResult() {
+  //   if (_verificationResult == null && !_isVerifying) {
+  //     return const SizedBox.shrink();
+  //   }
 
-    if (_isVerifying) {
-      return Container(
-        padding: const EdgeInsets.all(12),
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: Colors.blue.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.blue.withOpacity(0.3)),
-        ),
-        child: Row(
-          children: [
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              'جاري التحقق من الصورة...',
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontWeight: FontWeight.w600,
-                color: Colors.blue,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+  //   if (_isVerifying) {
+  //     return Container(
+  //       padding: const EdgeInsets.all(12),
+  //       margin: const EdgeInsets.only(bottom: 12),
+  //       decoration: BoxDecoration(
+  //         color: Colors.blue.withOpacity(0.1),
+  //         borderRadius: BorderRadius.circular(12),
+  //         border: Border.all(color: Colors.blue.withOpacity(0.3)),
+  //       ),
+  //       child: Row(
+  //         children: [
+  //           const SizedBox(
+  //             width: 20,
+  //             height: 20,
+  //             child: CircularProgressIndicator(strokeWidth: 2),
+  //           ),
+  //           const SizedBox(width: 12),
+  //           Text(
+  //             'جاري التحقق من الصورة...',
+  //             style: GoogleFonts.ibmPlexSansArabic(
+  //               fontWeight: FontWeight.w600,
+  //               color: Colors.blue,
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     );
+  //   }
 
-    final isVerified = _verificationResult!.verified == true;
-    final matchesExpected = _verificationResult!.matchesExpected;
+  //   final isVerified = _verificationResult!.verified == true;
+  //   final matchesExpected = _verificationResult!.matchesExpected;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isVerified
-            ? Colors.green.withOpacity(0.1)
-            : Colors.orange.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isVerified ? Colors.green : Colors.orange,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isVerified ? Icons.check_circle : Icons.warning,
-            color: isVerified ? Colors.green : Colors.orange,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'نوع المهمة: ${_verificationResult!.taskNameAr ?? "غير معروف"}',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  'نسبة الثقة: ${_verificationResult!.confidencePercent ?? "0%"}',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 13,
-                    color: Colors.black54,
-                  ),
-                ),
-                if (matchesExpected != null)
-                  Text(
-                    matchesExpected ? '✅ مطابق للمهمة' : '⚠️ غير مطابق للمهمة',
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 13,
-                      color: matchesExpected ? Colors.green : Colors.orange,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  //   return Container(
+  //     padding: const EdgeInsets.all(12),
+  //     margin: const EdgeInsets.only(bottom: 12),
+  //     decoration: BoxDecoration(
+  //       color: isVerified
+  //           ? Colors.green.withOpacity(0.1)
+  //           : Colors.orange.withOpacity(0.1),
+  //       borderRadius: BorderRadius.circular(12),
+  //       border: Border.all(
+  //         color: isVerified ? Colors.green : Colors.orange,
+  //       ),
+  //     ),
+  //     child: Row(
+  //       children: [
+  //         Icon(
+  //           isVerified ? Icons.check_circle : Icons.warning,
+  //           color: isVerified ? Colors.green : Colors.orange,
+  //         ),
+  //         const SizedBox(width: 8),
+  //         Expanded(
+  //           child: Column(
+  //             crossAxisAlignment: CrossAxisAlignment.start,
+  //             children: [
+  //               Text(
+  //                 'نوع المهمة: ${_verificationResult!.taskNameAr ?? "غير معروف"}',
+  //                 style: GoogleFonts.ibmPlexSansArabic(
+  //                   fontWeight: FontWeight.w600,
+  //                 ),
+  //               ),
+  //               Text(
+  //                 'نسبة الثقة: ${_verificationResult!.confidencePercent ?? "0%"}',
+  //                 style: GoogleFonts.ibmPlexSansArabic(
+  //                   fontSize: 13,
+  //                   color: Colors.black54,
+  //                 ),
+  //               ),
+  //               if (matchesExpected != null)
+  //                 Text(
+  //                   matchesExpected ? '✅ مطابق للمهمة' : '⚠️ غير مطابق للمهمة',
+  //                   style: GoogleFonts.ibmPlexSansArabic(
+  //                     fontSize: 13,
+  //                     color: matchesExpected ? Colors.green : Colors.orange,
+  //                     fontWeight: FontWeight.w600,
+  //                   ),
+  //                 ),
+  //             ],
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -1309,8 +1544,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                     ),
                   const SizedBox(height: 12),
                   
-                  // ✅ عرض نتيجة التحقق بالـ AI
-                  if (_capturedPath != null) _buildVerificationResult(),
+                  // // ✅ عرض نتيجة التحقق بالـ AI
+                  // if (_capturedPath != null) _buildVerificationResult(),
                   
                   const SizedBox(height: 10),
                   if (_ready) ...[
@@ -1349,39 +1584,65 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           _gradientButton(
-                            label: _isUploading ? 'جاري الإرسال...' : 'إرسال للمراجعة',
+                            label: _isUploading ? 'جاري الإرسال...' : 'إرسال',
                             icon: Icons.cloud_upload,
                             onTap: _isUploading
                                 ? null
                                 : () async {
                                     if (_capturedPath == null) return;
 
+                                    // ✅ NEW: امنعي الإرسال إذا ما صار AI Approved (كونفدنس عالي)
+
+                                    // if (!_isAiApproved(_verificationResult)) {
+                                    //   if (!mounted) return;
+
+                                    //   ScaffoldMessenger.of(
+                                    //     Navigator.of(context, rootNavigator: true).context,
+                                    //   )
+                                    //     ..hideCurrentSnackBar()
+                                    //     ..showSnackBar(
+                                    //       SnackBar(
+                                    //         backgroundColor: slackMesseges.red,
+                                    //         content: Text(
+                                    //           'الصورة غير مطابقة للمهمة. أعد الالتقاط.',
+                                    //           style: GoogleFonts.ibmPlexSansArabic(
+                                    //             color: Colors.white,
+                                    //             fontWeight: FontWeight.w700,
+                                    //           ),
+                                    //         ),
+                                    //       ),
+                                    //     );
+
+                                    //   return;
+                                    // }
+                                    if (!_isAiApproved(_verificationResult)) { _showInlineError('الصورة غير مطابقة للمهمة. أعد الالتقاط.'); return; }
+
                                     // ✅ تحذير إذا التحقق فشل
-                                    if (_verificationResult != null && _verificationResult!.verified != true) {
-                                      final proceed = await showDialog<bool>(
-                                        context: context,
-                                        builder: (ctx) => AlertDialog(
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                          title: Text('تنبيه', style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.bold)),
-                                          content: Text(
-                                            'الصورة قد لا تكون مطابقة للمهمة.\nهل تريد المتابعة؟',
-                                            style: GoogleFonts.ibmPlexSansArabic(),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(ctx, false),
-                                              child: Text('إلغاء', style: GoogleFonts.ibmPlexSansArabic(color: appColors.primary)),
-                                            ),
-                                            ElevatedButton(
-                                              onPressed: () => Navigator.pop(ctx, true),
-                                              style: ElevatedButton.styleFrom(backgroundColor: appColors.primary),
-                                              child: Text('متابعة', style: GoogleFonts.ibmPlexSansArabic(color: Colors.white)),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                      if (proceed != true) return;
-                                    }
+                                    // if (_verificationResult != null && _verificationResult!.verified != true) {
+                                    //   final proceed = await showDialog<bool>(
+                                    //     context: context,
+                                    //     builder: (ctx) => AlertDialog(
+                                    //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    //       title: Text('تنبيه', style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.bold)),
+                                    //       content: Text(
+                                    //         'الصورة قد لا تكون مطابقة للمهمة.\nهل تريد المتابعة؟',
+                                    //         style: GoogleFonts.ibmPlexSansArabic(),
+                                    //       ),
+                                    //       actions: [
+                                    //         TextButton(
+                                    //           onPressed: () => Navigator.pop(ctx, false),
+                                    //           child: Text('إلغاء', style: GoogleFonts.ibmPlexSansArabic(color: appColors.primary)),
+                                    //         ),
+                                    //         ElevatedButton(
+                                    //           onPressed: () => Navigator.pop(ctx, true),
+                                    //           style: ElevatedButton.styleFrom(backgroundColor: appColors.primary),
+                                    //           child: Text('متابعة', style: GoogleFonts.ibmPlexSansArabic(color: Colors.white)),
+                                    //         ),
+                                    //       ],
+                                    //     ),
+                                    //   );
+                                    //   if (proceed != true) return;
+                                    // }
 
                                     int? safeItems = _itemCount;
                                     final mode = (widget.taskData['calcMode'] ?? '').toString().toLowerCase();
@@ -1461,7 +1722,15 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         }
                                       }
 
-                                      await _createSubmissionAndMarkSubmitted(
+                                      // await _createSubmissionAndMarkSubmitted(
+                                      //   localPath: _capturedPath!,
+                                      //   taskPoints: pts,
+                                      //   taskId: taskId,
+                                      //   distanceKm: pickedKm,
+                                      //   carbonSaved: carbonSaved,
+                                      //   itemCount: safeItems,
+                                      // );
+                                      await _createSubmissionAndAutoApprove(
                                         localPath: _capturedPath!,
                                         taskPoints: pts,
                                         taskId: taskId,
@@ -1503,7 +1772,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                     ),
                                                     const SizedBox(height: 12),
                                                     Text(
-                                                      'جاري إرسالها للجنة المراجعة.\nعند الاعتماد، ستُضاف نقاطك تلقائيًا',
+                                                      'تم اعتماد المهمة بنجاح \nتمت إضافة نقاطك مباشرة',
                                                       textAlign: TextAlign.center,
                                                       style: GoogleFonts.ibmPlexSansArabic(
                                                         fontSize: 16,
