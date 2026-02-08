@@ -1,9 +1,10 @@
-// task_verification_service.dart
-// Add this file to your Flutter project: lib/services/task_verification_service.dart
+// lib/services/task_verification_service.dart
 
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+
+import 'ocr_service.dart';
 
 class TaskVerificationResult {
   final bool success;
@@ -14,6 +15,8 @@ class TaskVerificationResult {
   final String? confidencePercent;
   final bool? verified;
   final bool? matchesExpected;
+  final String? verificationSource; // vision | ocr
+  final String? extractedText;
   final String? error;
   final Map<String, double>? allPredictions;
 
@@ -26,12 +29,15 @@ class TaskVerificationResult {
     this.confidencePercent,
     this.verified,
     this.matchesExpected,
+    this.verificationSource,
+    this.extractedText,
     this.error,
     this.allPredictions,
   });
 
   factory TaskVerificationResult.fromJson(Map<String, dynamic> json) {
     Map<String, double>? predictions;
+
     if (json['all_predictions'] != null) {
       predictions = Map<String, double>.from(
         (json['all_predictions'] as Map).map(
@@ -49,7 +55,7 @@ class TaskVerificationResult {
       confidencePercent: json['confidence_percent'],
       verified: json['verified'],
       matchesExpected: json['matches_expected'],
-      error: json['error'],
+      verificationSource: 'vision',
       allPredictions: predictions,
     );
   }
@@ -57,27 +63,116 @@ class TaskVerificationResult {
   @override
   String toString() {
     if (!success) return 'Error: $error';
-    return 'Task: $taskNameAr, Confidence: $confidencePercent, Verified: $verified';
+    return 'Task: $taskNameAr | Confidence: $confidencePercent | Source: $verificationSource';
   }
 }
 
 class TaskVerificationService {
-static const String _baseUrl = 'https://verify-tasks-188455017517.us-central1.run.app';  
-  // أو إذا تستخدمين Firebase Functions:
-  // static const String _baseUrl = 'https://us-central1-YOUR_PROJECT.cloudfunctions.net/verifyTask';
+  static const String _baseUrl =
+      'https://verify-tasks-188455017517.us-central1.run.app';
 
-  /// Verify task from image file
-  /// 
-  /// [imageFile] - The captured image file
-  /// [expectedTask] - Optional: The expected task name (e.g., 'plastic', 'metro')
-  /// [threshold] - Confidence threshold (default 0.7 = 70%)
+  /// 🔹 MAIN METHOD (Vision + OCR fallback)
+  static Future<TaskVerificationResult> verifyWithOCRFallback(
+    File imageFile, {
+    String? expectedTask,
+    double visionThreshold = 0.7,
+  }) async {
+    // 1️⃣ Vision first
+    final visionResult = await verifyFromFile(
+      imageFile,
+      expectedTask: expectedTask,
+    );
+
+    // 2️⃣ If vision confidence is good → accept
+    if (visionResult.success &&
+        visionResult.confidence != null &&
+        visionResult.confidence! >= visionThreshold) {
+      return visionResult;
+    }
+
+    // 3️⃣ OCR fallback
+    final extractedText = await OCRService.extractTextFromFile(imageFile);
+
+    // Debug: طباعة النص المستخرج
+    print('📝 النص المستخرج: $extractedText');
+
+    if (extractedText.isEmpty) {
+      return TaskVerificationResult(
+        success: false,
+        error: 'فشل التحقق: لا يوجد نص واضح في الصورة',
+        verificationSource: 'ocr',
+      );
+    }
+
+    final ocrTask = OCRTaskMapper.mapTaskToCategory(extractedText);
+
+    // تحويل التوقعات المتوقعة إلى تنسيق قياسي للمقارنة
+    final normalizedExpected = _normalizeTaskName(expectedTask);
+    final normalizedOcrTask = _normalizeTaskName(ocrTask);
+
+    final verified = ocrTask != null && normalizedOcrTask == normalizedExpected;
+
+    print('🔍 المقارنة: $normalizedOcrTask == $normalizedExpected → $verified');
+
+    return TaskVerificationResult(
+      success: verified,
+      taskName: ocrTask,
+      taskNameAr: _getArabicTaskName(ocrTask), // ترجمة للعربية للعرض
+      confidence: verified ? 0.8 : 0.3,
+      confidencePercent: verified ? '80%' : '30%',
+      verified: verified,
+      matchesExpected: verified,
+      verificationSource: 'ocr',
+      extractedText: extractedText,
+    );
+  }
+
+  /// دالة لتوحيد أسماء المهام
+  static String? _normalizeTaskName(String? taskName) {
+    if (taskName == null) return null;
+
+    final t = taskName.toLowerCase();
+
+    if (t.contains('plastic') || t.contains('بلاست')) return 'plastic';
+    if (t.contains('paper') || t.contains('ورق')) return 'paper';
+    if (t.contains('food') || t.contains('طعام') || t.contains('عضوي'))
+      return 'food';
+    if (t.contains('cloth') || t.contains('ملابس')) return 'cloth';
+    if (t.contains('metro') || t.contains('مترو')) return 'metro';
+    if (t.contains('bus') || t.contains('باص')) return 'bus';
+    if (t.contains('bicycle') || t.contains('دراجة')) return 'bicycle';
+    if (t.contains('scooter') || t.contains('سكوتر')) return 'scooter';
+    if (t.contains('rvm') || t.contains('تدوير')) return 'rvm';
+
+    return taskName;
+  }
+
+  /// دالة للحصول على الاسم العربي
+  static String? _getArabicTaskName(String? taskName) {
+    if (taskName == null) return null;
+
+    final Map<String, String> arabicNames = {
+      'plastic': 'بلاستيك',
+      'paper': 'ورق',
+      'food': 'نفايات عضوية',
+      'cloth': 'ملابس',
+      'metro': 'مترو',
+      'bus': 'باص',
+      'bicycle': 'دراجة هوائية',
+      'scooter': 'سكوتر',
+      'rvm': 'آلة التدوير',
+    };
+
+    return arabicNames[taskName] ?? taskName;
+  }
+
+  /// 🔹 Vision only (existing logic)
   static Future<TaskVerificationResult> verifyFromFile(
     File imageFile, {
     String? expectedTask,
     double threshold = 0.7,
   }) async {
     try {
-      // Read and encode image
       final bytes = await imageFile.readAsBytes();
       final base64Image = base64Encode(bytes);
 
@@ -94,36 +189,6 @@ static const String _baseUrl = 'https://verify-tasks-188455017517.us-central1.ru
     }
   }
 
-  /// Verify task from image URL (Firebase Storage)
-  /// 
-  /// [imageUrl] - URL to the image in Cloud Storage
-  /// [expectedTask] - Optional: The expected task name
-  /// [threshold] - Confidence threshold (default 0.7 = 70%)
-  static Future<TaskVerificationResult> verifyFromUrl(
-    String imageUrl, {
-    String? expectedTask,
-    double threshold = 0.7,
-  }) async {
-    return await _sendVerificationRequest(
-      imageUrl: imageUrl,
-      expectedTask: expectedTask,
-      threshold: threshold,
-    );
-  }
-
-  /// Verify task from base64 encoded image
-  static Future<TaskVerificationResult> verifyFromBase64(
-    String base64Image, {
-    String? expectedTask,
-    double threshold = 0.7,
-  }) async {
-    return await _sendVerificationRequest(
-      imageBase64: base64Image,
-      expectedTask: expectedTask,
-      threshold: threshold,
-    );
-  }
-
   static Future<TaskVerificationResult> _sendVerificationRequest({
     String? imageBase64,
     String? imageUrl,
@@ -131,9 +196,7 @@ static const String _baseUrl = 'https://verify-tasks-188455017517.us-central1.ru
     double threshold = 0.7,
   }) async {
     try {
-      final body = <String, dynamic>{
-        'threshold': threshold,
-      };
+      final body = <String, dynamic>{'threshold': threshold};
 
       if (imageBase64 != null) {
         body['image_base64'] = imageBase64;
@@ -168,54 +231,8 @@ static const String _baseUrl = 'https://verify-tasks-188455017517.us-central1.ru
           error: json['error'] ?? 'خطأ في الخادم: ${response.statusCode}',
         );
       }
-    }catch (e) {
-      return TaskVerificationResult(
-        success: false,
-        error: 'فشل الاتصال: $e',
-      );
+    } catch (e) {
+      return TaskVerificationResult(success: false, error: 'فشل الاتصال: $e');
     }
-  }
-
-  /// Map task name to expected category
-  /// Use this to match your Firebase task data with model predictions
-  static String? mapTaskToCategory(Map<String, dynamic> taskData) {
-    final title = (taskData['title'] ?? '').toString().toLowerCase();
-    final category = (taskData['category'] ?? '').toString().toLowerCase();
-    final combined = '$title $category';
-
-    // Transportation tasks
-    if (combined.contains('مترو') || combined.contains('قطار')) {
-      return 'metro';
-    }
-    if (combined.contains('باص') || combined.contains('حافلة')) {
-      return 'bus';
-    }
-    if (combined.contains('دراجة') || combined.contains('bicycle')) {
-      return 'bicycle';
-    }
-    if (combined.contains('سكوتر') || combined.contains('scooter')) {
-      return 'scooter';
-    }
-
-    // Recycling tasks
-    if (combined.contains('بلاستيك') || combined.contains('plastic')) {
-      return 'plastic';
-    }
-    if (combined.contains('ورق') || combined.contains('paper')) {
-      return 'paper';
-    }
-    if (combined.contains('ملابس') || combined.contains('قماش') || combined.contains('cloth')) {
-      return 'cloth';
-    }
-    if (combined.contains('طعام') || combined.contains('food') || combined.contains('كومبوست')) {
-      return 'food';
-    }
-
-    // RVM
-    if (combined.contains('rvm') || combined.contains('إعادة') || combined.contains('تدوير')) {
-      return 'rvm';
-    }
-
-    return null; // Unknown task type
   }
 }

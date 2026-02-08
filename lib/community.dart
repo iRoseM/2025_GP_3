@@ -96,7 +96,10 @@ class _communityPageState extends State<communityPage> {
 
       for (String friendId in followingIds) {
         try {
-          final friendDoc = await _firestore.collection('users').doc(friendId).get();
+          final friendDoc = await _firestore
+              .collection('users')
+              .doc(friendId)
+              .get();
 
           if (friendDoc.exists) {
             final data = friendDoc.data()!;
@@ -113,7 +116,9 @@ class _communityPageState extends State<communityPage> {
         }
       }
 
-      following.sort((a, b) => (b['points'] as int).compareTo(a['points'] as int));
+      following.sort(
+        (a, b) => (b['points'] as int).compareTo(a['points'] as int),
+      );
       _followingList = following;
     } catch (e) {
       debugPrint('خطأ في تحميل المتابَعين: $e');
@@ -142,7 +147,9 @@ class _communityPageState extends State<communityPage> {
         });
       }
 
-      followers.sort((a, b) => (b['points'] as int).compareTo(a['points'] as int));
+      followers.sort(
+        (a, b) => (b['points'] as int).compareTo(a['points'] as int),
+      );
       _followersList = followers;
     } catch (e) {
       debugPrint('خطأ في تحميل المتابِعين: $e');
@@ -253,10 +260,7 @@ class _communityPageState extends State<communityPage> {
 
     try {
       // إضافة الصديق إلى array في وثيقة المستخدم
-      await _firestore
-          .collection('users')
-          .doc(currentUser.uid)
-          .set({
+      await _firestore.collection('users').doc(currentUser.uid).set({
         'following': FieldValue.arrayUnion([friend['id']]),
       }, SetOptions(merge: true));
 
@@ -284,7 +288,9 @@ class _communityPageState extends State<communityPage> {
       builder: (context) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: Text(
             'إلغاء المتابعة',
             style: GoogleFonts.ibmPlexSansArabic(
@@ -321,7 +327,10 @@ class _communityPageState extends State<communityPage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
               ),
               child: Text(
                 'إلغاء المتابعة',
@@ -339,10 +348,7 @@ class _communityPageState extends State<communityPage> {
     if (confirm != true) return;
 
     try {
-      await _firestore
-          .collection('users')
-          .doc(currentUser.uid)
-          .update({
+      await _firestore.collection('users').doc(currentUser.uid).update({
         'following': FieldValue.arrayRemove([friendId]),
       });
 
@@ -462,9 +468,7 @@ class _communityPageState extends State<communityPage> {
                     const SizedBox(height: 20),
 
                     // قائمة الأصدقاء
-                    Expanded(
-                      child: _buildFriendsList(),
-                    ),
+                    Expanded(child: _buildFriendsList()),
                   ],
                 ),
               );
@@ -635,9 +639,7 @@ class _communityPageState extends State<communityPage> {
               decoration: BoxDecoration(
                 color: appColors.red.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: appColors.red.withOpacity(0.3),
-                ),
+                border: Border.all(color: appColors.red.withOpacity(0.3)),
               ),
               child: Row(
                 children: [
@@ -672,12 +674,13 @@ class _communityPageState extends State<communityPage> {
     );
   }
 
-  // ✅ بطاقة نتيجة البحث
+  // ✅ بطاقة نتيجة البحث (موزونة + زر متابعة عمودي)
   Widget _buildSearchResultCard(Map<String, dynamic> user) {
     final isAlreadyFriend = _followingList.any((f) => f['id'] == user['id']);
     final pfpIndex = user['pfpIndex'];
 
     return Container(
+      height: 92,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -695,6 +698,7 @@ class _communityPageState extends State<communityPage> {
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // صورة المستخدم
           _buildAvatar(pfpIndex, 28),
@@ -703,17 +707,20 @@ class _communityPageState extends State<communityPage> {
           // معلومات المستخدم
           Expanded(
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   user['username'] ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
                     color: appColors.dark,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     _buildStatChip(
@@ -733,67 +740,78 @@ class _communityPageState extends State<communityPage> {
             ),
           ),
 
-          // زر المتابعة
+          // زر المتابعة / متابَع
           if (isAlreadyFriend)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.grey.shade300),
               ),
-              child: Row(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_rounded, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(height: 4),
                   Text(
                     'متابَع',
                     style: GoogleFonts.ibmPlexSansArabic(
                       color: Colors.grey.shade600,
                       fontWeight: FontWeight.w600,
-                      fontSize: 13,
+                      fontSize: 11,
                     ),
                   ),
                 ],
               ),
             )
           else
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [appColors.primary, appColors.tealSoft],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: appColors.primary.withOpacity(0.3),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
+            SizedBox(
+              width: 60, // ⬅ ثابت + يمنع overflow
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [appColors.primary, appColors.tealSoft],
                   ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _followFriend(user),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.person_add_rounded, size: 18, color: Colors.white),
-                        const SizedBox(width: 6),
-                        Text(
-                          'متابعة',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            fontWeight: FontWeight.w700,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: appColors.primary.withOpacity(0.25),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _followFriend(user),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.person_add_rounded,
+                            size: 18,
                             color: Colors.white,
-                            fontSize: 13,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          Text(
+                            'متابعة',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1007,7 +1025,9 @@ class _communityPageState extends State<communityPage> {
         itemBuilder: (context, index) {
           final follower = _followersList[index];
           // التحقق هل أتابع هذا الشخص أيضاً
-          final isFollowingBack = _followingList.any((f) => f['id'] == follower['id']);
+          final isFollowingBack = _followingList.any(
+            (f) => f['id'] == follower['id'],
+          );
           return _buildFollowerCard(follower, index + 1, isFollowingBack);
         },
       ),
@@ -1015,7 +1035,10 @@ class _communityPageState extends State<communityPage> {
   }
 
   // ✅ الحالة الفارغة
-  Widget _buildEmptyState({required String message, required String subMessage}) {
+  Widget _buildEmptyState({
+    required String message,
+    required String subMessage,
+  }) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1078,18 +1101,18 @@ class _communityPageState extends State<communityPage> {
         backgroundColor: Colors.transparent,
         backgroundImage: avatarPath != null ? AssetImage(avatarPath) : null,
         child: avatarPath == null
-            ? Icon(
-                Icons.person_rounded,
-                color: appColors.primary,
-                size: radius,
-              )
+            ? Icon(Icons.person_rounded, color: appColors.primary, size: radius)
             : null,
       ),
     );
   }
 
   // ✅ بطاقة الصديق (من أتابعهم)
-  Widget _buildFriendCard(Map<String, dynamic> friend, int rank, {bool showUnfollow = false}) {
+  Widget _buildFriendCard(
+    Map<String, dynamic> friend,
+    int rank, {
+    bool showUnfollow = false,
+  }) {
     final pfpIndex = friend['pfpIndex'];
 
     return Container(
@@ -1114,10 +1137,10 @@ class _communityPageState extends State<communityPage> {
             decoration: BoxDecoration(
               color: rank <= 3
                   ? (rank == 1
-                      ? const Color(0xFFFFD700)
-                      : rank == 2
-                          ? const Color(0xFFC0C0C0)
-                          : const Color(0xFFCD7F32))
+                        ? const Color(0xFFFFD700)
+                        : rank == 2
+                        ? const Color(0xFFC0C0C0)
+                        : const Color(0xFFCD7F32))
                   : appColors.primary.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
@@ -1198,7 +1221,11 @@ class _communityPageState extends State<communityPage> {
   }
 
   // ✅ بطاقة المتابِع (من يتابعونني)
-  Widget _buildFollowerCard(Map<String, dynamic> follower, int rank, bool isFollowingBack) {
+  Widget _buildFollowerCard(
+    Map<String, dynamic> follower,
+    int rank,
+    bool isFollowingBack,
+  ) {
     final pfpIndex = follower['pfpIndex'];
 
     return Container(
@@ -1223,10 +1250,10 @@ class _communityPageState extends State<communityPage> {
             decoration: BoxDecoration(
               color: rank <= 3
                   ? (rank == 1
-                      ? const Color(0xFFFFD700)
-                      : rank == 2
-                          ? const Color(0xFFC0C0C0)
-                          : const Color(0xFFCD7F32))
+                        ? const Color(0xFFFFD700)
+                        : rank == 2
+                        ? const Color(0xFFC0C0C0)
+                        : const Color(0xFFCD7F32))
                   : appColors.primary.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
@@ -1265,7 +1292,10 @@ class _communityPageState extends State<communityPage> {
                     if (isFollowingBack) ...[
                       const SizedBox(width: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: appColors.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
@@ -1317,7 +1347,10 @@ class _communityPageState extends State<communityPage> {
                   onTap: () => _followFriend(follower),
                   borderRadius: BorderRadius.circular(10),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     child: Text(
                       'تابع',
                       style: GoogleFonts.ibmPlexSansArabic(

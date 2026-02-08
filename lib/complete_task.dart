@@ -14,6 +14,7 @@ import 'services/map_pick_route.dart';
 import 'services/task_verification_service.dart'; // ✅ أضيفي هذا
 import '../services/app_colors.dart';
 import '../../home.dart';
+import 'services/ocr_service.dart';
 
 class CompleteTaskSheet extends StatefulWidget {
   final Map<String, dynamic> taskData;
@@ -55,8 +56,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     // لو matchesExpected == null → نطلب كونفدنس عالي (حسب اتفاقنا)
     return conf >= 0.85;
   }
+
   String _dayId(DateTime dt) {
-  String two(int v) => v.toString().padLeft(2, '0');
+    String two(int v) => v.toString().padLeft(2, '0');
     return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
   }
 
@@ -131,7 +133,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
   double _deg2rad(double deg) => deg * math.pi / 180.0;
-  
+
   double _haversineKm(double lat1, double lon1, double lat2, double lon2) {
     const R = 6371.0;
     final dLat = _deg2rad(lat2 - lat1);
@@ -182,38 +184,102 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
   }
 
-  // ✅ دالة التحقق من الصورة بالـ AI
   Future<TaskVerificationResult?> _verifyTaskImage(String imagePath) async {
     if (!mounted) return null;
-    
+
     setState(() => _isVerifying = true);
-    
+
     try {
-      // الحصول على نوع المهمة المتوقع
-      final expectedTask = TaskVerificationService.mapTaskToCategory(widget.taskData);
-      
-      // التحقق من الصورة
+      // الحصول على نوع المهمة المتوقع باستخدام OCRTaskMapper
+      final expectedTask = OCRTaskMapper.mapTaskToCategory(widget.taskData);
+
+      print('🔍 بدء التحقق بالـ AI');
+      print('📌 المهمة المتوقعة: $expectedTask');
+
+      // 1️⃣ أولاً: جرب الـ OCR مباشرة
+      print('🔄 جرب الـ OCR...');
+      final ocrText = await OCRService.extractTextFromFile(File(imagePath));
+      print('📝 النص المقروء من OCR: "$ocrText"');
+
+      if (ocrText.isNotEmpty) {
+        // استخدام OCRTaskMapper لتحويل النص إلى فئة
+        final detectedTask = OCRTaskMapper.mapTextToCategory(ocrText);
+        print('🗂️ الفئة المكتشفة من OCR: "$detectedTask"');
+
+        if (detectedTask != null && expectedTask != null) {
+          final matches = detectedTask == expectedTask;
+
+          final ocrResult = TaskVerificationResult(
+            success: true,
+            taskName: detectedTask,
+            taskNameAr: _getArabicTaskName(detectedTask),
+            confidence: matches ? 0.85 : 0.5,
+            confidencePercent: matches ? '85%' : '50%',
+            verified: matches,
+            matchesExpected: matches,
+            error: null,
+            allPredictions: null,
+          );
+
+          if (mounted) {
+            setState(() {
+              _verificationResult = ocrResult;
+              _isVerifying = false;
+            });
+          }
+          return ocrResult;
+        }
+      }
+
+      // 2️⃣ إذا فشل OCR، جرب Vision API
+      print('🔄 الانتقال إلى Vision API...');
       final result = await TaskVerificationService.verifyFromFile(
         File(imagePath),
         expectedTask: expectedTask,
-        threshold: 0.7, // 70% نسبة الثقة المطلوبة
+        threshold: 0.7,
       );
-      
+
+      print('✅ نتيجة Vision API:');
+      print('   - النجاح: ${result.success}');
+      print('   - المهمة: ${result.taskNameAr}');
+      print('   - الثقة: ${result.confidencePercent}');
+      print('   - التحقق: ${result.verified}');
+
       if (mounted) {
         setState(() {
           _verificationResult = result;
           _isVerifying = false;
         });
       }
-      
+
       return result;
     } catch (e) {
+      print('❌ خطأ في التحقق: $e');
       if (mounted) {
         setState(() => _isVerifying = false);
         _showInlineError('فشل التحقق من الصورة');
       }
       return null;
     }
+  }
+
+  /// دالة للحصول على الاسم العربي للمهمة
+  String? _getArabicTaskName(String? taskName) {
+    if (taskName == null) return null;
+
+    final Map<String, String> arabicNames = {
+      'plastic': 'بلاستيك',
+      'paper': 'ورق',
+      'food': 'نفايات عضوية',
+      'cloth': 'ملابس',
+      'metro': 'مترو',
+      'bus': 'باص',
+      'bicycle': 'دراجة هوائية',
+      'scooter': 'سكوتر',
+      'rvm': 'آلة التدوير',
+    };
+
+    return arabicNames[taskName] ?? taskName;
   }
 
   Future<void> _ensureLocationPermission() async {
@@ -529,7 +595,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   //   if (itemCount != null) {
   //     extra['itemCount'] = itemCount;
   //   }
-    
+
   //   final efId =
   //       (widget.taskData['ef_ref'] ??
   //               widget.taskData['efRef'] ??
@@ -567,9 +633,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   //     'createdAt': FieldValue.serverTimestamp(),
   //     ...extra,
   //   });
-    
+
   //   await StreakService.updateStreakOnTaskCompletion();
-    
+
   //   await utRef.set({
   //     'userId': uid,
   //     'status': 'submitted',
@@ -634,7 +700,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     } on TimeoutException {
       throw Exception('انتهى وقت رفع الصورة.');
     } on FirebaseException catch (e) {
-      throw FirebaseException(plugin: e.plugin, code: e.code, message: _friendlyError(e));
+      throw FirebaseException(
+        plugin: e.plugin,
+        code: e.code,
+        message: _friendlyError(e),
+      );
     } catch (e) {
       throw Exception(_friendlyError(e));
     }
@@ -642,15 +712,27 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     // 2) Get download URL (خارج الترانزاكشن)
     String downloadUrl;
     try {
-      downloadUrl = await storageRef.getDownloadURL().timeout(const Duration(seconds: 20));
+      downloadUrl = await storageRef.getDownloadURL().timeout(
+        const Duration(seconds: 20),
+      );
     } on TimeoutException {
-      try { await storageRef.delete(); } catch (_) {}
+      try {
+        await storageRef.delete();
+      } catch (_) {}
       throw Exception('انتهى وقت جلب رابط الصورة.');
     } on FirebaseException catch (e) {
-      try { await storageRef.delete(); } catch (_) {}
-      throw FirebaseException(plugin: e.plugin, code: e.code, message: _friendlyError(e));
+      try {
+        await storageRef.delete();
+      } catch (_) {}
+      throw FirebaseException(
+        plugin: e.plugin,
+        code: e.code,
+        message: _friendlyError(e),
+      );
     } catch (e) {
-      try { await storageRef.delete(); } catch (_) {}
+      try {
+        await storageRef.delete();
+      } catch (_) {}
       throw Exception(_friendlyError(e));
     }
 
@@ -660,8 +742,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         : 0.0;
 
     final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
-    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(widget.userTaskDocId);
-    final subRef = FirebaseFirestore.instance.collection('submissions').doc(); // نحدد ID قبل الترانزاكشن
+    final utRef = FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(widget.userTaskDocId);
+    final subRef = FirebaseFirestore.instance
+        .collection('submissions')
+        .doc(); // نحدد ID قبل الترانزاكشن
 
     final todayId = _dayId(DateTime.now());
     final dayMarkRef = FirebaseFirestore.instance
@@ -756,13 +842,15 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           'taskTitle': taskTitle,
         };
         if (carbonForStore > 0) histData['carbonSaved'] = carbonForStore;
-        if (itemCount != null && itemCount > 0) histData['itemCount'] = itemCount;
+        if (itemCount != null && itemCount > 0)
+          histData['itemCount'] = itemCount;
         trx.set(historyRef, histData);
 
         // 4.5) totalCarbonSaved + lastCarbonUpdateAt
         trx.set(usersRef, {
           'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-          if (carbonForStore > 0) 'totalCarbonSaved': FieldValue.increment(carbonForStore),
+          if (carbonForStore > 0)
+            'totalCarbonSaved': FieldValue.increment(carbonForStore),
         }, SetOptions(merge: true));
 
         // 4.6) dayMarks
@@ -772,8 +860,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         }, SetOptions(merge: true));
 
         // 4.7) notifications
-        final notifRef = FirebaseFirestore.instance.collection('notifications').doc();
-        final carbonText = _fmtKgLocal(carbonForStore.isFinite && carbonForStore >= 0 ? carbonForStore : 0.0);
+        final notifRef = FirebaseFirestore.instance
+            .collection('notifications')
+            .doc();
+        final carbonText = _fmtKgLocal(
+          carbonForStore.isFinite && carbonForStore >= 0 ? carbonForStore : 0.0,
+        );
         trx.set(notifRef, {
           'type': 'submission_approved',
           'userId': uid,
@@ -786,7 +878,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           'seen': false,
           'title': 'تم اعتماد المهمة 🎉',
           'body': 'أُضيفت $taskPoints نقطة • وفَّرت $carbonText كجم CO₂ 🌿',
-          'message': 'تم اعتماد طلبك لمهمة: $taskTitle — نقاط: $taskPoints • توفير: $carbonText كجم CO₂',
+          'message':
+              'تم اعتماد طلبك لمهمة: $taskTitle — نقاط: $taskPoints • توفير: $carbonText كجم CO₂',
         });
       });
 
@@ -794,11 +887,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       await StreakService.updateStreakOnTaskCompletion();
     } catch (e) {
       // لو فشل الترانزاكشن، نحاول نحذف الملف المرفوع عشان ما يعلق
-      try { await storageRef.delete(); } catch (_) {}
+      try {
+        await storageRef.delete();
+      } catch (_) {}
       throw Exception('خطأ: $e');
     }
   }
-
 
   Future<void> _openCamera({int? index}) async {
     if (_openingCamera) return;
@@ -1399,23 +1493,44 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 Positioned.fill(
                                   child: _capturedPath != null
                                       ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
                                           child: Image.file(
                                             File(_capturedPath!),
                                             fit: BoxFit.cover,
                                           ),
                                         )
                                       : ClipRRect(
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
                                           child: FittedBox(
                                             fit: BoxFit.cover,
                                             child: SizedBox(
-                                              width: _controller!.value.previewSize?.height ?? w,
-                                              height: _controller!.value.previewSize?.width ?? h,
+                                              width:
+                                                  _controller!
+                                                      .value
+                                                      .previewSize
+                                                      ?.height ??
+                                                  w,
+                                              height:
+                                                  _controller!
+                                                      .value
+                                                      .previewSize
+                                                      ?.width ??
+                                                  h,
                                               child: GestureDetector(
-                                                behavior: HitTestBehavior.opaque,
-                                                onTapDown: (d) => _setFocusAndExposurePoint(d, Size(w, h)),
-                                                child: CameraPreview(_controller!),
+                                                behavior:
+                                                    HitTestBehavior.opaque,
+                                                onTapDown: (d) =>
+                                                    _setFocusAndExposurePoint(
+                                                      d,
+                                                      Size(w, h),
+                                                    ),
+                                                child: CameraPreview(
+                                                  _controller!,
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -1430,7 +1545,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                       _roundedGlass(
                                         child: IconButton(
                                           tooltip: 'تبديل الكاميرا',
-                                          icon: const Icon(Icons.cameraswitch_rounded, color: Colors.white),
+                                          icon: const Icon(
+                                            Icons.cameraswitch_rounded,
+                                            color: Colors.white,
+                                          ),
                                           onPressed: _switchCamera,
                                         ),
                                       ),
@@ -1443,10 +1561,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                             _flashMode == FlashMode.off
                                                 ? Icons.flash_off_rounded
                                                 : _flashMode == FlashMode.auto
-                                                    ? Icons.flash_auto_rounded
-                                                    : _flashMode == FlashMode.always
-                                                        ? Icons.flash_on_rounded
-                                                        : Icons.highlight_rounded,
+                                                ? Icons.flash_auto_rounded
+                                                : _flashMode == FlashMode.always
+                                                ? Icons.flash_on_rounded
+                                                : Icons.highlight_rounded,
                                             color: Colors.white,
                                           ),
                                         ),
@@ -1478,28 +1596,39 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                     ],
                                   ),
                                 ),
-                                if (_requiresItemDialog && (_itemCount != null && _itemCount! > 0))
+                                if (_requiresItemDialog &&
+                                    (_itemCount != null && _itemCount! > 0))
                                   Positioned(
                                     top: 54,
                                     right: 12,
                                     child: _roundedGlass(
                                       child: Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 8,
+                                        ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Text(
                                               'عدد العناصر: $_itemCount',
-                                              style: GoogleFonts.ibmPlexSansArabic(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w700,
-                                              ),
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
                                             ),
                                             const SizedBox(width: 6),
                                             InkWell(
-                                              onTap: _promptForItemCountIfNeeded,
-                                              borderRadius: BorderRadius.circular(999),
-                                              child: const Icon(Icons.edit, size: 18, color: Colors.white),
+                                              onTap:
+                                                  _promptForItemCountIfNeeded,
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              child: const Icon(
+                                                Icons.edit,
+                                                size: 18,
+                                                color: Colors.white,
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -1510,7 +1639,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   Positioned(
                                     top: 12,
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 10,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: Colors.black.withOpacity(0.72),
                                         borderRadius: BorderRadius.circular(12),
@@ -1543,15 +1675,16 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                       ),
                     ),
                   const SizedBox(height: 12),
-                  
+
                   // // ✅ عرض نتيجة التحقق بالـ AI
                   // if (_capturedPath != null) _buildVerificationResult(),
-                  
                   const SizedBox(height: 10),
                   if (_ready) ...[
                     if (_capturedPath == null)
                       _gradientButton(
-                        label: _isCapturing ? 'جاري الالتقاط...' : 'التقاط صورة',
+                        label: _isCapturing
+                            ? 'جاري الالتقاط...'
+                            : 'التقاط صورة',
                         icon: Icons.camera,
                         onTap: _isCapturing
                             ? null
@@ -1561,12 +1694,15 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   _isCapturing = true;
                                   _flashOpacity = 0.9;
                                 });
-                                await Future.delayed(const Duration(milliseconds: 90));
-                                if (mounted) setState(() => _flashOpacity = 0.0);
-                                
+                                await Future.delayed(
+                                  const Duration(milliseconds: 90),
+                                );
+                                if (mounted)
+                                  setState(() => _flashOpacity = 0.0);
+
                                 final shot = await _safeTakePicture();
                                 if (!mounted) return;
-                                
+
                                 if (shot != null) {
                                   setState(() => _capturedPath = shot.path);
 
@@ -1576,7 +1712,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   // ✅ بعد التصوير، نسأل عن عدد العناصر لو المهمة deltaPerItem
                                   await _promptForItemCountIfNeeded();
                                 }
-                                if (mounted) setState(() => _isCapturing = false);
+                                if (mounted)
+                                  setState(() => _isCapturing = false);
                               },
                       )
                     else
@@ -1615,7 +1752,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
                                     //   return;
                                     // }
-                                    if (!_isAiApproved(_verificationResult)) { _showInlineError('الصورة غير مطابقة للمهمة. أعد الالتقاط.'); return; }
+                                    if (!_isAiApproved(_verificationResult)) {
+                                      _showInlineError(
+                                        'الصورة غير مطابقة للمهمة. أعد الالتقاط.',
+                                      );
+                                      return;
+                                    }
 
                                     // ✅ تحذير إذا التحقق فشل
                                     // if (_verificationResult != null && _verificationResult!.verified != true) {
@@ -1645,13 +1787,19 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                     // }
 
                                     int? safeItems = _itemCount;
-                                    final mode = (widget.taskData['calcMode'] ?? '').toString().toLowerCase();
+                                    final mode =
+                                        (widget.taskData['calcMode'] ?? '')
+                                            .toString()
+                                            .toLowerCase();
 
-                                    if (mode == 'deltaperitem' && (safeItems == null || safeItems <= 0)) {
+                                    if (mode == 'deltaperitem' &&
+                                        (safeItems == null || safeItems <= 0)) {
                                       await _promptForItemCountIfNeeded();
                                       safeItems = _itemCount;
                                       if (safeItems == null || safeItems <= 0) {
-                                        _showInlineError('يرجى إدخال عدد العناصر.');
+                                        _showInlineError(
+                                          'يرجى إدخال عدد العناصر.',
+                                        );
                                         return;
                                       }
                                     }
@@ -1660,7 +1808,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                     setState(() => _isUploading = true);
 
                                     try {
-                                      final isDistanceMode = mode == 'perkm' || mode == 'deltaperkm';
+                                      final isDistanceMode =
+                                          mode == 'perkm' ||
+                                          mode == 'deltaperkm';
                                       double? pickedKm;
 
                                       if (isDistanceMode) {
@@ -1670,55 +1820,90 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         if (_autoDistanceKmComputed != null &&
                                             _autoDistanceKmComputed!.isFinite &&
                                             _autoDistanceKmComputed! > 0) {
-                                          straightKm = double.parse(_autoDistanceKmComputed!.toStringAsFixed(3));
+                                          straightKm = double.parse(
+                                            _autoDistanceKmComputed!
+                                                .toStringAsFixed(3),
+                                          );
                                         }
                                         if (manualKm != null && manualKm > 0) {
                                           pickedKm = manualKm;
-                                        } else if (straightKm != null && straightKm > 0) {
+                                        } else if (straightKm != null &&
+                                            straightKm > 0) {
                                           pickedKm = straightKm;
                                         }
-                                        
-                                        final askDistanceKm = widget.taskData['askDistanceKm'] == true;
-                                        final defaultKmOnSubmit = (widget.taskData['defaultKmOnSubmit'] is num)
-                                            ? (widget.taskData['defaultKmOnSubmit'] as num).toDouble()
+
+                                        final askDistanceKm =
+                                            widget.taskData['askDistanceKm'] ==
+                                            true;
+                                        final defaultKmOnSubmit =
+                                            (widget.taskData['defaultKmOnSubmit']
+                                                is num)
+                                            ? (widget.taskData['defaultKmOnSubmit']
+                                                      as num)
+                                                  .toDouble()
                                             : null;
-                                        if (pickedKm == null && askDistanceKm && defaultKmOnSubmit != null) {
+                                        if (pickedKm == null &&
+                                            askDistanceKm &&
+                                            defaultKmOnSubmit != null) {
                                           pickedKm = defaultKmOnSubmit;
                                         }
-                                        
+
                                         double? minKm, maxKm;
                                         final mk = widget.taskData['minKm'];
                                         final xk = widget.taskData['maxKm'];
                                         if (mk is num) minKm = mk.toDouble();
                                         if (xk is num) maxKm = xk.toDouble();
                                         if (pickedKm != null && pickedKm > 0) {
-                                          final clamped = pickedKm.clamp(minKm ?? 0.2, maxKm ?? 50.0) as num;
-                                          pickedKm = double.parse(clamped.toStringAsFixed(3));
+                                          final clamped =
+                                              pickedKm.clamp(
+                                                    minKm ?? 0.2,
+                                                    maxKm ?? 50.0,
+                                                  )
+                                                  as num;
+                                          pickedKm = double.parse(
+                                            clamped.toStringAsFixed(3),
+                                          );
                                         }
 
-                                        if (_manualStart != null && _manualEnd != null) {
-                                          _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
-                                          _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
+                                        if (_manualStart != null &&
+                                            _manualEnd != null) {
+                                          _geoStart = GeoPoint(
+                                            _manualStart!.latitude,
+                                            _manualStart!.longitude,
+                                          );
+                                          _geoEnd = GeoPoint(
+                                            _manualEnd!.latitude,
+                                            _manualEnd!.longitude,
+                                          );
                                         }
                                       }
 
                                       double? carbonSaved;
-                                      final efId = (widget.taskData['ef_ref'] ??
-                                              widget.taskData['efRef'] ??
-                                              widget.taskData['emissionFactorRef'] ??
-                                              widget.taskData['emission_factor_ref'])
-                                          ?.toString();
+                                      final efId =
+                                          (widget.taskData['ef_ref'] ??
+                                                  widget.taskData['efRef'] ??
+                                                  widget
+                                                      .taskData['emissionFactorRef'] ??
+                                                  widget
+                                                      .taskData['emission_factor_ref'])
+                                              ?.toString();
                                       final valueFieldFromTask =
-                                          (widget.taskData['ef_valueField'] ?? widget.taskData['valueField'])?.toString();
+                                          (widget.taskData['ef_valueField'] ??
+                                                  widget.taskData['valueField'])
+                                              ?.toString();
                                       if (efId != null && efId.isNotEmpty) {
-                                        final saved = await _computeCarbonSavedFlexible(
-                                          efIdFromTask: efId,
-                                          km: pickedKm,
-                                          items: safeItems,
-                                          valueFieldFromTask: valueFieldFromTask,
-                                        );
+                                        final saved =
+                                            await _computeCarbonSavedFlexible(
+                                              efIdFromTask: efId,
+                                              km: pickedKm,
+                                              items: safeItems,
+                                              valueFieldFromTask:
+                                                  valueFieldFromTask,
+                                            );
                                         if (saved.isFinite) {
-                                          carbonSaved = double.parse(saved.toStringAsFixed(3));
+                                          carbonSaved = double.parse(
+                                            saved.toStringAsFixed(3),
+                                          );
                                         }
                                       }
 
@@ -1746,14 +1931,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                         useRootNavigator: true,
                                         builder: (context) {
                                           return Dialog(
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                            ),
+                                            insetPadding:
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 24,
+                                                ),
                                             child: SizedBox(
                                               width: 340,
                                               child: Padding(
-                                                padding: const EdgeInsets.all(20),
+                                                padding: const EdgeInsets.all(
+                                                  20,
+                                                ),
                                                 child: Column(
-                                                  mainAxisSize: MainAxisSize.min,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
                                                   children: [
                                                     Image.asset(
                                                       'assets/img/nameerCamera.png',
@@ -1763,42 +1957,65 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                                     const SizedBox(height: 16),
                                                     Text(
                                                       '!تم تسجيل مشاركتك بنجاح',
-                                                      textAlign: TextAlign.center,
-                                                      style: GoogleFonts.ibmPlexSansArabic(
-                                                        fontSize: 20,
-                                                        fontWeight: FontWeight.w700,
-                                                        color: appColors.dark,
-                                                      ),
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                      style:
+                                                          GoogleFonts.ibmPlexSansArabic(
+                                                            fontSize: 20,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color:
+                                                                appColors.dark,
+                                                          ),
                                                     ),
                                                     const SizedBox(height: 12),
                                                     Text(
                                                       'تم اعتماد المهمة بنجاح \nتمت إضافة نقاطك مباشرة',
-                                                      textAlign: TextAlign.center,
-                                                      style: GoogleFonts.ibmPlexSansArabic(
-                                                        fontSize: 16,
-                                                        fontWeight: FontWeight.w500,
-                                                        color: appColors.dark,
-                                                      ),
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                      style:
+                                                          GoogleFonts.ibmPlexSansArabic(
+                                                            fontSize: 16,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                            color:
+                                                                appColors.dark,
+                                                          ),
                                                     ),
                                                     const SizedBox(height: 24),
                                                     SizedBox(
                                                       width: 140,
                                                       child: ElevatedButton(
                                                         style: ElevatedButton.styleFrom(
-                                                          backgroundColor: appColors.primary,
+                                                          backgroundColor:
+                                                              appColors.primary,
                                                           shape: RoundedRectangleBorder(
-                                                            borderRadius: BorderRadius.circular(12),
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  12,
+                                                                ),
                                                           ),
-                                                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 24,
+                                                                vertical: 10,
+                                                              ),
                                                         ),
-                                                        onPressed: () => Navigator.pop(context),
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                              context,
+                                                            ),
                                                         child: Text(
                                                           'تم',
-                                                          style: GoogleFonts.ibmPlexSansArabic(
-                                                            color: Colors.white,
-                                                            fontWeight: FontWeight.w700,
-                                                            fontSize: 16,
-                                                          ),
+                                                          style:
+                                                              GoogleFonts.ibmPlexSansArabic(
+                                                                color: Colors
+                                                                    .white,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                fontSize: 16,
+                                                              ),
                                                         ),
                                                       ),
                                                     ),
@@ -1813,7 +2030,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                       try {
                                         if (_capturedPath != null) {
                                           final f = File(_capturedPath!);
-                                          if (await f.exists()) await f.delete();
+                                          if (await f.exists())
+                                            await f.delete();
                                         }
                                       } catch (_) {}
                                       if (!mounted) return;
@@ -1822,13 +2040,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                       if (!mounted) return;
                                       _showInlineError(_friendlyError(e));
                                     } finally {
-                                      if (mounted) setState(() => _isUploading = false);
+                                      if (mounted)
+                                        setState(() => _isUploading = false);
                                     }
                                   },
                           ),
                           const SizedBox(height: 10),
                           OutlinedButton.icon(
-                            icon: const Icon(Icons.refresh, color: appColors.primary),
+                            icon: const Icon(
+                              Icons.refresh,
+                              color: appColors.primary,
+                            ),
                             label: Text(
                               'إعادة التقاط',
                               style: GoogleFonts.ibmPlexSansArabic(
@@ -1838,8 +2060,13 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                               ),
                             ),
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: appColors.primary, width: 2),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              side: const BorderSide(
+                                color: appColors.primary,
+                                width: 2,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: () async {
@@ -1852,7 +2079,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                               if (mounted) {
                                 setState(() {
                                   _capturedPath = null;
-                                  _verificationResult = null; // ✅ إعادة تعيين نتيجة التحقق
+                                  _verificationResult =
+                                      null; // ✅ إعادة تعيين نتيجة التحقق
                                 });
                               }
                             },
@@ -1937,7 +2165,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           SizedBox(
             width: 58,
             child: Text(
-              label == 'التقريب' ? '${value.toStringAsFixed(1)}x' : value.toStringAsFixed(1),
+              label == 'التقريب'
+                  ? '${value.toStringAsFixed(1)}x'
+                  : value.toStringAsFixed(1),
               textAlign: TextAlign.center,
               style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
             ),
@@ -1957,7 +2187,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         ? const SizedBox(
             height: 22,
             width: 22,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
           )
         : Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -2019,7 +2252,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         children: [
           Row(
             children: [
-              const Icon(Icons.camera_alt_outlined, color: appColors.primary, size: 22),
+              const Icon(
+                Icons.camera_alt_outlined,
+                color: appColors.primary,
+                size: 22,
+              ),
               const SizedBox(width: 8),
               Text(
                 'تعليمات التصوير',
@@ -2068,7 +2305,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         decoration: BoxDecoration(
           color: appColors.primary.withOpacity(0.08),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: appColors.primary.withOpacity(0.45), width: 1.3),
+          border: Border.all(
+            color: appColors.primary.withOpacity(0.45),
+            width: 1.3,
+          ),
         ),
         child: Icon(icon, size: 22, color: appColors.primary),
       ),

@@ -1372,7 +1372,8 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) => const communityPage(),
+                                            builder: (_) =>
+                                                const communityPage(),
                                           ),
                                         );
                                       });
@@ -1397,12 +1398,12 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                         ),
                         const SliverToBoxAdapter(child: SizedBox(height: 12)),
                         // ✅ قسم الأصدقاء الديناميكي
-SliverToBoxAdapter(
-  child: Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: _DynamicFriendsSection(),
-  ),
-),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: _DynamicFriendsSection(),
+                          ),
+                        ),
                         const SliverToBoxAdapter(child: SizedBox(height: 120)),
                       ],
                     ),
@@ -4583,7 +4584,6 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -4727,7 +4727,6 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
   }
 }
 
-  
 class _DynamicFriendsSection extends StatefulWidget {
   const _DynamicFriendsSection();
 
@@ -4802,7 +4801,9 @@ class _DynamicFriendsSectionState extends State<_DynamicFriendsSection> {
       }
 
       // ترتيب حسب النقاط
-      friends.sort((a, b) => (b['points'] as int).compareTo(a['points'] as int));
+      friends.sort(
+        (a, b) => (b['points'] as int).compareTo(a['points'] as int),
+      );
 
       setState(() {
         _friends = friends;
@@ -4865,7 +4866,7 @@ class _DynamicFriendsSectionState extends State<_DynamicFriendsSection> {
         );
       },
       child: Container(
-        height: 140,
+        height: 160,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -5053,7 +5054,11 @@ class _DynamicFriendCard extends StatelessWidget {
                       ? AssetImage(avatarPath)
                       : null,
                   child: avatarPath == null
-                      ? const Icon(Icons.person, color: appColors.primary, size: 24)
+                      ? const Icon(
+                          Icons.person,
+                          color: appColors.primary,
+                          size: 24,
+                        )
                       : null,
                 ),
               ),
@@ -5072,12 +5077,12 @@ class _DynamicFriendCard extends StatelessWidget {
             ],
           ),
           const Spacer(),
-          
+
           // شارة الـ Streak
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: streak > 0 
+              color: streak > 0
                   ? appColors.accent.withOpacity(.12)
                   : Colors.grey.withOpacity(0.1),
               borderRadius: BorderRadius.circular(999),
@@ -5102,7 +5107,7 @@ class _DynamicFriendCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          
+
           // النقاط
           Row(
             children: [
@@ -5127,4 +5132,3 @@ class _DynamicFriendCard extends StatelessWidget {
     );
   }
 }
-
