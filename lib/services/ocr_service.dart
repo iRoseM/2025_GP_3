@@ -55,6 +55,72 @@ class OCRService {
     // ignore: avoid_print
     print('🧠 OCR TEXT:\n$text');
   }
+
+  static double calculateOCRConfidence({
+    required String ocrText,
+    required String detectedTask,
+    required String? expectedTask,
+  }) {
+    print('🧮 حساب دقة OCR...');
+
+    // 1. تطابق المهام
+    final matches = expectedTask != null && detectedTask == expectedTask;
+    final matchScore = matches ? 1.0 : 0.4;
+
+    // 2. طول النص
+    final lengthScore = ocrText.length <= 10
+        ? 1.0
+        : ocrText.length <= 20
+        ? 0.9
+        : ocrText.length <= 30
+        ? 0.8
+        : 0.7;
+
+    // 3. كلمات مفتاحية محددة لكل مهمة
+    final Map<String, List<String>> taskKeywords = {
+      'plastic': [
+        'plastic',
+        'plast',
+        'bottle',
+        'bottles',
+        'recycl',
+        'عبوة',
+        'زجاجة',
+        'بلاست',
+      ],
+      'paper': ['paper', 'cardboard', 'ورق', 'كرتون'],
+      'food': ['food', 'bread', 'fruit', 'طعام', 'خبز', 'فاكهة'],
+      'cloth': ['cloth', 'clothes', 'shirt', 'pants', 'ملابس', 'قميص'],
+      'metro': ['metro', 'subway', 'مترو', 'قطار'],
+      'bus': ['bus', 'autobus', 'باص', 'حافلة'],
+      'bicycle': ['bicycle', 'bike', 'دراجة', 'عجلة'],
+      'scooter': ['scooter', 'سكوتر', 'دراجة نارية'],
+      'rvm': ['rvm', 'recycling', 'machine', 'آلة', 'تدوير'],
+    };
+
+    double keywordScore = 0.3; // الحد الأدنى
+    final keywords = taskKeywords[detectedTask] ?? [];
+    final lowerText = ocrText.toLowerCase();
+
+    for (final keyword in keywords) {
+      if (lowerText.contains(keyword.toLowerCase())) {
+        keywordScore = 0.9; // وجدنا كلمة مفتاحية
+        break;
+      }
+    }
+
+    // حساب النتيجة النهائية
+    final finalScore =
+        (matchScore * 0.6) + (lengthScore * 0.2) + (keywordScore * 0.2);
+    final confidence = finalScore.clamp(0.0, 1.0);
+
+    print('   - تطابق المهام: ${matches ? "نعم" : "لا"}');
+    print('   - طول النص: ${ocrText.length} حرف');
+    print('   - كلمات مفتاحية: ${keywordScore > 0.3 ? "وجدت" : "لم توجد"}');
+    print('   - النتيجة النهائية: ${(confidence * 100).toInt()}%');
+
+    return confidence;
+  }
 }
 
 class OCRTaskMapper {
@@ -140,64 +206,117 @@ class OCRTaskMapper {
     }
   }
 
-  /// Map text to category (لتحويل النص المقروء إلى فئة)
   static String? mapTextToCategory(String text) {
+    print('🔍 تحليل النص: "$text"');
+
     final t = text.toLowerCase();
 
-    if (t.contains('plastic') ||
-        t.contains('بلاستيك') ||
-        t.contains('بلاستك') ||
-        t.contains('زجاجة')) {
-      return 'plastic';
-    }
-    if (t.contains('paper') ||
-        t.contains('ورق') ||
-        t.contains('كرتون') ||
-        t.contains('صحيفة')) {
-      return 'paper';
-    }
-    if (t.contains('food') ||
-        t.contains('طعام') ||
-        t.contains('عضوي') ||
-        t.contains('بقايا')) {
-      return 'food';
-    }
-    if (t.contains('cloth') ||
-        t.contains('clothes') ||
-        t.contains('ملابس') ||
-        t.contains('قماش')) {
-      return 'cloth';
-    }
-    if (t.contains('metro') ||
-        t.contains('مترو') ||
-        t.contains('قطار') ||
-        t.contains('أنفاق')) {
-      return 'metro';
-    }
-    if (t.contains('bus') ||
-        t.contains('باص') ||
-        t.contains('حافلة') ||
-        t.contains('اتوبيس')) {
-      return 'bus';
-    }
-    if (t.contains('bicycle') ||
-        t.contains('bike') ||
-        t.contains('دراجة') ||
-        t.contains('عجلة')) {
-      return 'bicycle';
-    }
-    if (t.contains('scooter') ||
-        t.contains('سكوتر') ||
-        t.contains('دراجة نارية')) {
-      return 'scooter';
-    }
-    if (t.contains('rvm') ||
-        t.contains('recycle') ||
-        t.contains('تدوير') ||
-        t.contains('إعادة')) {
-      return 'rvm';
+    // قائمة الكلمات المفتاحية مع أوزان
+    final keywords = [
+      {'word': 'plastic', 'category': 'plastic', 'weight': 10},
+      {'word': 'بلاستيك', 'category': 'plastic', 'weight': 10},
+      {'word': 'بلاست', 'category': 'plastic', 'weight': 8},
+      {'word': 'paper', 'category': 'paper', 'weight': 10},
+      {'word': 'ورق', 'category': 'paper', 'weight': 10},
+      {'word': 'food', 'category': 'food', 'weight': 10},
+      {'word': 'طعام', 'category': 'food', 'weight': 10},
+      {'word': 'خبز', 'category': 'food', 'weight': 8},
+      {'word': 'bread', 'category': 'food', 'weight': 8},
+      {'word': 'cloth', 'category': 'cloth', 'weight': 10},
+      {'word': 'ملابس', 'category': 'cloth', 'weight': 10},
+      {'word': 'قماش', 'category': 'cloth', 'weight': 7},
+      {'word': 'metro', 'category': 'metro', 'weight': 10},
+      {'word': 'مترو', 'category': 'metro', 'weight': 10},
+      {'word': 'bus', 'category': 'bus', 'weight': 10},
+      {'word': 'باص', 'category': 'bus', 'weight': 10},
+      {'word': 'bicycle', 'category': 'bicycle', 'weight': 10},
+      {'word': 'دراجة', 'category': 'bicycle', 'weight': 10},
+      {'word': 'scooter', 'category': 'scooter', 'weight': 10},
+      {'word': 'سكوتر', 'category': 'scooter', 'weight': 10},
+      {'word': 'rvm', 'category': 'rvm', 'weight': 10},
+      {'word': 'تدوير', 'category': 'rvm', 'weight': 10},
+    ];
+
+    String? bestCategory;
+    int highestScore = 0;
+
+    for (final keyword in keywords) {
+      final word = keyword['word'] as String;
+      final category = keyword['category'] as String;
+      final weight = keyword['weight'] as int;
+
+      if (t.contains(word)) {
+        print('🎯 وجدت "$word" → $category (+$weight)');
+
+        if (weight > highestScore) {
+          highestScore = weight;
+          bestCategory = category;
+        }
+      }
     }
 
+    if (bestCategory != null) {
+      print('✅ الفئة المختارة: $bestCategory (نقاط: $highestScore)');
+      return bestCategory;
+    }
+
+    print('❌ لم أجد أي كلمة مفتاحية');
     return null;
+  }
+
+  double _calculateOCRConfidence(
+    String ocrText,
+    String detectedTask,
+    String? expectedTask,
+  ) {
+    print('🧮 حساب دقة OCR...');
+
+    // 1. تطابق المهام
+    final matches = expectedTask != null && detectedTask == expectedTask;
+    final matchScore = matches ? 1.0 : 0.4;
+
+    // 2. طول النص (نص أطول يعني ثقة أقل لأنه قد يكون فيه أخطاء)
+    final lengthScore = ocrText.length <= 10
+        ? 1.0
+        : ocrText.length <= 20
+        ? 0.9
+        : ocrText.length <= 30
+        ? 0.8
+        : 0.7;
+
+    // 3. كلمات مفتاحية محددة لكل مهمة
+    final Map<String, List<String>> taskKeywords = {
+      'plastic': [
+        'plastic',
+        'plast',
+        'bottle',
+        'bottles',
+        'recycl',
+        'عبوة',
+        'زجاجة',
+        'بلاست',
+      ],
+      'paper': ['paper', 'cardboard', 'ورق', 'كرتون'],
+      'food': ['food', 'bread', 'fruit', 'طعام', 'خبز', 'فاكهة'],
+      'cloth': ['cloth', 'clothes', 'shirt', 'pants', 'ملابس', 'قميص'],
+    };
+
+    double keywordScore = 0.3; // الحد الأدنى
+    final keywords = taskKeywords[detectedTask] ?? [];
+    final lowerText = ocrText.toLowerCase();
+
+    for (final keyword in keywords) {
+      if (lowerText.contains(keyword.toLowerCase())) {
+        keywordScore = 0.9; // وجدنا كلمة مفتاحية
+        break;
+      }
+    }
+
+    // حساب النتيجة النهائية
+    final finalScore =
+        (matchScore * 0.6) + (lengthScore * 0.2) + (keywordScore * 0.2);
+    print('   - النتيجة النهائية: ${(finalScore * 100).toInt()}%');
+
+    return finalScore.clamp(0.0, 1.0);
   }
 }

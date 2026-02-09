@@ -15,6 +15,7 @@ import 'services/task_verification_service.dart'; // ✅ أضيفي هذا
 import '../services/app_colors.dart';
 import '../../home.dart';
 import 'services/ocr_service.dart';
+import 'task.dart';
 
 class CompleteTaskSheet extends StatefulWidget {
   final Map<String, dynamic> taskData;
@@ -53,8 +54,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     // لو matchesExpected == true → نعتمد بعتبة 0.70
     if (r?.matchesExpected == true) return conf >= 0.70;
 
-    // لو matchesExpected == null → نطلب كونفدنس عالي (حسب اتفاقنا)
-    return conf >= 0.85;
+    // لو matchesExpected == null →
+    return conf >= 0.70; // نستخدم نفس الحد الأدنى للتأكد من أن الصورة مطابقة
   }
 
   String _dayId(DateTime dt) {
@@ -90,6 +91,44 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   // ✅ متغيرات التحقق بالـ AI
   TaskVerificationResult? _verificationResult;
   bool _isVerifying = false;
+  String _verificationBlockReason(TaskVerificationResult? r) {
+    if (_isVerifying) {
+      return 'جاري التحقق من الصورة الآن… انتظر قليلًا ثم أعد المحاولة.';
+    }
+
+    if (r == null) {
+      return 'لم يتم التحقق من الصورة بعد. اضغط "التقاط صورة" أو أعد الالتقاط ليبدأ التحقق.';
+    }
+
+    if (r.success != true) {
+      // لو عندك r.error عبيها داخل TaskVerificationResult
+      final err = (r.error ?? '').toString().trim();
+      return err.isNotEmpty
+          ? 'فشل التحقق: $err'
+          : 'فشل التحقق من الصورة. تأكد من الاتصال وحاول إعادة الالتقاط.';
+    }
+
+    if (r.verified != true) {
+      // إذا عندك matchesExpected
+      if (r.matchesExpected == false) {
+        final expected =
+            (OCRTaskMapper.mapTaskToCategory(widget.taskData) ??
+            'المهمة المطلوبة');
+        final got = (r.taskNameAr ?? r.taskName ?? 'غير معروف');
+        return 'الصورة غير مطابقة للمهمة.\nالمطلوب: $expected\nالمكتشف: $got\nأعد الالتقاط بصورة أوضح.';
+      }
+
+      return 'لم يتم اعتماد الصورة. حاول إعادة الالتقاط بإضاءة أفضل وإظهار العنصر بشكل واضح.';
+    }
+
+    // هنا verified = true لكن ممكن كونفدنس أقل من الحد
+    final conf = (r.confidence ?? 0.0);
+    if (r.matchesExpected == true && conf < 0.70) {
+      return 'التطابق موجود لكن الثقة منخفضة (${r.confidencePercent ?? ''}). التقط صورة أوضح.';
+    }
+
+    return '';
+  }
 
   Map<String, dynamic> get _calcRequires {
     final v = widget.taskData['calc_requires'];
@@ -184,39 +223,176 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
   }
 
+  Future<void> showTaskCompletedDialogAndRedirect(BuildContext context) async {
+    // تأخير بسيط للتأكد من أن جميع العمليات قد اكتملت
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // عرض الديالوج
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: SizedBox(
+            width: 340,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/img/nameerLove.png',
+                    height: 120,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'تم إنجاز المهمة',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: appColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'أحسنتِ! تم تسجيل إنجازك بنجاح\nوتمت إضافة نقاطك مباشرة',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: appColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Center(
+                    child: SizedBox(
+                      width: 140,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: appColors.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 10,
+                          ),
+                        ),
+                        onPressed: () async {
+                          // 1. إغلاق الديالوج أولاً
+                          Navigator.of(dialogContext).pop();
+
+                          // 2. تأخير بسيط قبل الإغلاق والتوجيه
+                          await Future.delayed(
+                            const Duration(milliseconds: 200),
+                          );
+
+                          // 3. التحقق من أن context لا يزال active
+                          if (!mounted) return;
+
+                          // 4. إغلاق الـ BottomSheet
+                          Navigator.of(context).pop(true);
+
+                          // 5. التوجيه لصفحة المهام باستبدال كل الـ stack
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (_) => const taskPage()),
+                            (route) => false,
+                          );
+                        },
+                        child: Text(
+                          'تم',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<TaskVerificationResult?> _verifyTaskImage(String imagePath) async {
     if (!mounted) return null;
 
-    setState(() => _isVerifying = true);
+    setState(() {
+      _isVerifying = true;
+      _verificationResult = null;
+    });
 
     try {
-      // الحصول على نوع المهمة المتوقع باستخدام OCRTaskMapper
       final expectedTask = OCRTaskMapper.mapTaskToCategory(widget.taskData);
-
       print('🔍 بدء التحقق بالـ AI');
-      print('📌 المهمة المتوقعة: $expectedTask');
 
-      // 1️⃣ أولاً: جرب الـ OCR مباشرة
+      // 1️⃣ أولاً: جرب مودل Cloud Run (الخاص بك)
+      print('🔄 جرب مودل Cloud Run أولاً...');
+      final cloudResult = await _tryCloudModelFirst(imagePath, expectedTask);
+
+      if (cloudResult != null &&
+          cloudResult.success == true &&
+          _isAiApproved(cloudResult)) {
+        print('✅ Cloud Run معتمد، بدء الرفع...');
+
+        if (mounted) {
+          setState(() {
+            _verificationResult = cloudResult;
+            _isVerifying = false;
+          });
+        }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _uploadAndComplete();
+          }
+        });
+
+        return cloudResult;
+      }
+
+      print('⚠️ Cloud Run غير كافي، جرب الـ OCR...');
+
+      // 2️⃣ إذا فشل Cloud Run، جرب الـ OCR
       print('🔄 جرب الـ OCR...');
       final ocrText = await OCRService.extractTextFromFile(File(imagePath));
       print('📝 النص المقروء من OCR: "$ocrText"');
 
       if (ocrText.isNotEmpty) {
-        // استخدام OCRTaskMapper لتحويل النص إلى فئة
         final detectedTask = OCRTaskMapper.mapTextToCategory(ocrText);
         print('🗂️ الفئة المكتشفة من OCR: "$detectedTask"');
 
         if (detectedTask != null && expectedTask != null) {
           final matches = detectedTask == expectedTask;
 
+          // 🔧 استدعاء دقة OCR من الـ Service
+          final smartOCRConfidence = OCRService.calculateOCRConfidence(
+            ocrText: ocrText,
+            detectedTask: detectedTask,
+            expectedTask: expectedTask,
+          );
+
           final ocrResult = TaskVerificationResult(
             success: true,
             taskName: detectedTask,
             taskNameAr: _getArabicTaskName(detectedTask),
-            confidence: matches ? 0.85 : 0.5,
-            confidencePercent: matches ? '85%' : '50%',
+            confidence: smartOCRConfidence,
+            confidencePercent: '${(smartOCRConfidence * 100).toInt()}%',
             verified: matches,
             matchesExpected: matches,
+            verificationSource: 'ocr',
+            extractedText: ocrText,
             error: null,
             allPredictions: null,
           );
@@ -227,39 +403,259 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
               _isVerifying = false;
             });
           }
-          return ocrResult;
+
+          if (matches && smartOCRConfidence >= 0.70) {
+            print(
+              '✅ OCR مطابق ودقيق (${(smartOCRConfidence * 100).toInt()}%)، بدء الرفع...',
+            );
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _uploadAndComplete();
+              }
+            });
+            return ocrResult;
+          } else {
+            print('⚠️ OCR غير كافي، عرض رسالة خطأ...');
+            final reason = 'فشل التحقق. حاول إعادة الالتقاط بصورة أوضح.';
+            _showInlineError(reason);
+            return TaskVerificationResult(success: false, error: reason);
+          }
         }
       }
 
-      // 2️⃣ إذا فشل OCR، جرب Vision API
-      print('🔄 الانتقال إلى Vision API...');
-      final result = await TaskVerificationService.verifyFromFile(
+      print('❌ فشل كل من Cloud Run وOCR');
+      final finalError = 'لم نتمكن من التحقق من الصورة. حاول مرة أخرى.';
+      _showInlineError(finalError);
+
+      return TaskVerificationResult(success: false, error: finalError);
+    } catch (e) {
+      print('❌ خطأ في التحقق: $e');
+      if (mounted) {
+        setState(() => _isVerifying = false);
+        _showInlineError('فشل التحقق من الصورة: ${_friendlyError(e)}');
+      }
+      return null;
+    }
+  }
+
+  Future<TaskVerificationResult?> _tryCloudModelFirst(
+    String imagePath,
+    String? expectedTask,
+  ) async {
+    print('🔵 === بدء استدعاء مودل Cloud Run (الخاص بك) ===');
+    print('🔗 الرابط: https://verify-tasks-188455017517.us-central1.run.app');
+    print('📁 الصورة: $imagePath');
+    print('🎯 المهمة المتوقعة: $expectedTask');
+
+    try {
+      print('📤 إرسال طلب إلى Cloud Run...');
+      final modelResult = await TaskVerificationService.verifyFromFile(
         File(imagePath),
         expectedTask: expectedTask,
         threshold: 0.7,
       );
 
-      print('✅ نتيجة Vision API:');
-      print('   - النجاح: ${result.success}');
-      print('   - المهمة: ${result.taskNameAr}');
-      print('   - الثقة: ${result.confidencePercent}');
-      print('   - التحقق: ${result.verified}');
+      print('📥 استلمت النتيجة من Cloud Run:');
+      print('   - النجاح: ${modelResult.success}');
+      print('   - المهمة: ${modelResult.taskName}');
+      print('   - الثقة: ${modelResult.confidence}');
+      print('   - التحقق: ${modelResult.verified}');
 
+      return modelResult;
+    } catch (e, stackTrace) {
+      print('❌ خطأ في Cloud Run API: $e');
+      print('📋 Stack trace: $stackTrace');
+      return TaskVerificationResult(
+        success: false,
+        error: 'فشل الاتصال بمودل Cloud Run: ${_friendlyError(e)}',
+      );
+    }
+  }
+
+  Future<void> _uploadAndComplete() async {
+    // 1) التحقق من حالة الرفع والتحقق
+    if (_isUploading || _isVerifying) {
+      print('⚠️ العملية جارية بالفعل');
+      return;
+    }
+
+    // 2) التأكد من وجود صورة
+    if (_capturedPath == null) {
+      _showInlineError('لم يتم التقاط صورة');
+      return;
+    }
+
+    // 3) التحقق من صحة نتيجة الـ AI
+    if (!_isAiApproved(_verificationResult)) {
+      _showInlineError('لم يتم اعتماد الصورة. أعد الالتقاط.');
+      return;
+    }
+
+    print('🚀 بدء عملية الرفع التلقائي...');
+
+    // 4) الحصول على بيانات المهمة
+    final task = widget.taskData;
+    final pts = (task['points'] ?? 0) as int;
+    final taskId = task['id'] as String?;
+
+    // 5) التحقق من عدد العناصر إذا كانت المهمة deltaperitem
+    int? safeItems = _itemCount;
+    final mode = (task['calcMode'] ?? '').toString().toLowerCase();
+
+    if (mode == 'deltaperitem' && (safeItems == null || safeItems <= 0)) {
+      // طلب عدد العناصر إذا لم يكن موجوداً
+      print('📦 طلب عدد العناصر...');
+      await _promptForItemCountIfNeeded();
+      safeItems = _itemCount;
+      if (safeItems == null || safeItems <= 0) {
+        _showInlineError('يرجى إدخال عدد العناصر.');
+        return;
+      }
+    }
+
+    // 6) بدء عملية الرفع
+    if (!mounted) return;
+    setState(() {
+      _isUploading = true;
+      _isVerifying = false; // تأكد من إغلاق حالة التحقق
+    });
+
+    try {
+      print('📐 حساب البيانات الإضافية...');
+      // 7) حساب المسافة إذا كانت المهمة تتطلب ذلك
+      final isDistanceMode = mode == 'perkm' || mode == 'deltaperkm';
+      double? pickedKm;
+
+      if (isDistanceMode) {
+        print('📍 حساب المسافة...');
+        final manualKm = _manualDistanceKm;
+        await _captureEndAndComputeDistance();
+        double? straightKm;
+        if (_autoDistanceKmComputed != null &&
+            _autoDistanceKmComputed!.isFinite &&
+            _autoDistanceKmComputed! > 0) {
+          straightKm = double.parse(
+            _autoDistanceKmComputed!.toStringAsFixed(3),
+          );
+        }
+        if (manualKm != null && manualKm > 0) {
+          pickedKm = manualKm;
+        } else if (straightKm != null && straightKm > 0) {
+          pickedKm = straightKm;
+        }
+
+        final askDistanceKm = task['askDistanceKm'] == true;
+        final defaultKmOnSubmit = (task['defaultKmOnSubmit'] is num)
+            ? (task['defaultKmOnSubmit'] as num).toDouble()
+            : null;
+        if (pickedKm == null && askDistanceKm && defaultKmOnSubmit != null) {
+          pickedKm = defaultKmOnSubmit;
+        }
+
+        double? minKm, maxKm;
+        final mk = task['minKm'];
+        final xk = task['maxKm'];
+        if (mk is num) minKm = mk.toDouble();
+        if (xk is num) maxKm = xk.toDouble();
+        if (pickedKm != null && pickedKm > 0) {
+          final clamped = pickedKm.clamp(minKm ?? 0.2, maxKm ?? 50.0) as num;
+          pickedKm = double.parse(clamped.toStringAsFixed(3));
+        }
+
+        if (_manualStart != null && _manualEnd != null) {
+          _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
+          _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
+        }
+      }
+
+      // 8) حساب الكربون المُوفر
+      print('🌿 حساب الكربون الموفر...');
+      double? carbonSaved;
+      final efId =
+          (task['ef_ref'] ??
+                  task['efRef'] ??
+                  task['emissionFactorRef'] ??
+                  task['emission_factor_ref'])
+              ?.toString();
+      final valueFieldFromTask = (task['ef_valueField'] ?? task['valueField'])
+          ?.toString();
+      if (efId != null && efId.isNotEmpty) {
+        final saved = await _computeCarbonSavedFlexible(
+          efIdFromTask: efId,
+          km: pickedKm,
+          items: safeItems,
+          valueFieldFromTask: valueFieldFromTask,
+        );
+        if (saved.isFinite) {
+          carbonSaved = double.parse(saved.toStringAsFixed(3));
+        }
+      }
+
+      print('☁️ بدء رفع الملف...');
+      // 9) رفع الملف وإكمال المهمة
+      await _createSubmissionAndAutoApprove(
+        localPath: _capturedPath!,
+        taskPoints: pts,
+        taskId: taskId,
+        distanceKm: pickedKm,
+        carbonSaved: carbonSaved,
+        itemCount: safeItems,
+      );
+
+      print('✅ الرفع والإنجاز تم بنجاح!');
+      // 10) عرض شاشة النجاح والتوجيه
+      if (!mounted) return;
+      await showTaskCompletedDialogAndRedirect(context);
+
+      // 11) تنظيف وحذف الصورة المؤقتة
+      try {
+        if (_capturedPath != null) {
+          final f = File(_capturedPath!);
+          if (await f.exists()) await f.delete();
+        }
+      } catch (_) {}
+
+      // 12) إغلاق البوتوم شيت
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (e, stackTrace) {
+      print('❌ خطأ في _uploadAndComplete: $e');
+      print('📋 Stack trace: $stackTrace');
+
+      if (!mounted) return;
+
+      // عرض رسالة خطأ أكثر تفصيلاً
+      String errorMessage = 'حدث خطأ أثناء إكمال المهمة';
+
+      if (e.toString().contains('FirebaseException') &&
+          e.toString().contains('403')) {
+        errorMessage = 'خطأ في صلاحيات التطبيق. حاول مرة أخرى.';
+      } else if (e.toString().contains('Too many attempts')) {
+        errorMessage = 'محاولات كثيرة جداً. انتظر قليلاً وحاول مرة أخرى.';
+      } else if (e.toString().contains('App attestation failed')) {
+        errorMessage = 'خطأ في التحقق من التطبيق. تأكد من إعدادات Firebase.';
+      } else if (e.toString().contains('network') ||
+          e.toString().contains('اتصال')) {
+        errorMessage = 'مشكلة في الاتصال بالإنترنت. تحقق من اتصالك.';
+      } else if (e.toString().contains('timeout') ||
+          e.toString().contains('مهلة')) {
+        errorMessage = 'انتهت مهلة الاتصال. حاول مرة أخرى.';
+      }
+
+      _showInlineError(errorMessage);
+
+      // إعادة تعيين الحالة للسماح بإعادة المحاولة
       if (mounted) {
         setState(() {
-          _verificationResult = result;
-          _isVerifying = false;
+          _isUploading = false;
         });
       }
-
-      return result;
-    } catch (e) {
-      print('❌ خطأ في التحقق: $e');
+    } finally {
       if (mounted) {
-        setState(() => _isVerifying = false);
-        _showInlineError('فشل التحقق من الصورة');
+        setState(() {
+          _isUploading = false;
+        });
       }
-      return null;
     }
   }
 
@@ -478,183 +874,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }
   }
 
-  // Future<void> _createSubmissionAndMarkSubmitted({
-  //   required String localPath,
-  //   required int taskPoints,
-  //   String? taskId,
-  //   double? distanceKm,
-  //   double? carbonSaved,
-  //   int? itemCount,
-  // }) async {
-  //   final user = FirebaseAuth.instance.currentUser;
-  //   if (user == null) {
-  //     throw Exception('يرجى تسجيل الدخول.');
-  //   }
-
-  //   final file = File(localPath);
-  //   if (!await file.exists()) {
-  //     throw Exception('لم يتم العثور على ملف الصورة.');
-  //   }
-
-  //   final uid = user.uid;
-  //   final dayKey = _yyyyMMdd(widget.selectedDay);
-  //   final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
-  //   final name = DateTime.now().millisecondsSinceEpoch.toString();
-
-  //   final storage = FirebaseStorage.instance;
-  //   final storageRef = storage.ref('$basePath/$name.jpg');
-
-  //   Future<void> tryUpload() async {
-  //     await storageRef
-  //         .putFile(
-  //           file,
-  //           SettableMetadata(
-  //             contentType: 'image/jpeg',
-  //             cacheControl: 'public,max-age=3600',
-  //           ),
-  //         )
-  //         .timeout(const Duration(seconds: 60));
-  //   }
-
-  //   try {
-  //     try {
-  //       await tryUpload();
-  //     } catch (_) {
-  //       await Future.delayed(const Duration(milliseconds: 300));
-  //       await tryUpload();
-  //     }
-  //   } on FirebaseException catch (e) {
-  //     throw FirebaseException(
-  //       plugin: e.plugin,
-  //       code: e.code,
-  //       message: _friendlyError(e),
-  //     );
-  //   } on TimeoutException {
-  //     throw Exception('انتهى وقت رفع الصورة.');
-  //   } catch (e) {
-  //     throw Exception(_friendlyError(e));
-  //   }
-
-  //   Future<String> getUrlWithRetry() async {
-  //     try {
-  //       return await storageRef.getDownloadURL().timeout(
-  //         const Duration(seconds: 20),
-  //       );
-  //     } on TimeoutException {
-  //       await Future.delayed(const Duration(milliseconds: 200));
-  //       return await storageRef.getDownloadURL().timeout(
-  //         const Duration(seconds: 20),
-  //       );
-  //     }
-  //   }
-
-  //   String downloadUrl;
-  //   try {
-  //     downloadUrl = await getUrlWithRetry();
-  //   } on FirebaseException catch (e) {
-  //     try {
-  //       await storageRef.delete();
-  //     } catch (_) {}
-  //     throw FirebaseException(
-  //       plugin: e.plugin,
-  //       code: e.code,
-  //       message: _friendlyError(e),
-  //     );
-  //   } on TimeoutException {
-  //     try {
-  //       await storageRef.delete();
-  //     } catch (_) {}
-  //     throw Exception('انتهى وقت جلب رابط الصورة.');
-  //   } catch (e) {
-  //     try {
-  //       await storageRef.delete();
-  //     } catch (_) {}
-  //     throw Exception(_friendlyError(e));
-  //   }
-
-  //   final subRef = FirebaseFirestore.instance.collection('submissions').doc();
-  //   final utRef = FirebaseFirestore.instance
-  //       .collection('userTasks')
-  //       .doc(widget.userTaskDocId);
-
-  //   final extra = <String, dynamic>{};
-
-  //   if (distanceKm != null) {
-  //     extra['distanceKm'] = distanceKm;
-  //   }
-
-  //   final double carbonForStore = (carbonSaved != null && carbonSaved.isFinite)
-  //       ? double.parse(carbonSaved.toStringAsFixed(3))
-  //       : 0.0;
-
-  //   extra['carbonSaved'] = carbonForStore;
-
-  //   if (_geoStart != null) extra['geoStart'] = _geoStart;
-  //   if (_geoEnd != null) extra['geoEnd'] = _geoEnd;
-
-  //   if (itemCount != null) {
-  //     extra['itemCount'] = itemCount;
-  //   }
-
-  //   final efId =
-  //       (widget.taskData['ef_ref'] ??
-  //               widget.taskData['efRef'] ??
-  //               widget.taskData['emissionFactorRef'] ??
-  //               widget.taskData['emission_factor_ref'])
-  //           ?.toString();
-  //   if (efId != null && efId.isNotEmpty) {
-  //     extra['emissionFactorRef'] = efId;
-  //   }
-
-  //   final calcMode = widget.taskData['calcMode']?.toString();
-  //   if (calcMode != null && calcMode.isNotEmpty) {
-  //     extra['calcMode'] = calcMode;
-  //   }
-
-  //   // ✅ إضافة نتيجة التحقق بالـ AI
-  //   if (_verificationResult != null) {
-  //     extra['aiVerification'] = {
-  //       'taskName': _verificationResult!.taskName,
-  //       'taskNameAr': _verificationResult!.taskNameAr,
-  //       'confidence': _verificationResult!.confidence,
-  //       'verified': _verificationResult!.verified,
-  //       'matchesExpected': _verificationResult!.matchesExpected,
-  //     };
-  //   }
-
-  //   await subRef.set({
-  //     'userId': uid,
-  //     'userTaskDocId': widget.userTaskDocId,
-  //     'taskId': taskId ?? '',
-  //     'taskTitle': widget.taskData['title'] ?? '',
-  //     'taskPoints': taskPoints,
-  //     'status': 'pending',
-  //     'imageUrls': [downloadUrl],
-  //     'createdAt': FieldValue.serverTimestamp(),
-  //     ...extra,
-  //   });
-
-  //   await StreakService.updateStreakOnTaskCompletion();
-
-  //   await utRef.set({
-  //     'userId': uid,
-  //     'status': 'submitted',
-  //     'evidence': {
-  //       'type': 'photo',
-  //       'url': downloadUrl,
-  //       'storagePath': storageRef.fullPath,
-  //     },
-  //     'taskTitle': widget.taskData['title'] ?? '',
-  //     'taskPoints': taskPoints,
-  //     if (taskId != null) 'taskId': taskId,
-  //     if (distanceKm != null) 'distanceKm': distanceKm,
-  //     'carbonSaved': carbonForStore,
-  //     if (_geoStart != null) 'geoStart': _geoStart,
-  //     if (_geoEnd != null) 'geoEnd': _geoEnd,
-  //     if (itemCount != null) 'itemCount': itemCount,
-  //   }, SetOptions(merge: true));
-  // }
-
   Future<void> _createSubmissionAndAutoApprove({
     required String localPath,
     required int taskPoints,
@@ -666,231 +885,202 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw Exception('يرجى تسجيل الدخول.');
 
-    final file = File(localPath);
-    if (!await file.exists()) throw Exception('لم يتم العثور على ملف الصورة.');
-
-    final uid = user.uid;
-    final dayKey = _yyyyMMdd(widget.selectedDay);
-    final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
-    final name = DateTime.now().millisecondsSinceEpoch.toString();
-
-    // 1) Upload to Storage (خارج الترانزاكشن)
-    final storage = FirebaseStorage.instance;
-    final storageRef = storage.ref('$basePath/$name.jpg');
-
-    Future<void> tryUpload() async {
-      await storageRef
-          .putFile(
-            file,
-            SettableMetadata(
-              contentType: 'image/jpeg',
-              cacheControl: 'public,max-age=3600',
-            ),
-          )
-          .timeout(const Duration(seconds: 60));
-    }
+    print('👤 المستخدم: ${user.uid}');
+    print('📦 بدء عملية الإنجاز...');
 
     try {
+      // 1) رفع الصورة
+      final file = File(localPath);
+      final uid = user.uid;
+      final dayKey = _yyyyMMdd(widget.selectedDay);
+      final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
+      final name = DateTime.now().millisecondsSinceEpoch.toString();
+
+      final storage = FirebaseStorage.instance;
+      final storageRef = storage.ref('$basePath/$name.jpg');
+
+      print('🔼 رفع الصورة إلى: $basePath/$name.jpg');
+
       try {
-        await tryUpload();
-      } catch (_) {
-        await Future.delayed(const Duration(milliseconds: 300));
-        await tryUpload();
-      }
-    } on TimeoutException {
-      throw Exception('انتهى وقت رفع الصورة.');
-    } on FirebaseException catch (e) {
-      throw FirebaseException(
-        plugin: e.plugin,
-        code: e.code,
-        message: _friendlyError(e),
-      );
-    } catch (e) {
-      throw Exception(_friendlyError(e));
-    }
-
-    // 2) Get download URL (خارج الترانزاكشن)
-    String downloadUrl;
-    try {
-      downloadUrl = await storageRef.getDownloadURL().timeout(
-        const Duration(seconds: 20),
-      );
-    } on TimeoutException {
-      try {
-        await storageRef.delete();
-      } catch (_) {}
-      throw Exception('انتهى وقت جلب رابط الصورة.');
-    } on FirebaseException catch (e) {
-      try {
-        await storageRef.delete();
-      } catch (_) {}
-      throw FirebaseException(
-        plugin: e.plugin,
-        code: e.code,
-        message: _friendlyError(e),
-      );
-    } catch (e) {
-      try {
-        await storageRef.delete();
-      } catch (_) {}
-      throw Exception(_friendlyError(e));
-    }
-
-    // 3) تجهيز بيانات إضافية
-    final double carbonForStore = (carbonSaved != null && carbonSaved.isFinite)
-        ? double.parse(carbonSaved.toStringAsFixed(3))
-        : 0.0;
-
-    final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
-    final utRef = FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(widget.userTaskDocId);
-    final subRef = FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(); // نحدد ID قبل الترانزاكشن
-
-    final todayId = _dayId(DateTime.now());
-    final dayMarkRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('dayMarks')
-        .doc(todayId);
-
-    final taskTitle = (widget.taskData['title'] ?? '').toString();
-
-    // 4) Transaction = نفس منطق الأدمن لكن بدون pending
-    try {
-      await FirebaseFirestore.instance.runTransaction((trx) async {
-        final utSnap = await trx.get(utRef);
-        if (!utSnap.exists) throw 'userTask غير موجود.';
-        final ut = utSnap.data() as Map<String, dynamic>;
-        final currentStatus = (ut['status'] as String?) ?? 'pending';
-        final canComplete = currentStatus != 'completed';
-
-        // 4.1) submissions: approved مباشرة
-        final subData = <String, dynamic>{
-          'userId': uid,
-          'userTaskDocId': widget.userTaskDocId,
-          'taskId': taskId ?? '',
-          'taskTitle': taskTitle,
-          'taskPoints': taskPoints,
-          'status': 'approved',
-          'imageUrls': [downloadUrl],
-          'createdAt': FieldValue.serverTimestamp(),
-
-          if (distanceKm != null) 'distanceKm': distanceKm,
-          'carbonSaved': carbonForStore,
-          if (itemCount != null) 'itemCount': itemCount,
-          if (_geoStart != null) 'geoStart': _geoStart,
-          if (_geoEnd != null) 'geoEnd': _geoEnd,
-
-          // AI result (موجود عندك أصلًا)
-          if (_verificationResult != null)
-            'aiVerification': {
-              'taskName': _verificationResult!.taskName,
-              'taskNameAr': _verificationResult!.taskNameAr,
-              'confidence': _verificationResult!.confidence,
-              'verified': _verificationResult!.verified,
-              'matchesExpected': _verificationResult!.matchesExpected,
-            },
-        };
-
-        trx.set(subRef, subData);
-
-        // 4.2) userTasks: completed مباشرة
-        final utUpdate = <String, dynamic>{
-          'userId': uid,
-          'status': 'completed',
-          'completedAt': FieldValue.serverTimestamp(),
-          'canRetry': false,
-          'evidence': {
-            'type': 'photo',
-            'url': downloadUrl,
-            'storagePath': storageRef.fullPath,
-          },
-          'taskTitle': taskTitle,
-          'taskPoints': taskPoints,
-          if (taskId != null) 'taskId': taskId,
-          if (distanceKm != null) 'distanceKm': distanceKm,
-          'carbonSaved': carbonForStore,
-          if (itemCount != null) 'itemCount': itemCount,
-          if (_geoStart != null) 'geoStart': _geoStart,
-          if (_geoEnd != null) 'geoEnd': _geoEnd,
-        };
-        trx.set(utRef, utUpdate, SetOptions(merge: true));
-
-        // 4.3) نقاط المستخدم (مرة واحدة فقط)
-        if (canComplete && taskPoints > 0) {
-          trx.update(usersRef, {
-            'points': FieldValue.increment(taskPoints),
-            'completedTask': FieldValue.increment(1),
-          });
-        }
-
-        // 4.4) history
-        final historyRef = FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('history')
-            .doc();
-        final histData = <String, dynamic>{
-          'type': 'task_approved',
-          'userTaskDocId': widget.userTaskDocId,
-          'submissionId': subRef.id,
-          'points': taskPoints,
-          'at': FieldValue.serverTimestamp(),
-          'taskTitle': taskTitle,
-        };
-        if (carbonForStore > 0) histData['carbonSaved'] = carbonForStore;
-        if (itemCount != null && itemCount > 0)
-          histData['itemCount'] = itemCount;
-        trx.set(historyRef, histData);
-
-        // 4.5) totalCarbonSaved + lastCarbonUpdateAt
-        trx.set(usersRef, {
-          'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-          if (carbonForStore > 0)
-            'totalCarbonSaved': FieldValue.increment(carbonForStore),
-        }, SetOptions(merge: true));
-
-        // 4.6) dayMarks
-        trx.set(dayMarkRef, {
-          'count': FieldValue.increment(1),
-          'lastAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-        // 4.7) notifications
-        final notifRef = FirebaseFirestore.instance
-            .collection('notifications')
-            .doc();
-        final carbonText = _fmtKgLocal(
-          carbonForStore.isFinite && carbonForStore >= 0 ? carbonForStore : 0.0,
+        await storageRef.putFile(
+          file,
+          SettableMetadata(contentType: 'image/jpeg'),
         );
-        trx.set(notifRef, {
-          'type': 'submission_approved',
-          'userId': uid,
-          'submissionId': subRef.id,
-          'taskTitle': taskTitle,
-          'points': taskPoints,
-          if (distanceKm != null && distanceKm > 0) 'distanceKm': distanceKm,
-          if (itemCount != null && itemCount > 0) 'itemCount': itemCount,
-          'createdAt': FieldValue.serverTimestamp(),
-          'seen': false,
-          'title': 'تم اعتماد المهمة 🎉',
-          'body': 'أُضيفت $taskPoints نقطة • وفَّرت $carbonText كجم CO₂ 🌿',
-          'message':
-              'تم اعتماد طلبك لمهمة: $taskTitle — نقاط: $taskPoints • توفير: $carbonText كجم CO₂',
-        });
-      });
+        print('✅ تم رفع الصورة بنجاح');
+      } catch (e) {
+        print('❌ خطأ في رفع الصورة: $e');
+        throw Exception('فشل رفع الصورة: ${_friendlyError(e)}');
+      }
 
-      // ✅ (الستريك: اتركيه زي ما هو عندك؛ إذا كان سطره موجود في مكان ثاني لا تنقلينه الآن)
-      await StreakService.updateStreakOnTaskCompletion();
-    } catch (e) {
-      // لو فشل الترانزاكشن، نحاول نحذف الملف المرفوع عشان ما يعلق
+      // 2) الحصول على الرابط
+      String downloadUrl;
       try {
-        await storageRef.delete();
-      } catch (_) {}
-      throw Exception('خطأ: $e');
+        downloadUrl = await storageRef.getDownloadURL();
+        print('🔗 رابط الصورة: $downloadUrl');
+      } catch (e) {
+        print('❌ خطأ في الحصول على الرابط: $e');
+        throw Exception('فشل الحصول على رابط الصورة');
+      }
+
+      // 3) البيانات الأساسية
+      final double carbonForStore =
+          (carbonSaved != null && carbonSaved.isFinite)
+          ? double.parse(carbonSaved.toStringAsFixed(3))
+          : 0.0;
+
+      final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      final utRef = FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(widget.userTaskDocId);
+      final subRef = FirebaseFirestore.instance.collection('submissions').doc();
+
+      final todayId = _dayId(DateTime.now());
+      final dayMarkRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('dayMarks')
+          .doc(todayId);
+
+      final taskTitle = (widget.taskData['title'] ?? '').toString();
+
+      print('📝 إعداد بيانات Firestore...');
+
+      // 4) تنفيذ Transaction مع معالجة أخطاء مفصلة
+      try {
+        await FirebaseFirestore.instance.runTransaction((trx) async {
+          print('🔄 بدء الترانزاكشن...');
+
+          // الحصول على userTask
+          final utSnap = await trx.get(utRef);
+          if (!utSnap.exists) {
+            print('❌ userTask غير موجود: ${widget.userTaskDocId}');
+            throw 'userTask غير موجود.';
+          }
+
+          final ut = utSnap.data() as Map<String, dynamic>;
+          final currentStatus = (ut['status'] as String?) ?? 'pending';
+          print('📊 حالة المهمة الحالية: $currentStatus');
+
+          // 4.1) إنشاء submission
+          final subData = <String, dynamic>{
+            'userId': uid,
+            'userTaskDocId': widget.userTaskDocId,
+            'taskId': taskId ?? '',
+            'taskTitle': taskTitle,
+            'taskPoints': taskPoints,
+            'status': 'approved',
+            'imageUrls': [downloadUrl],
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+
+            if (distanceKm != null) 'distanceKm': distanceKm,
+            'carbonSaved': carbonForStore,
+            if (itemCount != null) 'itemCount': itemCount,
+            if (_geoStart != null) 'geoStart': _geoStart,
+            if (_geoEnd != null) 'geoEnd': _geoEnd,
+
+            if (_verificationResult != null)
+              'aiVerification': {
+                'taskName': _verificationResult!.taskName,
+                'taskNameAr': _verificationResult!.taskNameAr,
+                'confidence': _verificationResult!.confidence,
+                'verified': _verificationResult!.verified,
+                'matchesExpected': _verificationResult!.matchesExpected,
+              },
+          };
+
+          print('📄 إنشاء submission: ${subRef.id}');
+          trx.set(subRef, subData);
+
+          // 4.2) تحديث userTask
+          final utUpdate = <String, dynamic>{
+            'status': 'completed',
+            'completedAt': FieldValue.serverTimestamp(),
+            'canRetry': false,
+            'evidence': {
+              'type': 'photo',
+              'url': downloadUrl,
+              'storagePath': storageRef.fullPath,
+            },
+            'taskTitle': taskTitle,
+            'taskPoints': taskPoints,
+            if (taskId != null) 'taskId': taskId,
+            if (distanceKm != null) 'distanceKm': distanceKm,
+            'carbonSaved': carbonForStore,
+            if (itemCount != null) 'itemCount': itemCount,
+            if (_geoStart != null) 'geoStart': _geoStart,
+            if (_geoEnd != null) 'geoEnd': _geoEnd,
+            'updatedAt': FieldValue.serverTimestamp(),
+          };
+
+          print('📝 تحديث userTask...');
+          trx.set(utRef, utUpdate, SetOptions(merge: true));
+
+          // 4.3) زيادة نقاط المستخدم
+          if (currentStatus != 'completed' && taskPoints > 0) {
+            print('💰 زيادة النقاط: $taskPoints');
+            trx.update(usersRef, {
+              'points': FieldValue.increment(taskPoints),
+              'completedTask': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+          }
+
+          // 4.4) إضافة للسجل
+          final historyRef = FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .collection('history')
+              .doc();
+          final histData = <String, dynamic>{
+            'type': 'task_approved',
+            'userTaskDocId': widget.userTaskDocId,
+            'submissionId': subRef.id,
+            'points': taskPoints,
+            'at': FieldValue.serverTimestamp(),
+            'taskTitle': taskTitle,
+            'carbonSaved': carbonForStore,
+          };
+          if (itemCount != null && itemCount > 0)
+            histData['itemCount'] = itemCount;
+
+          print('📚 إضافة إلى السجل...');
+          trx.set(historyRef, histData);
+
+          // 4.5) تحديث الكربون الموفّر
+          trx.set(usersRef, {
+            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+            if (carbonForStore > 0)
+              'totalCarbonSaved': FieldValue.increment(carbonForStore),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+          // 4.6) تحديث dayMarks
+          trx.set(dayMarkRef, {
+            'count': FieldValue.increment(1),
+            'lastAt': FieldValue.serverTimestamp(),
+            'userId': uid, // إضافة هذا الحقل
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+          print('✅ الترانزاكشن مكتملة بنجاح');
+          try {
+            await StreakService.updateStreakOnTaskCompletion();
+            print('🔥 تم تحديث الستريك بنجاح');
+          } catch (e) {
+            print('⚠️ خطأ في تحديث الستريك: $e');
+          }
+        });
+
+        print('🎉 تم إكمال المهمة بنجاح!');
+      } on FirebaseException catch (e) {
+        print('🔥 FirebaseException: ${e.code} - ${e.message}');
+        throw Exception('خطأ في قاعدة البيانات: ${e.code} - ${e.message}');
+      }
+    } catch (e, stackTrace) {
+      print('❌ خطأ في _createSubmissionAndAutoApprove: $e');
+      print('📋 Stack trace: $stackTrace');
+      rethrow;
     }
   }
 
@@ -1281,95 +1471,93 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   }
 
   // ✅ ودجت عرض نتيجة التحقق بالـ AI
-  // Widget _buildVerificationResult() {
-  //   if (_verificationResult == null && !_isVerifying) {
-  //     return const SizedBox.shrink();
-  //   }
+  Widget _buildVerificationResult() {
+    if (_verificationResult == null && !_isVerifying) {
+      return const SizedBox.shrink();
+    }
 
-  //   if (_isVerifying) {
-  //     return Container(
-  //       padding: const EdgeInsets.all(12),
-  //       margin: const EdgeInsets.only(bottom: 12),
-  //       decoration: BoxDecoration(
-  //         color: Colors.blue.withOpacity(0.1),
-  //         borderRadius: BorderRadius.circular(12),
-  //         border: Border.all(color: Colors.blue.withOpacity(0.3)),
-  //       ),
-  //       child: Row(
-  //         children: [
-  //           const SizedBox(
-  //             width: 20,
-  //             height: 20,
-  //             child: CircularProgressIndicator(strokeWidth: 2),
-  //           ),
-  //           const SizedBox(width: 12),
-  //           Text(
-  //             'جاري التحقق من الصورة...',
-  //             style: GoogleFonts.ibmPlexSansArabic(
-  //               fontWeight: FontWeight.w600,
-  //               color: Colors.blue,
-  //             ),
-  //           ),
-  //         ],
-  //       ),
-  //     );
-  //   }
+    if (_isVerifying) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.blue.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'جاري التحقق من الصورة...',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w600,
+                color: Colors.blue,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
-  //   final isVerified = _verificationResult!.verified == true;
-  //   final matchesExpected = _verificationResult!.matchesExpected;
+    final isVerified = _verificationResult!.verified == true;
+    final matchesExpected = _verificationResult!.matchesExpected;
 
-  //   return Container(
-  //     padding: const EdgeInsets.all(12),
-  //     margin: const EdgeInsets.only(bottom: 12),
-  //     decoration: BoxDecoration(
-  //       color: isVerified
-  //           ? Colors.green.withOpacity(0.1)
-  //           : Colors.orange.withOpacity(0.1),
-  //       borderRadius: BorderRadius.circular(12),
-  //       border: Border.all(
-  //         color: isVerified ? Colors.green : Colors.orange,
-  //       ),
-  //     ),
-  //     child: Row(
-  //       children: [
-  //         Icon(
-  //           isVerified ? Icons.check_circle : Icons.warning,
-  //           color: isVerified ? Colors.green : Colors.orange,
-  //         ),
-  //         const SizedBox(width: 8),
-  //         Expanded(
-  //           child: Column(
-  //             crossAxisAlignment: CrossAxisAlignment.start,
-  //             children: [
-  //               Text(
-  //                 'نوع المهمة: ${_verificationResult!.taskNameAr ?? "غير معروف"}',
-  //                 style: GoogleFonts.ibmPlexSansArabic(
-  //                   fontWeight: FontWeight.w600,
-  //                 ),
-  //               ),
-  //               Text(
-  //                 'نسبة الثقة: ${_verificationResult!.confidencePercent ?? "0%"}',
-  //                 style: GoogleFonts.ibmPlexSansArabic(
-  //                   fontSize: 13,
-  //                   color: Colors.black54,
-  //                 ),
-  //               ),
-  //               if (matchesExpected != null)
-  //                 Text(
-  //                   matchesExpected ? '✅ مطابق للمهمة' : '⚠️ غير مطابق للمهمة',
-  //                   style: GoogleFonts.ibmPlexSansArabic(
-  //                     fontSize: 13,
-  //                     color: matchesExpected ? Colors.green : Colors.orange,
-  //                     fontWeight: FontWeight.w600,
-  //                   ),
-  //                 ),
-  //             ],
-  //           ),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isVerified
+            ? Colors.green.withOpacity(0.1)
+            : Colors.orange.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isVerified ? Colors.green : Colors.orange),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isVerified ? Icons.check_circle : Icons.warning,
+            color: isVerified ? Colors.green : Colors.orange,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'نوع المهمة: ${_verificationResult!.taskNameAr ?? "غير معروف"}',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'نسبة الثقة: ${_verificationResult!.confidencePercent ?? "0%"}',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 13,
+                    color: Colors.black54,
+                  ),
+                ),
+                if (matchesExpected != null)
+                  Text(
+                    matchesExpected ? '✅ مطابق للمهمة' : '⚠️ غير مطابق للمهمة',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 13,
+                      color: matchesExpected ? Colors.green : Colors.orange,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1380,7 +1568,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final taskId = task['id'] as String?;
     final requiresPhotoExact = true;
     final isTransport = (_autoDistance || _isTransportTask);
-
+    final bool disableActions = _isVerifying || _isUploading;
     return Directionality(
       textDirection: TextDirection.rtl,
       child: DraggableScrollableSheet(
@@ -1676,8 +1864,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                     ),
                   const SizedBox(height: 12),
 
-                  // // ✅ عرض نتيجة التحقق بالـ AI
-                  // if (_capturedPath != null) _buildVerificationResult(),
+                  // ✅ عرض نتيجة التحقق بالـ AI
+                  if (_capturedPath != null) _buildVerificationResult(),
                   const SizedBox(height: 10),
                   if (_ready) ...[
                     if (_capturedPath == null)
@@ -1709,348 +1897,41 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   // ✅ التحقق من الصورة بالـ AI تلقائياً
                                   await _verifyTaskImage(shot.path);
 
-                                  // ✅ بعد التصوير، نسأل عن عدد العناصر لو المهمة deltaPerItem
-                                  await _promptForItemCountIfNeeded();
+                                  // ❌ تم إزالة السطر التالي لأننا لن نطلب عدد العناصر هنا
+                                  // await _promptForItemCountIfNeeded();
                                 }
                                 if (mounted)
                                   setState(() => _isCapturing = false);
                               },
                       )
+                    else if (_isUploading)
+                      _gradientButton(
+                        label: 'جاري إكمال المهمة...',
+                        icon: Icons.cloud_upload,
+                        enabled: false,
+                        loading: true,
+                        onTap: null,
+                      )
+                    else if (_isVerifying)
+                      _gradientButton(
+                        label: 'جاري التحقق...',
+                        icon: Icons.search,
+                        enabled: false,
+                        loading: true,
+                        onTap: null,
+                      )
                     else
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _gradientButton(
-                            label: _isUploading ? 'جاري الإرسال...' : 'إرسال',
-                            icon: Icons.cloud_upload,
-                            onTap: _isUploading
-                                ? null
-                                : () async {
-                                    if (_capturedPath == null) return;
+                          // عرض نتيجة التحقق إذا كانت موجودة
+                          if (_verificationResult != null)
+                            _buildVerificationResult(),
+                          const SizedBox(height: 16),
 
-                                    // ✅ NEW: امنعي الإرسال إذا ما صار AI Approved (كونفدنس عالي)
-
-                                    // if (!_isAiApproved(_verificationResult)) {
-                                    //   if (!mounted) return;
-
-                                    //   ScaffoldMessenger.of(
-                                    //     Navigator.of(context, rootNavigator: true).context,
-                                    //   )
-                                    //     ..hideCurrentSnackBar()
-                                    //     ..showSnackBar(
-                                    //       SnackBar(
-                                    //         backgroundColor: slackMesseges.red,
-                                    //         content: Text(
-                                    //           'الصورة غير مطابقة للمهمة. أعد الالتقاط.',
-                                    //           style: GoogleFonts.ibmPlexSansArabic(
-                                    //             color: Colors.white,
-                                    //             fontWeight: FontWeight.w700,
-                                    //           ),
-                                    //         ),
-                                    //       ),
-                                    //     );
-
-                                    //   return;
-                                    // }
-                                    if (!_isAiApproved(_verificationResult)) {
-                                      _showInlineError(
-                                        'الصورة غير مطابقة للمهمة. أعد الالتقاط.',
-                                      );
-                                      return;
-                                    }
-
-                                    // ✅ تحذير إذا التحقق فشل
-                                    // if (_verificationResult != null && _verificationResult!.verified != true) {
-                                    //   final proceed = await showDialog<bool>(
-                                    //     context: context,
-                                    //     builder: (ctx) => AlertDialog(
-                                    //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                    //       title: Text('تنبيه', style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.bold)),
-                                    //       content: Text(
-                                    //         'الصورة قد لا تكون مطابقة للمهمة.\nهل تريد المتابعة؟',
-                                    //         style: GoogleFonts.ibmPlexSansArabic(),
-                                    //       ),
-                                    //       actions: [
-                                    //         TextButton(
-                                    //           onPressed: () => Navigator.pop(ctx, false),
-                                    //           child: Text('إلغاء', style: GoogleFonts.ibmPlexSansArabic(color: appColors.primary)),
-                                    //         ),
-                                    //         ElevatedButton(
-                                    //           onPressed: () => Navigator.pop(ctx, true),
-                                    //           style: ElevatedButton.styleFrom(backgroundColor: appColors.primary),
-                                    //           child: Text('متابعة', style: GoogleFonts.ibmPlexSansArabic(color: Colors.white)),
-                                    //         ),
-                                    //       ],
-                                    //     ),
-                                    //   );
-                                    //   if (proceed != true) return;
-                                    // }
-
-                                    int? safeItems = _itemCount;
-                                    final mode =
-                                        (widget.taskData['calcMode'] ?? '')
-                                            .toString()
-                                            .toLowerCase();
-
-                                    if (mode == 'deltaperitem' &&
-                                        (safeItems == null || safeItems <= 0)) {
-                                      await _promptForItemCountIfNeeded();
-                                      safeItems = _itemCount;
-                                      if (safeItems == null || safeItems <= 0) {
-                                        _showInlineError(
-                                          'يرجى إدخال عدد العناصر.',
-                                        );
-                                        return;
-                                      }
-                                    }
-
-                                    if (!mounted || _isUploading) return;
-                                    setState(() => _isUploading = true);
-
-                                    try {
-                                      final isDistanceMode =
-                                          mode == 'perkm' ||
-                                          mode == 'deltaperkm';
-                                      double? pickedKm;
-
-                                      if (isDistanceMode) {
-                                        final manualKm = _manualDistanceKm;
-                                        await _captureEndAndComputeDistance();
-                                        double? straightKm;
-                                        if (_autoDistanceKmComputed != null &&
-                                            _autoDistanceKmComputed!.isFinite &&
-                                            _autoDistanceKmComputed! > 0) {
-                                          straightKm = double.parse(
-                                            _autoDistanceKmComputed!
-                                                .toStringAsFixed(3),
-                                          );
-                                        }
-                                        if (manualKm != null && manualKm > 0) {
-                                          pickedKm = manualKm;
-                                        } else if (straightKm != null &&
-                                            straightKm > 0) {
-                                          pickedKm = straightKm;
-                                        }
-
-                                        final askDistanceKm =
-                                            widget.taskData['askDistanceKm'] ==
-                                            true;
-                                        final defaultKmOnSubmit =
-                                            (widget.taskData['defaultKmOnSubmit']
-                                                is num)
-                                            ? (widget.taskData['defaultKmOnSubmit']
-                                                      as num)
-                                                  .toDouble()
-                                            : null;
-                                        if (pickedKm == null &&
-                                            askDistanceKm &&
-                                            defaultKmOnSubmit != null) {
-                                          pickedKm = defaultKmOnSubmit;
-                                        }
-
-                                        double? minKm, maxKm;
-                                        final mk = widget.taskData['minKm'];
-                                        final xk = widget.taskData['maxKm'];
-                                        if (mk is num) minKm = mk.toDouble();
-                                        if (xk is num) maxKm = xk.toDouble();
-                                        if (pickedKm != null && pickedKm > 0) {
-                                          final clamped =
-                                              pickedKm.clamp(
-                                                    minKm ?? 0.2,
-                                                    maxKm ?? 50.0,
-                                                  )
-                                                  as num;
-                                          pickedKm = double.parse(
-                                            clamped.toStringAsFixed(3),
-                                          );
-                                        }
-
-                                        if (_manualStart != null &&
-                                            _manualEnd != null) {
-                                          _geoStart = GeoPoint(
-                                            _manualStart!.latitude,
-                                            _manualStart!.longitude,
-                                          );
-                                          _geoEnd = GeoPoint(
-                                            _manualEnd!.latitude,
-                                            _manualEnd!.longitude,
-                                          );
-                                        }
-                                      }
-
-                                      double? carbonSaved;
-                                      final efId =
-                                          (widget.taskData['ef_ref'] ??
-                                                  widget.taskData['efRef'] ??
-                                                  widget
-                                                      .taskData['emissionFactorRef'] ??
-                                                  widget
-                                                      .taskData['emission_factor_ref'])
-                                              ?.toString();
-                                      final valueFieldFromTask =
-                                          (widget.taskData['ef_valueField'] ??
-                                                  widget.taskData['valueField'])
-                                              ?.toString();
-                                      if (efId != null && efId.isNotEmpty) {
-                                        final saved =
-                                            await _computeCarbonSavedFlexible(
-                                              efIdFromTask: efId,
-                                              km: pickedKm,
-                                              items: safeItems,
-                                              valueFieldFromTask:
-                                                  valueFieldFromTask,
-                                            );
-                                        if (saved.isFinite) {
-                                          carbonSaved = double.parse(
-                                            saved.toStringAsFixed(3),
-                                          );
-                                        }
-                                      }
-
-                                      // await _createSubmissionAndMarkSubmitted(
-                                      //   localPath: _capturedPath!,
-                                      //   taskPoints: pts,
-                                      //   taskId: taskId,
-                                      //   distanceKm: pickedKm,
-                                      //   carbonSaved: carbonSaved,
-                                      //   itemCount: safeItems,
-                                      // );
-                                      await _createSubmissionAndAutoApprove(
-                                        localPath: _capturedPath!,
-                                        taskPoints: pts,
-                                        taskId: taskId,
-                                        distanceKm: pickedKm,
-                                        carbonSaved: carbonSaved,
-                                        itemCount: safeItems,
-                                      );
-
-                                      if (!mounted) return;
-                                      await showDialog(
-                                        context: context,
-                                        barrierDismissible: false,
-                                        useRootNavigator: true,
-                                        builder: (context) {
-                                          return Dialog(
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                            insetPadding:
-                                                const EdgeInsets.symmetric(
-                                                  horizontal: 24,
-                                                ),
-                                            child: SizedBox(
-                                              width: 340,
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(
-                                                  20,
-                                                ),
-                                                child: Column(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Image.asset(
-                                                      'assets/img/nameerCamera.png',
-                                                      height: 120,
-                                                      fit: BoxFit.contain,
-                                                    ),
-                                                    const SizedBox(height: 16),
-                                                    Text(
-                                                      '!تم تسجيل مشاركتك بنجاح',
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                      style:
-                                                          GoogleFonts.ibmPlexSansArabic(
-                                                            fontSize: 20,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            color:
-                                                                appColors.dark,
-                                                          ),
-                                                    ),
-                                                    const SizedBox(height: 12),
-                                                    Text(
-                                                      'تم اعتماد المهمة بنجاح \nتمت إضافة نقاطك مباشرة',
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                      style:
-                                                          GoogleFonts.ibmPlexSansArabic(
-                                                            fontSize: 16,
-                                                            fontWeight:
-                                                                FontWeight.w500,
-                                                            color:
-                                                                appColors.dark,
-                                                          ),
-                                                    ),
-                                                    const SizedBox(height: 24),
-                                                    SizedBox(
-                                                      width: 140,
-                                                      child: ElevatedButton(
-                                                        style: ElevatedButton.styleFrom(
-                                                          backgroundColor:
-                                                              appColors.primary,
-                                                          shape: RoundedRectangleBorder(
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  12,
-                                                                ),
-                                                          ),
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 24,
-                                                                vertical: 10,
-                                                              ),
-                                                        ),
-                                                        onPressed: () =>
-                                                            Navigator.pop(
-                                                              context,
-                                                            ),
-                                                        child: Text(
-                                                          'تم',
-                                                          style:
-                                                              GoogleFonts.ibmPlexSansArabic(
-                                                                color: Colors
-                                                                    .white,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700,
-                                                                fontSize: 16,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      );
-
-                                      try {
-                                        if (_capturedPath != null) {
-                                          final f = File(_capturedPath!);
-                                          if (await f.exists())
-                                            await f.delete();
-                                        }
-                                      } catch (_) {}
-                                      if (!mounted) return;
-                                      Navigator.of(context).pop(true);
-                                    } catch (e) {
-                                      if (!mounted) return;
-                                      _showInlineError(_friendlyError(e));
-                                    } finally {
-                                      if (mounted)
-                                        setState(() => _isUploading = false);
-                                    }
-                                  },
-                          ),
-                          const SizedBox(height: 10),
+                          // زر إعادة التقاط فقط
                           OutlinedButton.icon(
-                            icon: const Icon(
-                              Icons.refresh,
-                              color: appColors.primary,
-                            ),
+                            icon: Icon(Icons.refresh, color: appColors.primary),
                             label: Text(
                               'إعادة التقاط',
                               style: GoogleFonts.ibmPlexSansArabic(
@@ -2060,7 +1941,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                               ),
                             ),
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
+                              side: BorderSide(
                                 color: appColors.primary,
                                 width: 2,
                               ),
@@ -2081,10 +1962,125 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   _capturedPath = null;
                                   _verificationResult =
                                       null; // ✅ إعادة تعيين نتيجة التحقق
+                                  _isUploading = false;
+                                  _isVerifying = false;
                                 });
                               }
                             },
                           ),
+
+                          // رسالة توجيهية إذا كانت الصورة غير معتمدة
+                          if (_verificationResult != null &&
+                              !_isAiApproved(_verificationResult))
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.orange),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.warning,
+                                          color: Colors.orange,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'الصورة غير معتمدة',
+                                          style: GoogleFonts.ibmPlexSansArabic(
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.orange,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'يرجى إعادة التقاط صورة أوضح للمهمة',
+                                      style: GoogleFonts.ibmPlexSansArabic(
+                                        fontSize: 13,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    if (_verificationResult?.taskNameAr != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          'المكتشف: ${_verificationResult!.taskNameAr!}',
+                                          style: GoogleFonts.ibmPlexSansArabic(
+                                            fontSize: 12,
+                                            color: Colors.black54,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                          // رسالة توجيهية إذا كانت الصورة معتمدة وجاري العملية
+                          if (_verificationResult != null &&
+                              _isAiApproved(_verificationResult) &&
+                              !_isUploading)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.green),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'الصورة معتمدة',
+                                            style:
+                                                GoogleFonts.ibmPlexSansArabic(
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.green,
+                                                ),
+                                          ),
+                                          Text(
+                                            'سيتم إكمال المهمة تلقائياً...',
+                                            style:
+                                                GoogleFonts.ibmPlexSansArabic(
+                                                  fontSize: 12,
+                                                  color: Colors.black87,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                   ],
@@ -2182,7 +2178,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     IconData? icon,
     required VoidCallback? onTap,
     bool loading = false,
+    bool enabled = true, // ✅ جديد
   }) {
+    final bool isDisabled = !enabled || loading || onTap == null;
+
     final child = loading
         ? const SizedBox(
             height: 22,
@@ -2214,15 +2213,21 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       width: double.infinity,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [appColors.primary, appColors.mint],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
+          gradient: isDisabled
+              ? LinearGradient(
+                  colors: [Colors.grey.shade400, Colors.grey.shade400],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                )
+              : const LinearGradient(
+                  colors: [appColors.primary, appColors.mint],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
           borderRadius: BorderRadius.circular(14),
         ),
         child: InkWell(
-          onTap: onTap,
+          onTap: isDisabled ? null : onTap, // ✅ يمنع الضغط
           borderRadius: BorderRadius.circular(14),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),

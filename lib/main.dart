@@ -9,8 +9,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:Nameer/services/connection.dart';
-import 'services/background_tracker.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 
 import 'services/launch_decider.dart';
 import 'services/firebase_options.dart';
@@ -20,6 +19,8 @@ import 'admin_home.dart';
 import '../services/app_colors.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:Nameer/services/connection.dart';
+import 'services/background_tracker.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -93,13 +94,18 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     print('❌ خطأ أثناء جلب التوكن: $e');
   }
 }
-/* ======================= تهيئة ======================= */
 
+/* ======================= تهيئة ======================= */
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // ✅ App Check (للتطوير استخدمي debug)
+  await FirebaseAppCheck.instance.activate(
+    androidProvider: AndroidProvider.debug, // <-- Dev
+    // androidProvider: AndroidProvider.playIntegrity, // <-- Prod لاحقاً
+  );
   // تتبّع الخلفية (نفعّله قبل runApp)
   await BackgroundTracker.initialize();
   // الإشعارات المحلية + FCM

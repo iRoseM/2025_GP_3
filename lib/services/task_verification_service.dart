@@ -60,6 +60,36 @@ class TaskVerificationResult {
     );
   }
 
+  TaskVerificationResult copyWith({
+    bool? success,
+    int? taskId,
+    String? taskName,
+    String? taskNameAr,
+    double? confidence,
+    String? confidencePercent,
+    bool? verified,
+    bool? matchesExpected,
+    String? verificationSource,
+    String? extractedText,
+    String? error,
+    Map<String, double>? allPredictions,
+  }) {
+    return TaskVerificationResult(
+      success: success ?? this.success,
+      taskId: taskId ?? this.taskId,
+      taskName: taskName ?? this.taskName,
+      taskNameAr: taskNameAr ?? this.taskNameAr,
+      confidence: confidence ?? this.confidence,
+      confidencePercent: confidencePercent ?? this.confidencePercent,
+      verified: verified ?? this.verified,
+      matchesExpected: matchesExpected ?? this.matchesExpected,
+      verificationSource: verificationSource ?? this.verificationSource,
+      extractedText: extractedText ?? this.extractedText,
+      error: error ?? this.error,
+      allPredictions: allPredictions ?? this.allPredictions,
+    );
+  }
+
   @override
   String toString() {
     if (!success) return 'Error: $error';
@@ -71,80 +101,163 @@ class TaskVerificationService {
   static const String _baseUrl =
       'https://verify-tasks-188455017517.us-central1.run.app';
 
+  static bool _debugMode = true;
+
+  static void _log(String message) {
+    if (_debugMode) {
+      print('🔍 [TaskVerification] $message');
+    }
+  }
+
   /// 🔹 MAIN METHOD (Vision + OCR fallback)
   static Future<TaskVerificationResult> verifyWithOCRFallback(
     File imageFile, {
     String? expectedTask,
-    double visionThreshold = 0.7,
+    double visionThreshold = 0.6,
   }) async {
-    // 1️⃣ Vision first
-    final visionResult = await verifyFromFile(
-      imageFile,
-      expectedTask: expectedTask,
-    );
+    try {
+      _log('🚀 بدء عملية التحقق التلقائي');
+      _log('📋 المهمة المتوقعة/المقترحة: $expectedTask');
 
-    // 2️⃣ If vision confidence is good → accept
-    if (visionResult.success &&
-        visionResult.confidence != null &&
-        visionResult.confidence! >= visionThreshold) {
-      return visionResult;
-    }
+      // 1️⃣ محاولة Vision API أولاً
+      _log('👁️ جاري استدعاء Vision API...');
+      final visionResult = await verifyFromFile(
+        imageFile,
+        expectedTask: expectedTask,
+      );
 
-    // 3️⃣ OCR fallback
-    final extractedText = await OCRService.extractTextFromFile(imageFile);
+      _log('✅ نتيجة Vision API:');
+      _log('   - النجاح: ${visionResult.success}');
+      _log('   - المهمة: ${visionResult.taskName}');
+      _log('   - الثقة: ${visionResult.confidence}');
+      _log('   - تم التحقق: ${visionResult.verified}');
 
-    // Debug: طباعة النص المستخرج
-    print('📝 النص المستخرج: $extractedText');
+      // إذا كانت نتيجة Vision جيدة بما يكفي، نقبلها
+      if (visionResult.success &&
+          visionResult.verified == true &&
+          visionResult.confidence != null &&
+          visionResult.confidence! >= visionThreshold) {
+        _log('🎯 تم القبول من Vision API');
+        return visionResult.copyWith(
+          verificationSource: 'vision',
+          extractedText: visionResult.extractedText,
+        );
+      }
 
-    if (extractedText.isEmpty) {
+      _log('⚠️  Vision API غير كافي، جاري محاولة OCR...');
+
+      // 2️⃣ محاولة OCR
+      _log('🔤 جاري استخراج النص من OCR...');
+      final extractedText = await OCRService.extractTextFromFile(imageFile);
+      _log('📝 النص المستخرج: "$extractedText"');
+
+      if (extractedText.isEmpty) {
+        _log('❌ لم يتم العثور على نص في الصورة');
+        return TaskVerificationResult(
+          success: false,
+          error: 'لا يمكن قراءة النص في الصورة',
+          verificationSource: 'ocr',
+          extractedText: extractedText,
+        );
+      }
+
+      // 3️⃣ محاولة التعرف على المهمة من النص
+      final ocrTask = OCRTaskMapper.mapTextToCategory(
+        extractedText,
+      ); // ✅ صح      _log('🗂️ المهمة المقترحة من OCR: $ocrTask');
+
+      // إذا لم يكن هناك مهمة متوقعة، نستخدم المهمة من OCR
+      final taskToVerify = expectedTask ?? ocrTask;
+      _log('🔍 المهمة للمقارنة: $taskToVerify');
+      _log('🔤 النص الخام: "$extractedText"');
+
+      if (taskToVerify == null) {
+        _log('❌ لا يمكن تحديد المهمة');
+        return TaskVerificationResult(
+          success: false,
+          error: 'لم يتم التعرف على المهمة',
+          verificationSource: 'ocr',
+          extractedText: extractedText,
+        );
+      }
+
+      // 4️⃣ تحقق من تطابق المهمة
+      final normalizedTask = _normalizeTaskName(taskToVerify);
+      final normalizedOcrTask = _normalizeTaskName(ocrTask);
+
+      _log('🔍 المقارنة:');
+      _log('   - المهمة المقترحة: $normalizedOcrTask');
+      _log('   - المهمة المتوقعة: $normalizedTask');
+
+      final bool verified;
+      if (expectedTask == null) {
+        // إذا لم يكن هناك مهمة متوقعة، نقبل المهمة من OCR
+        verified = ocrTask != null;
+        _log('📌 لا توجد مهمة متوقعة، نقبل المهمة من OCR: $verified');
+      } else {
+        // إذا كانت هناك مهمة متوقعة، نقارن
+        verified =
+            normalizedOcrTask != null &&
+            normalizedTask != null &&
+            normalizedOcrTask == normalizedTask;
+        _log('📌 مقارنة مع المهمة المتوقعة: $verified');
+      }
+
+      _log('🎯 النتيجة النهائية: $verified');
+
+      return TaskVerificationResult(
+        success: verified,
+        taskName: ocrTask ?? taskToVerify,
+        taskNameAr: _getArabicTaskName(ocrTask ?? taskToVerify),
+        confidence: verified ? 0.85 : 0.4,
+        confidencePercent: verified ? '85%' : '40%',
+        verified: verified,
+        matchesExpected: expectedTask != null ? verified : null,
+        verificationSource: 'ocr',
+        extractedText: extractedText,
+      );
+    } catch (e, stackTrace) {
+      _log('💥 خطأ في verifyWithOCRFallback: $e');
+      _log('📋 Stack Trace: $stackTrace');
+
       return TaskVerificationResult(
         success: false,
-        error: 'فشل التحقق: لا يوجد نص واضح في الصورة',
-        verificationSource: 'ocr',
+        error: 'فشل في عملية التحقق: $e',
+        verificationSource: 'system',
       );
     }
-
-    final ocrTask = OCRTaskMapper.mapTaskToCategory(extractedText);
-
-    // تحويل التوقعات المتوقعة إلى تنسيق قياسي للمقارنة
-    final normalizedExpected = _normalizeTaskName(expectedTask);
-    final normalizedOcrTask = _normalizeTaskName(ocrTask);
-
-    final verified = ocrTask != null && normalizedOcrTask == normalizedExpected;
-
-    print('🔍 المقارنة: $normalizedOcrTask == $normalizedExpected → $verified');
-
-    return TaskVerificationResult(
-      success: verified,
-      taskName: ocrTask,
-      taskNameAr: _getArabicTaskName(ocrTask), // ترجمة للعربية للعرض
-      confidence: verified ? 0.8 : 0.3,
-      confidencePercent: verified ? '80%' : '30%',
-      verified: verified,
-      matchesExpected: verified,
-      verificationSource: 'ocr',
-      extractedText: extractedText,
-    );
   }
 
-  /// دالة لتوحيد أسماء المهام
+  /// دالة لتوحيد أسماء المهام - النسخة المحسنة
   static String? _normalizeTaskName(String? taskName) {
     if (taskName == null) return null;
 
-    final t = taskName.toLowerCase();
+    final t = taskName.toLowerCase().trim();
 
-    if (t.contains('plastic') || t.contains('بلاست')) return 'plastic';
-    if (t.contains('paper') || t.contains('ورق')) return 'paper';
-    if (t.contains('food') || t.contains('طعام') || t.contains('عضوي'))
+    // إزالة مسافات زائدة وتوحيد النص
+    final cleaned = t.replaceAll(RegExp(r'\s+'), ' ');
+
+    if (cleaned.contains('plastic') || cleaned.contains('بلاست'))
+      return 'plastic';
+    if (cleaned.contains('paper') || cleaned.contains('ورق')) return 'paper';
+    if (cleaned.contains('food') ||
+        cleaned.contains('طعام') ||
+        cleaned.contains('عضوي') ||
+        cleaned.contains('bread'))
       return 'food';
-    if (t.contains('cloth') || t.contains('ملابس')) return 'cloth';
-    if (t.contains('metro') || t.contains('مترو')) return 'metro';
-    if (t.contains('bus') || t.contains('باص')) return 'bus';
-    if (t.contains('bicycle') || t.contains('دراجة')) return 'bicycle';
-    if (t.contains('scooter') || t.contains('سكوتر')) return 'scooter';
-    if (t.contains('rvm') || t.contains('تدوير')) return 'rvm';
+    if (cleaned.contains('cloth') ||
+        cleaned.contains('ملابس') ||
+        cleaned.contains('clothes'))
+      return 'cloth';
+    if (cleaned.contains('metro') || cleaned.contains('مترو')) return 'metro';
+    if (cleaned.contains('bus') || cleaned.contains('باص')) return 'bus';
+    if (cleaned.contains('bicycle') || cleaned.contains('دراجة'))
+      return 'bicycle';
+    if (cleaned.contains('scooter') || cleaned.contains('سكوتر'))
+      return 'scooter';
+    if (cleaned.contains('rvm') || cleaned.contains('تدوير')) return 'rvm';
 
-    return taskName;
+    return cleaned;
   }
 
   /// دالة للحصول على الاسم العربي
