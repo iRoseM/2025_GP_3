@@ -189,77 +189,84 @@ exports.getMapsKey = onCall((request) => {
 
   // 🎯 نرجع الكي للعميل بدون ما يكون مكتوب في الكود
   return { apiKey };
-});/* ============================================================
- * 🔔 Reminder: باقي يوم على المهمة (scheduledTasks.scheduledFor)
+});const { DateTime } = require("luxon");
+
+/* ============================================================
+ * 🔔 Immediate Trigger: "بكره" reminder عند إنشاء/تحديث scheduledTasks
+ * - Runs on create/update
+ * - Checks if scheduledFor is TOMORROW in Asia/Riyadh AND status == scheduled
+ * - Prevents duplicates via stable notifId
  * ============================================================ */
-exports.sendOneDayReminderForScheduledTasks = functions
+exports.sendImmediateTomorrowReminderOnScheduledTaskWrite = functions
   .region("us-central1")
-  .pubsub.schedule("0 9 * * *") // 9:00 AM
-  .timeZone("Asia/Riyadh")
-  .onRun(async () => {
+  .firestore.document("scheduledTasks/{scheduledTaskId}")
+  .onWrite(async (change, context) => {
+    // deleted
+    if (!change.after.exists) return null;
+
     const db = admin.firestore();
-    const now = new Date();
+    const docId = context.params.scheduledTaskId;
 
-    // بكرة من 00:00 إلى 23:59
-    const startTomorrow = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 1,
-      0, 0, 0, 0
-    );
-    const endTomorrow = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 1,
-      23, 59, 59, 999
-    );
+    const afterData = change.after.data() || {};
+    const beforeData = change.before.exists ? (change.before.data() || {}) : null;
 
-    const startTs = admin.firestore.Timestamp.fromDate(startTomorrow);
-    const endTs = admin.firestore.Timestamp.fromDate(endTomorrow);
+    // ✅ لازم يكون فيها userId + scheduledFor
+    const userId = afterData.userId;
+    if (!userId) return null;
 
-    // ✅ نجيب المهام المجدولة لبكرة فقط
-    const snapshot = await db
-      .collection("scheduledTasks")
-      .where("scheduledFor", ">=", startTs)
-      .where("scheduledFor", "<=", endTs)
-      .get();
+    const ts = afterData.scheduledFor;
+    if (!ts || typeof ts.toDate !== "function") return null;
 
-    if (snapshot.empty) return null;
+    // ✅ فقط scheduled
+    if ((afterData.status || "").toLowerCase() !== "scheduled") return null;
 
-    const pad = (n) => String(n).padStart(2, "0");
-    const ymd = `${startTomorrow.getFullYear()}${pad(startTomorrow.getMonth() + 1)}${pad(startTomorrow.getDate())}`;
+    // ✅ لو ما تغير شيء مهم (status/scheduledFor) وما هي إنشاء جديد، تجاهل لتقليل التنفيذ
+    const isCreate = !change.before.exists;
+    const scheduledForChanged =
+      !beforeData || !beforeData.scheduledFor || beforeData.scheduledFor.toMillis?.() !== ts.toMillis?.();
+    const statusChanged =
+      !beforeData || (beforeData.status || "").toLowerCase() !== (afterData.status || "").toLowerCase();
 
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
-      const userId = data.userId;
-      if (!userId) continue;
+    if (!isCreate && !scheduledForChanged && !statusChanged) return null;
 
-      // ✅ فقط اللي حالتها scheduled (وتجاهل غيرها)
-      if ((data.status || "").toLowerCase() !== "scheduled") continue;
+    // ===== حساب "بكره" بتوقيت الرياض =====
+    const nowRiyadh = DateTime.now().setZone("Asia/Riyadh");
+    const startTomorrow = nowRiyadh.plus({ days: 1 }).startOf("day");
+    const endTomorrow = nowRiyadh.plus({ days: 1 }).endOf("day");
 
-      const taskTitle = data.taskTitle || "مهمة";
+    // موعد المهمة بتوقيت الرياض
+    const scheduledForRiyadh = DateTime.fromJSDate(ts.toDate()).setZone("Asia/Riyadh");
 
-      // ✅ DocId ثابت يمنع التكرار
-      const notifId = `rem1d_sched_${doc.id}_${ymd}`;
-      const notifRef = db.collection("notifications").doc(notifId);
+    // ✅ لازم تكون المهمة داخل يوم "بكره" (كتاريخ)
+    const isTomorrow =
+      scheduledForRiyadh >= startTomorrow && scheduledForRiyadh <= endTomorrow;
 
-      const exists = await notifRef.get();
-      if (exists.exists) continue;
+    if (!isTomorrow) return null;
 
-      await notifRef.set({
-        type: "scheduled_task_one_day_reminder",
-        userId,
-        scheduledTaskId: doc.id,
-        taskId: data.taskId || null,
-        taskTitle,
+    // ✅ ymd ثابت لليوم (بكره) لمنع التكرار
+    const ymd = startTomorrow.toFormat("yyyyLLdd");
 
-        title: "تذكير ⏳",
-        body: `لا تنسى مهمتك "${taskTitle}"، بكره موعدها 🌿`,
+    const taskTitle = afterData.taskTitle || "مهمة";
 
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        seen: false,
-      });
-    }
+    const notifId = `rem1d_sched_${docId}_${ymd}`;
+    const notifRef = db.collection("notifications").doc(notifId);
+
+    const exists = await notifRef.get();
+    if (exists.exists) return null;
+
+    await notifRef.set({
+      type: "scheduled_task_one_day_reminder",
+      userId,
+      scheduledTaskId: docId,
+      taskId: afterData.taskId || null,
+      taskTitle,
+
+      title: "تذكير ⏳",
+      body: `لا تنسى مهمتك "${taskTitle}"، بكره موعدها 🌿`,
+
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      seen: false,
+    });
 
     return null;
   });
