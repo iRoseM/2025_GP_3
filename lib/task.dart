@@ -408,7 +408,11 @@ class _taskPageState extends State<taskPage> {
       final ts = doc.data()['scheduledFor'];
       if (ts is Timestamp) {
         final d = ts.toDate();
-        newSet.add(DateTime(d.year, d.month, d.day));
+        final today = _dayStart(DateTime.now());
+        final onlyDate = DateTime(d.year, d.month, d.day);
+        if (!onlyDate.isBefore(today)) {
+          newSet.add(onlyDate);
+        }
       }
     }
 
@@ -482,7 +486,7 @@ class _taskPageState extends State<taskPage> {
           'status': 'scheduled',
         });
       } else {
-        await schedCol.add({
+        final added = await schedCol.add({
           'userId': _uid,
           'taskId': taskId,
           'taskTitle': taskTitle,
@@ -490,6 +494,7 @@ class _taskPageState extends State<taskPage> {
           'createdAt': FieldValue.serverTimestamp(),
           'status': 'scheduled',
         });
+        existingScheduleDocId = added.id; // ✅ هذا المهم
       }
 
       // ✅ 3) (المهم) تحديث userTasks لنفس اليوم عشان الكرت تحت يتغير
@@ -521,6 +526,7 @@ class _taskPageState extends State<taskPage> {
         'status': 'pending',
         'completedAt': null,
         'isScheduled': true,
+        'scheduledDocId': existingScheduleDocId,
       }, SetOptions(merge: true));
 
       // 4) علّم اليوم عشان تظهر الأيقونة

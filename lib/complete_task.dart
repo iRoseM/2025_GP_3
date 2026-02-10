@@ -958,6 +958,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           }
 
           final ut = utSnap.data() as Map<String, dynamic>;
+          final schedId = (ut['scheduledDocId'] as String?)?.trim();
+
           final currentStatus = (ut['status'] as String?) ?? 'pending';
           print('📊 حالة المهمة الحالية: $currentStatus');
 
@@ -1015,6 +1017,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
           print('📝 تحديث userTask...');
           trx.set(utRef, utUpdate, SetOptions(merge: true));
+          // ✅ إذا كانت المهمة مجدولة: حدّث scheduledTasks وخليها completed
+          if (schedId != null && schedId.isNotEmpty) {
+            final schedRef = FirebaseFirestore.instance
+                .collection('scheduledTasks')
+                .doc(schedId);
+
+            trx.set(schedRef, {
+              'status': 'completed',
+              'completedAt': FieldValue.serverTimestamp(),
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+          }
 
           // 4.3) زيادة نقاط المستخدم
           if (currentStatus != 'completed' && taskPoints > 0) {
