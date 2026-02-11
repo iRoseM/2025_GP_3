@@ -110,119 +110,74 @@ class TaskVerificationService {
   }
 
   /// 🔹 MAIN METHOD (Vision + OCR fallback)
-  static Future<TaskVerificationResult> verifyWithOCRFallback(
-    File imageFile, {
-    String? expectedTask,
+  /// ✅ الطريقة الجديدة - استبدلها كلها
+  static Future<TaskVerificationResult> verifyTaskWithTitle({
+    required File imageFile,
+    required String taskTitle, // 🔴 من Firebase
+    required String taskDescription, // 🔴 من Firebase
     double visionThreshold = 0.6,
   }) async {
     try {
-      _log('🚀 بدء عملية التحقق التلقائي');
-      _log('📋 المهمة المتوقعة/المقترحة: $expectedTask');
+      _log('🚀 بدء التحقق باستخدام عنوان التاسك: "$taskTitle"');
 
-      // 1️⃣ محاولة Vision API أولاً
-      _log('👁️ جاري استدعاء Vision API...');
+      // 1️⃣ محاولة Vision API
       final visionResult = await verifyFromFile(
         imageFile,
-        expectedTask: expectedTask,
+        expectedTask: taskTitle, // نرسله كامل
       );
 
-      _log('✅ نتيجة Vision API:');
-      _log('   - النجاح: ${visionResult.success}');
-      _log('   - المهمة: ${visionResult.taskName}');
-      _log('   - الثقة: ${visionResult.confidence}');
-      _log('   - تم التحقق: ${visionResult.verified}');
-
-      // إذا كانت نتيجة Vision جيدة بما يكفي، نقبلها
       if (visionResult.success &&
           visionResult.verified == true &&
           visionResult.confidence != null &&
           visionResult.confidence! >= visionThreshold) {
-        _log('🎯 تم القبول من Vision API');
-        return visionResult.copyWith(
-          verificationSource: 'vision',
-          extractedText: visionResult.extractedText,
-        );
+        return visionResult.copyWith(verificationSource: 'vision');
       }
 
-      _log('⚠️  Vision API غير كافي، جاري محاولة OCR...');
-
-      // 2️⃣ محاولة OCR
-      _log('🔤 جاري استخراج النص من OCR...');
+      // 2️⃣ OCR: أي كلمة من العنوان تطابق؟
       final extractedText = await OCRService.extractTextFromFile(imageFile);
       _log('📝 النص المستخرج: "$extractedText"');
 
       if (extractedText.isEmpty) {
-        _log('❌ لم يتم العثور على نص في الصورة');
         return TaskVerificationResult(
           success: false,
-          error: 'لا يمكن قراءة النص في الصورة',
+          error: 'لا يوجد نص في الصورة',
           verificationSource: 'ocr',
           extractedText: extractedText,
         );
       }
 
-      // 3️⃣ محاولة التعرف على المهمة من النص
-      final ocrTask = OCRTaskMapper.mapTextToCategory(
-        extractedText,
-      ); // ✅ صح      _log('🗂️ المهمة المقترحة من OCR: $ocrTask');
+      // 3️⃣ البحث عن أي كلمة من عنوان المهمة
+      final lowerExtracted = extractedText.toLowerCase();
+      final lowerTitle = taskTitle.toLowerCase();
+      final titleWords = lowerTitle.split(RegExp(r'\s+'));
 
-      // إذا لم يكن هناك مهمة متوقعة، نستخدم المهمة من OCR
-      final taskToVerify = expectedTask ?? ocrTask;
-      _log('🔍 المهمة للمقارنة: $taskToVerify');
-      _log('🔤 النص الخام: "$extractedText"');
-
-      if (taskToVerify == null) {
-        _log('❌ لا يمكن تحديد المهمة');
-        return TaskVerificationResult(
-          success: false,
-          error: 'لم يتم التعرف على المهمة',
-          verificationSource: 'ocr',
-          extractedText: extractedText,
-        );
+      final matchedWords = <String>[];
+      for (final word in titleWords) {
+        if (word.length > 2 && lowerExtracted.contains(word)) {
+          matchedWords.add(word);
+        }
       }
 
-      // 4️⃣ تحقق من تطابق المهمة
-      final normalizedTask = _normalizeTaskName(taskToVerify);
-      final normalizedOcrTask = _normalizeTaskName(ocrTask);
+      final isValid = matchedWords.isNotEmpty; // ✅ كلمة واحدة تكفي!
 
-      _log('🔍 المقارنة:');
-      _log('   - المهمة المقترحة: $normalizedOcrTask');
-      _log('   - المهمة المتوقعة: $normalizedTask');
-
-      final bool verified;
-      if (expectedTask == null) {
-        // إذا لم يكن هناك مهمة متوقعة، نقبل المهمة من OCR
-        verified = ocrTask != null;
-        _log('📌 لا توجد مهمة متوقعة، نقبل المهمة من OCR: $verified');
-      } else {
-        // إذا كانت هناك مهمة متوقعة، نقارن
-        verified =
-            normalizedOcrTask != null &&
-            normalizedTask != null &&
-            normalizedOcrTask == normalizedTask;
-        _log('📌 مقارنة مع المهمة المتوقعة: $verified');
-      }
-
-      _log('🎯 النتيجة النهائية: $verified');
+      _log('📊 النتيجة: ${isValid ? "✅ صح" : "❌ خطأ"}');
+      _log('   - كلمات مطابقة: $matchedWords');
 
       return TaskVerificationResult(
-        success: verified,
-        taskName: ocrTask ?? taskToVerify,
-        taskNameAr: _getArabicTaskName(ocrTask ?? taskToVerify),
-        confidence: verified ? 0.85 : 0.4,
-        confidencePercent: verified ? '85%' : '40%',
-        verified: verified,
-        matchesExpected: expectedTask != null ? verified : null,
+        success: isValid,
+        taskName: taskTitle, // نرسل العنوان الأصلي
+        taskNameAr: taskTitle, // أو ممكن تستخرج أول كلمة
+        confidence: isValid ? 0.85 : 0.4,
+        confidencePercent: isValid ? '85%' : '40%',
+        verified: isValid,
+        matchesExpected: isValid,
         verificationSource: 'ocr',
         extractedText: extractedText,
       );
-    } catch (e, stackTrace) {
-      _log('💥 خطأ في verifyWithOCRFallback: $e');
-      _log('📋 Stack Trace: $stackTrace');
-
+    } catch (e) {
       return TaskVerificationResult(
         success: false,
-        error: 'فشل في عملية التحقق: $e',
+        error: 'فشل التحقق: $e',
         verificationSource: 'system',
       );
     }

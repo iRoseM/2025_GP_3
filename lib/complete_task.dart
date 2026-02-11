@@ -42,20 +42,32 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   bool _openingCamera = false;
   bool _isCapturing = false;
   bool _isUploading = false;
+  bool _isCompleted = false;
   bool _isAiApproved(TaskVerificationResult? r) {
-    if (r?.success != true) return false;
-    if (r?.verified != true) return false;
+    // 1) لابد يكون في Result والتحقق ناجح
+    if (r == null) return false;
+    if (r.success != true) return false;
+    if (r.verified != true) return false;
 
-    final conf = (r?.confidence ?? 0.0);
+    // 2) الثقة لا تقل عن 70%
+    final conf = r.confidence ?? 0.0;
+    if (conf < 0.70) return false;
 
-    // لو المودل قال صراحةً "غير مطابق" نرفض مهما كان الكونفدنس
-    if (r?.matchesExpected == false) return false;
+    // 3) إذا كان OCR نعتمد على الثقة فقط
+    if (r.verificationSource == 'ocr_smart') {
+      return true; // الثقة فوق 70% ✅
+    }
 
-    // لو matchesExpected == true → نعتمد بعتبة 0.70
-    if (r?.matchesExpected == true) return conf >= 0.70;
+    // 4) إذا كان المودل - نتحقق من المنطقية
+    if (r.verificationSource == 'vision' || r.verificationSource == null) {
+      final isLogical = OCRService.isModelResultValid(
+        r.taskName,
+        widget.taskData['title']?.toString() ?? '',
+      );
+      return isLogical; // المنطقية كافية لأن الثقة فوق 70% ✅
+    }
 
-    // لو matchesExpected == null →
-    return conf >= 0.70; // نستخدم نفس الحد الأدنى للتأكد من أن الصورة مطابقة
+    return false;
   }
 
   String _dayId(DateTime dt) {
@@ -91,44 +103,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   // ✅ متغيرات التحقق بالـ AI
   TaskVerificationResult? _verificationResult;
   bool _isVerifying = false;
-  String _verificationBlockReason(TaskVerificationResult? r) {
-    if (_isVerifying) {
-      return 'جاري التحقق من الصورة الآن… انتظر قليلًا ثم أعد المحاولة.';
-    }
-
-    if (r == null) {
-      return 'لم يتم التحقق من الصورة بعد. اضغط "التقاط صورة" أو أعد الالتقاط ليبدأ التحقق.';
-    }
-
-    if (r.success != true) {
-      // لو عندك r.error عبيها داخل TaskVerificationResult
-      final err = (r.error ?? '').toString().trim();
-      return err.isNotEmpty
-          ? 'فشل التحقق: $err'
-          : 'فشل التحقق من الصورة. تأكد من الاتصال وحاول إعادة الالتقاط.';
-    }
-
-    if (r.verified != true) {
-      // إذا عندك matchesExpected
-      if (r.matchesExpected == false) {
-        final expected =
-            (OCRTaskMapper.mapTaskToCategory(widget.taskData) ??
-            'المهمة المطلوبة');
-        final got = (r.taskNameAr ?? r.taskName ?? 'غير معروف');
-        return 'الصورة غير مطابقة للمهمة.\nالمطلوب: $expected\nالمكتشف: $got\nأعد الالتقاط بصورة أوضح.';
-      }
-
-      return 'لم يتم اعتماد الصورة. حاول إعادة الالتقاط بإضاءة أفضل وإظهار العنصر بشكل واضح.';
-    }
-
-    // هنا verified = true لكن ممكن كونفدنس أقل من الحد
-    final conf = (r.confidence ?? 0.0);
-    if (r.matchesExpected == true && conf < 0.70) {
-      return 'التطابق موجود لكن الثقة منخفضة (${r.confidencePercent ?? ''}). التقط صورة أوضح.';
-    }
-
-    return '';
-  }
 
   Map<String, dynamic> get _calcRequires {
     final v = widget.taskData['calc_requires'];
@@ -334,160 +308,169 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
 
     try {
-      final expectedTask = OCRTaskMapper.mapTaskToCategory(widget.taskData);
-      print('🔍 بدء التحقق بالـ AI');
+      // استخراج عنوان المهمة
+      final taskTitle = widget.taskData['title']?.toString() ?? '';
+      print('🔍 التحقق باستخدام العنوان: "$taskTitle"');
 
-      // 1️⃣ أولاً: جرب مودل Cloud Run (الخاص بك)
-      print('🔄 جرب مودل Cloud Run أولاً...');
-      final cloudResult = await _tryCloudModelFirst(imagePath, expectedTask);
+      // 1️⃣ ✅ جرب المودل أولاً
+      final cloudResult = await _tryCloudModelFirst(imagePath, taskTitle);
 
+      // 2️⃣ استخرج النص من الصورة (للـ OCR)
+      final extractedText = await OCRService.extractTextFromFile(
+        File(imagePath),
+      );
+      print('📝 النص المستخرج: "$extractedText"');
+
+      // 3️⃣ تحقق من صحة المودل باستخدام OCRService
+      final isModelLogical = OCRService.isModelResultValid(
+        cloudResult?.taskName,
+        taskTitle,
+      );
+
+      final doesImageMatch = OCRService.doesImageMatchTask(
+        extractedText,
+        taskTitle,
+      );
+      print('📌 doesImageMatch: $doesImageMatch');
+
+      TaskVerificationResult finalResult;
+
+      // 4️⃣ القرار الذكي
       if (cloudResult != null &&
           cloudResult.success == true &&
-          _isAiApproved(cloudResult)) {
-        print('✅ Cloud Run معتمد، بدء الرفع...');
+          isModelLogical) {
+        // ✅ المودل منطقي → نثق فيه
+        finalResult = cloudResult.copyWith(
+          verificationSource: 'vision', // 👈 أضف هذا!
+        );
+        print('✅ المودل منطقي، نعتمد نتيجته');
+      } else {
+        // ⚠️ المودل غير منطقي → نعتمد OCR
+        print('⚠️ المودل غير منطقي، نعتمد OCR');
+        finalResult = TaskVerificationResult(
+          success: doesImageMatch,
+          taskName: taskTitle,
+          taskNameAr: OCRService.extractArabicTitle(
+            taskTitle,
+          ), // ✅ استخدام OCRService
+          confidence: doesImageMatch ? 0.85 : 0.0,
+          confidencePercent: doesImageMatch ? '85%' : '0%',
+          verified: doesImageMatch,
+          matchesExpected: doesImageMatch,
+          verificationSource: 'ocr_smart',
+          extractedText: extractedText,
+        );
+      }
 
-        if (mounted) {
-          setState(() {
-            _verificationResult = cloudResult;
-            _isVerifying = false;
-          });
-        }
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _uploadAndComplete();
-          }
+      // 5️⃣ تحديث الحالة
+      if (mounted) {
+        setState(() {
+          _verificationResult = finalResult;
+          _isVerifying = false;
         });
-
-        return cloudResult;
       }
 
-      print('⚠️ Cloud Run غير كافي، جرب الـ OCR...');
+      // 6️⃣ إذا كان صحيح، ابدأ الرفع
+      if (finalResult.verified == true) {
+        print('✅ تم التحقق بنجاح');
+        WidgetsBinding.instance.endOfFrame.then((_) {
+          if (mounted) _uploadAndComplete();
+        });
+      } else {
+        _showInlineError('❌ الصورة غير مطابقة للمهمة');
 
-      // 2️⃣ إذا فشل Cloud Run، جرب الـ OCR
-      print('🔄 جرب الـ OCR...');
-      final ocrText = await OCRService.extractTextFromFile(File(imagePath));
-      print('📝 النص المقروء من OCR: "$ocrText"');
-
-      if (ocrText.isNotEmpty) {
-        final detectedTask = OCRTaskMapper.mapTextToCategory(ocrText);
-        print('🗂️ الفئة المكتشفة من OCR: "$detectedTask"');
-
-        if (detectedTask != null && expectedTask != null) {
-          final matches = detectedTask == expectedTask;
-
-          // 🔧 استدعاء دقة OCR من الـ Service
-          final smartOCRConfidence = OCRService.calculateOCRConfidence(
-            ocrText: ocrText,
-            detectedTask: detectedTask,
-            expectedTask: expectedTask,
-          );
-
-          final ocrResult = TaskVerificationResult(
-            success: true,
-            taskName: detectedTask,
-            taskNameAr: _getArabicTaskName(detectedTask),
-            confidence: smartOCRConfidence,
-            confidencePercent: '${(smartOCRConfidence * 100).toInt()}%',
-            verified: matches,
-            matchesExpected: matches,
-            verificationSource: 'ocr',
-            extractedText: ocrText,
-            error: null,
-            allPredictions: null,
-          );
-
-          if (mounted) {
-            setState(() {
-              _verificationResult = ocrResult;
-              _isVerifying = false;
-            });
-          }
-
-          if (matches && smartOCRConfidence >= 0.70) {
-            print(
-              '✅ OCR مطابق ودقيق (${(smartOCRConfidence * 100).toInt()}%)، بدء الرفع...',
-            );
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                _uploadAndComplete();
-              }
-            });
-            return ocrResult;
-          } else {
-            print('⚠️ OCR غير كافي، عرض رسالة خطأ...');
-            final reason = 'فشل التحقق. حاول إعادة الالتقاط بصورة أوضح.';
-            _showInlineError(reason);
-            return TaskVerificationResult(success: false, error: reason);
-          }
-        }
+        // ✅ أضيفي هذا - يظهر popup نمّر زعلان
+        WidgetsBinding.instance.endOfFrame.then((_) {
+          if (mounted) showTaskFailedDialogAndRedirect(context);
+        });
       }
 
-      print('❌ فشل كل من Cloud Run وOCR');
-      final finalError = 'لم نتمكن من التحقق من الصورة. حاول مرة أخرى.';
-      _showInlineError(finalError);
-
-      return TaskVerificationResult(success: false, error: finalError);
+      return finalResult;
     } catch (e) {
-      print('❌ خطأ في التحقق: $e');
+      print('❌ خطأ: $e');
       if (mounted) {
         setState(() => _isVerifying = false);
-        _showInlineError('فشل التحقق من الصورة: ${_friendlyError(e)}');
+        _showInlineError('❌ فشل التحقق من الصورة');
       }
+      return TaskVerificationResult(
+        success: false,
+        error: 'فشل التحقق: $e',
+        verificationSource: 'system',
+      );
+    }
+  }
+
+  // دالة مساعدة لعرض جزء من العنوان في رسالة الخطأ
+  // ✅ استخدم هذا بدل _extractMeaningfulTitle
+  String _getDisplayTaskName(TaskVerificationResult? result, String taskTitle) {
+    if (result?.taskNameAr != null && result!.taskNameAr!.isNotEmpty) {
+      return result.taskNameAr!;
+    }
+    // استخدام دالة OCRService الذكية
+    return OCRService.extractArabicTitle(taskTitle);
+  }
+
+  // 🗑️ احذف _extractMeaningfulTitle بالكامل
+  // 🗑️ احذف _stopWords (موجودة في OCRService)
+  // 🗑️ احذف _getArabicTaskName (موجودة في OCRService)
+  Future<TaskVerificationResult?> _tryCloudModelFirst(
+    String imagePath,
+    String taskTitle,
+  ) async {
+    print('🔵 === استدعاء مودل Cloud Run ===');
+
+    try {
+      final modelResult = await TaskVerificationService.verifyFromFile(
+        File(imagePath),
+        expectedTask: taskTitle,
+        threshold: 0.7,
+      );
+
+      // 🔴 أضف هذا - لازم تشوف النتيجة!
+      print('📥 نتيجة Cloud Run:');
+      print('   - Success: ${modelResult.success}');
+      print('   - Verified: ${modelResult.verified}');
+      print('   - Confidence: ${modelResult.confidence}');
+      print('   - Task: ${modelResult.taskName}');
+      print('   - Error: ${modelResult.error}');
+
+      return modelResult;
+    } catch (e, stack) {
+      print('❌ خطأ في Cloud Run: $e');
+      print('📋 Stack: $stack');
       return null;
     }
   }
 
-  Future<TaskVerificationResult?> _tryCloudModelFirst(
-    String imagePath,
-    String? expectedTask,
-  ) async {
-    print('🔵 === بدء استدعاء مودل Cloud Run (الخاص بك) ===');
-    print('🔗 الرابط: https://verify-tasks-188455017517.us-central1.run.app');
-    print('📁 الصورة: $imagePath');
-    print('🎯 المهمة المتوقعة: $expectedTask');
-
-    try {
-      print('📤 إرسال طلب إلى Cloud Run...');
-      final modelResult = await TaskVerificationService.verifyFromFile(
-        File(imagePath),
-        expectedTask: expectedTask,
-        threshold: 0.7,
-      );
-
-      print('📥 استلمت النتيجة من Cloud Run:');
-      print('   - النجاح: ${modelResult.success}');
-      print('   - المهمة: ${modelResult.taskName}');
-      print('   - الثقة: ${modelResult.confidence}');
-      print('   - التحقق: ${modelResult.verified}');
-
-      return modelResult;
-    } catch (e, stackTrace) {
-      print('❌ خطأ في Cloud Run API: $e');
-      print('📋 Stack trace: $stackTrace');
-      return TaskVerificationResult(
-        success: false,
-        error: 'فشل الاتصال بمودل Cloud Run: ${_friendlyError(e)}',
-      );
-    }
-  }
-
   Future<void> _uploadAndComplete() async {
+    print('🚨🚨🚨 دخلنا _uploadAndComplete 🚨🚨🚨');
+
     // 1) التحقق من حالة الرفع والتحقق
+    print('📌 _isUploading: $_isUploading, _isVerifying: $_isVerifying');
     if (_isUploading || _isVerifying) {
       print('⚠️ العملية جارية بالفعل');
       return;
     }
 
     // 2) التأكد من وجود صورة
+    print('📌 _capturedPath: $_capturedPath');
     if (_capturedPath == null) {
       _showInlineError('لم يتم التقاط صورة');
+      print('❌ لا توجد صورة');
       return;
     }
 
     // 3) التحقق من صحة نتيجة الـ AI
+    print('📌 _verificationResult?.verified: ${_verificationResult?.verified}');
+    print('📌 _isAiApproved: ${_isAiApproved(_verificationResult)}');
     if (!_isAiApproved(_verificationResult)) {
       _showInlineError('لم يتم اعتماد الصورة. أعد الالتقاط.');
+      print('❌ الصورة غير معتمدة');
+      if (mounted) {
+        WidgetsBinding.instance.endOfFrame.then((_) {
+          if (mounted) showTaskFailedDialogAndRedirect(context);
+        });
+      }
       return;
     }
 
@@ -503,7 +486,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final mode = (task['calcMode'] ?? '').toString().toLowerCase();
 
     if (mode == 'deltaperitem' && (safeItems == null || safeItems <= 0)) {
-      // طلب عدد العناصر إذا لم يكن موجوداً
       print('📦 طلب عدد العناصر...');
       await _promptForItemCountIfNeeded();
       safeItems = _itemCount;
@@ -517,11 +499,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     if (!mounted) return;
     setState(() {
       _isUploading = true;
-      _isVerifying = false; // تأكد من إغلاق حالة التحقق
+      _isVerifying = false;
     });
 
     try {
       print('📐 حساب البيانات الإضافية...');
+
       // 7) حساب المسافة إذا كانت المهمة تتطلب ذلك
       final isDistanceMode = mode == 'perkm' || mode == 'deltaperkm';
       double? pickedKm;
@@ -592,6 +575,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       }
 
       print('☁️ بدء رفع الملف...');
+
       // 9) رفع الملف وإكمال المهمة
       await _createSubmissionAndAutoApprove(
         localPath: _capturedPath!,
@@ -603,6 +587,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       );
 
       print('✅ الرفع والإنجاز تم بنجاح!');
+
+      setState(() {
+        _isCompleted = true;
+      });
+
       // 10) عرض شاشة النجاح والتوجيه
       if (!mounted) return;
       await showTaskCompletedDialogAndRedirect(context);
@@ -624,7 +613,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
       if (!mounted) return;
 
-      // عرض رسالة خطأ أكثر تفصيلاً
       String errorMessage = 'حدث خطأ أثناء إكمال المهمة';
 
       if (e.toString().contains('FirebaseException') &&
@@ -644,7 +632,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
       _showInlineError(errorMessage);
 
-      // إعادة تعيين الحالة للسماح بإعادة المحاولة
       if (mounted) {
         setState(() {
           _isUploading = false;
@@ -958,8 +945,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           }
 
           final ut = utSnap.data() as Map<String, dynamic>;
-          final schedId = (ut['scheduledDocId'] as String?)?.trim();
-
           final currentStatus = (ut['status'] as String?) ?? 'pending';
           print('📊 حالة المهمة الحالية: $currentStatus');
 
@@ -1017,18 +1002,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
           print('📝 تحديث userTask...');
           trx.set(utRef, utUpdate, SetOptions(merge: true));
-          // ✅ إذا كانت المهمة مجدولة: حدّث scheduledTasks وخليها completed
-          if (schedId != null && schedId.isNotEmpty) {
-            final schedRef = FirebaseFirestore.instance
-                .collection('scheduledTasks')
-                .doc(schedId);
-
-            trx.set(schedRef, {
-              'status': 'completed',
-              'completedAt': FieldValue.serverTimestamp(),
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-          }
 
           // 4.3) زيادة نقاط المستخدم
           if (currentStatus != 'completed' && taskPoints > 0) {
@@ -1107,6 +1080,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       _capturedPath = null;
       _ready = false;
       _verificationResult = null; // ✅ إعادة تعيين نتيجة التحقق
+      _isCompleted = false;
     });
 
     try {
@@ -1519,52 +1493,43 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       );
     }
 
-    final isVerified = _verificationResult!.verified == true;
-    final matchesExpected = _verificationResult!.matchesExpected;
+    // ✅ إذا كان صحيح → ما نعرض شيء (خلاص)
+    if (_verificationResult!.verified == true) {
+      return const SizedBox.shrink();
+    }
 
+    // ❌ إذا كان خطأ → نعرض المربع البرتقالي فقط
     return Container(
       padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isVerified
-            ? Colors.green.withOpacity(0.1)
-            : Colors.orange.withOpacity(0.1),
+        color: Colors.orange.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isVerified ? Colors.green : Colors.orange),
+        border: Border.all(color: Colors.orange),
       ),
       child: Row(
         children: [
-          Icon(
-            isVerified ? Icons.check_circle : Icons.warning,
-            color: isVerified ? Colors.green : Colors.orange,
-          ),
+          const Icon(Icons.warning, color: Colors.orange, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'نوع المهمة: ${_verificationResult!.taskNameAr ?? "غير معروف"}',
+                  'الصورة غير مطابقة',
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontWeight: FontWeight.w600,
+                    color: Colors.orange,
                   ),
                 ),
+                const SizedBox(height: 4),
                 Text(
-                  'نسبة الثقة: ${_verificationResult!.confidencePercent ?? "0%"}',
+                  'يرجى إعادة التقاط صورة أوضح للمهمة',
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontSize: 13,
-                    color: Colors.black54,
+                    color: Colors.black87,
                   ),
                 ),
-                if (matchesExpected != null)
-                  Text(
-                    matchesExpected ? '✅ مطابق للمهمة' : '⚠️ غير مطابق للمهمة',
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 13,
-                      color: matchesExpected ? Colors.green : Colors.orange,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
               ],
             ),
           ),
@@ -1582,7 +1547,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final taskId = task['id'] as String?;
     final requiresPhotoExact = true;
     final isTransport = (_autoDistance || _isTransportTask);
-    final bool disableActions = _isVerifying || _isUploading;
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: DraggableScrollableSheet(
@@ -1879,7 +1844,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   const SizedBox(height: 12),
 
                   // ✅ عرض نتيجة التحقق بالـ AI
-                  if (_capturedPath != null) _buildVerificationResult(),
                   const SizedBox(height: 10),
                   if (_ready) ...[
                     if (_capturedPath == null)
@@ -1907,12 +1871,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
                                 if (shot != null) {
                                   setState(() => _capturedPath = shot.path);
-
-                                  // ✅ التحقق من الصورة بالـ AI تلقائياً
                                   await _verifyTaskImage(shot.path);
-
-                                  // ❌ تم إزالة السطر التالي لأننا لن نطلب عدد العناصر هنا
-                                  // await _promptForItemCountIfNeeded();
                                 }
                                 if (mounted)
                                   setState(() => _isCapturing = false);
@@ -1934,16 +1893,16 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                         loading: true,
                         onTap: null,
                       )
-                    else
+                    // في الـ build داخل else if (!_isCompleted)
+                    else if (!_isCompleted)
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // عرض نتيجة التحقق إذا كانت موجودة
                           if (_verificationResult != null)
-                            _buildVerificationResult(),
+                            _buildVerificationResult(), // ✅ المربع البرتقالي يظهر مرة واحدة فقط من هنا
                           const SizedBox(height: 16),
 
-                          // زر إعادة التقاط فقط
+                          // زر إعادة التقاط
                           OutlinedButton.icon(
                             icon: Icon(Icons.refresh, color: appColors.primary),
                             label: Text(
@@ -1974,71 +1933,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                               if (mounted) {
                                 setState(() {
                                   _capturedPath = null;
-                                  _verificationResult =
-                                      null; // ✅ إعادة تعيين نتيجة التحقق
+                                  _verificationResult = null;
                                   _isUploading = false;
                                   _isVerifying = false;
+                                  _isCompleted = false;
                                 });
                               }
                             },
                           ),
 
-                          // رسالة توجيهية إذا كانت الصورة غير معتمدة
-                          if (_verificationResult != null &&
-                              !_isAiApproved(_verificationResult))
-                            Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.orange),
-                                ),
-                                child: Column(
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.warning,
-                                          color: Colors.orange,
-                                          size: 18,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'الصورة غير معتمدة',
-                                          style: GoogleFonts.ibmPlexSansArabic(
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.orange,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      'يرجى إعادة التقاط صورة أوضح للمهمة',
-                                      style: GoogleFonts.ibmPlexSansArabic(
-                                        fontSize: 13,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                    if (_verificationResult?.taskNameAr != null)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4),
-                                        child: Text(
-                                          'المكتشف: ${_verificationResult!.taskNameAr!}',
-                                          style: GoogleFonts.ibmPlexSansArabic(
-                                            fontSize: 12,
-                                            color: Colors.black54,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                          // 🗑️ تم حذف المربع البرتقالي المكرر من هنا ❌
 
-                          // رسالة توجيهية إذا كانت الصورة معتمدة وجاري العملية
+                          // رسالة توجيهية إذا كانت الصورة معتمدة (المربع الأخضر فقط)
                           if (_verificationResult != null &&
                               _isAiApproved(_verificationResult) &&
                               !_isUploading)
@@ -2121,6 +2027,87 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         ),
         child: Text(text, textAlign: TextAlign.center),
       ),
+    );
+  }
+
+  Future<void> showTaskFailedDialogAndRedirect(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: SizedBox(
+            width: 340,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/img/nameerSad.png',
+                    height: 120,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'لم يتم التحقق', // نفس حجم الخط والتنسيق
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: appColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'يرجى إعادة التقاط الصورة مع:\n• إضاءة مناسبة\n• وضوح العنصر\n• زاوية تصوير جيدة',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: appColors.dark,
+                      height: 1.6,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Center(
+                    child: SizedBox(
+                      width: 140, // 👈 نفس عرض الزر 140
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: appColors.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 10, // 👈 نفس الـ padding
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                        },
+                        child: Text(
+                          'حسناً',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16, // 👈 نفس حجم الخط
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
