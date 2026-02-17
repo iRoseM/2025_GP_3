@@ -876,7 +876,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     print('📦 بدء عملية الإنجاز...');
 
     try {
-      // 1) رفع الصورة
       final file = File(localPath);
       final uid = user.uid;
       final dayKey = _yyyyMMdd(widget.selectedDay);
@@ -888,185 +887,152 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
       print('🔼 رفع الصورة إلى: $basePath/$name.jpg');
 
-      try {
-        await storageRef.putFile(
-          file,
-          SettableMetadata(contentType: 'image/jpeg'),
-        );
-        print('✅ تم رفع الصورة بنجاح');
-      } catch (e) {
-        print('❌ خطأ في رفع الصورة: $e');
-        throw Exception('فشل رفع الصورة: ${_friendlyError(e)}');
-      }
+      await storageRef.putFile(
+        file,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
 
-      // 2) الحصول على الرابط
-      String downloadUrl;
-      try {
-        downloadUrl = await storageRef.getDownloadURL();
-        print('🔗 رابط الصورة: $downloadUrl');
-      } catch (e) {
-        print('❌ خطأ في الحصول على الرابط: $e');
-        throw Exception('فشل الحصول على رابط الصورة');
-      }
+      final downloadUrl = await storageRef.getDownloadURL();
+      print('🔗 رابط الصورة: $downloadUrl');
 
-      // 3) البيانات الأساسية
       final double carbonForStore =
           (carbonSaved != null && carbonSaved.isFinite)
           ? double.parse(carbonSaved.toStringAsFixed(3))
           : 0.0;
 
-      final usersRef = FirebaseFirestore.instance.collection('users').doc(uid);
-      final utRef = FirebaseFirestore.instance
-          .collection('userTasks')
-          .doc(widget.userTaskDocId);
-      final subRef = FirebaseFirestore.instance.collection('submissions').doc();
+      final firestore = FirebaseFirestore.instance;
+
+      final usersRef = firestore.collection('users').doc(uid);
+      final utRef = firestore.collection('userTasks').doc(widget.userTaskDocId);
+      final subRef = firestore.collection('submissions').doc();
 
       final todayId = _dayId(DateTime.now());
-      final dayMarkRef = FirebaseFirestore.instance
+      final dayMarkRef = firestore
           .collection('users')
           .doc(uid)
           .collection('dayMarks')
           .doc(todayId);
-
+      final dailyTaskRef = firestore
+          .collection('dailyTasks')
+          .doc(uid)
+          .collection('tasks')
+          .doc(_dayId(widget.selectedDay));
       final taskTitle = (widget.taskData['title'] ?? '').toString();
 
-      print('📝 إعداد بيانات Firestore...');
+      print('📝 تجهيز بيانات Firestore...');
 
-      // 4) تنفيذ Transaction مع معالجة أخطاء مفصلة
-      try {
-        await FirebaseFirestore.instance.runTransaction((trx) async {
-          print('🔄 بدء الترانزاكشن...');
+      /// ⭐ تأكد من وجود user doc
+      await usersRef.set({
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
-          // الحصول على userTask
-          final utSnap = await trx.get(utRef);
-          if (!utSnap.exists) {
-            print('❌ userTask غير موجود: ${widget.userTaskDocId}');
-            throw 'userTask غير موجود.';
-          }
+      // ========== أولاً: قراءة userTask خارج الترانزاكشن ==========
+      print('📖 قراءة userTask...');
+      final utSnapshot = await utRef.get();
 
-          final ut = utSnap.data() as Map<String, dynamic>;
-          final currentStatus = (ut['status'] as String?) ?? 'pending';
-          print('📊 حالة المهمة الحالية: $currentStatus');
+      String currentStatus = 'pending';
 
-          // 4.1) إنشاء submission
-          final subData = <String, dynamic>{
-            'userId': uid,
-            'userTaskDocId': widget.userTaskDocId,
-            'taskId': taskId ?? '',
-            'taskTitle': taskTitle,
-            'taskPoints': taskPoints,
-            'status': 'approved',
-            'imageUrls': [downloadUrl],
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
+      if (utSnapshot.exists) {
+        final ut = utSnapshot.data() as Map<String, dynamic>;
+        currentStatus = (ut['status'] as String?) ?? 'pending';
+      }
+      print('📊 حالة المهمة الحالية: $currentStatus');
 
-            if (distanceKm != null) 'distanceKm': distanceKm,
-            'carbonSaved': carbonForStore,
-            if (itemCount != null) 'itemCount': itemCount,
-            if (_geoStart != null) 'geoStart': _geoStart,
-            if (_geoEnd != null) 'geoEnd': _geoEnd,
+      // ========== ثانياً: الترانزاكشن للكتابة فقط ==========
+      await firestore.runTransaction((trx) async {
+        print('🔄 بدء ترانزاكشن الكتابة...');
 
-            if (_verificationResult != null)
-              'aiVerification': {
-                'taskName': _verificationResult!.taskName,
-                'taskNameAr': _verificationResult!.taskNameAr,
-                'confidence': _verificationResult!.confidence,
-                'verified': _verificationResult!.verified,
-                'matchesExpected': _verificationResult!.matchesExpected,
-              },
-          };
+        /// submission
+        trx.set(subRef, {
+          'userId': uid,
+          'userTaskDocId': widget.userTaskDocId,
+          'taskId': taskId ?? '',
+          'taskTitle': taskTitle,
+          'taskPoints': taskPoints,
+          'status': 'approved',
+          'imageUrls': [downloadUrl],
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'carbonSaved': carbonForStore,
+          if (distanceKm != null) 'distanceKm': distanceKm,
+          if (itemCount != null) 'itemCount': itemCount,
+          if (_geoStart != null) 'geoStart': _geoStart,
+          if (_geoEnd != null) 'geoEnd': _geoEnd,
+        }, SetOptions(merge: true));
 
-          print('📄 إنشاء submission: ${subRef.id}');
-          trx.set(subRef, subData);
+        /// update userTask
+        trx.set(utRef, {
+          'userId': uid,
+          'status': 'completed',
+          'completedAt': FieldValue.serverTimestamp(),
+          'taskPoints': taskPoints,
+          'taskTitle': taskTitle,
+          'carbonSaved': carbonForStore,
+          'evidence': {
+            'type': 'photo',
+            'url': downloadUrl,
+            'storagePath': storageRef.fullPath,
+          },
+          if (distanceKm != null) 'distanceKm': distanceKm,
+          if (itemCount != null) 'itemCount': itemCount,
+          if (_geoStart != null) 'geoStart': _geoStart,
+          if (_geoEnd != null) 'geoEnd': _geoEnd,
+        }, SetOptions(merge: true));
 
-          // 4.2) تحديث userTask
-          final utUpdate = <String, dynamic>{
-            'status': 'completed',
-            'completedAt': FieldValue.serverTimestamp(),
-            'canRetry': false,
-            'evidence': {
-              'type': 'photo',
-              'url': downloadUrl,
-              'storagePath': storageRef.fullPath,
-            },
-            'taskTitle': taskTitle,
-            'taskPoints': taskPoints,
-            if (taskId != null) 'taskId': taskId,
-            if (distanceKm != null) 'distanceKm': distanceKm,
-            'carbonSaved': carbonForStore,
-            if (itemCount != null) 'itemCount': itemCount,
-            if (_geoStart != null) 'geoStart': _geoStart,
-            if (_geoEnd != null) 'geoEnd': _geoEnd,
-            'updatedAt': FieldValue.serverTimestamp(),
-          };
-
-          print('📝 تحديث userTask...');
-          trx.set(utRef, utUpdate, SetOptions(merge: true));
-
-          // 4.3) زيادة نقاط المستخدم
-          if (currentStatus != 'completed' && taskPoints > 0) {
-            print('💰 زيادة النقاط: $taskPoints');
-            trx.update(usersRef, {
-              'points': FieldValue.increment(taskPoints),
-              'completedTask': FieldValue.increment(1),
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-          }
-
-          // 4.4) إضافة للسجل
-          final historyRef = FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .collection('history')
-              .doc();
-          final histData = <String, dynamic>{
-            'type': 'task_approved',
-            'userTaskDocId': widget.userTaskDocId,
-            'submissionId': subRef.id,
-            'points': taskPoints,
-            'at': FieldValue.serverTimestamp(),
-            'taskTitle': taskTitle,
-            'carbonSaved': carbonForStore,
-          };
-          if (itemCount != null && itemCount > 0)
-            histData['itemCount'] = itemCount;
-
-          print('📚 إضافة إلى السجل...');
-          trx.set(historyRef, histData);
-
-          // 4.5) تحديث الكربون الموفّر
+        /// تحديث نقاط المستخدم
+        if (currentStatus != 'completed' && taskPoints > 0) {
           trx.set(usersRef, {
-            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-            if (carbonForStore > 0)
-              'totalCarbonSaved': FieldValue.increment(carbonForStore),
+            'points': FieldValue.increment(taskPoints),
+            'completedTask': FieldValue.increment(1),
             'updatedAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
+        }
 
-          // 4.6) تحديث dayMarks
-          trx.set(dayMarkRef, {
-            'count': FieldValue.increment(1),
-            'lastAt': FieldValue.serverTimestamp(),
-            'userId': uid, // إضافة هذا الحقل
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+        /// history
+        final historyRef = firestore
+            .collection('users')
+            .doc(uid)
+            .collection('history')
+            .doc();
 
-          print('✅ الترانزاكشن مكتملة بنجاح');
-          try {
-            await StreakService.updateStreakOnTaskCompletion();
-            print('🔥 تم تحديث الستريك بنجاح');
-          } catch (e) {
-            print('⚠️ خطأ في تحديث الستريك: $e');
-          }
+        trx.set(historyRef, {
+          'type': 'task_approved',
+          'submissionId': subRef.id,
+          'points': taskPoints,
+          'taskTitle': taskTitle,
+          'carbonSaved': carbonForStore,
+          'at': FieldValue.serverTimestamp(),
         });
 
-        print('🎉 تم إكمال المهمة بنجاح!');
-      } on FirebaseException catch (e) {
-        print('🔥 FirebaseException: ${e.code} - ${e.message}');
-        throw Exception('خطأ في قاعدة البيانات: ${e.code} - ${e.message}');
-      }
-    } catch (e, stackTrace) {
+        /// تحديث الكربون
+        trx.set(usersRef, {
+          'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+          if (carbonForStore > 0)
+            'totalCarbonSaved': FieldValue.increment(carbonForStore),
+        }, SetOptions(merge: true));
+        trx.set(dailyTaskRef, {
+          'status': 'completed',
+          'completedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        /// day marks
+        trx.set(dayMarkRef, {
+          'count': FieldValue.increment(1),
+          'lastAt': FieldValue.serverTimestamp(),
+          'userId': uid,
+        }, SetOptions(merge: true));
+
+        print('✅ ترانزاكشن الكتابة تم');
+      });
+
+      try {
+        await StreakService.updateStreakOnTaskCompletion();
+      } catch (_) {}
+
+      print('🎉 المهمة اكتملت بنجاح');
+    } catch (e, s) {
       print('❌ خطأ في _createSubmissionAndAutoApprove: $e');
-      print('📋 Stack trace: $stackTrace');
+      print('📋 Stack trace: $s');
       rethrow;
     }
   }

@@ -34,7 +34,6 @@
       "source": "functions"
     },
     {
-      "source": "autoexpire",
       "codebase": "autoexpire",
       "ignore": [
         "node_modules",
@@ -42,18 +41,19 @@
         "firebase-debug.log",
         "firebase-debug.*.log",
         "*.local"
-      ]
+      ],
+      "source": "autoexpire"
     },
     {
-      "source": "functions-python",
       "codebase": "task-verification",
-      "runtime": "python311",
       "ignore": [
         "venv",
         "__pycache__",
         ".git",
         "*.pyc"
-      ]
+      ],
+      "source": "functions-python",
+      "runtime": "python311"
     }
   ]
 }

@@ -527,6 +527,9 @@ class _taskPageState extends State<taskPage> {
         'completedAt': null,
         'isScheduled': true,
         'scheduledDocId': existingScheduleDocId,
+
+        'ignored': false,
+        'ignoredAt': null,
       }, SetOptions(merge: true));
 
       // 4) علّم اليوم عشان تظهر الأيقونة
@@ -1047,6 +1050,18 @@ class _taskPageState extends State<taskPage> {
     final utKey = '${_uid!}_${_yyyyMMdd(selected)}';
     final utRef = FirebaseFirestore.instance.collection('userTasks').doc(utKey);
 
+    try {
+      await utRef.update({
+        'ignored': true,
+        'ignoredAt': FieldValue.serverTimestamp(),
+        'status': 'ignored', // غيري الحالة عشان تختفي من الشاشة
+      });
+      print('✅ تم تسجيل المهمة كمتجاهلة (تحديث)');
+    } catch (e) {
+      print('⚠️ فشل تسجيل التجاهل: $e');
+      // نكمل عادي حتى لو فشل
+    }
+
     // 🟩 1) جلب المهام الفعالة من كولكشن tasks (يختار المهام الحالية فقط)
     final tasksSnap = await FirebaseFirestore.instance
         .collection('tasks')
@@ -1312,6 +1327,9 @@ class _taskPageState extends State<taskPage> {
         'windowEnd': Timestamp.fromDate(end),
         'status': status,
         'completedAt': null,
+
+        'ignored': false,
+        'ignoredAt': null,
       });
       return;
     }
@@ -1334,6 +1352,9 @@ class _taskPageState extends State<taskPage> {
           pickedData['validation'] ??
           pickedData['taskValidation'] ??
           'غير محددة',
+
+      'ignored': false,
+      'ignoredAt': null,
     });
   }
 

@@ -21,6 +21,7 @@ import 'services/connection.dart';
 import 'services/title_header.dart';
 import '../services/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'article.dart';
 
 class homePage extends StatefulWidget {
   const homePage({super.key});
@@ -117,6 +118,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
 
     // تأكد من وجود حقول الكربون في user
     ensureUserCarbonFields();
+    StreakService.initializeStreakFields();
   }
 
   Future<void> _initHome() async {
@@ -1158,6 +1160,314 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                             ),
                           ),
                         ),
+                        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Builder(
+                              builder: (context) {
+                                final now = DateTime.now();
+                                final today =
+                                    "${now.year.toString().padLeft(4, '0')}-"
+                                    "${now.month.toString().padLeft(2, '0')}-"
+                                    "${now.day.toString().padLeft(2, '0')}";
+
+                                return StreamBuilder<DocumentSnapshot>(
+                                  stream: FirebaseFirestore.instance
+                                      .collection('dailyTasks')
+                                      .doc(
+                                        FirebaseAuth.instance.currentUser?.uid,
+                                      )
+                                      .collection('tasks')
+                                      .doc(today)
+                                      .snapshots(),
+                                  builder: (context, snapshot) {
+                                    // ===== Loading =====
+                                    if (snapshot.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return Container(
+                                        height: 100,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[100],
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                        child: const Center(
+                                          child: CircularProgressIndicator(
+                                            color: appColors.primary,
+                                          ),
+                                        ),
+                                      );
+                                    }
+
+                                    // ===== No Task =====
+                                    if (!snapshot.hasData ||
+                                        !snapshot.data!.exists) {
+                                      return Container(
+                                        height: 100,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              appColors.primary.withOpacity(
+                                                0.1,
+                                              ),
+                                              appColors.mint.withOpacity(0.1),
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                          border: Border.all(
+                                            color: appColors.primary
+                                                .withOpacity(0.2),
+                                          ),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            'لا توجد مهمة حتى الآن',
+                                            style:
+                                                GoogleFonts.ibmPlexSansArabic(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: appColors.dark
+                                                      .withOpacity(0.6),
+                                                ),
+                                          ),
+                                        ),
+                                      );
+                                    }
+
+                                    final taskData =
+                                        snapshot.data!.data()
+                                            as Map<String, dynamic>;
+
+                                    final taskTitle =
+                                        taskData['title'] ?? 'مهمة بيئية';
+                                    final taskDescription =
+                                        taskData['description'] ?? '';
+                                    final taskCategory =
+                                        taskData['category'] ?? '';
+                                    final taskPoints =
+                                        (taskData['points'] ?? 10) as int;
+                                    final validationStrategy =
+                                        taskData['validationStrategy'] ??
+                                        'photo';
+
+                                    final status =
+                                        taskData['status'] ?? 'pending';
+                                    final isCompleted = status == 'completed';
+
+                                    return Container(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: isCompleted
+                                              ? [
+                                                  Colors.green.withOpacity(
+                                                    0.12,
+                                                  ),
+                                                  Colors.green.withOpacity(
+                                                    0.06,
+                                                  ),
+                                                ]
+                                              : [
+                                                  Colors.white.withOpacity(
+                                                    0.95,
+                                                  ),
+                                                  Colors.white.withOpacity(
+                                                    0.85,
+                                                  ),
+                                                ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: isCompleted
+                                              ? Colors.green
+                                              : appColors.primary.withOpacity(
+                                                  0.2,
+                                                ),
+                                        ),
+                                      ),
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                          onTap: isCompleted
+                                              ? null
+                                              : () async {
+                                                  final uid =
+                                                      FirebaseAuth
+                                                          .instance
+                                                          .currentUser
+                                                          ?.uid ??
+                                                      '';
+
+                                                  final userTaskDocId =
+                                                      uid.isEmpty
+                                                      ? ''
+                                                      : '${uid}_$today';
+
+                                                  final taskDataForSheet = {
+                                                    'taskId':
+                                                        taskData['taskId'] ??
+                                                        snapshot.data!.id,
+                                                    'title': taskTitle,
+                                                    'description':
+                                                        taskDescription,
+                                                    'points': taskPoints,
+                                                    'validationStrategy':
+                                                        validationStrategy,
+                                                    'category': taskCategory,
+                                                    'id':
+                                                        taskData['taskId'] ??
+                                                        snapshot.data!.id,
+                                                    'status': status,
+                                                  };
+
+                                                  // ✅ التفريق بين المقال والتصوير
+                                                  if (validationStrategy ==
+                                                      "التحقق عبر اجراء اختبار قصير") {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (_) => ArticlePage(
+                                                          userTaskDocId:
+                                                              userTaskDocId,
+                                                          taskId:
+                                                              taskDataForSheet['id'],
+                                                        ),
+                                                      ),
+                                                    );
+                                                  } else {
+                                                    await showCompleteTaskSheet(
+                                                      context,
+                                                      taskDataForSheet,
+                                                      selectedDay:
+                                                          DateTime.now(),
+                                                      userTaskDocId:
+                                                          userTaskDocId,
+                                                    );
+                                                  }
+                                                },
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(16),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.center,
+                                              children: [
+                                                // Icon
+                                                Container(
+                                                  padding: const EdgeInsets.all(
+                                                    10,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: isCompleted
+                                                        ? Colors.green
+                                                              .withOpacity(0.15)
+                                                        : appColors.primary
+                                                              .withOpacity(0.1),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          14,
+                                                        ),
+                                                  ),
+                                                  child: Icon(
+                                                    isCompleted
+                                                        ? Icons.check_circle
+                                                        : _getCategoryIcon(
+                                                            taskCategory,
+                                                          ),
+                                                    color: isCompleted
+                                                        ? Colors.green
+                                                        : appColors.primary,
+                                                    size: 24,
+                                                  ),
+                                                ),
+
+                                                const SizedBox(width: 12),
+
+                                                // Text
+                                                Expanded(
+                                                  child: Text(
+                                                    isCompleted
+                                                        ? 'أحسنت 👏 تم إنجاز مهمة اليوم'
+                                                        : taskDescription,
+                                                    style:
+                                                        GoogleFonts.ibmPlexSansArabic(
+                                                          fontSize: 13,
+                                                          height: 1.5,
+                                                          fontWeight:
+                                                              isCompleted
+                                                              ? FontWeight.w600
+                                                              : FontWeight
+                                                                    .normal,
+                                                        ),
+                                                  ),
+                                                ),
+
+                                                const SizedBox(width: 8),
+
+                                                // Points
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 4,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: isCompleted
+                                                        ? Colors.green
+                                                              .withOpacity(0.15)
+                                                        : appColors.primary
+                                                              .withOpacity(0.1),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          999,
+                                                        ),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        isCompleted
+                                                            ? Icons.check
+                                                            : Icons
+                                                                  .stars_rounded,
+                                                        color: isCompleted
+                                                            ? Colors.green
+                                                            : appColors.primary,
+                                                        size: 16,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        isCompleted
+                                                            ? 'تم'
+                                                            : '$taskPoints',
+                                                        style:
+                                                            GoogleFonts.ibmPlexSansArabic(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                            ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                        ),
 
                         const SliverToBoxAdapter(child: SizedBox(height: 16)),
                         // قائمة المتصدرين
@@ -1430,6 +1740,23 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
     );
   }
 
+  // 🔹 أضيفي هذا في نهاية الملف (قبل آخر قوسين)
+  IconData _getCategoryIcon(String category) {
+    if (category.contains('تدوير') || category.contains('recycling')) {
+      return Icons.recycling_rounded;
+    } else if (category.contains('نقل') || category.contains('transport')) {
+      return Icons.directions_bus_rounded;
+    } else if (category.contains('طاقة') || category.contains('electricity')) {
+      return Icons.bolt_rounded;
+    } else if (category.contains('ماء') || category.contains('water')) {
+      return Icons.water_drop_rounded;
+    } else if (category.contains('وعي') || category.contains('awareness')) {
+      return Icons.auto_stories_rounded;
+    } else {
+      return Icons.eco_rounded;
+    }
+  }
+
   int calculateStreak(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     final Set<DateTime> activeDays = {};
     DateTime lastActivityDate = DateTime(1970); // تاريخ افتراضي قديم
@@ -1644,7 +1971,7 @@ class StreakService {
       final lastActivity = data['lastActivityAt'] as Timestamp?;
       int currentStreak = (data['currentStreak'] as int?) ?? 0;
 
-      // إذا كان هذا أول نشاط
+      // 🔹 أول مرة
       if (lastActivity == null) {
         await userRef.update({
           'currentStreak': 1,
@@ -1653,33 +1980,26 @@ class StreakService {
         return;
       }
 
-      final lastActivityDate = lastActivity.toDate();
-      final hoursSinceLastActivity = now.difference(lastActivityDate).inHours;
+      final lastDate = lastActivity.toDate();
+      final lastDay = DateTime(lastDate.year, lastDate.month, lastDate.day);
 
-      if (hoursSinceLastActivity > 24) {
+      final difference = today.difference(lastDay).inDays;
+
+      if (difference == 0) {
+        // نفس اليوم → لا نزيد
+        await userRef.update({'lastActivityAt': FieldValue.serverTimestamp()});
+      } else if (difference == 1) {
+        // أمس → نزيد الستريك
         await userRef.update({
-          'currentStreak': 1,
+          'currentStreak': currentStreak + 1,
           'lastActivityAt': FieldValue.serverTimestamp(),
         });
-      }
-      // إذا مرت أقل من 24 ساعة → نتحقق إذا كان النشاط في نفس اليوم
-      else {
-        final lastActivityDay = DateTime(
-          lastActivityDate.year,
-          lastActivityDate.month,
-          lastActivityDate.day,
-        );
-
-        if (lastActivityDay.isBefore(today)) {
-          await userRef.update({
-            'currentStreak': currentStreak + 1,
-            'lastActivityAt': FieldValue.serverTimestamp(),
-          });
-        } else {
-          await userRef.update({
-            'lastActivityAt': FieldValue.serverTimestamp(),
-          });
-        }
+      } else {
+        // انقطع أكثر من يوم → نرجع 1
+        await userRef.update({
+          'currentStreak': 0,
+          'lastActivityAt': FieldValue.serverTimestamp(),
+        });
       }
     } catch (e) {
       debugPrint('Error updating streak: $e');
