@@ -3085,7 +3085,6 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
       case 'شهر':
         return '${_cursorDate.month}/${_cursorDate.year}';
       case 'أسبوع':
-        // 🔧 حساب صحيح للأسبوع يبدأ من الأحد
         final weekday = _cursorDate.weekday;
         final weekStart = _cursorDate.subtract(Duration(days: weekday % 7));
         final weekEnd = weekStart.add(const Duration(days: 6));
@@ -3157,7 +3156,7 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -3173,172 +3172,140 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           /// العنوان + الفلتر
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'تقدم إنجاز المهام',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: appColors.dark,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: appColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: appColors.primary.withOpacity(0.3)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _range,
-                    icon: const Icon(
-                      Icons.arrow_drop_down,
-                      size: 20,
-                      color: appColors.primary,
-                    ),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() {
-                        _range = v;
-                        _cursorDate = DateTime.now();
-                      });
-                    },
-                    items: ranges
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e,
-                            child: Text(
-                              e,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: appColors.dark,
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'تقدم إنجاز المهام',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: appColors.dark,
                   ),
                 ),
-              ),
-            ],
+                _buildTimeRangeSelector(),
+              ],
+            ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
-          /// ---------- DATA ----------
+          /// الرسم البياني
+          SizedBox(
+            height: 170,
+            child: Row(
+              children: [
+                /// الرسم البياني أولاً
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: _getTasksStream(uid),
+                    builder: (context, snap) {
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: appColors.primary,
+                          ),
+                        );
+                      }
+
+                      final bars = _buildSpots(snap.data?.docs ?? []);
+                      final double maxY = _getMaxYValue(bars);
+
+                      return BarChart(
+                        BarChartData(
+                          minY: 0,
+                          maxY: maxY == 0 ? 10 : maxY * 1.1,
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            horizontalInterval: maxY == 0
+                                ? 1
+                                : (maxY / 3).ceilToDouble(),
+                          ),
+                          titlesData: _buildTitles(maxY),
+                          borderData: FlBorderData(
+                            show: true,
+                            border: Border.all(
+                              color: Colors.grey[300]!,
+                              width: 0.5,
+                            ),
+                          ),
+                          barGroups: bars,
+                          barTouchData: BarTouchData(
+                            enabled: true,
+                            touchTooltipData: BarTouchTooltipData(
+                              tooltipBgColor: appColors.primary,
+                              getTooltipItem:
+                                  (group, groupIndex, rod, rodIndex) {
+                                    return BarTooltipItem(
+                                      '${rod.toY.toInt()} مهمة',
+                                      const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 10,
+                                      ),
+                                    );
+                                  },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                /// مسافة بين الرسم والـ Label
+                const SizedBox(width: 1),
+
+                /// 🏷️ Label Y على اليمين
+                Center(
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: Text(
+                      'القيمة',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+          _buildRangeNavigator(),
+
+          const SizedBox(height: 8),
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _getTasksStream(uid),
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
-                return const SizedBox(
-                  height: 175,
-                  child: Center(
-                    child: CircularProgressIndicator(color: appColors.primary),
-                  ),
-                );
+                return const SizedBox();
               }
 
               final bars = _buildSpots(snap.data?.docs ?? []);
-
-              final double maxY = _getMaxYValue(bars);
               final double total = _getTotalValue(bars);
               final double average = _getAverageValue(bars);
+              final double maxY = _getMaxYValue(bars);
 
-              return Column(
-                children: [
-                  SizedBox(
-                    height: 160,
-                    child: BarChart(
-                      BarChartData(
-                        minY: 0,
-                        maxY: maxY == 0 ? 3 : null,
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval: maxY == 0
-                              ? 1
-                              : math.max(1, (maxY / 3).ceilToDouble()),
-                        ),
-                        titlesData: _buildTitles(),
-                        borderData: FlBorderData(
-                          show: true,
-                          border: Border.all(
-                            color: Colors.grey[300]!,
-                            width: 1,
-                          ),
-                        ),
-                        barGroups: bars,
-                        barTouchData: BarTouchData(
-                          enabled: true,
-                          touchTooltipData: BarTouchTooltipData(
-                            tooltipBgColor: appColors.primary,
-                            getTooltipItem: (group, _, rod, __) {
-                              return BarTooltipItem(
-                                '${rod.toY.toInt()} مهمة',
-                                const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildCompactMiniStat('الإجمالي', total.toStringAsFixed(1)),
+                    _buildCompactMiniStat(
+                      'المتوسط',
+                      average.toStringAsFixed(1),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.chevron_left),
-                        onPressed: _goPrev,
-                      ),
-                      Text(
-                        _rangeLabel,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right),
-                        onPressed: _canGoNext ? _goNext : null,
-                      ),
-                    ],
-                  ),
-
-                  /// 👇 الإحصائيات المعدلة لتكون بنفس أسلوب الأدمن
-                  const SizedBox(height: 12),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _buildCompactMiniStat(
-                          'الإجمالي',
-                          total.toStringAsFixed(0),
-                        ),
-                        _buildCompactMiniStat(
-                          'المتوسط',
-                          average.toStringAsFixed(1),
-                        ),
-                        _buildCompactMiniStat(
-                          'الأعلى',
-                          maxY.toStringAsFixed(0),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                    _buildCompactMiniStat('الأعلى', maxY.toInt().toString()),
+                  ],
+                ),
               );
             },
           ),
@@ -3347,116 +3314,124 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
     );
   }
 
-  // 🔹 دالة لحساب القيمة الإجمالية
-  double _getTotalValue(List<BarChartGroupData> bars) {
-    if (bars.isEmpty) return 0;
-    double total = 0;
-    for (final bar in bars) {
-      total += bar.barRods.first.toY;
-    }
-    return total;
+  Widget _buildTimeRangeSelector() {
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: appColors.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      alignment: Alignment.center,
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _range,
+          isDense: true,
+          icon: Icon(Icons.arrow_drop_down, color: appColors.primary, size: 20),
+          dropdownColor: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          style: GoogleFonts.ibmPlexSansArabic(
+            color: appColors.dark,
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
+          onChanged: (String? newValue) {
+            if (newValue != null) {
+              setState(() {
+                _range = newValue;
+                _cursorDate = DateTime.now();
+              });
+            }
+          },
+          items: ranges.map<DropdownMenuItem<String>>((String value) {
+            return DropdownMenuItem<String>(value: value, child: Text(value));
+          }).toList(),
+        ),
+      ),
+    );
   }
 
-  // 🔹 دالة لحساب القيمة المتوسطة
-  double _getAverageValue(List<BarChartGroupData> bars) {
-    if (bars.isEmpty) return 0;
-    double total = 0;
-    int count = 0;
-    for (final bar in bars) {
-      total += bar.barRods.first.toY;
-      count++;
-    }
-    return count > 0 ? total / count : 0;
+  Widget _buildRangeNavigator() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(icon: const Icon(Icons.chevron_left), onPressed: _goPrev),
+        Text(
+          _rangeLabel,
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+        ),
+        IconButton(
+          icon: const Icon(Icons.chevron_right),
+          onPressed: _canGoNext ? _goNext : null,
+        ),
+      ],
+    );
   }
 
-  // 🔹 دالة لحساب القيمة القصوى
-  double _getMaxYValue(List<BarChartGroupData> bars) {
-    if (bars.isEmpty) return 0;
-    double maxY = 0;
-    for (final bar in bars) {
-      if (bar.barRods.first.toY > maxY) {
-        maxY = bar.barRods.first.toY;
-      }
-    }
-    return maxY;
-  }
-
-  /// ---------- Titles ----------
-  FlTitlesData _buildTitles() {
+  FlTitlesData _buildTitles(double maxY) {
     return FlTitlesData(
       bottomTitles: AxisTitles(
+        axisNameWidget: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            _getXAxisLabel(),
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+        ),
+        axisNameSize: 25,
         sideTitles: SideTitles(
           showTitles: true,
-          reservedSize: 36,
+          reservedSize: 25,
           interval: _getInterval(),
-          getTitlesWidget: (value, _) {
-            final index = value.toInt();
-
-            if (_range == 'اليوم') {
-              final showHours = [0, 3, 6, 9, 12, 15, 18, 21, 23];
-              if (showHours.contains(index)) {
-                return Text('$index', style: const TextStyle(fontSize: 10));
-              }
-              return const SizedBox();
-            }
-
-            if (_range == 'أسبوع') {
-              const days = ['أحد', 'إثن', 'ثلا', 'أرب', 'خم', 'جم', 'سبت'];
-              if (index >= 0 && index < 7) {
-                return Text(days[index], style: const TextStyle(fontSize: 10));
-              }
-              return const SizedBox();
-            }
-
-            if (_range == 'شهر') {
-              final day = index + 1;
-              final lastDay = DateTime(
-                _cursorDate.year,
-                _cursorDate.month,
-                0,
-              ).day;
-              final showDays = [1, 5, 10, 15, 20, 25, lastDay];
-              if (showDays.contains(day)) {
-                return Text(
-                  day.toString(),
-                  style: const TextStyle(fontSize: 10),
-                );
-              }
-              return const SizedBox();
-            }
-
-            // 🔹 السنة
-            const months = [
-              'ينا',
-              'فبر',
-              'مار',
-              'أبر',
-              'ماي',
-              'يون',
-              'يول',
-              'أغس',
-              'سبت',
-              'أكت',
-              'نوف',
-              'ديس',
-            ];
-            if (index >= 0 && index < 12) {
-              return Text(months[index], style: const TextStyle(fontSize: 10));
-            }
-            return const SizedBox();
+          getTitlesWidget: (value, meta) {
+            return Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _buildXAxisTitle(value, meta),
+            );
           },
         ),
       ),
       leftTitles: AxisTitles(
         sideTitles: SideTitles(
           showTitles: true,
-          reservedSize: 28,
-          interval: 1,
-          getTitlesWidget: (value, _) {
-            return Text(
-              value.toInt().toString(),
-              style: const TextStyle(fontSize: 10),
-            );
+          reservedSize: 30,
+          interval: maxY == 0 ? 1 : (maxY / 3),
+          getTitlesWidget: (value, meta) {
+            // 🔥 لا تعرض الصفر
+            if (value.abs() < 0.0001) {
+              return const SizedBox.shrink();
+            }
+
+            final third = maxY / 3;
+            final twoThird = maxY * 2 / 3;
+
+            // 🔥 مقارنة آمنة للـ double
+            bool isMatch(double a, double b) => (a - b).abs() < 0.0001;
+
+            if (isMatch(value, maxY) ||
+                isMatch(value, twoThird) ||
+                isMatch(value, third)) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Text(
+                  value < 1
+                      ? value.toStringAsFixed(1) // لو رقم صغير
+                      : value.toInt().toString(), // لو رقم عادي
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.right,
+                ),
+              );
+            }
+
+            return const SizedBox.shrink();
           },
         ),
       ),
@@ -3465,7 +3440,67 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
     );
   }
 
-  // 🔹 دالة تحدد التباعد المناسب لكل فترة
+  Widget _buildXAxisTitle(double value, TitleMeta meta) {
+    int index = value.toInt();
+    String text = '';
+
+    if (_range == 'اليوم') {
+      if (index % 3 == 0) {
+        text = index.toString();
+      }
+    } else if (_range == 'أسبوع') {
+      if (index < 7 && index % 2 == 0) {
+        const days = ['أحد', 'اثن', 'ثلث', 'أرب', 'خم', 'جم', 'سبت'];
+        text = days[index];
+      }
+    } else if (_range == 'شهر') {
+      if (index % 5 == 0 && index < 30) {
+        text = (index + 1).toString();
+      }
+    } else if (_range == 'سنة') {
+      if (index < 12 && index % 2 == 0) {
+        const months = [
+          'ينا',
+          'فبر',
+          'مار',
+          'أبر',
+          'ماي',
+          'يون',
+          'يول',
+          'أغس',
+          'سبت',
+          'أكت',
+          'نوف',
+          'ديس',
+        ];
+        text = months[index];
+      }
+    }
+
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    return Text(
+      text,
+      style: const TextStyle(fontSize: 8, color: Colors.grey),
+      textAlign: TextAlign.center,
+    );
+  }
+
+  String _getXAxisLabel() {
+    switch (_range) {
+      case 'اليوم':
+        return 'الساعة';
+      case 'أسبوع':
+        return 'اليوم';
+      case 'شهر':
+        return 'اليوم';
+      case 'سنة':
+        return 'الشهر';
+      default:
+        return 'الفترة';
+    }
+  }
+
   double _getInterval() {
     switch (_range) {
       case 'اليوم':
@@ -3481,7 +3516,37 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
     }
   }
 
-  /// ---------- Mini stat ----------
+  double _getTotalValue(List<BarChartGroupData> bars) {
+    if (bars.isEmpty) return 0;
+    double total = 0;
+    for (final bar in bars) {
+      total += bar.barRods.first.toY;
+    }
+    return total;
+  }
+
+  double _getAverageValue(List<BarChartGroupData> bars) {
+    if (bars.isEmpty) return 0;
+    double total = 0;
+    int count = 0;
+    for (final bar in bars) {
+      total += bar.barRods.first.toY;
+      count++;
+    }
+    return count > 0 ? total / count : 0;
+  }
+
+  double _getMaxYValue(List<BarChartGroupData> bars) {
+    if (bars.isEmpty) return 0;
+    double maxY = 0;
+    for (final bar in bars) {
+      if (bar.barRods.first.toY > maxY) {
+        maxY = bar.barRods.first.toY;
+      }
+    }
+    return maxY;
+  }
+
   Widget _buildCompactMiniStat(String label, String value) {
     return Column(
       children: [
@@ -3499,7 +3564,6 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
     );
   }
 
-  /// ---------- Chart logic ----------
   List<BarChartGroupData> _buildSpots(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
@@ -3509,7 +3573,6 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
     DateTime endDate;
     int totalBars;
 
-    // 🔹 تحديد عدد الأشرطة لكل فترة
     if (_range == 'سنة') {
       totalBars = 12;
       startDate = DateTime(_cursorDate.year, 1, 1);
@@ -3538,12 +3601,10 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
       endDate = startDate.add(const Duration(days: 1));
     }
 
-    // 🔹 تهيئة جميع الأشرطة بصفر
     for (int i = 0; i < totalBars; i++) {
       buckets[i] = 0;
     }
 
-    // 🔹 ملء البيانات الفعلية
     for (final doc in docs) {
       final data = doc.data();
       final Timestamp? ts = data['completedAt'] ?? data['createdAt'];
@@ -3551,7 +3612,6 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
 
       final date = ts.toDate();
 
-      // ✅ تأكد من التاريخ ضمن النطاق
       if (date.isBefore(startDate) || date.isAfter(endDate)) continue;
 
       int key;
@@ -3571,7 +3631,6 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
       }
     }
 
-    // 🔹 إنشاء الأشرطة
     return List.generate(totalBars, (index) {
       final value = (buckets[index] ?? 0).toDouble();
       return BarChartGroupData(
@@ -3582,18 +3641,12 @@ class _UserTaskProgressCardState extends State<_UserTaskProgressCard> {
             width: _getBarWidth(),
             borderRadius: BorderRadius.circular(4),
             color: value > 0 ? appColors.primary : Colors.grey[300]!,
-            backDrawRodData: BackgroundBarChartRodData(
-              show: true,
-              toY: value + 0.5,
-              color: Colors.grey[100]!,
-            ),
           ),
         ],
       );
     });
   }
 
-  // 🔹 تحديد عرض الشريط بناءً على الفترة
   double _getBarWidth() {
     switch (_range) {
       case 'اليوم':
@@ -3702,7 +3755,7 @@ class _UserCarbonProgressCardState extends State<_UserCarbonProgressCard> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12), // تغيير من 16 إلى 12
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -3718,66 +3771,25 @@ class _UserCarbonProgressCardState extends State<_UserCarbonProgressCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           /// العنوان + الفلتر
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'تطور خفض الكربون',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: appColors.dark,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: appColors.tealSoft.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: appColors.tealSoft.withOpacity(0.3),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'تطور خفض الكربون',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: appColors.dark,
                   ),
                 ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _range,
-                    icon: Icon(
-                      Icons.arrow_drop_down,
-                      size: 20,
-                      color: appColors.tealSoft,
-                    ),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() {
-                        _range = v;
-                        _cursorDate = DateTime.now();
-                      });
-                    },
-                    items: ranges
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e,
-                            child: Text(
-                              e,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: appColors.dark,
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ),
-            ],
+                _buildTimeRangeSelector(), // استخدام الدالة الموحدة
+              ],
+            ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
           /// ---------- DATA ----------
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -3793,78 +3805,89 @@ class _UserCarbonProgressCardState extends State<_UserCarbonProgressCard> {
               }
 
               final bars = _buildSpots(snap.data?.docs ?? []);
-
               final double maxY = _getMaxYValue(bars);
               final double total = _getTotalValue(bars);
               final double average = _getAverageValue(bars);
 
               return Column(
                 children: [
+                  /// الرسم البياني مع Label Y
                   SizedBox(
-                    height: 160,
-                    child: BarChart(
-                      BarChartData(
-                        minY: 0,
-                        maxY: maxY == 0 ? 3 : null,
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval: maxY == 0
-                              ? 1
-                              : math.max(1, (maxY / 3).ceilToDouble()),
-                        ),
-                        titlesData: _buildTitles(),
-                        borderData: FlBorderData(
-                          show: true,
-                          border: Border.all(
-                            color: Colors.grey[300]!,
-                            width: 1,
-                          ),
-                        ),
-                        barGroups: bars,
-                        barTouchData: BarTouchData(
-                          enabled: true,
-                          touchTooltipData: BarTouchTooltipData(
-                            tooltipBgColor: appColors.tealSoft,
-                            getTooltipItem: (group, _, rod, __) {
-                              return BarTooltipItem(
-                                '${rod.toY.toStringAsFixed(1)} كجم',
-                                const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
+                    height: 170,
+                    child: Row(
+                      children: [
+                        /// الرسم البياني أولاً
+                        Expanded(
+                          child: BarChart(
+                            BarChartData(
+                              minY: 0,
+                              maxY: maxY == 0 ? 10 : maxY * 1.1,
+                              gridData: FlGridData(
+                                show: true,
+                                drawVerticalLine: false,
+                                horizontalInterval: maxY == 0
+                                    ? 1
+                                    : (maxY / 3).ceilToDouble(),
+                              ),
+                              titlesData: _buildTitles(maxY),
+                              borderData: FlBorderData(
+                                show: true,
+                                border: Border.all(
+                                  color: Colors.grey[300]!,
+                                  width: 0.5,
                                 ),
-                              );
-                            },
+                              ),
+                              barGroups: bars,
+                              barTouchData: BarTouchData(
+                                enabled: true,
+                                touchTooltipData: BarTouchTooltipData(
+                                  tooltipBgColor: appColors.tealSoft,
+                                  getTooltipItem:
+                                      (group, groupIndex, rod, rodIndex) {
+                                        return BarTooltipItem(
+                                          '${rod.toY.toStringAsFixed(1)} كجم',
+                                          const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10,
+                                          ),
+                                        );
+                                      },
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+
+                        /// مسافة بين الرسم والـ Label
+                        const SizedBox(width: 1),
+
+                        /// 🏷️ Label Y على اليمين
+                        Center(
+                          child: RotatedBox(
+                            quarterTurns: 3,
+                            child: Text(
+                              'القيمة',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+
                   const SizedBox(height: 8),
 
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.chevron_left),
-                        onPressed: _goPrev,
-                      ),
-                      Text(
-                        _rangeLabel,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right),
-                        onPressed: _canGoNext ? _goNext : null,
-                      ),
-                    ],
-                  ),
+                  /// متصفح التاريخ
+                  _buildRangeNavigator(),
 
-                  /// 👇 الإحصائيات المعدلة لتكون بنفس أسلوب الأدمن
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+
+                  /// الإحصائيات
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Row(
@@ -3894,6 +3917,65 @@ class _UserCarbonProgressCardState extends State<_UserCarbonProgressCard> {
     );
   }
 
+  // أضف هذه الدوال داخل الكلاس
+  Widget _buildTimeRangeSelector() {
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: appColors.tealSoft.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      alignment: Alignment.center,
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _range,
+          isDense: true,
+          icon: Icon(
+            Icons.arrow_drop_down,
+            color: appColors.tealSoft,
+            size: 20,
+          ),
+          dropdownColor: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          style: GoogleFonts.ibmPlexSansArabic(
+            color: appColors.dark,
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
+          onChanged: (String? newValue) {
+            if (newValue != null) {
+              setState(() {
+                _range = newValue;
+                _cursorDate = DateTime.now();
+              });
+            }
+          },
+          items: ranges.map<DropdownMenuItem<String>>((String value) {
+            return DropdownMenuItem<String>(value: value, child: Text(value));
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRangeNavigator() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(icon: const Icon(Icons.chevron_left), onPressed: _goPrev),
+        Text(
+          _rangeLabel,
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+        ),
+        IconButton(
+          icon: const Icon(Icons.chevron_right),
+          onPressed: _canGoNext ? _goNext : null,
+        ),
+      ],
+    );
+  }
+
   // 🔹 دالة لحساب القيمة الإجمالية
   double _getTotalValue(List<BarChartGroupData> bars) {
     if (bars.isEmpty) return 0;
@@ -3918,20 +4000,42 @@ class _UserCarbonProgressCardState extends State<_UserCarbonProgressCard> {
 
   // 🔹 دالة لحساب القيمة القصوى
   double _getMaxYValue(List<BarChartGroupData> bars) {
-    if (bars.isEmpty) return 0;
+    if (bars.isEmpty) return 1;
+
     double maxY = 0;
     for (final bar in bars) {
       if (bar.barRods.first.toY > maxY) {
         maxY = bar.barRods.first.toY;
       }
     }
+
+    if (maxY <= 0) return 1;
+
+    // 🔥 لو القيمة صغيرة جدًا نخليها 1 عشان الرسم يكون منطقي
+    if (maxY < 1) return 1;
+
+    if (maxY < 5) return 5;
+    if (maxY < 10) return 10;
+
     return maxY;
   }
 
   /// ---------- Titles ----------
-  FlTitlesData _buildTitles() {
+  FlTitlesData _buildTitles(double maxY) {
     return FlTitlesData(
       bottomTitles: AxisTitles(
+        axisNameWidget: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            _getXAxisLabel(),
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+        axisNameSize: 18,
         sideTitles: SideTitles(
           showTitles: true,
           reservedSize: 36,
@@ -3948,7 +4052,7 @@ class _UserCarbonProgressCardState extends State<_UserCarbonProgressCard> {
             }
 
             if (_range == 'أسبوع') {
-              const days = ['أحد', 'إثن', 'ثلا', 'أرب', 'خم', 'جم', 'سبت'];
+              const days = ['أحد', 'إثن', 'ثلث', 'أرب', 'خم', 'جم', 'سبت'];
               if (index >= 0 && index < 7) {
                 return Text(days[index], style: const TextStyle(fontSize: 10));
               }
@@ -3996,12 +4100,25 @@ class _UserCarbonProgressCardState extends State<_UserCarbonProgressCard> {
       leftTitles: AxisTitles(
         sideTitles: SideTitles(
           showTitles: true,
-          reservedSize: 28,
-          interval: 1,
-          getTitlesWidget: (value, _) {
-            return Text(
-              value.toInt().toString(),
-              style: const TextStyle(fontSize: 10),
+          reservedSize: 30,
+          interval: maxY == 0 ? 1 : (maxY / 3),
+          getTitlesWidget: (value, meta) {
+            // 🔥 لا تعرض الصفر
+            if (value.abs() < 0.0001) {
+              return const SizedBox.shrink();
+            }
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Text(
+                value.toStringAsFixed(1), // أو toInt() حسب احتياجك
+                style: const TextStyle(
+                  fontSize: 9,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.right,
+              ),
             );
           },
         ),
@@ -4009,6 +4126,21 @@ class _UserCarbonProgressCardState extends State<_UserCarbonProgressCard> {
       topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
       rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
     );
+  }
+
+  String _getXAxisLabel() {
+    switch (_range) {
+      case 'اليوم':
+        return 'الساعة';
+      case 'أسبوع':
+        return 'اليوم';
+      case 'شهر':
+        return 'اليوم';
+      case 'سنة':
+        return 'الشهر';
+      default:
+        return 'الفترة';
+    }
   }
 
   // 🔹 دالة تحدد التباعد المناسب لكل فترة
@@ -4158,118 +4290,6 @@ class _UserCarbonProgressCardState extends State<_UserCarbonProgressCard> {
         return 10.0;
     }
   }
-}
-
-Future<List<Map<String, dynamic>>> _fetchTopUsersWithCurrentUser() async {
-  try {
-    final usersSnapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .where('isVerified', isEqualTo: true)
-        .get();
-
-    final List<Map<String, dynamic>> usersData = [];
-    final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
-
-    // 🔹 حساب إنجازات الشهر الحالي
-    final monthStart = DateTime(DateTime.now().year, DateTime.now().month, 1);
-
-    for (final doc in usersSnapshot.docs) {
-      final userId = doc.id;
-      final data = doc.data();
-
-      // 🔹 حساب المهام المكتملة لهذا الشهر
-      final completedTasksCount = await _getMonthlyCompletedTasks(
-        userId,
-        monthStart,
-      );
-
-      // 🔹 حساب النقاط لهذا الشهر
-      final monthlyPoints = await _getMonthlyPoints(userId, monthStart);
-
-      usersData.add({
-        'id': userId,
-        'username': data['username']?.toString() ?? 'مستخدم',
-        'completedTasks': completedTasksCount,
-        'points': monthlyPoints,
-        'pfpIndex': _asInt(data['pfpIndex'] ?? 0),
-        'isCurrentUser': userId == currentUserId,
-      });
-    }
-
-    // 🔹 ترتيب تنازلي حسب عدد المهام المكتملة
-    usersData.sort(
-      (a, b) => b['completedTasks'].compareTo(a['completedTasks']),
-    );
-
-    // 🔹 إضافة الرتبة لكل مستخدم
-    for (int i = 0; i < usersData.length; i++) {
-      usersData[i]['rank'] = i + 1;
-    }
-
-    return usersData;
-  } catch (e) {
-    debugPrint('❌ Leaderboard error: $e');
-    return [];
-  }
-}
-
-// 🔹 دالة مساعدة لحساب المهام المكتملة في الشهر
-Future<int> _getMonthlyCompletedTasks(
-  String userId,
-  DateTime monthStart,
-) async {
-  try {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('submissions')
-        .where('userId', isEqualTo: userId)
-        .where('status', isEqualTo: 'approved')
-        .where(
-          'completedAt',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(monthStart),
-        )
-        .get();
-
-    return snapshot.docs.length;
-  } catch (e) {
-    debugPrint('❌ Error counting monthly tasks: $e');
-    return 0;
-  }
-}
-
-// 🔹 دالة مساعدة لحساب النقاط في الشهر
-Future<int> _getMonthlyPoints(String userId, DateTime monthStart) async {
-  try {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('submissions')
-        .where('userId', isEqualTo: userId)
-        .where('status', isEqualTo: 'approved')
-        .where(
-          'completedAt',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(monthStart),
-        )
-        .get();
-
-    int totalPoints = 0;
-    for (final doc in snapshot.docs) {
-      final points = doc.data()['taskPoints'];
-      if (points is num) {
-        totalPoints += points.toInt();
-      }
-    }
-
-    return totalPoints;
-  } catch (e) {
-    debugPrint('❌ Error calculating monthly points: $e');
-    return 0;
-  }
-}
-
-// 🔹 دالة لتحويل أي قيمة إلى int
-int _asInt(dynamic v) {
-  if (v is int) return v;
-  if (v is double) return v.toInt();
-  if (v == null) return 0;
-  return int.tryParse('$v') ?? 0;
 }
 
 /* ======================= TopLeaderboardCard Widget ======================= */

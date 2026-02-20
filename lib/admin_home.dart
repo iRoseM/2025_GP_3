@@ -295,32 +295,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
-  // 🔧 دالة لتنسيق تسميات المحور Y
-  Widget _buildLeftTitle(double value, TitleMeta meta) {
-    // تقريب الأعداد الكبيرة
-    String formattedValue;
-    if (value >= 1000) {
-      formattedValue = '${(value / 1000).toStringAsFixed(1)}ك';
-    } else if (value >= 1000000) {
-      formattedValue = '${(value / 1000000).toStringAsFixed(1)}م';
-    } else {
-      formattedValue = value.toInt().toString();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(right: 8.0),
-      child: Text(
-        formattedValue,
-        style: GoogleFonts.ibmPlexSansArabic(
-          fontSize: 10,
-          color: Colors.grey[600],
-          fontWeight: FontWeight.w500,
-        ),
-        textAlign: TextAlign.right,
-      ),
-    );
-  }
-
   Widget _buildLeaderboardCard() {
     return Container(
       width: double.infinity,
@@ -846,21 +820,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
-  int _getDaysForRange(String range) {
-    switch (range) {
-      case 'اليوم':
-        return 24; // نقطة وحدة
-      case 'أسبوع':
-        return 7;
-      case 'شهر':
-        return 30;
-      case 'سنة':
-        return 365;
-      default:
-        return 7;
-    }
-  }
-
   void _onTap(int i) {
     if (i == _currentIndex) return;
     switch (i) {
@@ -928,492 +887,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
-  Widget _buildChartCard(
-    String title,
-    List<FlSpot> spots,
-    Color color,
-    String timeRange,
-  ) {
-    final double maxY = _getMaxYValue(spots);
-    final double average = spots.isNotEmpty
-        ? spots.map((e) => e.y).reduce((a, b) => a + b) / spots.length
-        : 0;
-
-    return Container(
-      padding: const EdgeInsets.all(16), // نفس البادينج
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20), // نفس الزوايا
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 14,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          /// العنوان + الفلتر (نفس التصميم)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: appColors.dark,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: color.withOpacity(0.3)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedTimeRange,
-                    icon: Icon(Icons.arrow_drop_down, size: 20, color: color),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() {
-                          _selectedTimeRange = v;
-                        });
-                        _loadChartData();
-                      }
-                    },
-                    items: _timeRanges
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e,
-                            child: Text(
-                              e,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: appColors.dark,
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          /// 👇 الرسم البياني الخطي
-          SizedBox(
-            height: 160, // نفس الارتفاع
-            child: spots.isEmpty
-                ? const Center(child: Text('لا توجد بيانات'))
-                : LineChart(
-                    LineChartData(
-                      minY: 0,
-                      maxY: maxY == 0 ? 10 : null,
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        horizontalInterval: maxY == 0
-                            ? 1
-                            : math.max(1, (maxY / 3).ceilToDouble()),
-                      ),
-                      titlesData: FlTitlesData(
-                        show: true,
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 36,
-                            getTitlesWidget: _buildLeftTitle,
-                          ),
-                        ),
-
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 36, // نفس الحجم
-                            interval: _getInterval(),
-                            getTitlesWidget: (value, _) {
-                              return _buildXAxisTitle(value.toInt());
-                            },
-                          ),
-                        ),
-                      ),
-                      borderData: FlBorderData(
-                        show: true,
-                        border: Border.all(color: Colors.grey[300]!, width: 1),
-                      ),
-                      lineBarsData: [
-                        LineChartBarData(
-                          spots: spots,
-                          isCurved: true,
-                          barWidth: 3, // نفس السماكة
-                          color: color,
-                          dotData: const FlDotData(show: false),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            color: color.withOpacity(.15),
-                          ),
-                        ),
-                      ],
-                      lineTouchData: LineTouchData(
-                        enabled: true,
-                        touchTooltipData: LineTouchTooltipData(
-                          tooltipBgColor: color,
-                          getTooltipItems: (spots) {
-                            return spots.map((spot) {
-                              return LineTooltipItem(
-                                '${spot.y.toInt()}',
-                                const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              );
-                            }).toList();
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-          ),
-
-          const SizedBox(height: 8),
-          _buildRangeNavigator(),
-
-          /// 👇 الإحصائيات (نفس تشارت اليوزر)
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildCompactMiniStat(
-                  'الإجمالي',
-                  spots.isNotEmpty
-                      ? spots
-                            .map((e) => e.y)
-                            .reduce((a, b) => a + b)
-                            .toStringAsFixed(1)
-                      : '0',
-                ),
-                _buildCompactMiniStat('المتوسط', average.toStringAsFixed(1)),
-                _buildCompactMiniStat('الأعلى', maxY.toInt().toString()),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  double _calculateSafeInterval(double maxY, String chartTitle) {
-    if (maxY <= 0 || maxY.isNaN || maxY.isInfinite) {
-      return 1.0;
-    }
-
-    final niceMaxY = _getNiceMaxY(maxY, chartTitle);
-    if (niceMaxY <= 0 || niceMaxY.isNaN || niceMaxY.isInfinite) {
-      return 1.0;
-    }
-
-    final interval = niceMaxY / 4;
-    if (interval <= 0 || interval.isNaN || interval.isInfinite) {
-      return 1.0;
-    }
-
-    return interval;
-  }
-
-  Widget _buildCompactTimeRangeSelector() {
-    return Container(
-      height: 28, // أصغر
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: appColors.primary.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      alignment: Alignment.center,
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedTimeRange,
-          isDense: true,
-          icon: Icon(
-            Icons.arrow_drop_down,
-            color: appColors.primary,
-            size: 16, // أصغر
-          ),
-          dropdownColor: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          style: GoogleFonts.ibmPlexSansArabic(
-            color: appColors.dark,
-            fontWeight: FontWeight.w600,
-            fontSize: 10, // أصغر
-          ),
-          onChanged: (String? newValue) {
-            if (newValue != null) {
-              setState(() {
-                _selectedTimeRange = newValue;
-              });
-              _loadChartData();
-            }
-          },
-          items: _timeRanges.map<DropdownMenuItem<String>>((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(
-                value,
-                style: GoogleFonts.ibmPlexSansArabic(fontSize: 10),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  String _formatCompactNumber(double value) {
-    if (value >= 1000000) {
-      return '${(value / 1000000).toStringAsFixed(0)}م';
-    } else if (value >= 1000) {
-      return '${(value / 1000).toStringAsFixed(0)}ألف';
-    } else if (value >= 1) {
-      return value.toInt().toString();
-    } else {
-      return value.toStringAsFixed(1);
-    }
-  }
-
-  int _getCompactXInterval(String timeRange) {
-    switch (timeRange) {
-      case 'اليوم':
-        return 6; // كل 6 ساعات (بدلاً من 3)
-      case 'أسبوع':
-        return 1; // كل يومين
-      case 'شهر':
-        return 10; // كل 10 أيام
-      case 'سنة':
-        return 3; // كل 3 أشهر
-      default:
-        return 2;
-    }
-  }
-
-  Widget _buildCompactXAxisTitle(int value, int maxX, String timeRange) {
-    switch (timeRange) {
-      case 'اليوم':
-        if (value > 23) return const SizedBox.shrink();
-        if (value % 6 != 0) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(top: 2.0),
-          child: Text(
-            '$value',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 7, // أصغر
-              color: Colors.grey[600],
-            ),
-          ),
-        );
-
-      case 'أسبوع':
-        if (value > 6) return const SizedBox.shrink();
-        if (value % 2 != 0) return const SizedBox.shrink();
-        final days = ['أ', 'ث', 'خ', 'س']; // أيام مختصرة
-        final dayIndex = value ~/ 2;
-        if (dayIndex < days.length) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 2.0),
-            child: Text(
-              days[dayIndex],
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 7,
-                color: Colors.grey[600],
-              ),
-            ),
-          );
-        }
-        return const SizedBox.shrink();
-
-      case 'شهر':
-        if (value > 29) return const SizedBox.shrink();
-        if (value % 10 != 0) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(top: 2.0),
-          child: Text(
-            '${value + 1}',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 7,
-              color: Colors.grey[600],
-            ),
-          ),
-        );
-
-      case 'سنة':
-        if (value > 11) return const SizedBox.shrink();
-        if (value % 3 != 0) return const SizedBox.shrink();
-        const months = ['ينا', 'أبريل', 'يوليو', 'أكتوبر'];
-        final monthIndex = value ~/ 3;
-        if (monthIndex < months.length) {
-          return Padding(
-            padding: const EdgeInsets.only(top: 2.0),
-            child: Text(
-              months[monthIndex],
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 7,
-                color: Colors.grey[600],
-              ),
-            ),
-          );
-        }
-        return const SizedBox.shrink();
-
-      default:
-        return const SizedBox.shrink();
-    }
-  }
-
-  String _getCompactPeriodName(String period) {
-    switch (period) {
-      case 'اليوم':
-        return 'اليوم';
-      case 'أسبوع':
-        return 'أسبوع';
-      case 'شهر':
-        return 'شهر';
-      case 'سنة':
-        return 'سنة';
-      default:
-        return period;
-    }
-  }
-
-  // 🔧 دالة لتحديد تباعد مناسب للمحور X حسب الفترة
-  int _getXInterval(String timeRange) {
-    switch (timeRange) {
-      case 'اليوم':
-        return 3; // كل 3 ساعات
-      case 'أسبوع':
-        return 1; // كل يوم
-      case 'شهر':
-        return 5; // كل 5 أيام
-      case 'سنة':
-        return 2; // كل شهرين
-      default:
-        return 1;
-    }
-  }
-
-  // DateTime _getEndDateForRange(String range) {
-  //   final start = _getStartDateForRange(range);
-
-  //   switch (range) {
-  //     case 'اليوم':
-  //       return start.add(const Duration(days: 1));
-  //     case 'أسبوع':
-  //       return start.add(const Duration(days: 7));
-  //     case 'شهر':
-  //       return DateTime(start.year, start.month + 1, 1);
-  //     case 'سنة':
-  //       return DateTime(start.year + 1, 1, 1);
-  //     default:
-  //       return DateTime.now();
-  //   }
-  // }
-
-  // 🔧 دالة لتقريب القيم الكبيرة
-  String _formatLargeNumber(double value) {
-    if (value >= 1000000) {
-      return '${(value / 1000000).toStringAsFixed(1)}م';
-    } else if (value >= 1000) {
-      return '${(value / 1000).toStringAsFixed(1)}ك';
-    } else if (value >= 1) {
-      return value.toInt().toString();
-    } else {
-      return value.toStringAsFixed(1);
-    }
-  }
-
-  // 👇 ميثود _buildMiniStat الأصلية التي تريد الاحتفاظ بها
-  Widget _buildMiniStat(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-      ],
-    );
-  }
-
-  Widget _buildChartStats(List<FlSpot> spots, double maxY) {
-    final total = spots.map((e) => e.y).reduce((a, b) => a + b);
-    final average = total / spots.length;
-    final lastValue = spots.isNotEmpty ? spots.last.y : 0;
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _buildStatItem('القيمة الأخيرة', lastValue.toStringAsFixed(1)),
-        _buildStatItem('المتوسط', average.toStringAsFixed(1)),
-        _buildStatItem('الإجمالي', total.toStringAsFixed(1)),
-        _buildStatItem('الأعلى', maxY.toStringAsFixed(1)),
-      ],
-    );
-  }
-
-  Widget _buildStatItem(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.ibmPlexSansArabic(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: appColors.dark,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: GoogleFonts.ibmPlexSansArabic(
-            fontSize: 9,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _miniStat(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-      ],
-    );
-  }
-
   Widget _buildBarChartCard(
     String title,
     List<FlSpot> spots,
@@ -1426,10 +899,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
         : 0;
 
     return Container(
-      padding: const EdgeInsets.all(16), // نفس البادينج
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20), // نفس الزوايا
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
             color: Color(0x14000000),
@@ -1441,152 +914,184 @@ class _AdminHomePageState extends State<AdminHomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          /// العنوان + الفلتر (نفس التصميم)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: appColors.dark,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: color.withOpacity(0.3)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedTimeRange,
-                    icon: Icon(Icons.arrow_drop_down, size: 20, color: color),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() {
-                          _selectedTimeRange = v;
-                        });
-                        _loadChartData();
-                      }
-                    },
-                    items: _timeRanges
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e,
-                            child: Text(
-                              e,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: appColors.dark,
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
+          /// العنوان + الفلتر
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: appColors.dark,
                   ),
                 ),
-              ),
-            ],
+                _buildTimeRangeSelector(),
+              ],
+            ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
-          /// 👇 الرسم البياني العمودي
+          /// 👇 الرسم البياني
           SizedBox(
-            height: 160, // نفس الارتفاع
-            child: spots.isEmpty
-                ? const Center(child: Text('لا توجد بيانات'))
-                : BarChart(
-                    BarChartData(
-                      minY: 0,
-                      maxY: maxY == 0 ? 3 : null,
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        horizontalInterval: maxY == 0
-                            ? 1
-                            : math.max(1, (maxY / 3).ceilToDouble()),
-                      ),
-                      titlesData: FlTitlesData(
-                        show: true,
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 36,
-                            getTitlesWidget: _buildLeftTitle,
-                          ),
-                        ),
+            height: 180,
+            child: Row(
+              children: [
+                /// الرسم البياني أولاً (على اليمين في RTL)
+                Expanded(
+                  child: spots.isEmpty
+                      ? const Center(child: Text('لا توجد بيانات'))
+                      : BarChart(
+                          BarChartData(
+                            minY: maxY == 0 ? 0 : 0.0001,
+                            maxY: maxY == 0 ? 10 : maxY * 1.1,
+                            gridData: FlGridData(
+                              show: true,
+                              drawVerticalLine: false,
+                              horizontalInterval: maxY == 0
+                                  ? 1
+                                  : (maxY / 3).ceilToDouble(),
+                            ),
+                            titlesData: FlTitlesData(
+                              show: true,
+                              topTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              rightTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
 
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 36, // نفس الحجم
-                            interval: _getInterval(),
-                            getTitlesWidget: (value, _) {
-                              return _buildXAxisTitle(value.toInt());
-                            },
-                          ),
-                        ),
-                      ),
-                      borderData: FlBorderData(
-                        show: true,
-                        border: Border.all(color: Colors.grey[300]!, width: 1),
-                      ),
-                      barGroups: spots.map((spot) {
-                        return BarChartGroupData(
-                          x: spot.x.toInt(),
-                          barRods: [
-                            BarChartRodData(
-                              toY: spot.y,
-                              width: _getBarWidth(_selectedTimeRange),
-                              borderRadius: BorderRadius.circular(4),
-                              color: spot.y > 0 ? color : Colors.grey[300]!,
-                              backDrawRodData: BackgroundBarChartRodData(
-                                show: true,
-                                toY: spot.y + 0.5,
-                                color: Colors.grey[100]!,
+                              leftTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 30,
+                                  interval: maxY <= 1 ? 0.5 : (maxY / 3),
+                                  getTitlesWidget: (value, meta) {
+                                    // 🔥 لا تعرض الصفر
+                                    if (value.abs() < 0.0001) {
+                                      return const SizedBox.shrink();
+                                    }
+
+                                    final third = maxY / 3;
+                                    final twoThird = maxY * 2 / 3;
+
+                                    bool isMatch(double a, double b) =>
+                                        (a - b).abs() < 0.0001;
+
+                                    if (isMatch(value, maxY) ||
+                                        isMatch(value, twoThird) ||
+                                        isMatch(value, third)) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 4,
+                                        ),
+                                        child: Text(
+                                          value < 1
+                                              ? value.toStringAsFixed(
+                                                  1,
+                                                ) // للأرقام الصغيرة مثل 0.1
+                                              : value
+                                                    .toInt()
+                                                    .toString(), // للأرقام العادية
+                                          style: const TextStyle(
+                                            fontSize: 9,
+                                            color: Colors.grey,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          textAlign: TextAlign.right,
+                                        ),
+                                      );
+                                    }
+
+                                    return const SizedBox.shrink();
+                                  },
+                                ),
+                              ),
+
+                              /// محور X السفلي
+                              bottomTitles: AxisTitles(
+                                axisNameWidget: Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    _getXAxisLabel(),
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                ),
+                                axisNameSize: 25,
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 25,
+                                  interval: _getInterval(),
+                                  getTitlesWidget: (value, meta) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: _buildXAxisTitle(value, meta),
+                                    );
+                                  },
+                                ),
                               ),
                             ),
-                          ],
-                        );
-                      }).toList(),
-                      barTouchData: BarTouchData(
-                        enabled: true,
-                        touchTooltipData: BarTouchTooltipData(
-                          tooltipBgColor: color,
-                          getTooltipItem: (group, _, rod, __) {
-                            return BarTooltipItem(
-                              '${rod.toY.toInt()}',
-                              const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                            borderData: FlBorderData(
+                              show: true,
+                              border: Border.all(
+                                color: Colors.grey[300]!,
+                                width: 1,
                               ),
-                            );
-                          },
+                            ),
+                            barGroups: spots.asMap().entries.map((entry) {
+                              int index = entry.key;
+                              FlSpot spot = entry.value;
+
+                              return BarChartGroupData(
+                                x: index,
+                                barRods: [
+                                  BarChartRodData(
+                                    toY: spot.y,
+                                    width: _getBarWidth(_selectedTimeRange),
+                                    borderRadius: BorderRadius.circular(4),
+                                    color: spot.y > 0
+                                        ? color
+                                        : Colors.grey[300]!,
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          ),
                         ),
+                ),
+
+                /// مسافة بين الرسم والـ Label
+                const SizedBox(width: 1),
+
+                /// 🏷️ Label Y على اليمين (في RTL)
+                Center(
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: Text(
+                      'القيمة',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
                       ),
                     ),
                   ),
+                ),
+              ],
+            ),
           ),
 
           const SizedBox(height: 8),
           _buildRangeNavigator(),
 
-          /// 👇 الإحصائيات (نفس تشارت اليوزر)
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(
@@ -1601,7 +1106,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             .toStringAsFixed(1)
                       : '0',
                 ),
-
                 _buildCompactMiniStat('المتوسط', average.toStringAsFixed(1)),
                 _buildCompactMiniStat('الأعلى', maxY.toInt().toString()),
               ],
@@ -1612,46 +1116,43 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
-  Widget _buildBottomTitle(double value, TitleMeta meta) {
-    final index = value.toInt();
+  Widget _buildCompactMiniStat(String label, String value) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: appColors.dark,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(fontSize: 9, color: Colors.grey[600])),
+      ],
+    );
+  }
 
+  Widget _buildXAxisTitle(double value, TitleMeta meta) {
+    int index = value.toInt();
     String text = '';
 
-    switch (_selectedTimeRange) {
-      case 'اليوم':
-        if (index % 3 == 0) {
-          text = '${index}:00'; // كل 3 ساعات
-        }
-        break;
-      case 'أسبوع':
-        final index = value.toInt();
-        if (index > 6) return const SizedBox.shrink();
-
+    if (_selectedTimeRange == 'اليوم') {
+      if (index % 3 == 0) {
+        text = index.toString();
+      }
+    } else if (_selectedTimeRange == 'أسبوع') {
+      if (index < 7 && index % 2 == 0) {
         const days = ['أحد', 'اثن', 'ثلث', 'أرب', 'خمي', 'جمع', 'سبت'];
-
-        return Padding(
-          padding: const EdgeInsets.only(top: 2.0),
-          child: Text(
-            days[index],
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 7,
-              color: Colors.grey[600],
-            ),
-          ),
-        );
-
-      case 'شهر':
-        // أرقام الأيام
-        // اعرض كل 5 أيام فقط
-        if (index % 5 == 0) {
-          text = (index + 1).toString();
-        }
-
-        break;
-
-      case '3 أشهر':
-      case 'سنة':
-        // أسماء الشهور
+        text = days[index];
+      }
+    } else if (_selectedTimeRange == 'شهر') {
+      if (index % 5 == 0 && index < 30) {
+        text = (index + 1).toString();
+      }
+    } else if (_selectedTimeRange == 'سنة') {
+      if (index < 12 && index % 2 == 0) {
         const months = [
           'ينا',
           'فبر',
@@ -1666,26 +1167,272 @@ class _AdminHomePageState extends State<AdminHomePage> {
           'نوف',
           'ديس',
         ];
-        if (index >= 0 && index < months.length) {
-          text = months[index];
-        }
-        break;
+        text = months[index];
+      }
     }
 
     if (text.isEmpty) return const SizedBox.shrink();
 
-    return SideTitleWidget(
-      axisSide: meta.axisSide,
-      space: 8,
-      child: Transform.rotate(
-        angle: -math.pi / 4, // 👈 ميل 45 درجة
-        child: Text(
-          text,
-          style: GoogleFonts.ibmPlexSansArabic(
-            fontSize: 9,
-            color: Colors.grey[600],
+    return Text(
+      text,
+      style: const TextStyle(fontSize: 8, color: Colors.grey),
+      textAlign: TextAlign.center,
+    );
+  }
+
+  /// 🏷️ دالة مساعدة لعنوان المحور X حسب الفترة
+  String _getXAxisLabel() {
+    switch (_selectedTimeRange) {
+      case 'اليوم':
+        return 'الساعة';
+      case 'أسبوع':
+        return 'اليوم';
+      case 'شهر':
+        return 'اليوم';
+      case 'سنة':
+        return 'الشهر';
+      default:
+        return 'الفترة';
+    }
+  }
+
+  Widget _buildChartCard(
+    String title,
+    List<FlSpot> spots,
+    Color color,
+    String timeRange,
+  ) {
+    final double maxY = _getMaxYValue(spots);
+    final double average = spots.isNotEmpty
+        ? spots.map((e) => e.y).reduce((a, b) => a + b) / spots.length
+        : 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 14,
+            offset: Offset(0, 6),
           ),
-        ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          /// العنوان + الفلتر
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
+                ),
+              ),
+              _buildTimeRangeSelector(),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          /// 👇 الرسم البياني
+          SizedBox(
+            height: 180,
+            child: Row(
+              children: [
+                /// الرسم البياني أولاً (على اليمين في RTL)
+                Expanded(
+                  child: spots.isEmpty
+                      ? const Center(child: Text('لا توجد بيانات'))
+                      : LineChart(
+                          LineChartData(
+                            minY: 0,
+                            maxY: maxY == 0 ? 10 : maxY * 1.1,
+                            gridData: FlGridData(
+                              show: true,
+                              drawVerticalLine: false,
+                              horizontalInterval: maxY == 0
+                                  ? 1
+                                  : (maxY / 3).ceilToDouble(),
+                            ),
+                            titlesData: FlTitlesData(
+                              show: true,
+                              topTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              rightTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+
+                              /// محور Y الأيسر (الأرقام)
+                              leftTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 30,
+                                  interval: maxY == 0 ? 1 : (maxY / 3),
+                                  getTitlesWidget: (value, meta) {
+                                    // 🔥 لا تعرض الصفر
+                                    if (value.abs() < 0.0001) {
+                                      return const SizedBox.shrink();
+                                    }
+
+                                    final third = maxY / 3;
+                                    final twoThird = maxY * 2 / 3;
+
+                                    // 🔥 مقارنة آمنة للـ double
+                                    bool isMatch(double a, double b) =>
+                                        (a - b).abs() < 0.0001;
+
+                                    if (isMatch(value, maxY) ||
+                                        isMatch(value, twoThird) ||
+                                        isMatch(value, third)) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 4,
+                                        ),
+                                        child: Text(
+                                          value < 1
+                                              ? value.toStringAsFixed(
+                                                  1,
+                                                ) // لو رقم صغير
+                                              : value
+                                                    .toInt()
+                                                    .toString(), // لو رقم عادي
+                                          style: const TextStyle(
+                                            fontSize: 9,
+                                            color: Colors.grey,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          textAlign: TextAlign.right,
+                                        ),
+                                      );
+                                    }
+
+                                    return const SizedBox.shrink();
+                                  },
+                                ),
+                              ),
+
+                              /// محور X السفلي
+                              bottomTitles: AxisTitles(
+                                axisNameWidget: Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    _getXAxisLabel(),
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                ),
+                                axisNameSize: 25,
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 25,
+                                  interval: _getInterval(),
+                                  getTitlesWidget: (value, meta) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: _buildXAxisTitle(value, meta),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            borderData: FlBorderData(
+                              show: true,
+                              border: Border.all(
+                                color: Colors.grey[300]!,
+                                width: 1,
+                              ),
+                            ),
+                            lineBarsData: [
+                              LineChartBarData(
+                                spots: spots,
+                                isCurved: true,
+                                barWidth: 2.5,
+                                color: color,
+                                dotData: const FlDotData(show: false),
+                                belowBarData: BarAreaData(
+                                  show: true,
+                                  color: color.withOpacity(.15),
+                                ),
+                              ),
+                            ],
+                            lineTouchData: LineTouchData(
+                              enabled: true,
+                              touchTooltipData: LineTouchTooltipData(
+                                tooltipBgColor: color,
+                                getTooltipItems: (spots) {
+                                  return spots.map((spot) {
+                                    return LineTooltipItem(
+                                      '${spot.y.toInt()}',
+                                      const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 10,
+                                      ),
+                                    );
+                                  }).toList();
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+
+                /// مسافة بين الرسم والـ Label
+                const SizedBox(width: 1),
+
+                /// 🏷️ Label Y على اليمين (في RTL)
+                Center(
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: Text(
+                      'القيمة',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+          _buildRangeNavigator(),
+
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildCompactMiniStat(
+                  'الإجمالي',
+                  spots.isNotEmpty
+                      ? spots
+                            .map((e) => e.y)
+                            .reduce((a, b) => a + b)
+                            .toStringAsFixed(1)
+                      : '0',
+                ),
+                _buildCompactMiniStat('المتوسط', average.toStringAsFixed(1)),
+                _buildCompactMiniStat('الأعلى', maxY.toInt().toString()),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1703,134 +1450,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
     return maxY;
   }
 
-  double _getNiceMaxY(double maxY, String chartTitle) {
-    if (maxY <= 0) return 10;
-
-    // معالجة خاصة للكربون والنقاط
-    if (chartTitle.contains('كربون') || chartTitle.contains('توفير')) {
-      if (maxY < 10) return 10;
-      if (maxY < 100) return 100;
-      if (maxY < 1000) return 1000;
-    }
-
-    if (chartTitle.contains('نقاط') || chartTitle.contains('تراكم')) {
-      if (maxY < 100) return 100;
-      if (maxY < 1000) return 1000;
-      if (maxY < 10000) return 10000;
-    }
-
-    // الحساب العام
-    if (maxY < 1) return 1;
-
-    if (maxY <= 10) {
-      if (maxY <= 2) return 2;
-      if (maxY <= 5) return 5;
-      return 10;
-    }
-
-    // للأعداد الكبيرة
-    final int magnitude = maxY.toString().split('.')[0].length - 1;
-    final double base = math.pow(10, magnitude).toDouble();
-    final double normalized = maxY / base;
-
-    double niceMax;
-    if (normalized <= 1) {
-      niceMax = 1;
-    } else if (normalized <= 2) {
-      niceMax = 2;
-    } else if (normalized <= 5) {
-      niceMax = 5;
-    } else {
-      niceMax = 10;
-    }
-
-    return niceMax * base * 1.2; // هامش 20%
-  }
-
-  Widget _buildStatCardSafe({
-    required String title,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    double? progress,
-  }) {
-    return SizedBox(
-      height: 110, // 🔒 ارتفاع ثابت يمنع RenderFlex overflow
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.10),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
-          border: Border.all(color: color.withOpacity(0.15), width: 1),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 🔹 أيقونة صغيرة
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 14, color: color),
-            ),
-
-            // 🔹 الرقم
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: appColors.dark,
-                height: 1.0,
-              ),
-            ),
-
-            // 🔹 العنوان
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: appColors.sea,
-                height: 1.1,
-              ),
-            ),
-
-            // 🔹 Progress أو فراغ ثابت
-            progress != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: LinearProgressIndicator(
-                      value: progress.clamp(0, 1),
-                      minHeight: 4,
-                      backgroundColor: color.withOpacity(0.15),
-                      valueColor: AlwaysStoppedAnimation(color),
-                    ),
-                  )
-                : const SizedBox(height: 4),
-          ],
-        ),
-      ),
-    );
-  }
-
-  bool _showTargetForm = false;
   double _carbonTarget = 1000.0; // القيمة الافتراضية
   final TextEditingController _targetController = TextEditingController();
 
@@ -2215,7 +1834,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         : 0;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -2231,156 +1850,188 @@ class _AdminHomePageState extends State<AdminHomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           /// العنوان + الفلتر
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'تطور توفير الكربون',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: appColors.dark,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.teal.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.teal.withOpacity(0.3)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedTimeRange,
-                    icon: Icon(
-                      Icons.arrow_drop_down,
-                      size: 20,
-                      color: Colors.teal,
-                    ),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() {
-                          _selectedTimeRange = v;
-                        });
-                        _loadChartData();
-                      }
-                    },
-                    items: _timeRanges
-                        .map(
-                          (e) => DropdownMenuItem(
-                            value: e,
-                            child: Text(
-                              e,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: appColors.dark,
-                              ),
-                            ),
-                          ),
-                        )
-                        .toList(),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'تطور توفير الكربون',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: appColors.dark,
                   ),
                 ),
-              ),
-            ],
+
+                /// ✅ استخدام _buildTimeRangeSelector مباشرة
+                _buildTimeRangeSelector(),
+              ],
+            ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
-          /// 👇 الرسم البياني
+          /// 👇 الرسم البياني مع Label ي مثل _buildBarChartCard
           SizedBox(
-            height: 160,
-            child: carbonSpots.isEmpty
-                ? const Center(child: Text('لا توجد بيانات'))
-                : BarChart(
-                    BarChartData(
-                      minY: 0,
-                      maxY: maxY == 0 ? 10 : null,
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        horizontalInterval: maxY == 0
-                            ? 1
-                            : math.max(1, (maxY / 3).ceilToDouble()),
-                      ),
-                      titlesData: FlTitlesData(
-                        show: true,
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 36,
-                            getTitlesWidget: _buildLeftTitle,
-                          ),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 36,
-                            interval: _getInterval(),
-                            getTitlesWidget: (value, _) {
-                              return _buildXAxisTitle(value.toInt());
-                            },
-                          ),
-                        ),
-                      ),
-                      borderData: FlBorderData(
-                        show: true,
-                        border: Border.all(color: Colors.grey[300]!, width: 1),
-                      ),
-                      barGroups: carbonSpots.map((spot) {
-                        return BarChartGroupData(
-                          x: spot.x.toInt(),
-                          barRods: [
-                            BarChartRodData(
-                              toY: spot.y,
-                              width: _getBarWidth(_selectedTimeRange),
-                              borderRadius: BorderRadius.circular(4),
-                              color: spot.y > 0
-                                  ? Colors.teal
-                                  : Colors.grey[300]!,
-                              backDrawRodData: BackgroundBarChartRodData(
-                                show: true,
-                                toY: spot.y + 0.5,
-                                color: Colors.grey[100]!,
+            height: 170,
+            child: Row(
+              children: [
+                /// الرسم البياني أولاً
+                Expanded(
+                  child: carbonSpots.isEmpty
+                      ? const Center(child: Text('لا توجد بيانات'))
+                      : BarChart(
+                          BarChartData(
+                            minY: 0,
+                            maxY: maxY == 0 ? 10 : maxY * 1.1,
+                            gridData: FlGridData(
+                              show: true,
+                              drawVerticalLine: false,
+                              horizontalInterval: maxY == 0
+                                  ? 1
+                                  : (maxY / 3).ceilToDouble(),
+                            ),
+                            titlesData: FlTitlesData(
+                              show: true,
+                              topTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+                              rightTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false),
+                              ),
+
+                              /// محور Y الأيسر (الأرقام)
+                              leftTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 30,
+                                  interval: maxY == 0 ? 1 : (maxY / 3),
+                                  getTitlesWidget: (value, meta) {
+                                    // عرض فقط القيم التي تطابق maxY, maxY*2/3, maxY/3
+                                    if (value == maxY ||
+                                        value == maxY * 2 / 3 ||
+                                        value == maxY / 3) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 4,
+                                        ),
+                                        child: Text(
+                                          value.toInt().toString(),
+                                          style: const TextStyle(
+                                            fontSize: 9,
+                                            color: Colors.grey,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          textAlign: TextAlign.right,
+                                        ),
+                                      );
+                                    }
+
+                                    // إخفاء باقي القيم بما في ذلك الصفر
+                                    return const SizedBox.shrink();
+                                  },
+                                ),
+                              ),
+
+                              /// محور X السفلي
+                              bottomTitles: AxisTitles(
+                                axisNameWidget: Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    _getXAxisLabel(),
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                ),
+                                axisNameSize: 25,
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  reservedSize: 25,
+                                  interval: _getInterval(),
+                                  getTitlesWidget: (value, meta) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: _buildXAxisTitle(value, meta),
+                                    );
+                                  },
+                                ),
                               ),
                             ),
-                          ],
-                        );
-                      }).toList(),
-                      barTouchData: BarTouchData(
-                        enabled: true,
-                        touchTooltipData: BarTouchTooltipData(
-                          tooltipBgColor: Colors.teal,
-                          getTooltipItem: (group, _, rod, __) {
-                            return BarTooltipItem(
-                              '${rod.toY.toInt()} كجم',
-                              const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                            borderData: FlBorderData(
+                              show: true,
+                              border: Border.all(
+                                color: Colors.grey[300]!,
+                                width: 0.5,
                               ),
-                            );
-                          },
+                            ),
+                            barGroups: carbonSpots.asMap().entries.map((entry) {
+                              int index = entry.key;
+                              FlSpot spot = entry.value;
+
+                              return BarChartGroupData(
+                                x: index,
+                                barRods: [
+                                  BarChartRodData(
+                                    toY: spot.y,
+                                    width: _getBarWidth(_selectedTimeRange),
+                                    borderRadius: BorderRadius.circular(4),
+                                    color: spot.y > 0
+                                        ? Colors.teal
+                                        : Colors.grey[300]!,
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                            barTouchData: BarTouchData(
+                              enabled: true,
+                              touchTooltipData: BarTouchTooltipData(
+                                tooltipBgColor: Colors.teal,
+                                getTooltipItem:
+                                    (group, groupIndex, rod, rodIndex) {
+                                      return BarTooltipItem(
+                                        '${rod.toY.toInt()} كجم',
+                                        const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 10,
+                                        ),
+                                      );
+                                    },
+                              ),
+                            ),
+                          ),
                         ),
+                ),
+
+                /// مسافة بين الرسم والـ Label
+                const SizedBox(width: 1),
+
+                /// 🏷️ Label Y على اليمين (في RTL)
+                Center(
+                  child: RotatedBox(
+                    quarterTurns: 3,
+                    child: Text(
+                      'القيمة',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
                       ),
                     ),
                   ),
+                ),
+              ],
+            ),
           ),
 
           const SizedBox(height: 8),
           _buildRangeNavigator(),
 
-          /// 👇 الإحصائيات
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(
@@ -2392,7 +2043,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
                       ? '${carbonSpots.map((e) => e.y).reduce((a, b) => a + b).toStringAsFixed(1)} كجم'
                       : '0 كجم',
                 ),
-
                 _buildCompactMiniStat(
                   'المتوسط',
                   '${average.toStringAsFixed(1)} كجم',
@@ -2407,29 +2057,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
         ],
       ),
     );
-  }
-
-  Future<int> _getActiveUsersCount() async {
-    final startDate = _getStartDateForRange(_selectedTimeRange);
-
-    final snapshot = await FirebaseFirestore.instance
-        .collection('submissions')
-        .where(
-          'createdAt',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
-        )
-        .get();
-
-    final Set<String> activeUserIds = {};
-
-    for (final doc in snapshot.docs) {
-      final userId = doc.data()['userId'];
-      if (userId is String) {
-        activeUserIds.add(userId);
-      }
-    }
-
-    return activeUserIds.length;
   }
 
   @override
@@ -2646,10 +2273,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           totalCompletedTasks +=
                               num.tryParse(ct.toString()) ?? 0;
                       }
-                      final double totalPointsValue = totalPoints.toDouble();
-                      final double totalTasksValue = totalCompletedTasks
-                          .toDouble();
-                      final double totalCarbonValue = totalCarbon.toDouble();
                       return Column(
                         children: [
                           _buildCarbonOverviewCard(
@@ -2660,7 +2283,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           const SizedBox(height: 20),
 
                           SizedBox(
-                            height: 400,
+                            height: 370,
                             child: PageView(
                               children: [
                                 _buildBarChartCard(
@@ -3052,6 +2675,19 @@ class _AdminHomePageState extends State<AdminHomePage> {
           .collection('users')
           .where('isVerified', isEqualTo: true)
           .get();
+      // ✅ تعريف startDate و endDate داخل الدالة
+      // final startDate = _getStartDateForRange(_selectedTimeRange);
+      // final endDate = _getEndDateForRange(_selectedTimeRange);
+
+      // final usersSnapshot = await FirebaseFirestore.instance
+      //     .collection('users')
+      //     .where('isVerified', isEqualTo: true)
+      //     .where(
+      //       'createdAt',
+      //       isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+      //     )
+      //     .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+      //     .get();
 
       final List<Map<String, dynamic>> usersData = [];
 
@@ -3068,7 +2704,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
           'completedTasks': completedTasks is num ? completedTasks.toInt() : 0,
           'points': points is num ? points.toInt() : 0,
           'pfpIndex': pfpIndex,
-          // ❌ لا نحتاج 'rank': 0 هنا
         });
       }
 
@@ -3077,9 +2712,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
         (a, b) => b['completedTasks'].compareTo(a['completedTasks']),
       );
 
-      // ❌ لا نحتاج حلقة for لإضافة الرتبة
-
-      // أخذ أفضل 3 فقط
       return usersData.take(3).toList();
     } catch (e) {
       debugPrint('❌ Leaderboard error: $e');
@@ -3243,71 +2875,5 @@ class _AdminHomePageState extends State<AdminHomePage> {
       default:
         return 1.0;
     }
-  }
-
-  // 🔧 دالة لعرض تسميات المحور X (نفس تشارت اليوزر)
-  Widget _buildXAxisTitle(int index) {
-    if (_selectedTimeRange == 'اليوم') {
-      final showHours = [0, 3, 6, 9, 12, 15, 18, 21, 23];
-      if (showHours.contains(index)) {
-        return Text('$index', style: const TextStyle(fontSize: 10));
-      }
-      return const SizedBox();
-    }
-
-    if (_selectedTimeRange == 'أسبوع') {
-      const days = ['أحد', 'إثن', 'ثلا', 'أرب', 'خم', 'جم', 'سبت'];
-      if (index >= 0 && index < 7) {
-        return Text(days[index], style: const TextStyle(fontSize: 10));
-      }
-      return const SizedBox();
-    }
-
-    if (_selectedTimeRange == 'شهر') {
-      final day = index + 1;
-      final lastDay = DateTime(_cursorDate.year, _cursorDate.month, 0).day;
-      final showDays = [1, 5, 10, 15, 20, 25, lastDay];
-      if (showDays.contains(day)) {
-        return Text(day.toString(), style: const TextStyle(fontSize: 10));
-      }
-      return const SizedBox();
-    }
-
-    const months = [
-      'ينا',
-      'فبر',
-      'مار',
-      'أبر',
-      'ماي',
-      'يون',
-      'يول',
-      'أغس',
-      'سبت',
-      'أكت',
-      'نوف',
-      'ديس',
-    ];
-    if (index >= 0 && index < 12) {
-      return Text(months[index], style: const TextStyle(fontSize: 10));
-    }
-    return const SizedBox();
-  }
-
-  // 🔧 إحصائيات مصغرة (نفس تشارت اليوزر)
-  Widget _buildCompactMiniStat(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            color: appColors.dark,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-      ],
-    );
   }
 }
