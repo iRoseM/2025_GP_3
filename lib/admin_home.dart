@@ -42,6 +42,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
   DateTime _cursorDate = DateTime.now();
   bool _isCarbonExpanded = false;
   List<Map<String, dynamic>> _topUsers = [];
+  List<BarChartGroupData> _taskBarGroups = [];
+  Map<String, Color> _categoryColors = {};
+  Map<String, String> _categoryNames = {};
+  Set<String> _uniqueCategories = {};
+  Map<int, Map<String, dynamic>> _barCategoriesInfo =
+      {}; // لتخزين معلومات كل شريط
   bool _isLoadingTopUsers = false;
   // 🔧 دوال الفترات الزمنية
   List<String> _generatePeriodKeys(DateTime start, DateTime end, String range) {
@@ -126,6 +132,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         FCMService.listenToForegroundMessages();
         await _loadTargetFromFirebase();
         _loadTopUsers();
+        await _loadTaskCompletionData();
       }
     });
 
@@ -620,6 +627,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
       final startDate = _getStartDateForRange(_selectedTimeRange);
       final endDate = _getEndDateForRange(_selectedTimeRange);
 
+      debugPrint('📅 Loading tasks from $startDate to $endDate');
+
       // احصل على جميع التقديمات المعتمدة في الفترة
       final submissionsSnapshot = await FirebaseFirestore.instance
           .collection('submissions')
@@ -632,44 +641,199 @@ class _AdminHomePageState extends State<AdminHomePage> {
           .get();
 
       // أنشئ قائمة الفترات
-      final Map<String, int> periodCounts = {};
       final periodKeys = _generatePeriodKeys(
         startDate,
         endDate,
         _selectedTimeRange,
       );
 
+      // خريطة لتخزين البيانات حسب الفترة والـ emissionFactorRef
+      final Map<String, Map<String, int>> categoryCounts = {};
+      final Set<String> allCategories = {};
+
+      // تهيئة العدادات
       for (final key in periodKeys) {
-        periodCounts[key] = 0;
+        categoryCounts[key] = {};
       }
 
-      // عد المهام لكل فترة
+      // أولاً: جمع كل التصنيفات الفريدة وأسمائها من جميع المستندات
+      final Map<String, String> tempCategoryNames = {};
+      for (final doc in submissionsSnapshot.docs) {
+        final data = doc.data();
+        final emissionFactorRef =
+            data['emissionFactorRef']?.toString() ?? 'غير محدد';
+        final taskTitle = data['taskTitle']?.toString() ?? emissionFactorRef;
+
+        allCategories.add(emissionFactorRef);
+        tempCategoryNames[emissionFactorRef] = taskTitle;
+      }
+
+      // تحديث أسماء التصنيفات
+      setState(() {
+        _categoryNames.addAll(tempCategoryNames);
+      });
+
+      // توليد ألوان ديناميكية لكل تصنيف
+      final Map<String, Color> tempCategoryColors = {};
+      final colorPalette = [
+        Colors.green,
+        Colors.blue,
+        Colors.orange,
+        Colors.purple,
+        Colors.teal,
+        Colors.pink,
+        Colors.indigo,
+        Colors.amber,
+        Colors.brown,
+        Colors.cyan,
+        Colors.lime,
+        Colors.deepOrange,
+        Colors.red,
+        Colors.yellow,
+        Colors.lightBlue,
+        Colors.lightGreen,
+      ];
+
+      int colorIndex = 0;
+      for (final category in allCategories) {
+        tempCategoryColors[category] =
+            colorPalette[colorIndex % colorPalette.length];
+        colorIndex++;
+      }
+
+      // تحديث ألوان التصنيفات
+      setState(() {
+        _categoryColors.addAll(tempCategoryColors);
+      });
+
+      // عد المهام حسب emissionFactorRef لكل فترة
       for (final doc in submissionsSnapshot.docs) {
         final data = doc.data();
         final createdAt = data['createdAt'];
+        final emissionFactorRef =
+            data['emissionFactorRef']?.toString() ?? 'غير محدد';
+
         if (createdAt is Timestamp) {
           final taskDate = createdAt.toDate();
           final periodKey = _getPeriodKey(taskDate, _selectedTimeRange);
 
-          if (periodCounts.containsKey(periodKey)) {
-            periodCounts[periodKey] = periodCounts[periodKey]! + 1;
+          if (categoryCounts.containsKey(periodKey)) {
+            final periodData = categoryCounts[periodKey]!;
+            periodData[emissionFactorRef] =
+                (periodData[emissionFactorRef] ?? 0) + 1;
           }
         }
       }
 
-      // حوّل إلى FlSpots
-      final List<FlSpot> spots = [];
+      // تحويل إلى BarChartGroupData مع أشرطة متعددة
+      final List<BarChartGroupData> barGroups = [];
       int index = 0;
 
+      // حساب القيمة القصوى للمحور Y
+      double maxCount = 0;
       for (final key in periodKeys) {
-        spots.add(
-          FlSpot(index.toDouble(), (periodCounts[key] ?? 0).toDouble()),
+        final periodData = categoryCounts[key] ?? {};
+        double periodTotal = 0;
+        for (final entry in periodData.entries) {
+          periodTotal += entry.value;
+        }
+        if (periodTotal > maxCount) {
+          maxCount = periodTotal;
+        }
+      }
+
+      // تحديث _taskCompletionSpots للاستخدام في الإحصائيات
+      final List<FlSpot> spots = [];
+      for (final key in periodKeys) {
+        final periodData = categoryCounts[key] ?? {};
+        double periodTotal = 0;
+        for (final entry in periodData.entries) {
+          periodTotal += entry.value;
+        }
+        spots.add(FlSpot(index.toDouble(), periodTotal));
+        index++;
+      }
+
+      // إعادة تعيين index
+      index = 0;
+      final Map<int, Map<String, dynamic>> tempBarInfo =
+          {}; // للمعلومات المؤقتة
+
+      for (final key in periodKeys) {
+        final periodData = categoryCounts[key] ?? {};
+
+        // إنشاء أشرطة لكل تصنيف في نفس المجموعة
+        final List<BarChartRodData> rods = [];
+        final Map<String, dynamic> groupInfo = {}; // تخزين معلومات هذه المجموعة
+
+        // ترتيب التصنيفات حسب العدد (تنازلياً)
+        final sortedCategories = periodData.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+
+        double currentStack = 0;
+        int rodIndex = 0;
+        for (final entry in sortedCategories) {
+          final category = entry.key;
+          final count = entry.value.toDouble();
+          final displayName = _categoryNames[category] ?? category;
+
+          if (count > 0) {
+            // تخزين معلومات هذا الشريط
+            groupInfo['rod_$rodIndex'] = {
+              'category': category,
+              'name': displayName,
+              'count': count,
+              'color': _categoryColors[category] ?? Colors.grey,
+              'startY': currentStack,
+              'endY': currentStack + count,
+            };
+
+            rods.add(
+              BarChartRodData(
+                toY: currentStack + count,
+                width: _getBarWidth(_selectedTimeRange),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  topRight: Radius.circular(4),
+                ),
+                color: _categoryColors[category] ?? Colors.grey,
+              ),
+            );
+            currentStack += count;
+            rodIndex++;
+          }
+        }
+
+        // تخزين معلومات المجموعة
+        tempBarInfo[index] = groupInfo;
+
+        // إذا كانت rods فارغة، أضف شريطاً فارغاً
+        if (rods.isEmpty) {
+          rods.add(
+            BarChartRodData(
+              toY: 0,
+              width: _getBarWidth(_selectedTimeRange),
+              color: Colors.transparent,
+            ),
+          );
+        }
+
+        barGroups.add(
+          BarChartGroupData(
+            x: index,
+            barRods: rods,
+            barsSpace: 0, // لا مسافة بين الأشرطة المتراكمة
+          ),
         );
+
         index++;
       }
 
       setState(() {
+        _taskBarGroups = barGroups;
         _taskCompletionSpots = spots;
+        _uniqueCategories = allCategories;
+        _barCategoriesInfo = tempBarInfo; // تخزين معلومات الأشرطة
       });
     } catch (e) {
       debugPrint('❌ Task completion error: $e');
@@ -937,10 +1101,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
           /// 👇 الرسم البياني
           SizedBox(
-            height: 180,
+            height: 200,
             child: Row(
               children: [
-                /// الرسم البياني أولاً (على اليمين في RTL)
                 Expanded(
                   child: spots.isEmpty
                       ? const Center(child: Text('لا توجد بيانات'))
@@ -963,14 +1126,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
                               rightTitles: const AxisTitles(
                                 sideTitles: SideTitles(showTitles: false),
                               ),
-
                               leftTitles: AxisTitles(
                                 sideTitles: SideTitles(
                                   showTitles: true,
                                   reservedSize: 30,
                                   interval: maxY <= 1 ? 0.5 : (maxY / 3),
                                   getTitlesWidget: (value, meta) {
-                                    // 🔥 لا تعرض الصفر
                                     if (value.abs() < 0.0001) {
                                       return const SizedBox.shrink();
                                     }
@@ -990,12 +1151,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                         ),
                                         child: Text(
                                           value < 1
-                                              ? value.toStringAsFixed(
-                                                  1,
-                                                ) // للأرقام الصغيرة مثل 0.1
-                                              : value
-                                                    .toInt()
-                                                    .toString(), // للأرقام العادية
+                                              ? value.toStringAsFixed(1)
+                                              : value.toInt().toString(),
                                           style: const TextStyle(
                                             fontSize: 9,
                                             color: Colors.grey,
@@ -1005,13 +1162,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                         ),
                                       );
                                     }
-
                                     return const SizedBox.shrink();
                                   },
                                 ),
                               ),
-
-                              /// محور X السفلي
                               bottomTitles: AxisTitles(
                                 axisNameWidget: Padding(
                                   padding: const EdgeInsets.only(top: 8),
@@ -1045,32 +1199,58 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                 width: 1,
                               ),
                             ),
-                            barGroups: spots.asMap().entries.map((entry) {
-                              int index = entry.key;
-                              FlSpot spot = entry.value;
+                            barGroups: _taskBarGroups.isEmpty
+                                ? _buildDefaultBarGroups(spots)
+                                : _taskBarGroups,
+                            barTouchData: BarTouchData(
+                              enabled: true,
+                              touchTooltipData: BarTouchTooltipData(
+                                tooltipBgColor: color,
+                                getTooltipItem:
+                                    (group, groupIndex, rod, rodIndex) {
+                                      // إذا كان عندنا معلومات عن هذا الشريط
+                                      if (_barCategoriesInfo.containsKey(
+                                        group.x,
+                                      )) {
+                                        final groupInfo =
+                                            _barCategoriesInfo[group.x]!;
+                                        final rodKey = 'rod_$rodIndex';
 
-                              return BarChartGroupData(
-                                x: index,
-                                barRods: [
-                                  BarChartRodData(
-                                    toY: spot.y,
-                                    width: _getBarWidth(_selectedTimeRange),
-                                    borderRadius: BorderRadius.circular(4),
-                                    color: spot.y > 0
-                                        ? color
-                                        : Colors.grey[300]!,
-                                  ),
-                                ],
-                              );
-                            }).toList(),
+                                        if (groupInfo.containsKey(rodKey)) {
+                                          final rodInfo = groupInfo[rodKey];
+                                          final categoryName = rodInfo['name'];
+                                          final count = rodInfo['count']
+                                              .toInt();
+
+                                          return BarTooltipItem(
+                                            '$categoryName\n$count مهمة',
+                                            const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 10,
+                                            ),
+                                          );
+                                        }
+                                      }
+
+                                      // إذا لم نجد معلومات، نعرض القيمة فقط
+                                      return BarTooltipItem(
+                                        '${rod.toY.toInt()} مهمة',
+                                        const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 10,
+                                        ),
+                                      );
+                                    },
+                              ),
+                            ),
                           ),
                         ),
                 ),
 
-                /// مسافة بين الرسم والـ Label
                 const SizedBox(width: 1),
 
-                /// 🏷️ Label Y على اليمين (في RTL)
                 Center(
                   child: RotatedBox(
                     quarterTurns: 3,
@@ -1115,6 +1295,28 @@ class _AdminHomePageState extends State<AdminHomePage> {
       ),
     );
   }
+
+  // دالة لبناء BarGroups افتراضية (احتياطي)
+  List<BarChartGroupData> _buildDefaultBarGroups(List<FlSpot> spots) {
+    return spots.asMap().entries.map((entry) {
+      int index = entry.key;
+      FlSpot spot = entry.value;
+
+      return BarChartGroupData(
+        x: index,
+        barRods: [
+          BarChartRodData(
+            toY: spot.y,
+            width: _getBarWidth(_selectedTimeRange),
+            borderRadius: BorderRadius.circular(4),
+            color: spot.y > 0 ? appColors.sea : Colors.grey[300]!,
+          ),
+        ],
+      );
+    }).toList();
+  }
+
+  // دالة وسيلة الإيضاح مع Tooltip
 
   Widget _buildCompactMiniStat(String label, String value) {
     return Column(
@@ -1989,17 +2191,32 @@ class _AdminHomePageState extends State<AdminHomePage> {
                             barTouchData: BarTouchData(
                               enabled: true,
                               touchTooltipData: BarTouchTooltipData(
-                                tooltipBgColor: Colors.teal,
+                                tooltipBgColor: appColors.primary,
                                 getTooltipItem:
                                     (group, groupIndex, rod, rodIndex) {
-                                      return BarTooltipItem(
-                                        '${rod.toY.toInt()} كجم',
-                                        const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10,
-                                        ),
-                                      );
+                                      // إذا كان عندنا بيانات التصنيفات
+                                      if (_taskBarGroups.isNotEmpty &&
+                                          group.barRods.length > 1) {
+                                        // نحتاج لمعرفة أي تصنيف يمثله هذا الشريط
+                                        // للتبسيط، نعرض القيمة فقط
+                                        return BarTooltipItem(
+                                          '${rod.toY.toInt()}',
+                                          const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10,
+                                          ),
+                                        );
+                                      } else {
+                                        return BarTooltipItem(
+                                          '${rod.toY.toInt()} مهمة',
+                                          const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10,
+                                          ),
+                                        );
+                                      }
                                     },
                               ),
                             ),
@@ -2283,7 +2500,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                           const SizedBox(height: 20),
 
                           SizedBox(
-                            height: 370,
+                            height: 380,
                             child: PageView(
                               children: [
                                 _buildBarChartCard(
@@ -2319,126 +2536,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
                   _buildLeaderboardCard(),
                   const SizedBox(height: 16),
-
-                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: FirebaseFirestore.instance
-                        .collection('submissions')
-                        .where('status', isEqualTo: 'pending')
-                        .snapshots(),
-                    builder: (context, snap) {
-                      final isLoading =
-                          snap.connectionState == ConnectionState.waiting;
-                      final count = (snap.data?.docs.length ?? 0);
-
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const AdminTaskCheckPage(),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 16,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.grey.withOpacity(0.15),
-                                blurRadius: 8,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                            border: Border.all(
-                              color: appColors.primary.withOpacity(0.2),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: appColors.primary.withOpacity(.12),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.fact_check_outlined,
-                                  color: appColors.primary,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'طلبات مهام جديدة للمراجعة',
-                                      style: GoogleFonts.ibmPlexSansArabic(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                        color: appColors.dark,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      isLoading
-                                          ? 'جاري التحميل...'
-                                          : (count == 0
-                                                ? 'لا توجد طلبات جديدة حالياً'
-                                                : 'لديك $count طلب${count == 1 ? '' : 'ات'} بانتظار الاعتماد'),
-                                      style: GoogleFonts.ibmPlexSansArabic(
-                                        fontSize: 13.5,
-                                        color: Colors.grey[700],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: appColors.primary.withOpacity(.12),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Text(
-                                      isLoading ? '—' : '$count',
-                                      style: GoogleFonts.ibmPlexSansArabic(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: appColors.primary,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  const Icon(
-                                    Icons.chevron_left,
-                                    color: appColors.primary,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 14),
 
                   StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                     stream: FirebaseFirestore.instance
