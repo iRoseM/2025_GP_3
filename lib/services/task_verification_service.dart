@@ -239,6 +239,7 @@ class TaskVerificationService {
     File imageFile, {
     String? expectedTask,
     double threshold = 0.7,
+    String mode = 'task_verify',
   }) async {
     try {
       final bytes = await imageFile.readAsBytes();
@@ -262,9 +263,10 @@ class TaskVerificationService {
     String? imageUrl,
     String? expectedTask,
     double threshold = 0.7,
+    String mode = 'task_verify',
   }) async {
     try {
-      final body = <String, dynamic>{'threshold': threshold};
+      final body = <String, dynamic>{'threshold': threshold, 'mode': mode};
 
       if (imageBase64 != null) {
         body['image_base64'] = imageBase64;
@@ -280,7 +282,8 @@ class TaskVerificationService {
       if (expectedTask != null) {
         body['expected_task'] = expectedTask;
       }
-
+      body['mode'] = 'origin_check';
+      _log('📤 request body: ${jsonEncode(body)}');
       final response = await http
           .post(
             Uri.parse(_baseUrl),
@@ -288,6 +291,8 @@ class TaskVerificationService {
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 60));
+      _log('📡 status: ${response.statusCode}');
+      _log('📡 body: ${response.body}');
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);

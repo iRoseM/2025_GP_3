@@ -34,6 +34,18 @@ class CompleteTaskSheet extends StatefulWidget {
 }
 
 class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
+  static const String _localProductTaskId = 'z5MNCTfrWZBkXFHVL9aS';
+
+  bool get _isLocalProductTask {
+    final id = (widget.taskData['id'] ?? '').toString().trim().toLowerCase();
+    final taskId = (widget.taskData['taskId'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    return id == _localProductTaskId.toLowerCase() ||
+        taskId == _localProductTaskId.toLowerCase();
+  }
+
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   final TextEditingController _itemCountCtrl = TextEditingController();
@@ -44,27 +56,29 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   bool _isUploading = false;
   bool _isCompleted = false;
   bool _isAiApproved(TaskVerificationResult? r) {
-    // 1) لابد يكون في Result والتحقق ناجح
     if (r == null) return false;
     if (r.success != true) return false;
     if (r.verified != true) return false;
 
-    // 2) الثقة لا تقل عن 70%
     final conf = r.confidence ?? 0.0;
     if (conf < 0.70) return false;
 
-    // 3) إذا كان OCR نعتمد على الثقة فقط
-    if (r.verificationSource == 'ocr_smart') {
-      return true; // الثقة فوق 70% ✅
+    // ✅ استثناء مهمة شراء منتجات محلية (origin_check)
+    if (_isLocalProductTask && r.taskName == 'origin_check') {
+      // إذا السيرفر قال local ✅ خلاص نعتمده
+      return true;
     }
 
-    // 4) إذا كان المودل - نتحقق من المنطقية
+    if (r.verificationSource == 'ocr_smart') {
+      return true;
+    }
+
     if (r.verificationSource == 'vision' || r.verificationSource == null) {
       final isLogical = OCRService.isModelResultValid(
         r.taskName,
         widget.taskData['title']?.toString() ?? '',
       );
-      return isLogical; // المنطقية كافية لأن الثقة فوق 70% ✅
+      return isLogical;
     }
 
     return false;
@@ -311,7 +325,40 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       // استخراج عنوان المهمة
       final taskTitle = widget.taskData['title']?.toString() ?? '';
       print('🔍 التحقق باستخدام العنوان: "$taskTitle"');
+      print('🧾 taskData keys: ${widget.taskData.keys.toList()}');
+      print(
+        '🧾 id: ${widget.taskData['id']} | taskId: ${widget.taskData['taskId']} | task_id: ${widget.taskData['task_id']}',
+      );
+      print('🧾 local? $_isLocalProductTask');
+      if (_isLocalProductTask) {
+        print('🟩 Local product task detected. Calling origin_check...');
 
+        final result = await TaskVerificationService.verifyFromFile(
+          File(imagePath),
+          threshold: 0.7,
+          mode: 'origin_check', // ✅ هذا أهم شي
+        );
+
+        if (mounted) {
+          setState(() {
+            _verificationResult = result;
+            _isVerifying = false;
+          });
+        }
+
+        if (result.verified == true) {
+          WidgetsBinding.instance.endOfFrame.then((_) {
+            if (mounted) _uploadAndComplete();
+          });
+        } else {
+          _showInlineError('❌ المنتج ليس محلي / لم يتم التأكد');
+          WidgetsBinding.instance.endOfFrame.then((_) {
+            if (mounted) showTaskFailedDialogAndRedirect(context);
+          });
+        }
+
+        return result;
+      }
       // 1️⃣ ✅ جرب المودل أولاً
       final cloudResult = await _tryCloudModelFirst(imagePath, taskTitle);
 
