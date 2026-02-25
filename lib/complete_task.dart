@@ -63,15 +63,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final conf = r.confidence ?? 0.0;
     if (conf < 0.70) return false;
 
-    // ✅ استثناء مهمة شراء منتجات محلية (origin_check)
-    if (_isLocalProductTask && r.taskName == 'origin_check') {
-      // إذا السيرفر قال local ✅ خلاص نعتمده
+    // ✅ لو origin_check خلاص اعتمده مباشرة (لأن السيرفر يقرر verified)
+    if (r.verificationSource == 'origin_check') {
       return true;
     }
 
-    if (r.verificationSource == 'ocr_smart') {
-      return true;
-    }
+    if (r.verificationSource == 'ocr_smart') return true;
 
     if (r.verificationSource == 'vision' || r.verificationSource == null) {
       final isLogical = OCRService.isModelResultValid(
@@ -113,6 +110,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   double? _manualDistanceKm;
 
   int? _itemCount;
+  String? _verificationHint;
 
   // ✅ متغيرات التحقق بالـ AI
   TaskVerificationResult? _verificationResult;
@@ -333,31 +331,44 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       if (_isLocalProductTask) {
         print('🟩 Local product task detected. Calling origin_check...');
 
-        final result = await TaskVerificationService.verifyFromFile(
+        final originResult = await TaskVerificationService.verifyOriginFromFile(
           File(imagePath),
           threshold: 0.7,
-          mode: 'origin_check', // ✅ هذا أهم شي
         );
+
+        // جهّز رسالة التحقق
+        final c = originResult.countryOfOrigin;
+        final isLocal = originResult.isLocalSaudi == true;
+        final conf = originResult.confidence ?? 0.0;
+
+        String msg;
+        if (c == null || c.trim().isEmpty || conf < 0.6) {
+          msg =
+              '🔎 تم التحقق: بلد المنشأ غير واضح, يرجى إعادة التقاط صورة أوضح للمهمة';
+        } else if (isLocal) {
+          msg = '✅ تم التحقق: بلد المنشأ $c (محلي)';
+        } else {
+          msg = '❌ تم التحقق: بلد المنشأ $c (غير محلي)';
+        }
 
         if (mounted) {
           setState(() {
-            _verificationResult = result;
+            _verificationResult = originResult.copyWith(
+              verificationSource: 'origin_check',
+            );
+            _verificationHint = msg;
             _isVerifying = false;
           });
         }
 
-        if (result.verified == true) {
+        // ✅ القرار
+        if (originResult.verified == true) {
           WidgetsBinding.instance.endOfFrame.then((_) {
             if (mounted) _uploadAndComplete();
           });
-        } else {
-          _showInlineError('❌ المنتج ليس محلي / لم يتم التأكد');
-          WidgetsBinding.instance.endOfFrame.then((_) {
-            if (mounted) showTaskFailedDialogAndRedirect(context);
-          });
         }
 
-        return result;
+        return originResult;
       }
       // 1️⃣ ✅ جرب المودل أولاً
       final cloudResult = await _tryCloudModelFirst(imagePath, taskTitle);
@@ -1094,6 +1105,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       _ready = false;
       _verificationResult = null; // ✅ إعادة تعيين نتيجة التحقق
       _isCompleted = false;
+      _verificationHint = null;
     });
 
     try {
@@ -1476,7 +1488,15 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     if (_verificationResult == null && !_isVerifying) {
       return const SizedBox.shrink();
     }
+    // ✅ إذا كان صحيح → ما نعرض شيء
+    if (_verificationResult!.verified == true) {
+      return const SizedBox.shrink();
+    }
 
+    // ✅ origin_check: لا نعرض البرتقالي
+    if (_verificationResult?.verificationSource == 'origin_check') {
+      return const SizedBox.shrink();
+    }
     if (_isVerifying) {
       return Container(
         padding: const EdgeInsets.all(12),
@@ -1913,6 +1933,27 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                         children: [
                           if (_verificationResult != null)
                             _buildVerificationResult(), // ✅ المربع البرتقالي يظهر مرة واحدة فقط من هنا
+                          if (_verificationHint != null) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.blueGrey.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.blueGrey.withOpacity(0.25),
+                                ),
+                              ),
+                              child: Text(
+                                _verificationHint!,
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  color: appColors.dark,
+                                ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 16),
 
                           // زر إعادة التقاط
@@ -1950,6 +1991,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   _isUploading = false;
                                   _isVerifying = false;
                                   _isCompleted = false;
+                                  _verificationHint = null;
                                 });
                               }
                             },
