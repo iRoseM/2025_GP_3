@@ -9,7 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-
+import 'services/location_validator.dart';
 import 'services/map_pick_route.dart';
 import 'services/task_verification_service.dart'; // ✅ أضيفي هذا
 import '../services/app_colors.dart';
@@ -55,31 +55,30 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   bool _isCapturing = false;
   bool _isUploading = false;
   bool _isCompleted = false;
-  bool _isAiApproved(TaskVerificationResult? r) {
-    if (r == null) return false;
-    if (r.success != true) return false;
-    if (r.verified != true) return false;
+bool _isAiApproved(TaskVerificationResult? r) {
+  if (r == null) return false;
+  if (r.success != true) return false;
+  if (r.verified != true) return false;
 
-    final conf = r.confidence ?? 0.0;
-    if (conf < 0.70) return false;
+  // ✅ location verification لا تحتاج confidence
+  if (r.verificationSource == 'location') return true;
 
-    // ✅ لو origin_check خلاص اعتمده مباشرة (لأن السيرفر يقرر verified)
-    if (r.verificationSource == 'origin_check') {
-      return true;
-    }
+  final conf = r.confidence ?? 0.0;
+  if (conf < 0.70) return false;
 
-    if (r.verificationSource == 'ocr_smart') return true;
+  if (r.verificationSource == 'origin_check') return true;
+  if (r.verificationSource == 'ocr_smart') return true;
 
-    if (r.verificationSource == 'vision' || r.verificationSource == null) {
-      final isLogical = OCRService.isModelResultValid(
-        r.taskName,
-        widget.taskData['title']?.toString() ?? '',
-      );
-      return isLogical;
-    }
-
-    return false;
+  if (r.verificationSource == 'vision' || r.verificationSource == null) {
+    final isLogical = OCRService.isModelResultValid(
+      r.taskName,
+      widget.taskData['title']?.toString() ?? '',
+    );
+    return isLogical;
   }
+
+  return false;
+}
 
   String _dayId(DateTime dt) {
     String two(int v) => v.toString().padLeft(2, '0');
@@ -319,132 +318,141 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       _verificationResult = null;
     });
 
-    try {
-      // استخراج عنوان المهمة
-      final taskTitle = widget.taskData['title']?.toString() ?? '';
-      print('🔍 التحقق باستخدام العنوان: "$taskTitle"');
-      print('🧾 taskData keys: ${widget.taskData.keys.toList()}');
-      print(
-        '🧾 id: ${widget.taskData['id']} | taskId: ${widget.taskData['taskId']} | task_id: ${widget.taskData['task_id']}',
-      );
-      print('🧾 local? $_isLocalProductTask');
-      if (_isLocalProductTask) {
-        print('🟩 Local product task detected. Calling origin_check...');
+try {
+  // استخراج عنوان المهمة
+  final taskTitle = widget.taskData['title']?.toString() ?? '';
+  print('🔍 التحقق باستخدام العنوان: "$taskTitle"');
+  print('🧾 taskData keys: ${widget.taskData.keys.toList()}');
+  print(
+    '🧾 id: ${widget.taskData['id']} | taskId: ${widget.taskData['taskId']} | task_id: ${widget.taskData['task_id']}',
+  );
+  print('🧾 local? $_isLocalProductTask');
 
-        final originResult = await TaskVerificationService.verifyOriginFromFile(
-          File(imagePath),
-          threshold: 0.7,
+  // 0️⃣ التحقق من الموقع أولاً
+  final taskType = _getLocationTaskType(taskTitle);
+  if (taskType != null) {
+    final locationResult = await LocationValidator.validate(taskType);
+
+    if (locationResult.isValid) {
+      // ✅ الموقع صح → نقاط بدون تصوير
+      if (mounted) setState(() => _isVerifying = false);
+      WidgetsBinding.instance.endOfFrame.then((_) {
+        if (mounted) _uploadAndComplete();
+      });
+      return TaskVerificationResult(
+        success: true,
+        verified: true,
+        verificationSource: 'location',
+      );
+    } else {
+      // ❌ الموقع غلط
+      final dist = locationResult.distanceMeters != null
+          ? ' (أنتِ على بُعد ${locationResult.distanceMeters!.toStringAsFixed(0)} متر)'
+          : '';
+          // الموقع بعيد → نكمل للتصوير والـ AI للكل
+    }
+  }
+
+  if (_isLocalProductTask) {
+    print('🟩 Local product task detected. Calling origin_check...');
+
+    final originResult = await TaskVerificationService.verifyOriginFromFile(
+      File(imagePath),
+      threshold: 0.7,
+    );
+
+    final c = originResult.countryOfOrigin;
+    final isLocal = originResult.isLocalSaudi == true;
+    final conf = originResult.confidence ?? 0.0;
+
+    String msg;
+    if (c == null || c.trim().isEmpty || conf < 0.6) {
+      msg = '🔎 تم التحقق: بلد المنشأ غير واضح, يرجى إعادة التقاط صورة أوضح للمهمة';
+    } else if (isLocal) {
+      msg = '✅ تم التحقق: بلد المنشأ $c (محلي)';
+    } else {
+      msg = '❌ تم التحقق: بلد المنشأ $c (غير محلي)';
+    }
+
+    if (mounted) {
+      setState(() {
+        _verificationResult = originResult.copyWith(
+          verificationSource: 'origin_check',
         );
+        _verificationHint = msg;
+        _isVerifying = false;
+      });
+    }
 
-        // جهّز رسالة التحقق
-        final c = originResult.countryOfOrigin;
-        final isLocal = originResult.isLocalSaudi == true;
-        final conf = originResult.confidence ?? 0.0;
+    if (originResult.verified == true) {
+      WidgetsBinding.instance.endOfFrame.then((_) {
+        if (mounted) _uploadAndComplete();
+      });
+    }
 
-        String msg;
-        if (c == null || c.trim().isEmpty || conf < 0.6) {
-          msg =
-              '🔎 تم التحقق: بلد المنشأ غير واضح, يرجى إعادة التقاط صورة أوضح للمهمة';
-        } else if (isLocal) {
-          msg = '✅ تم التحقق: بلد المنشأ $c (محلي)';
-        } else {
-          msg = '❌ تم التحقق: بلد المنشأ $c (غير محلي)';
-        }
+    return originResult;
+  }
 
-        if (mounted) {
-          setState(() {
-            _verificationResult = originResult.copyWith(
-              verificationSource: 'origin_check',
-            );
-            _verificationHint = msg;
-            _isVerifying = false;
-          });
-        }
+  // 1️⃣ جرب المودل أولاً
+  final cloudResult = await _tryCloudModelFirst(imagePath, taskTitle);
 
-        // ✅ القرار
-        if (originResult.verified == true) {
-          WidgetsBinding.instance.endOfFrame.then((_) {
-            if (mounted) _uploadAndComplete();
-          });
-        }
+  // 2️⃣ استخرج النص من الصورة
+  final extractedText = await OCRService.extractTextFromFile(File(imagePath));
+  print('📝 النص المستخرج: "$extractedText"');
 
-        return originResult;
-      }
-      // 1️⃣ ✅ جرب المودل أولاً
-      final cloudResult = await _tryCloudModelFirst(imagePath, taskTitle);
+  // 3️⃣ تحقق من صحة المودل
+  final isModelLogical = OCRService.isModelResultValid(
+    cloudResult?.taskName,
+    taskTitle,
+  );
 
-      // 2️⃣ استخرج النص من الصورة (للـ OCR)
-      final extractedText = await OCRService.extractTextFromFile(
-        File(imagePath),
-      );
-      print('📝 النص المستخرج: "$extractedText"');
+  final doesImageMatch = OCRService.doesImageMatchTask(extractedText, taskTitle);
+  print('📌 doesImageMatch: $doesImageMatch');
 
-      // 3️⃣ تحقق من صحة المودل باستخدام OCRService
-      final isModelLogical = OCRService.isModelResultValid(
-        cloudResult?.taskName,
-        taskTitle,
-      );
+  TaskVerificationResult finalResult;
 
-      final doesImageMatch = OCRService.doesImageMatchTask(
-        extractedText,
-        taskTitle,
-      );
-      print('📌 doesImageMatch: $doesImageMatch');
+  // 4️⃣ القرار الذكي
+  if (cloudResult != null && cloudResult.success == true && isModelLogical) {
+    finalResult = cloudResult.copyWith(verificationSource: 'vision');
+    print('✅ المودل منطقي، نعتمد نتيجته');
+  } else {
+    print('⚠️ المودل غير منطقي، نعتمد OCR');
+    finalResult = TaskVerificationResult(
+      success: doesImageMatch,
+      taskName: taskTitle,
+      taskNameAr: OCRService.extractArabicTitle(taskTitle),
+      confidence: doesImageMatch ? 0.85 : 0.0,
+      confidencePercent: doesImageMatch ? '85%' : '0%',
+      verified: doesImageMatch,
+      matchesExpected: doesImageMatch,
+      verificationSource: 'ocr_smart',
+      extractedText: extractedText,
+    );
+  }
 
-      TaskVerificationResult finalResult;
+  // 5️⃣ تحديث الحالة
+  if (mounted) {
+    setState(() {
+      _verificationResult = finalResult;
+      _isVerifying = false;
+    });
+  }
 
-      // 4️⃣ القرار الذكي
-      if (cloudResult != null &&
-          cloudResult.success == true &&
-          isModelLogical) {
-        // ✅ المودل منطقي → نثق فيه
-        finalResult = cloudResult.copyWith(
-          verificationSource: 'vision', // 👈 أضف هذا!
-        );
-        print('✅ المودل منطقي، نعتمد نتيجته');
-      } else {
-        // ⚠️ المودل غير منطقي → نعتمد OCR
-        print('⚠️ المودل غير منطقي، نعتمد OCR');
-        finalResult = TaskVerificationResult(
-          success: doesImageMatch,
-          taskName: taskTitle,
-          taskNameAr: OCRService.extractArabicTitle(
-            taskTitle,
-          ), // ✅ استخدام OCRService
-          confidence: doesImageMatch ? 0.85 : 0.0,
-          confidencePercent: doesImageMatch ? '85%' : '0%',
-          verified: doesImageMatch,
-          matchesExpected: doesImageMatch,
-          verificationSource: 'ocr_smart',
-          extractedText: extractedText,
-        );
-      }
+  // 6️⃣ إذا كان صحيح، ابدأ الرفع
+  if (finalResult.verified == true) {
+    print('✅ تم التحقق بنجاح');
+    WidgetsBinding.instance.endOfFrame.then((_) {
+      if (mounted) _uploadAndComplete();
+    });
+  } else {
+    _showInlineError('❌ الصورة غير مطابقة للمهمة');
+    WidgetsBinding.instance.endOfFrame.then((_) {
+      if (mounted) showTaskFailedDialogAndRedirect(context);
+    });
+  }
 
-      // 5️⃣ تحديث الحالة
-      if (mounted) {
-        setState(() {
-          _verificationResult = finalResult;
-          _isVerifying = false;
-        });
-      }
-
-      // 6️⃣ إذا كان صحيح، ابدأ الرفع
-      if (finalResult.verified == true) {
-        print('✅ تم التحقق بنجاح');
-        WidgetsBinding.instance.endOfFrame.then((_) {
-          if (mounted) _uploadAndComplete();
-        });
-      } else {
-        _showInlineError('❌ الصورة غير مطابقة للمهمة');
-
-        // ✅ أضيفي هذا - يظهر popup نمّر زعلان
-        WidgetsBinding.instance.endOfFrame.then((_) {
-          if (mounted) showTaskFailedDialogAndRedirect(context);
-        });
-      }
-
-      return finalResult;
-    } catch (e) {
+  return finalResult;
+}catch (e) {
       print('❌ خطأ: $e');
       if (mounted) {
         setState(() => _isVerifying = false);
@@ -499,210 +507,172 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return null;
     }
   }
+Future<void> _uploadAndComplete() async {
+  print('🚨🚨🚨 دخلنا _uploadAndComplete 🚨🚨🚨');
 
-  Future<void> _uploadAndComplete() async {
-    print('🚨🚨🚨 دخلنا _uploadAndComplete 🚨🚨🚨');
+  if (_isUploading || _isVerifying) {
+    print('⚠️ العملية جارية بالفعل');
+    return;
+  }
 
-    // 1) التحقق من حالة الرفع والتحقق
-    print('📌 _isUploading: $_isUploading, _isVerifying: $_isVerifying');
-    if (_isUploading || _isVerifying) {
-      print('⚠️ العملية جارية بالفعل');
-      return;
-    }
+  // ✅ location لا تحتاج صورة
+  final isLocationVerified =
+      _verificationResult?.verificationSource == 'location';
 
-    // 2) التأكد من وجود صورة
-    print('📌 _capturedPath: $_capturedPath');
-    if (_capturedPath == null) {
-      _showInlineError('لم يتم التقاط صورة');
-      print('❌ لا توجد صورة');
-      return;
-    }
+  if (_capturedPath == null && !isLocationVerified) {
+    _showInlineError('لم يتم التقاط صورة');
+    print('❌ لا توجد صورة');
+    return;
+  }
 
-    // 3) التحقق من صحة نتيجة الـ AI
-    print('📌 _verificationResult?.verified: ${_verificationResult?.verified}');
-    print('📌 _isAiApproved: ${_isAiApproved(_verificationResult)}');
-    if (!_isAiApproved(_verificationResult)) {
-      _showInlineError('لم يتم اعتماد الصورة. أعد الالتقاط.');
-      print('❌ الصورة غير معتمدة');
-      if (mounted) {
-        WidgetsBinding.instance.endOfFrame.then((_) {
-          if (mounted) showTaskFailedDialogAndRedirect(context);
-        });
-      }
-      return;
-    }
-
-    print('🚀 بدء عملية الرفع التلقائي...');
-
-    // 4) الحصول على بيانات المهمة
-    final task = widget.taskData;
-    final pts = (task['points'] ?? 0) as int;
-    final taskId = task['id'] as String?;
-
-    // 5) التحقق من عدد العناصر إذا كانت المهمة deltaperitem
-    int? safeItems = _itemCount;
-    final mode = (task['calcMode'] ?? '').toString().toLowerCase();
-
-    if (mode == 'deltaperitem' && (safeItems == null || safeItems <= 0)) {
-      print('📦 طلب عدد العناصر...');
-      await _promptForItemCountIfNeeded();
-      safeItems = _itemCount;
-      if (safeItems == null || safeItems <= 0) {
-        _showInlineError('يرجى إدخال عدد العناصر.');
-        return;
-      }
-    }
-
-    // 6) بدء عملية الرفع
-    if (!mounted) return;
-    setState(() {
-      _isUploading = true;
-      _isVerifying = false;
-    });
-
-    try {
-      print('📐 حساب البيانات الإضافية...');
-
-      // 7) حساب المسافة إذا كانت المهمة تتطلب ذلك
-      final isDistanceMode = mode == 'perkm' || mode == 'deltaperkm';
-      double? pickedKm;
-
-      if (isDistanceMode) {
-        print('📍 حساب المسافة...');
-        final manualKm = _manualDistanceKm;
-        await _captureEndAndComputeDistance();
-        double? straightKm;
-        if (_autoDistanceKmComputed != null &&
-            _autoDistanceKmComputed!.isFinite &&
-            _autoDistanceKmComputed! > 0) {
-          straightKm = double.parse(
-            _autoDistanceKmComputed!.toStringAsFixed(3),
-          );
-        }
-        if (manualKm != null && manualKm > 0) {
-          pickedKm = manualKm;
-        } else if (straightKm != null && straightKm > 0) {
-          pickedKm = straightKm;
-        }
-
-        final askDistanceKm = task['askDistanceKm'] == true;
-        final defaultKmOnSubmit = (task['defaultKmOnSubmit'] is num)
-            ? (task['defaultKmOnSubmit'] as num).toDouble()
-            : null;
-        if (pickedKm == null && askDistanceKm && defaultKmOnSubmit != null) {
-          pickedKm = defaultKmOnSubmit;
-        }
-
-        double? minKm, maxKm;
-        final mk = task['minKm'];
-        final xk = task['maxKm'];
-        if (mk is num) minKm = mk.toDouble();
-        if (xk is num) maxKm = xk.toDouble();
-        if (pickedKm != null && pickedKm > 0) {
-          final clamped = pickedKm.clamp(minKm ?? 0.2, maxKm ?? 50.0) as num;
-          pickedKm = double.parse(clamped.toStringAsFixed(3));
-        }
-
-        if (_manualStart != null && _manualEnd != null) {
-          _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
-          _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
-        }
-      }
-
-      // 8) حساب الكربون المُوفر
-      print('🌿 حساب الكربون الموفر...');
-      double? carbonSaved;
-      final efId =
-          (task['ef_ref'] ??
-                  task['efRef'] ??
-                  task['emissionFactorRef'] ??
-                  task['emission_factor_ref'])
-              ?.toString();
-      final valueFieldFromTask = (task['ef_valueField'] ?? task['valueField'])
-          ?.toString();
-      if (efId != null && efId.isNotEmpty) {
-        final saved = await _computeCarbonSavedFlexible(
-          efIdFromTask: efId,
-          km: pickedKm,
-          items: safeItems,
-          valueFieldFromTask: valueFieldFromTask,
-        );
-        if (saved.isFinite) {
-          carbonSaved = double.parse(saved.toStringAsFixed(3));
-        }
-      }
-
-      print('☁️ بدء رفع الملف...');
-
-      // 9) رفع الملف وإكمال المهمة
-      await _createSubmissionAndAutoApprove(
-        localPath: _capturedPath!,
-        taskPoints: pts,
-        taskId: taskId,
-        distanceKm: pickedKm,
-        carbonSaved: carbonSaved,
-        itemCount: safeItems,
-      );
-
-      print('✅ الرفع والإنجاز تم بنجاح!');
-
-      setState(() {
-        _isCompleted = true;
+  if (!_isAiApproved(_verificationResult)) {
+    _showInlineError('لم يتم اعتماد الصورة. أعد الالتقاط.');
+    print('❌ الصورة غير معتمدة');
+    if (mounted) {
+      WidgetsBinding.instance.endOfFrame.then((_) {
+        if (mounted) showTaskFailedDialogAndRedirect(context);
       });
+    }
+    return;
+  }
 
-      // 10) عرض شاشة النجاح والتوجيه
-      if (!mounted) return;
-      await showTaskCompletedDialogAndRedirect(context);
+  print('🚀 بدء عملية الرفع التلقائي...');
 
-      // 11) تنظيف وحذف الصورة المؤقتة
-      try {
-        if (_capturedPath != null) {
-          final f = File(_capturedPath!);
-          if (await f.exists()) await f.delete();
-        }
-      } catch (_) {}
+  final task = widget.taskData;
+  final pts = (task['points'] ?? 0) as int;
+  final taskId = task['id'] as String?;
 
-      // 12) إغلاق البوتوم شيت
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } catch (e, stackTrace) {
-      print('❌ خطأ في _uploadAndComplete: $e');
-      print('📋 Stack trace: $stackTrace');
+  int? safeItems = _itemCount;
+  final mode = (task['calcMode'] ?? '').toString().toLowerCase();
 
-      if (!mounted) return;
-
-      String errorMessage = 'حدث خطأ أثناء إكمال المهمة';
-
-      if (e.toString().contains('FirebaseException') &&
-          e.toString().contains('403')) {
-        errorMessage = 'خطأ في صلاحيات التطبيق. حاول مرة أخرى.';
-      } else if (e.toString().contains('Too many attempts')) {
-        errorMessage = 'محاولات كثيرة جداً. انتظر قليلاً وحاول مرة أخرى.';
-      } else if (e.toString().contains('App attestation failed')) {
-        errorMessage = 'خطأ في التحقق من التطبيق. تأكد من إعدادات Firebase.';
-      } else if (e.toString().contains('network') ||
-          e.toString().contains('اتصال')) {
-        errorMessage = 'مشكلة في الاتصال بالإنترنت. تحقق من اتصالك.';
-      } else if (e.toString().contains('timeout') ||
-          e.toString().contains('مهلة')) {
-        errorMessage = 'انتهت مهلة الاتصال. حاول مرة أخرى.';
-      }
-
-      _showInlineError(errorMessage);
-
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-        });
-      }
+  if (mode == 'deltaperitem' && (safeItems == null || safeItems <= 0)) {
+    await _promptForItemCountIfNeeded();
+    safeItems = _itemCount;
+    if (safeItems == null || safeItems <= 0) {
+      _showInlineError('يرجى إدخال عدد العناصر.');
+      return;
     }
   }
+
+  if (!mounted) return;
+  setState(() {
+    _isUploading = true;
+    _isVerifying = false;
+  });
+
+  try {
+    final isDistanceMode = mode == 'perkm' || mode == 'deltaperkm';
+    double? pickedKm;
+
+    if (isDistanceMode) {
+      final manualKm = _manualDistanceKm;
+      await _captureEndAndComputeDistance();
+      double? straightKm;
+      if (_autoDistanceKmComputed != null &&
+          _autoDistanceKmComputed!.isFinite &&
+          _autoDistanceKmComputed! > 0) {
+        straightKm = double.parse(_autoDistanceKmComputed!.toStringAsFixed(3));
+      }
+      if (manualKm != null && manualKm > 0) {
+        pickedKm = manualKm;
+      } else if (straightKm != null && straightKm > 0) {
+        pickedKm = straightKm;
+      }
+
+      final askDistanceKm = task['askDistanceKm'] == true;
+      final defaultKmOnSubmit = (task['defaultKmOnSubmit'] is num)
+          ? (task['defaultKmOnSubmit'] as num).toDouble()
+          : null;
+      if (pickedKm == null && askDistanceKm && defaultKmOnSubmit != null) {
+        pickedKm = defaultKmOnSubmit;
+      }
+
+      double? minKm, maxKm;
+      final mk = task['minKm'];
+      final xk = task['maxKm'];
+      if (mk is num) minKm = mk.toDouble();
+      if (xk is num) maxKm = xk.toDouble();
+      if (pickedKm != null && pickedKm > 0) {
+        final clamped = pickedKm.clamp(minKm ?? 0.2, maxKm ?? 50.0) as num;
+        pickedKm = double.parse(clamped.toStringAsFixed(3));
+      }
+
+      if (_manualStart != null && _manualEnd != null) {
+        _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
+        _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
+      }
+    }
+
+    double? carbonSaved;
+    final efId = (task['ef_ref'] ??
+            task['efRef'] ??
+            task['emissionFactorRef'] ??
+            task['emission_factor_ref'])
+        ?.toString();
+    final valueFieldFromTask =
+        (task['ef_valueField'] ?? task['valueField'])?.toString();
+    if (efId != null && efId.isNotEmpty) {
+      final saved = await _computeCarbonSavedFlexible(
+        efIdFromTask: efId,
+        km: pickedKm,
+        items: safeItems,
+        valueFieldFromTask: valueFieldFromTask,
+      );
+      if (saved.isFinite) {
+        carbonSaved = double.parse(saved.toStringAsFixed(3));
+      }
+    }
+
+    await _createSubmissionAndAutoApprove(
+      localPath: _capturedPath ?? '', // ✅ فارغ لو location
+      taskPoints: pts,
+      taskId: taskId,
+      distanceKm: pickedKm,
+      carbonSaved: carbonSaved,
+      itemCount: safeItems,
+    );
+
+    setState(() => _isCompleted = true);
+
+    if (!mounted) return;
+    await showTaskCompletedDialogAndRedirect(context);
+
+    try {
+      if (_capturedPath != null) {
+        final f = File(_capturedPath!);
+        if (await f.exists()) await f.delete();
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  } catch (e, stackTrace) {
+    print('❌ خطأ في _uploadAndComplete: $e');
+    print('📋 Stack trace: $stackTrace');
+
+    if (!mounted) return;
+
+    String errorMessage = 'حدث خطأ أثناء إكمال المهمة';
+    if (e.toString().contains('403')) {
+      errorMessage = 'خطأ في صلاحيات التطبيق. حاول مرة أخرى.';
+    } else if (e.toString().contains('Too many attempts')) {
+      errorMessage = 'محاولات كثيرة جداً. انتظر قليلاً وحاول مرة أخرى.';
+    } else if (e.toString().contains('App attestation failed')) {
+      errorMessage = 'خطأ في التحقق من التطبيق. تأكد من إعدادات Firebase.';
+    } else if (e.toString().contains('network') ||
+        e.toString().contains('اتصال')) {
+      errorMessage = 'مشكلة في الاتصال بالإنترنت. تحقق من اتصالك.';
+    } else if (e.toString().contains('timeout') ||
+        e.toString().contains('مهلة')) {
+      errorMessage = 'انتهت مهلة الاتصال. حاول مرة أخرى.';
+    }
+
+    _showInlineError(errorMessage);
+    if (mounted) setState(() => _isUploading = false);
+  } finally {
+    if (mounted) setState(() => _isUploading = false);
+  }
+}
 
   /// دالة للحصول على الاسم العربي للمهمة
   String? _getArabicTaskName(String? taskName) {
@@ -722,6 +692,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
     return arabicNames[taskName] ?? taskName;
   }
+
+  TaskType? _getLocationTaskType(String title) {
+  final t = title.toLowerCase();
+  if (t.contains('مترو') || t.contains('metro')) return TaskType.metro;
+  if (t.contains('باص') || t.contains('bus') || t.contains('حافلة')) return TaskType.bus;
+  if (t.contains('ملابس') || t.contains('cloth')) return TaskType.clothing;
+  if (t.contains('ورق') || t.contains('paper')) return TaskType.paper;
+  if (t.contains('طعام') || t.contains('food') || t.contains('عضوي')) return TaskType.food;
+  if (t.contains('rvm') || t.contains('تدوير') || t.contains('بلاستيك')) return TaskType.rvm;
+  return null;
+}
 
   Future<void> _ensureLocationPermission() async {
     try {
@@ -919,182 +900,159 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }
   }
 
-  Future<void> _createSubmissionAndAutoApprove({
-    required String localPath,
-    required int taskPoints,
-    String? taskId,
-    double? distanceKm,
-    double? carbonSaved,
-    int? itemCount,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw Exception('يرجى تسجيل الدخول.');
+Future<void> _createSubmissionAndAutoApprove({
+  required String localPath,
+  required int taskPoints,
+  String? taskId,
+  double? distanceKm,
+  double? carbonSaved,
+  int? itemCount,
+}) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) throw Exception('يرجى تسجيل الدخول.');
 
-    print('👤 المستخدم: ${user.uid}');
-    print('📦 بدء عملية الإنجاز...');
+  final uid = user.uid;
+  final dayKey = _yyyyMMdd(widget.selectedDay);
+  final taskTitle = (widget.taskData['title'] ?? '').toString();
 
-    try {
-      final file = File(localPath);
-      final uid = user.uid;
-      final dayKey = _yyyyMMdd(widget.selectedDay);
-      final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
-      final name = DateTime.now().millisecondsSinceEpoch.toString();
+  // ✅ رفع الصورة فقط إذا موجودة
+  final bool hasPhoto = localPath.isNotEmpty;
+  String downloadUrl = '';
+  String storagePath = '';
 
-      final storage = FirebaseStorage.instance;
-      final storageRef = storage.ref('$basePath/$name.jpg');
+  if (hasPhoto) {
+    final file = File(localPath);
+    final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
+    final name = DateTime.now().millisecondsSinceEpoch.toString();
+    final storageRef = FirebaseStorage.instance.ref('$basePath/$name.jpg');
 
-      print('🔼 رفع الصورة إلى: $basePath/$name.jpg');
+    await storageRef.putFile(
+      file,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
+    downloadUrl = await storageRef.getDownloadURL();
+    storagePath = storageRef.fullPath;
+    print('🔗 رابط الصورة: $downloadUrl');
+  } else {
+    print('📍 تحقق بالموقع - لا توجد صورة');
+  }
 
-      await storageRef.putFile(
-        file,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-
-      final downloadUrl = await storageRef.getDownloadURL();
-      print('🔗 رابط الصورة: $downloadUrl');
-
-      final double carbonForStore =
-          (carbonSaved != null && carbonSaved.isFinite)
+  final double carbonForStore =
+      (carbonSaved != null && carbonSaved.isFinite)
           ? double.parse(carbonSaved.toStringAsFixed(3))
           : 0.0;
 
-      final firestore = FirebaseFirestore.instance;
+  final firestore = FirebaseFirestore.instance;
+  final usersRef = firestore.collection('users').doc(uid);
+  final utRef = firestore.collection('userTasks').doc(widget.userTaskDocId);
+  final subRef = firestore.collection('submissions').doc();
+  final todayId = _dayId(DateTime.now());
+  final dayMarkRef = firestore
+      .collection('users')
+      .doc(uid)
+      .collection('dayMarks')
+      .doc(todayId);
+  final dailyTaskRef = firestore
+      .collection('dailyTasks')
+      .doc(uid)
+      .collection('tasks')
+      .doc(_dayId(widget.selectedDay));
 
-      final usersRef = firestore.collection('users').doc(uid);
-      final utRef = firestore.collection('userTasks').doc(widget.userTaskDocId);
-      final subRef = firestore.collection('submissions').doc();
+  await usersRef.set({
+    'createdAt': FieldValue.serverTimestamp(),
+  }, SetOptions(merge: true));
 
-      final todayId = _dayId(DateTime.now());
-      final dayMarkRef = firestore
-          .collection('users')
-          .doc(uid)
-          .collection('dayMarks')
-          .doc(todayId);
-      final dailyTaskRef = firestore
-          .collection('dailyTasks')
-          .doc(uid)
-          .collection('tasks')
-          .doc(_dayId(widget.selectedDay));
-      final taskTitle = (widget.taskData['title'] ?? '').toString();
-
-      print('📝 تجهيز بيانات Firestore...');
-
-      /// ⭐ تأكد من وجود user doc
-      await usersRef.set({
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      // ========== أولاً: قراءة userTask خارج الترانزاكشن ==========
-      print('📖 قراءة userTask...');
-      final utSnapshot = await utRef.get();
-
-      String currentStatus = 'pending';
-
-      if (utSnapshot.exists) {
-        final ut = utSnapshot.data() as Map<String, dynamic>;
-        currentStatus = (ut['status'] as String?) ?? 'pending';
-      }
-      print('📊 حالة المهمة الحالية: $currentStatus');
-
-      // ========== ثانياً: الترانزاكشن للكتابة فقط ==========
-      await firestore.runTransaction((trx) async {
-        print('🔄 بدء ترانزاكشن الكتابة...');
-
-        /// submission
-        trx.set(subRef, {
-          'userId': uid,
-          'userTaskDocId': widget.userTaskDocId,
-          'taskId': taskId ?? '',
-          'taskTitle': taskTitle,
-          'taskPoints': taskPoints,
-          'status': 'approved',
-          'imageUrls': [downloadUrl],
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-          'carbonSaved': carbonForStore,
-          if (distanceKm != null) 'distanceKm': distanceKm,
-          if (itemCount != null) 'itemCount': itemCount,
-          if (_geoStart != null) 'geoStart': _geoStart,
-          if (_geoEnd != null) 'geoEnd': _geoEnd,
-        }, SetOptions(merge: true));
-
-        /// update userTask
-        trx.set(utRef, {
-          'userId': uid,
-          'status': 'completed',
-          'completedAt': FieldValue.serverTimestamp(),
-          'taskPoints': taskPoints,
-          'taskTitle': taskTitle,
-          'carbonSaved': carbonForStore,
-          'evidence': {
-            'type': 'photo',
-            'url': downloadUrl,
-            'storagePath': storageRef.fullPath,
-          },
-          if (distanceKm != null) 'distanceKm': distanceKm,
-          if (itemCount != null) 'itemCount': itemCount,
-          if (_geoStart != null) 'geoStart': _geoStart,
-          if (_geoEnd != null) 'geoEnd': _geoEnd,
-        }, SetOptions(merge: true));
-
-        /// تحديث نقاط المستخدم
-        if (currentStatus != 'completed' && taskPoints > 0) {
-          trx.set(usersRef, {
-            'points': FieldValue.increment(taskPoints),
-            'completedTask': FieldValue.increment(1),
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-        }
-
-        /// history
-        final historyRef = firestore
-            .collection('users')
-            .doc(uid)
-            .collection('history')
-            .doc();
-
-        trx.set(historyRef, {
-          'type': 'task_approved',
-          'submissionId': subRef.id,
-          'points': taskPoints,
-          'taskTitle': taskTitle,
-          'carbonSaved': carbonForStore,
-          'at': FieldValue.serverTimestamp(),
-        });
-
-        /// تحديث الكربون
-        trx.set(usersRef, {
-          'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-          if (carbonForStore > 0)
-            'totalCarbonSaved': FieldValue.increment(carbonForStore),
-        }, SetOptions(merge: true));
-        trx.set(dailyTaskRef, {
-          'status': 'completed',
-          'completedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-        /// day marks
-        trx.set(dayMarkRef, {
-          'count': FieldValue.increment(1),
-          'lastAt': FieldValue.serverTimestamp(),
-          'userId': uid,
-        }, SetOptions(merge: true));
-
-        print('✅ ترانزاكشن الكتابة تم');
-      });
-
-      try {
-        await StreakService.updateStreakOnTaskCompletion();
-      } catch (_) {}
-
-      print('🎉 المهمة اكتملت بنجاح');
-    } catch (e, s) {
-      print('❌ خطأ في _createSubmissionAndAutoApprove: $e');
-      print('📋 Stack trace: $s');
-      rethrow;
-    }
+  final utSnapshot = await utRef.get();
+  String currentStatus = 'pending';
+  if (utSnapshot.exists) {
+    final ut = utSnapshot.data() as Map<String, dynamic>;
+    currentStatus = (ut['status'] as String?) ?? 'pending';
   }
 
+  await firestore.runTransaction((trx) async {
+    trx.set(subRef, {
+      'userId': uid,
+      'userTaskDocId': widget.userTaskDocId,
+      'taskId': taskId ?? '',
+      'taskTitle': taskTitle,
+      'taskPoints': taskPoints,
+      'status': 'approved',
+      'imageUrls': hasPhoto ? [downloadUrl] : [],
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'carbonSaved': carbonForStore,
+      if (distanceKm != null) 'distanceKm': distanceKm,
+      if (itemCount != null) 'itemCount': itemCount,
+      if (_geoStart != null) 'geoStart': _geoStart,
+      if (_geoEnd != null) 'geoEnd': _geoEnd,
+    }, SetOptions(merge: true));
+
+    trx.set(utRef, {
+      'userId': uid,
+      'status': 'completed',
+      'completedAt': FieldValue.serverTimestamp(),
+      'taskPoints': taskPoints,
+      'taskTitle': taskTitle,
+      'carbonSaved': carbonForStore,
+      'evidence': hasPhoto
+          ? {
+              'type': 'photo',
+              'url': downloadUrl,
+              'storagePath': storagePath,
+            }
+          : {'type': 'location'},
+      if (distanceKm != null) 'distanceKm': distanceKm,
+      if (itemCount != null) 'itemCount': itemCount,
+      if (_geoStart != null) 'geoStart': _geoStart,
+      if (_geoEnd != null) 'geoEnd': _geoEnd,
+    }, SetOptions(merge: true));
+
+    if (currentStatus != 'completed' && taskPoints > 0) {
+      trx.set(usersRef, {
+        'points': FieldValue.increment(taskPoints),
+        'completedTask': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+
+    final historyRef = firestore
+        .collection('users')
+        .doc(uid)
+        .collection('history')
+        .doc();
+    trx.set(historyRef, {
+      'type': 'task_approved',
+      'submissionId': subRef.id,
+      'points': taskPoints,
+      'taskTitle': taskTitle,
+      'carbonSaved': carbonForStore,
+      'at': FieldValue.serverTimestamp(),
+    });
+
+    trx.set(usersRef, {
+      'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+      if (carbonForStore > 0)
+        'totalCarbonSaved': FieldValue.increment(carbonForStore),
+    }, SetOptions(merge: true));
+
+    trx.set(dailyTaskRef, {
+      'status': 'completed',
+      'completedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    trx.set(dayMarkRef, {
+      'count': FieldValue.increment(1),
+      'lastAt': FieldValue.serverTimestamp(),
+      'userId': uid,
+    }, SetOptions(merge: true));
+  });
+
+  try {
+    await StreakService.updateStreakOnTaskCompletion();
+  } catch (_) {}
+
+  print('🎉 المهمة اكتملت بنجاح');
+}
   Future<void> _openCamera({int? index}) async {
     if (_openingCamera) return;
     if (!mounted) return;

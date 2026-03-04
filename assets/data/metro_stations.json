@@ -1,0 +1,852 @@
+{
+  "type": "metro",
+  "validation_radius_meters": 250,
+  "stations": [
+    {
+      "id": "S02",
+      "name_ar": "د.سليمان الحبيب",
+      "name_en": "Dr Sulaiman Al Habib",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.81155379383345,
+      "lng": 46.62654386725997
+    },
+    {
+      "id": "S03",
+      "name_ar": "المركز المالي",
+      "name_en": "KAFD",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.76800392512061,
+      "lng": 46.64364447641301
+    },
+    {
+      "id": "S04",
+      "name_ar": "المروج",
+      "name_en": "Al Murooj",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.75474607607529,
+      "lng": 46.65422135694412
+    },
+    {
+      "id": "S05",
+      "name_ar": "حي الملك فهد",
+      "name_en": "King Fahad District",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.74491442205136,
+      "lng": 46.65932671648558
+    },
+    {
+      "id": "S08",
+      "name_ar": "الورود 2",
+      "name_en": "Al Wurud 2",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.72172740595173,
+      "lng": 46.67112888545265
+    },
+    {
+      "id": "S09",
+      "name_ar": "العروبة",
+      "name_en": "Al Urubah",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.71321629407025,
+      "lng": 46.67536633589778
+    },
+    {
+      "id": "S12",
+      "name_ar": "مكتبة الملك فهد",
+      "name_en": "King Fahad Library",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.68969024261919,
+      "lng": 46.6873653489969
+    },
+    {
+      "id": "S13",
+      "name_ar": "وزارة الداخلية",
+      "name_en": "Ministry of Interior",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.67424257882058,
+      "lng": 46.6950479643063
+    },
+    {
+      "id": "S15",
+      "name_ar": "الجوازات",
+      "name_en": "Passport Department",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.65956045632056,
+      "lng": 46.70439494253413
+    },
+    {
+      "id": "S20",
+      "name_ar": "سكيرينة",
+      "name_en": "Skirinah",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.61755176745255,
+      "lng": 46.72540678332071
+    },
+    {
+      "id": "S22",
+      "name_ar": "مستشفى الايمان",
+      "name_en": "Al Iman Hospital",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.60100804986984,
+      "lng": 46.7352437098454
+    },
+    {
+      "id": "S24",
+      "name_ar": "العزيزية",
+      "name_en": "Al Aziziah",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.58613720640573,
+      "lng": 46.76119639347265
+    },
+    {
+      "id": "S25",
+      "name_ar": "الدار البيضاء",
+      "name_en": "Ad Dar Al Baida",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.55958910448547,
+      "lng": 46.77654712393894
+    },
+    {
+      "id": "S27",
+      "name_ar": "واحة الملك سلمان",
+      "name_en": "King Salman Oasis",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.71662928533406,
+      "lng": 46.63877718460973
+    },
+    {
+      "id": "S07",
+      "name_ar": "stc",
+      "name_en": "stc",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.72655843698455,
+      "lng": 46.66654513995131
+    },
+    {
+      "id": "S30",
+      "name_ar": "الورود",
+      "name_en": "Al Wurud",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.73304010012863,
+      "lng": 46.67749338636222
+    },
+    {
+      "id": "S35",
+      "name_ar": "طريق خالد بن الوليد",
+      "name_en": "Khalid Bin Alwaleed Road",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.76705804271704,
+      "lng": 46.75897415966957
+    },
+    {
+      "id": "S39",
+      "name_ar": "مدينة الملك فهد الرياضية",
+      "name_en": "King Fahad Sport City",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.79243565532622,
+      "lng": 46.83699440610236
+    },
+    {
+      "id": "S44",
+      "name_ar": "شارع عائشة بنت ابي بكر",
+      "name_en": "Aishah bint Abi Bakr Street",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.60052873723215,
+      "lng": 46.64374907224175
+    },
+    {
+      "id": "S45",
+      "name_ar": "ظهره البديعة",
+      "name_en": "Dhahrat Al Badiah",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.6073754409049,
+      "lng": 46.65497375326466
+    },
+    {
+      "id": "S46",
+      "name_ar": "سلطانه",
+      "name_en": "Sultanah",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.61481195473457,
+      "lng": 46.6861039999333
+    },
+    {
+      "id": "S47",
+      "name_ar": "الجرادية",
+      "name_en": "Al Jarradiyah",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.61845741064425,
+      "lng": 46.69821822387604
+    },
+    {
+      "id": "S54",
+      "name_ar": "الملز",
+      "name_en": "Al Malaz",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.66109427633321,
+      "lng": 46.74505406619882
+    },
+    {
+      "id": "S56",
+      "name_ar": "جامع الراجحي",
+      "name_en": "Al Rajhi Grand Mosque",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.67971156503735,
+      "lng": 46.77849737862974
+    },
+    {
+      "id": "S57",
+      "name_ar": "طريق هارون الرشيد",
+      "name_en": "Harun Ar Rashid Road",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.68608501392891,
+      "lng": 46.79601710504106
+    },
+    {
+      "id": "S03",
+      "name_ar": "المركز المالي",
+      "name_en": "KAFD",
+      "line": "Line4",
+      "line_name_ar": "المسار الأصفر",
+      "lat": 24.7681786337211,
+      "lng": 46.64360617754577
+    },
+    {
+      "id": "S16",
+      "name_ar": "المتحف الوطني",
+      "name_en": "National Museum",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.64607279558212,
+      "lng": 46.71427983670233
+    },
+    {
+      "id": "S73",
+      "name_ar": "التأمينات الاجتماعية",
+      "name_en": "GOSI",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.686692275556,
+      "lng": 46.71819918138066
+    },
+    {
+      "id": "S74",
+      "name_ar": "نادي الضباط",
+      "name_en": "Officers Club",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.69752283785252,
+      "lng": 46.71802902980748
+    },
+    {
+      "id": "S03",
+      "name_ar": "المركز المالي",
+      "name_en": "KAFD",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.7681786337211,
+      "lng": 46.64360617754577
+    },
+    {
+      "id": "S61",
+      "name_ar": "الربيع",
+      "name_en": "Ar Rabi",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.78629157966825,
+      "lng": 46.66057921262878
+    },
+    {
+      "id": "S62",
+      "name_ar": "طريق عثمان بن عفان",
+      "name_en": "Uthman Bin Affan Road",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.80050291216557,
+      "lng": 46.69634901482668
+    },
+    {
+      "id": "S63",
+      "name_ar": "سابك",
+      "name_en": "SABIC",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.80735674485716,
+      "lng": 46.70959638581176
+    },
+    {
+      "id": "S80",
+      "name_ar": "اليرموك",
+      "name_en": "Al Yarmuk",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.79102722793817,
+      "lng": 46.76642231187255
+    },
+    {
+      "id": "S82",
+      "name_ar": "طريق خريص",
+      "name_en": "Khurais Road",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.73808432123275,
+      "lng": 46.80009645445539
+    },
+    {
+      "id": "S83",
+      "name_ar": "السلام",
+      "name_en": "As Salam",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.72219711748086,
+      "lng": 46.8114455888186
+    },
+    {
+      "id": "S07",
+      "name_ar": "stc",
+      "name_en": "stc",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.72679705304654,
+      "lng": 46.66687987819414
+    },
+    {
+      "id": "S10",
+      "name_ar": "مصرف الانماء",
+      "name_en": "Alinma Bank",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.70316648220116,
+      "lng": 46.68032471057251
+    },
+    {
+      "id": "S14",
+      "name_ar": "المربع",
+      "name_en": "Al Muorabba",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.66485076093648,
+      "lng": 46.70244592563306
+    },
+    {
+      "id": "S17",
+      "name_ar": "البطحاء",
+      "name_en": "Al Bat'ha",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.63793144884599,
+      "lng": 46.71523382845812
+    },
+    {
+      "id": "S19",
+      "name_ar": "العود",
+      "name_en": "Al Owd",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.62531899374494,
+      "lng": 46.72101788739987
+    },
+    {
+      "id": "S23",
+      "name_ar": "مركز النقل العام",
+      "name_en": "Transportation Center",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.59798690948253,
+      "lng": 46.74514116213327
+    },
+    {
+      "id": "S26",
+      "name_ar": "جامعة الملك سعود",
+      "name_en": "King Saud University",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.70967823253188,
+      "lng": 46.62871099499831
+    },
+    {
+      "id": "S28",
+      "name_ar": "المدينة التقنية",
+      "name_en": "KACST",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.72017061216426,
+      "lng": 46.64693246597055
+    },
+    {
+      "id": "S29",
+      "name_ar": "التخصصي",
+      "name_en": "At Takhassussi",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.72340744244227,
+      "lng": 46.65464898678899
+    },
+    {
+      "id": "S33",
+      "name_ar": "النزهة",
+      "name_en": "An Nuzhah",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.74782156645681,
+      "lng": 46.71311355644504
+    },
+    {
+      "id": "S36",
+      "name_ar": "الحمراء",
+      "name_en": "Al Hamra",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.77642102227688,
+      "lng": 46.77675786070972
+    },
+    {
+      "id": "S38",
+      "name_ar": "اشبيليا",
+      "name_en": "Ishbiliyah",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.79216004055396,
+      "lng": 46.81106855810685
+    },
+    {
+      "id": "S40",
+      "name_ar": "طريق جده",
+      "name_en": "Jeddah Road",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.59121360322294,
+      "lng": 46.54339421952785
+    },
+    {
+      "id": "S41",
+      "name_ar": "طويق",
+      "name_en": "Tuwaiq",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.58532648766099,
+      "lng": 46.56190383360955
+    },
+    {
+      "id": "S42",
+      "name_ar": "الدوح",
+      "name_en": "Ad Douh",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.58293167966869,
+      "lng": 46.58806971836369
+    },
+    {
+      "id": "S49",
+      "name_ar": "الحلة",
+      "name_en": "Al Hilla",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.63174974583536,
+      "lng": 46.72092052341459
+    },
+    {
+      "id": "S53",
+      "name_ar": "سكة الحديد",
+      "name_en": "Railway",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.64923336622137,
+      "lng": 46.74124333488783
+    },
+    {
+      "id": "S55",
+      "name_ar": "حي جرير",
+      "name_en": "Jarir District",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.67297035932004,
+      "lng": 46.76052059417431
+    },
+    {
+      "id": "S59",
+      "name_ar": "شارع حسان بن ثابت",
+      "name_en": "Hassan Bin Thabit street",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.71315305285557,
+      "lng": 46.84810909256966
+    },
+    {
+      "id": "S61",
+      "name_ar": "الربيع",
+      "name_en": "Ar Rabi",
+      "line": "Line4",
+      "line_name_ar": "المسار الأصفر",
+      "lat": 24.78629157966825,
+      "lng": 46.66057921262878
+    },
+    {
+      "id": "S63",
+      "name_ar": "سابك",
+      "name_en": "SABIC",
+      "line": "Line4",
+      "line_name_ar": "المسار الأصفر",
+      "lat": 24.80723540035193,
+      "lng": 46.7097506102494
+    },
+    {
+      "id": "S65",
+      "name_ar": "جامعة الأميرة نورة 2",
+      "name_en": "PNU2",
+      "line": "Line4",
+      "line_name_ar": "المسار الأصفر",
+      "lat": 24.85983420999368,
+      "lng": 46.70431707873432
+    },
+    {
+      "id": "S66",
+      "name_ar": "الصالة 5",
+      "name_en": "Airport T5",
+      "line": "Line4",
+      "line_name_ar": "المسار الأصفر",
+      "lat": 24.94295453599951,
+      "lng": 46.70826370485601
+    },
+    {
+      "id": "S67",
+      "name_ar": "الصالة 3-4",
+      "name_en": "Airport T3-4",
+      "line": "Line4",
+      "line_name_ar": "المسار الأصفر",
+      "lat": 24.95629864361232,
+      "lng": 46.70322082727486
+    },
+    {
+      "id": "S69",
+      "name_ar": "وزارة المالية",
+      "name_en": "Ministry of Finance",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.65127908328224,
+      "lng": 46.71573060418663
+    },
+    {
+      "id": "S70",
+      "name_ar": "مستشفى الملك عبدالعزيز",
+      "name_en": "King Abdulaziz Hospital",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.65904589369298,
+      "lng": 46.71727365226771
+    },
+    {
+      "id": "S71",
+      "name_ar": "وزارة الدفاع",
+      "name_en": "Ministry of Defense",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.66712507970303,
+      "lng": 46.71825678997175
+    },
+    {
+      "id": "S72",
+      "name_ar": "الوزارات",
+      "name_en": "Al Wizarat",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.67721661325981,
+      "lng": 46.71835817336265
+    },
+    {
+      "id": "S75",
+      "name_ar": "ميدان أبو ظبي",
+      "name_en": "Abu Dhabi square",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.70611607029804,
+      "lng": 46.71634234922706
+    },
+    {
+      "id": "S76",
+      "name_ar": "الضباب",
+      "name_en": "Ad Dhabab",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.70915859869369,
+      "lng": 46.70835711021662
+    },
+    {
+      "id": "S77",
+      "name_ar": "السليمانية",
+      "name_en": "As Sulimaniyah",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.7130431910079,
+      "lng": 46.69954390840239
+    },
+    {
+      "id": "S32",
+      "name_ar": "وزاره التعليم",
+      "name_en": "Ministry of Education",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.73977015479611,
+      "lng": 46.69359791097942
+    },
+    {
+      "id": "S36",
+      "name_ar": "الحمراء",
+      "name_en": "Al Hamra",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.77632719132187,
+      "lng": 46.77657649147416
+    },
+    {
+      "id": "S01",
+      "name_ar": "الأول",
+      "name_en": "SAB",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.82943980747947,
+      "lng": 46.61843964843821
+    },
+    {
+      "id": "S06",
+      "name_ar": "حي الملك فهد 2",
+      "name_en": "King Fahad District 2",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.73665171554253,
+      "lng": 46.66338701990518
+    },
+    {
+      "id": "S11",
+      "name_ar": "بنك البلاد",
+      "name_en": "Bank Albilad",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.69650761170015,
+      "lng": 46.68392634195393
+    },
+    {
+      "id": "S16",
+      "name_ar": "المتحف الوطني",
+      "name_en": "National Museum",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.64606261233078,
+      "lng": 46.71416493164232
+    },
+    {
+      "id": "S18",
+      "name_ar": "قصر الحكم",
+      "name_en": "Qasr Al Hokm",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.62858166288806,
+      "lng": 46.71611888836972
+    },
+    {
+      "id": "S21",
+      "name_ar": "منفوحة",
+      "name_en": "Manfouhah",
+      "line": "Line1",
+      "line_name_ar": "المسار الأزرق",
+      "lat": 24.61045736735081,
+      "lng": 46.72751741880297
+    },
+    {
+      "id": "S31",
+      "name_ar": "طريق الملك عبدالعزيز",
+      "name_en": "King Abdulaziz Road",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.73623884393125,
+      "lng": 46.68521931745428
+    },
+    {
+      "id": "S32",
+      "name_ar": "وزاره التعليم",
+      "name_en": "Ministry of Education",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.7399774582299,
+      "lng": 46.69346684713819
+    },
+    {
+      "id": "S34",
+      "name_ar": "مركز الرياض للمعارض",
+      "name_en": "Riyadh Exhibition Center",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.75378482455737,
+      "lng": 46.72721163892653
+    },
+    {
+      "id": "S37",
+      "name_ar": "الخليج",
+      "name_en": "Al Khaleej",
+      "line": "Line2",
+      "line_name_ar": "المسار الأحمر",
+      "lat": 24.78145044800828,
+      "lng": 46.79447110643801
+    },
+    {
+      "id": "S43",
+      "name_ar": "الغربية",
+      "name_en": "Western Station",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.58248496741372,
+      "lng": 46.61438544942218
+    },
+    {
+      "id": "S48",
+      "name_ar": "مجمع المحاكم",
+      "name_en": "Courts Complex",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.62696585808965,
+      "lng": 46.71242068810995
+    },
+    {
+      "id": "S18",
+      "name_ar": "قصر الحكم",
+      "name_en": "Qasr Al Hokm",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.62852568362789,
+      "lng": 46.71605976865056
+    },
+    {
+      "id": "S50",
+      "name_ar": "المرقب",
+      "name_en": "Al Margab",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.63402768715887,
+      "lng": 46.72544371164624
+    },
+    {
+      "id": "S51",
+      "name_ar": "الصالحية",
+      "name_en": "As Salhiyah",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.63722864945175,
+      "lng": 46.73192914145916
+    },
+    {
+      "id": "S52",
+      "name_ar": "المدينة الصناعية الأولى",
+      "name_en": "First Industrial City",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.64518207915902,
+      "lng": 46.73949283534146
+    },
+    {
+      "id": "S58",
+      "name_ar": "النسيم",
+      "name_en": "An Naseem",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.70026793259499,
+      "lng": 46.82781400965195
+    },
+    {
+      "id": "S60",
+      "name_ar": "خشم العان",
+      "name_en": "Khashm Al An",
+      "line": "Line3",
+      "line_name_ar": "المسار البرتقالي",
+      "lat": 24.72156579731185,
+      "lng": 46.86032645729338
+    },
+    {
+      "id": "S62",
+      "name_ar": "طريق عثمان بن عفان",
+      "name_en": "Uthman Bin Affan Road",
+      "line": "Line4",
+      "line_name_ar": "المسار الأصفر",
+      "lat": 24.80050291216557,
+      "lng": 46.69634901482668
+    },
+    {
+      "id": "S64",
+      "name_ar": "جامعة الأميرة نورة 1",
+      "name_en": "PNU1",
+      "line": "Line4",
+      "line_name_ar": "المسار الأصفر",
+      "lat": 24.84039655903143,
+      "lng": 46.71668238777214
+    },
+    {
+      "id": "S68",
+      "name_ar": "الصالة 1-2",
+      "name_en": "Airport T1-2",
+      "line": "Line4",
+      "line_name_ar": "المسار الأصفر",
+      "lat": 24.96281541599763,
+      "lng": 46.70002847728534
+    },
+    {
+      "id": "S78",
+      "name_ar": "حديقة الملك سلمان",
+      "name_en": "King Salman Park",
+      "line": "Line5",
+      "line_name_ar": "المسار الأخضر",
+      "lat": 24.72833810456862,
+      "lng": 46.7010605218833
+    },
+    {
+      "id": "S79",
+      "name_ar": "غرناطيّة",
+      "name_en": "Granadia",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.78648327857564,
+      "lng": 46.72933303753641
+    },
+    {
+      "id": "S81",
+      "name_ar": "الأندلس",
+      "name_en": "Al Andalus",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.75674689952316,
+      "lng": 46.79050988521736
+    },
+    {
+      "id": "S58",
+      "name_ar": "النسيم",
+      "name_en": "An Naseem",
+      "line": "Line6",
+      "line_name_ar": "المسار البنفسجي",
+      "lat": 24.70048083828638,
+      "lng": 46.82796281476497
+    }
+  ]
+}
