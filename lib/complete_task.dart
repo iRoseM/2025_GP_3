@@ -310,161 +310,137 @@ bool _isAiApproved(TaskVerificationResult? r) {
     );
   }
 
-  Future<TaskVerificationResult?> _verifyTaskImage(String imagePath) async {
-    if (!mounted) return null;
+Future<TaskVerificationResult?> _verifyTaskImage(String imagePath) async {
+  if (!mounted) return null;
 
-    setState(() {
-      _isVerifying = true;
-      _verificationResult = null;
-    });
+  setState(() {
+    _isVerifying = true;
+    _verificationResult = null;
+  });
 
-try {
-  // استخراج عنوان المهمة
-  final taskTitle = widget.taskData['title']?.toString() ?? '';
-  print('🔍 التحقق باستخدام العنوان: "$taskTitle"');
-  print('🧾 taskData keys: ${widget.taskData.keys.toList()}');
-  print(
-    '🧾 id: ${widget.taskData['id']} | taskId: ${widget.taskData['taskId']} | task_id: ${widget.taskData['task_id']}',
-  );
-  print('🧾 local? $_isLocalProductTask');
+  try {
+    final taskTitle = widget.taskData['title']?.toString() ?? '';
+    print('🔍 التحقق باستخدام العنوان: "$taskTitle"');
+    print('🧾 taskData keys: ${widget.taskData.keys.toList()}');
+    print(
+      '🧾 id: ${widget.taskData['id']} | taskId: ${widget.taskData['taskId']} | task_id: ${widget.taskData['task_id']}',
+    );
+    print('🧾 local? $_isLocalProductTask');
 
-  // 0️⃣ التحقق من الموقع أولاً
-  final taskType = _getLocationTaskType(taskTitle);
-  if (taskType != null) {
-    final locationResult = await LocationValidator.validate(taskType);
+    // 🗑️ حُذف التحقق بالموقع من هنا — انتقل لـ _startTaskFlow
 
-    if (locationResult.isValid) {
-      // ✅ الموقع صح → نقاط بدون تصوير
-      if (mounted) setState(() => _isVerifying = false);
-      WidgetsBinding.instance.endOfFrame.then((_) {
-        if (mounted) _uploadAndComplete();
-      });
-      return TaskVerificationResult(
-        success: true,
-        verified: true,
-        verificationSource: 'location',
+    if (_isLocalProductTask) {
+      print('🟩 Local product task detected. Calling origin_check...');
+
+      final originResult = await TaskVerificationService.verifyOriginFromFile(
+        File(imagePath),
+        threshold: 0.7,
       );
-    } else {
-      // ❌ الموقع غلط
-      final dist = locationResult.distanceMeters != null
-          ? ' (أنتِ على بُعد ${locationResult.distanceMeters!.toStringAsFixed(0)} متر)'
-          : '';
-          // الموقع بعيد → نكمل للتصوير والـ AI للكل
+
+      final c = originResult.countryOfOrigin;
+      final isLocal = originResult.isLocalSaudi == true;
+      final conf = originResult.confidence ?? 0.0;
+
+      String msg;
+      if (c == null || c.trim().isEmpty || conf < 0.6) {
+        msg = '🔎 تم التحقق: بلد المنشأ غير واضح, يرجى إعادة التقاط صورة أوضح للمهمة';
+      } else if (isLocal) {
+        msg = '✅ تم التحقق: بلد المنشأ $c (محلي)';
+      } else {
+        msg = '❌ تم التحقق: بلد المنشأ $c (غير محلي)';
+      }
+
+      if (mounted) {
+        setState(() {
+          _verificationResult = originResult.copyWith(
+            verificationSource: 'origin_check',
+          );
+          _verificationHint = msg;
+          _isVerifying = false;
+        });
+      }
+
+      if (originResult.verified == true) {
+        WidgetsBinding.instance.endOfFrame.then((_) {
+          if (mounted) _uploadAndComplete();
+        });
+      }
+
+      return originResult;
     }
-  }
 
-  if (_isLocalProductTask) {
-    print('🟩 Local product task detected. Calling origin_check...');
+    // 1️⃣ جرب المودل أولاً
+    final cloudResult = await _tryCloudModelFirst(imagePath, taskTitle);
 
-    final originResult = await TaskVerificationService.verifyOriginFromFile(
-      File(imagePath),
-      threshold: 0.7,
+    // 2️⃣ استخرج النص من الصورة
+    final extractedText = await OCRService.extractTextFromFile(File(imagePath));
+    print('📝 النص المستخرج: "$extractedText"');
+
+    // 3️⃣ تحقق من صحة المودل
+    final isModelLogical = OCRService.isModelResultValid(
+      cloudResult?.taskName,
+      taskTitle,
     );
 
-    final c = originResult.countryOfOrigin;
-    final isLocal = originResult.isLocalSaudi == true;
-    final conf = originResult.confidence ?? 0.0;
+    final doesImageMatch = OCRService.doesImageMatchTask(extractedText, taskTitle);
+    print('📌 doesImageMatch: $doesImageMatch');
 
-    String msg;
-    if (c == null || c.trim().isEmpty || conf < 0.6) {
-      msg = '🔎 تم التحقق: بلد المنشأ غير واضح, يرجى إعادة التقاط صورة أوضح للمهمة';
-    } else if (isLocal) {
-      msg = '✅ تم التحقق: بلد المنشأ $c (محلي)';
+    TaskVerificationResult finalResult;
+
+    // 4️⃣ القرار الذكي
+    if (cloudResult != null && cloudResult.success == true && isModelLogical) {
+      finalResult = cloudResult.copyWith(verificationSource: 'vision');
+      print('✅ المودل منطقي، نعتمد نتيجته');
     } else {
-      msg = '❌ تم التحقق: بلد المنشأ $c (غير محلي)';
+      print('⚠️ المودل غير منطقي، نعتمد OCR');
+      finalResult = TaskVerificationResult(
+        success: doesImageMatch,
+        taskName: taskTitle,
+        taskNameAr: OCRService.extractArabicTitle(taskTitle),
+        confidence: doesImageMatch ? 0.85 : 0.0,
+        confidencePercent: doesImageMatch ? '85%' : '0%',
+        verified: doesImageMatch,
+        matchesExpected: doesImageMatch,
+        verificationSource: 'ocr_smart',
+        extractedText: extractedText,
+      );
     }
 
+    // 5️⃣ تحديث الحالة
     if (mounted) {
       setState(() {
-        _verificationResult = originResult.copyWith(
-          verificationSource: 'origin_check',
-        );
-        _verificationHint = msg;
+        _verificationResult = finalResult;
         _isVerifying = false;
       });
     }
 
-    if (originResult.verified == true) {
+    // 6️⃣ إذا كان صحيح، ابدأ الرفع
+    if (finalResult.verified == true) {
+      print('✅ تم التحقق بنجاح');
       WidgetsBinding.instance.endOfFrame.then((_) {
         if (mounted) _uploadAndComplete();
       });
+    } else {
+      _showInlineError('❌ الصورة غير مطابقة للمهمة');
+      WidgetsBinding.instance.endOfFrame.then((_) {
+        if (mounted) showTaskFailedDialogAndRedirect(context);
+      });
     }
 
-    return originResult;
-  }
-
-  // 1️⃣ جرب المودل أولاً
-  final cloudResult = await _tryCloudModelFirst(imagePath, taskTitle);
-
-  // 2️⃣ استخرج النص من الصورة
-  final extractedText = await OCRService.extractTextFromFile(File(imagePath));
-  print('📝 النص المستخرج: "$extractedText"');
-
-  // 3️⃣ تحقق من صحة المودل
-  final isModelLogical = OCRService.isModelResultValid(
-    cloudResult?.taskName,
-    taskTitle,
-  );
-
-  final doesImageMatch = OCRService.doesImageMatchTask(extractedText, taskTitle);
-  print('📌 doesImageMatch: $doesImageMatch');
-
-  TaskVerificationResult finalResult;
-
-  // 4️⃣ القرار الذكي
-  if (cloudResult != null && cloudResult.success == true && isModelLogical) {
-    finalResult = cloudResult.copyWith(verificationSource: 'vision');
-    print('✅ المودل منطقي، نعتمد نتيجته');
-  } else {
-    print('⚠️ المودل غير منطقي، نعتمد OCR');
-    finalResult = TaskVerificationResult(
-      success: doesImageMatch,
-      taskName: taskTitle,
-      taskNameAr: OCRService.extractArabicTitle(taskTitle),
-      confidence: doesImageMatch ? 0.85 : 0.0,
-      confidencePercent: doesImageMatch ? '85%' : '0%',
-      verified: doesImageMatch,
-      matchesExpected: doesImageMatch,
-      verificationSource: 'ocr_smart',
-      extractedText: extractedText,
+    return finalResult;
+  } catch (e) {
+    print('❌ خطأ: $e');
+    if (mounted) {
+      setState(() => _isVerifying = false);
+      _showInlineError('❌ فشل التحقق من الصورة');
+    }
+    return TaskVerificationResult(
+      success: false,
+      error: 'فشل التحقق: $e',
+      verificationSource: 'system',
     );
   }
-
-  // 5️⃣ تحديث الحالة
-  if (mounted) {
-    setState(() {
-      _verificationResult = finalResult;
-      _isVerifying = false;
-    });
-  }
-
-  // 6️⃣ إذا كان صحيح، ابدأ الرفع
-  if (finalResult.verified == true) {
-    print('✅ تم التحقق بنجاح');
-    WidgetsBinding.instance.endOfFrame.then((_) {
-      if (mounted) _uploadAndComplete();
-    });
-  } else {
-    _showInlineError('❌ الصورة غير مطابقة للمهمة');
-    WidgetsBinding.instance.endOfFrame.then((_) {
-      if (mounted) showTaskFailedDialogAndRedirect(context);
-    });
-  }
-
-  return finalResult;
-}catch (e) {
-      print('❌ خطأ: $e');
-      if (mounted) {
-        setState(() => _isVerifying = false);
-        _showInlineError('❌ فشل التحقق من الصورة');
-      }
-      return TaskVerificationResult(
-        success: false,
-        error: 'فشل التحقق: $e',
-        verificationSource: 'system',
-      );
-    }
-  }
+}
 
   // دالة مساعدة لعرض جزء من العنوان في رسالة الخطأ
   // ✅ استخدم هذا بدل _extractMeaningfulTitle
@@ -693,14 +669,14 @@ Future<void> _uploadAndComplete() async {
     return arabicNames[taskName] ?? taskName;
   }
 
-  TaskType? _getLocationTaskType(String title) {
+TaskType? _getLocationTaskType(String title) {
   final t = title.toLowerCase();
   if (t.contains('مترو') || t.contains('metro')) return TaskType.metro;
   if (t.contains('باص') || t.contains('bus') || t.contains('حافلة')) return TaskType.bus;
   if (t.contains('ملابس') || t.contains('cloth')) return TaskType.clothing;
-  if (t.contains('ورق') || t.contains('paper')) return TaskType.paper;
+  if (t.contains('ورق') || t.contains('paper') || t.contains('أوراق')) return TaskType.paper; // ✅ قبل rvm
   if (t.contains('طعام') || t.contains('food') || t.contains('عضوي')) return TaskType.food;
-  if (t.contains('rvm') || t.contains('تدوير') || t.contains('بلاستيك')) return TaskType.rvm;
+  if (t.contains('rvm') || t.contains('تدوير') || t.contains('بلاستيك')) return TaskType.rvm; // ✅ بعد paper
   return null;
 }
 
@@ -1122,6 +1098,39 @@ Future<void> _createSubmissionAndAutoApprove({
       if (mounted) setState(() => _openingCamera = false);
     }
   }
+
+  Future<void> _startTaskFlow() async {
+  final taskTitle = widget.taskData['title']?.toString() ?? '';
+  final taskType = _getLocationTaskType(taskTitle);
+
+   print('🏷️ taskTitle: "$taskTitle"');
+   print('📍 taskType: $taskType');
+
+  if (taskType != null) {
+    if (mounted) setState(() => _isVerifying = true);
+
+    final locationResult = await LocationValidator.validate(taskType);
+
+    if (mounted) setState(() => _isVerifying = false);
+
+    if (locationResult.isValid) {
+      if (mounted) {
+        setState(() {
+          _verificationResult = TaskVerificationResult(
+            success: true,
+            verified: true,
+            verificationSource: 'location',
+          );
+        });
+      }
+      await _uploadAndComplete();
+      return;
+    }
+    // الموقع بعيد → نكمل للكاميرا
+  }
+
+  _openCamera();
+}
 
   Future<void> _switchCamera() async {
     if ((_cameras?.length ?? 0) < 2) {
@@ -1615,13 +1624,21 @@ Future<void> _createSubmissionAndAutoApprove({
                   const SizedBox(height: 16),
                   if (!_ready) _buildPhotoInstructions(),
                   if (!_ready) const SizedBox(height: 16),
-                  if (requiresPhotoExact && !isTransport && !_ready)
-                    _gradientButton(
-                      label: 'ابدأ التصوير',
-                      icon: Icons.camera_alt,
-                      onTap: _openingCamera ? null : () => _openCamera(),
-                      loading: _openingCamera,
-                    ),
+if (requiresPhotoExact && !isTransport && !_ready)
+  _gradientButton(
+    label: _getLocationTaskType(
+              widget.taskData['title']?.toString() ?? ''
+            ) != null
+        ? 'تحقق من المهمة'   // مهام الموقع
+        : 'ابدأ التصوير',    // مهام التصوير
+    icon: _getLocationTaskType(
+              widget.taskData['title']?.toString() ?? ''
+            ) != null
+        ? Icons.location_on
+        : Icons.camera_alt,
+    onTap: (_openingCamera || _isVerifying) ? null : () => _startTaskFlow(),
+    loading: _openingCamera || _isVerifying,
+  ),
                   if (requiresPhotoExact && isTransport && !_ready) ...[
                     _gradientButton(
                       label: 'ابدأ',

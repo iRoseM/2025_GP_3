@@ -63,6 +63,7 @@ class LocationValidator {
 
     // الحاويات ← من Firestore
     final keyword = _firestoreKeyword(taskType);
+    print('🔑 keyword: "$keyword"');
     final snap = await FirebaseFirestore.instance
         .collection('facilities')
         .where('status', isEqualTo: 'نشط')
@@ -72,6 +73,11 @@ class LocationValidator {
       final type = (doc['type'] ?? '').toString().toLowerCase();
       return type.contains(keyword);
     }).toList();
+
+    print('📦 docs found: ${docs.length}'); // ← هنا
+for (final doc in docs) {
+  print('   - type: ${doc['type']}'); // ← هنا
+}
 
     if (docs.isEmpty) return ValidationResult(isValid: false);
 
@@ -101,7 +107,7 @@ class LocationValidator {
     switch (type) {
       case TaskType.rvm:      return 'rvm';
       case TaskType.clothing: return 'ملابس';
-      case TaskType.paper:    return 'ورق';
+      case TaskType.paper:    return 'وراق';
       case TaskType.food:     return 'طعام';
       default:                return '';
     }
