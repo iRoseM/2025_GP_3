@@ -65,6 +65,7 @@ flutter:
   assets:
     - assets/img/
     - assets/pfp/
+    - assets/data/
     - assets/img/onboarding1.png
     - assets/img/onboarding2.png
     - assets/img/onboarding3.png

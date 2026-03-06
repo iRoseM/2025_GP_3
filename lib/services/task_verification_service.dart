@@ -19,6 +19,9 @@ class TaskVerificationResult {
   final String? extractedText;
   final String? error;
   final Map<String, double>? allPredictions;
+  final String? countryOfOrigin;
+  final bool? isLocalSaudi;
+  final String? evidenceText;
 
   TaskVerificationResult({
     required this.success,
@@ -33,6 +36,9 @@ class TaskVerificationResult {
     this.extractedText,
     this.error,
     this.allPredictions,
+    this.countryOfOrigin,
+    this.isLocalSaudi,
+    this.evidenceText,
   });
 
   factory TaskVerificationResult.fromJson(Map<String, dynamic> json) {
@@ -51,12 +57,19 @@ class TaskVerificationResult {
       taskId: json['task_id'],
       taskName: json['task_name'],
       taskNameAr: json['task_name_ar'],
-      confidence: json['confidence']?.toDouble(),
+      confidence: (json['confidence'] is num)
+          ? (json['confidence'] as num).toDouble()
+          : null,
       confidencePercent: json['confidence_percent'],
       verified: json['verified'],
       matchesExpected: json['matches_expected'],
       verificationSource: 'vision',
       allPredictions: predictions,
+
+      // ✅ جديد
+      countryOfOrigin: json['country_of_origin']?.toString(),
+      isLocalSaudi: json['is_local_saudi'] == true,
+      evidenceText: json['evidence_text']?.toString(),
     );
   }
 
@@ -87,6 +100,9 @@ class TaskVerificationResult {
       extractedText: extractedText ?? this.extractedText,
       error: error ?? this.error,
       allPredictions: allPredictions ?? this.allPredictions,
+      countryOfOrigin: countryOfOrigin ?? this.countryOfOrigin,
+      isLocalSaudi: isLocalSaudi ?? this.isLocalSaudi,
+      evidenceText: evidenceText ?? this.evidenceText,
     );
   }
 
@@ -107,6 +123,21 @@ class TaskVerificationService {
     if (_debugMode) {
       print('🔍 [TaskVerification] $message');
     }
+  }
+
+  static Future<TaskVerificationResult> verifyOriginFromFile(
+    File imageFile, {
+    double threshold = 0.7,
+  }) async {
+    final bytes = await imageFile.readAsBytes();
+    final base64Image = base64Encode(bytes);
+
+    // نفس الاستدعاء لكن مع mode
+    return await _sendVerificationRequest(
+      imageBase64: base64Image,
+      threshold: threshold,
+      mode: 'origin_check',
+    );
   }
 
   /// 🔹 MAIN METHOD (Vision + OCR fallback)
