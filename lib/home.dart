@@ -24,6 +24,7 @@ import 'services/title_header.dart';
 import '../services/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'article.dart';
+import 'levels.dart';
 
 class homePage extends StatefulWidget {
   const homePage({super.key});
@@ -1180,9 +1181,11 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                       .collection('dailyTasks')
                                       .doc(
                                         FirebaseAuth.instance.currentUser?.uid,
-                                      )
-                                      .collection('tasks')
-                                      .doc(today)
+                                      ) // ← document المستخدم
+                                      .collection(
+                                        'tasks',
+                                      ) // ← sub-collection tasks
+                                      .doc(today) // ← document id = التاريخ
                                       .snapshots(),
                                   builder: (context, snapshot) {
                                     // ===== Loading =====
@@ -1344,14 +1347,117 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                       ),
                                                     );
                                                   } else {
-                                                    await showCompleteTaskSheet(
-                                                      context,
-                                                      taskDataForSheet,
-                                                      selectedDay:
-                                                          DateTime.now(),
-                                                      userTaskDocId:
-                                                          userTaskDocId,
-                                                    );
+                                                    final result =
+                                                        await showCompleteTaskSheet(
+                                                          context,
+                                                          taskDataForSheet,
+                                                          selectedDay:
+                                                              DateTime.now(),
+                                                          userTaskDocId:
+                                                              userTaskDocId,
+                                                        );
+
+                                                    if (result == true &&
+                                                        mounted) {
+                                                      try {
+                                                        final uid =
+                                                            FirebaseAuth
+                                                                .instance
+                                                                .currentUser
+                                                                ?.uid ??
+                                                            '';
+                                                        final today =
+                                                            DateFormat(
+                                                              'yyyy-MM-dd',
+                                                            ).format(
+                                                              DateTime.now(),
+                                                            );
+                                                        final todayKey = today
+                                                            .replaceAll(
+                                                              '-',
+                                                              '',
+                                                            );
+
+                                                        // ✅ 1. تحديث dailyTasks
+                                                        await FirebaseFirestore
+                                                            .instance
+                                                            .collection(
+                                                              'dailyTasks',
+                                                            )
+                                                            .doc(uid)
+                                                            .collection('tasks')
+                                                            .doc(today)
+                                                            .set(
+                                                              {
+                                                                'completed':
+                                                                    true,
+                                                                'completedAt':
+                                                                    FieldValue.serverTimestamp(),
+                                                                'status':
+                                                                    'completed',
+                                                              },
+                                                              SetOptions(
+                                                                merge: true,
+                                                              ),
+                                                            );
+
+                                                        // ✅ 2. تحديث userTasks (باستخدام نفس بيانات taskDataForSheet)
+                                                        await FirebaseFirestore
+                                                            .instance
+                                                            .collection(
+                                                              'userTasks',
+                                                            )
+                                                            .doc(
+                                                              '${uid}_$todayKey',
+                                                            )
+                                                            .set(
+                                                              {
+                                                                'userId': uid,
+                                                                'taskId':
+                                                                    taskDataForSheet['taskId'] ??
+                                                                    taskDataForSheet['id'],
+                                                                'taskTitle':
+                                                                    taskDataForSheet['title'] ??
+                                                                    'مهمة بيئية',
+                                                                'taskDescription':
+                                                                    taskDataForSheet['description'] ??
+                                                                    '',
+                                                                'taskPoints':
+                                                                    taskDataForSheet['points'] ??
+                                                                    10,
+                                                                'taskValidation':
+                                                                    taskDataForSheet['validationStrategy'] ??
+                                                                    'photo',
+                                                                'category':
+                                                                    taskDataForSheet['category'] ??
+                                                                    '',
+                                                                'selectedAt':
+                                                                    Timestamp.fromDate(
+                                                                      DateTime.now(),
+                                                                    ),
+                                                                'status':
+                                                                    'completed',
+                                                                'completedAt':
+                                                                    FieldValue.serverTimestamp(),
+                                                                'ignored':
+                                                                    false,
+                                                                'ignoredAt':
+                                                                    null,
+                                                              },
+                                                              SetOptions(
+                                                                merge: true,
+                                                              ),
+                                                            );
+
+                                                        print(
+                                                          '✅ Tasks updated successfully',
+                                                        );
+                                                      } catch (e) {
+                                                        print(
+                                                          '❌ Error updating tasks: $e',
+                                                        );
+                                                      }
+                                                    }
                                                   }
                                                 },
                                           child: Padding(
@@ -1974,8 +2080,13 @@ class StreakService {
       final lastActivity = data['lastActivityAt'] as Timestamp?;
       int currentStreak = (data['currentStreak'] as int?) ?? 0;
 
+      print('📊 Streak Debug:');
+      print('   - Current streak: $currentStreak');
+      print('   - Last activity: $lastActivity');
+
       // 🔹 أول مرة
       if (lastActivity == null) {
+        print('   - First time ever → set streak to 1');
         await userRef.update({
           'currentStreak': 1,
           'lastActivityAt': FieldValue.serverTimestamp(),
@@ -1988,24 +2099,32 @@ class StreakService {
 
       final difference = today.difference(lastDay).inDays;
 
+      print('   - Last day: $lastDay');
+      print('   - Today: $today');
+      print('   - Difference: $difference days');
+
       if (difference == 0) {
         // نفس اليوم → لا نزيد
+        print('   - Same day → keep streak: $currentStreak');
         await userRef.update({'lastActivityAt': FieldValue.serverTimestamp()});
       } else if (difference == 1) {
         // أمس → نزيد الستريك
+        final newStreak = currentStreak + 1;
+        print('   - Yesterday → increase streak: $newStreak');
         await userRef.update({
-          'currentStreak': currentStreak + 1,
+          'currentStreak': newStreak,
           'lastActivityAt': FieldValue.serverTimestamp(),
         });
       } else {
-        // انقطع أكثر من يوم → نرجع 1
+        // انقطع أكثر من يوم → نبدأ streak جديد من 1
+        print('   - Gap of $difference days → start new streak at 1');
         await userRef.update({
-          'currentStreak': 0,
+          'currentStreak': 1, // ✅ هنا التصحيح
           'lastActivityAt': FieldValue.serverTimestamp(),
         });
       }
     } catch (e) {
-      debugPrint('Error updating streak: $e');
+      print('❌ Error updating streak: $e');
     }
   }
 

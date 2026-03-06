@@ -7,7 +7,7 @@ import 'dart:math';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
+import 'package:cloud_functions/cloud_functions.dart';
 import 'home.dart';
 import 'map.dart';
 import 'levels.dart';
@@ -18,6 +18,7 @@ import 'services/background_container.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
 import 'complete_task.dart';
+import 'levels.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -40,6 +41,16 @@ class taskPage extends StatefulWidget {
 }
 
 class _taskPageState extends State<taskPage> {
+  bool _bonusLoading = false;
+  Map<String, dynamic>? _suggestedBonusTask;
+
+  String? _userLevel; // مستوى المستخدم (beginner, medium, hard)
+  String _userLevelName = 'مبتدئ'; // اسم المستوى بالعربي
+  int _completedTasksToday = 0; // المهام المكتملة اليوم
+  int _requiredTasksToday = 1; // المهام المطلوبة اليوم
+  bool _isLoadingProgress = true; // حالة تحميل البروقريس
+  StreamSubscription<DocumentSnapshot>? _userTasksSubscription;
+
   final int _currentIndex = 1;
 
   bool _isInitializing = true;
@@ -652,6 +663,271 @@ class _taskPageState extends State<taskPage> {
     });
   }
 
+  // ====================================================
+  // دالة تحول levelId إلى اسم عربي
+  // ====================================================
+  String _getLevelName(String levelId) {
+    switch (levelId) {
+      case 'beginner':
+        return 'مبتدئ';
+      case 'medium':
+        return 'متوسط';
+      case 'hard':
+        return 'متقدم';
+      default:
+        return 'مبتدئ';
+    }
+  }
+
+  // ====================================================
+  // دالة تحسب عدد المهام المطلوبة حسب مستوى المستخدم
+  // ====================================================
+  int _getRequiredTasksPerDay(String levelId) {
+    switch (levelId) {
+      case 'hard':
+        return 2;
+      case 'medium':
+        return 2;
+      case 'beginner':
+      default:
+        return 1;
+    }
+  }
+
+  // ====================================================
+  // دالة تحسب المهام المكتملة لليوم
+  // ====================================================
+  Future<int> _getCompletedTasksForDay(String userId, DateTime day) async {
+    final dayKey = '${userId}_${_yyyyMMdd(day)}';
+    final bonusKey = '${userId}_${_yyyyMMdd(day)}_bonus';
+    final dailyTaskDate = _dayId(day);
+
+    int count = 0;
+
+    try {
+      // 1️⃣ المهمة الرئيسية من userTasks
+      final mainTask = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(dayKey)
+          .get();
+
+      if (mainTask.exists && mainTask.data()?['status'] == 'completed') {
+        count++;
+      }
+
+      // 2️⃣ المهمة الإضافية من userTasks
+      final bonusTask = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(bonusKey)
+          .get();
+
+      if (bonusTask.exists && bonusTask.data()?['status'] == 'completed') {
+        count++;
+      }
+
+      // 🔥🔥🔥 3️⃣ المهمة من dailyTasks (الهوم بيج) 🔥🔥🔥
+      final dailyTask = await FirebaseFirestore.instance
+          .collection('dailyTasks')
+          .doc(userId)
+          .collection('tasks')
+          .doc(dailyTaskDate)
+          .get();
+
+      // ✅ dailyTasks تستخدم حقل completed من نوع boolean
+      if (dailyTask.exists && dailyTask.data()?['completed'] == true) {
+        count++;
+        print('✅ Found completed daily task in home page');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error getting completed tasks: $e');
+    }
+
+    return count;
+  }
+
+  // ====================================================
+  // جلب مستوى المستخدم والمهام المكتملة لليوم
+  // ====================================================
+  String _dayId(DateTime dt) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
+  }
+
+  void _watchUserProgress() {
+    if (_uid == null || _selectedDay == null) return;
+
+    final dayKey = '${_uid}_${_yyyyMMdd(_selectedDay!)}';
+    final bonusKey = '${_uid}_${_yyyyMMdd(_selectedDay!)}_bonus';
+    final dailyTaskDate = _dayId(_selectedDay!);
+
+    print('👀 Watching all progress sources for: $dayKey');
+
+    // إلغاء الاشتراكات السابقة
+    _userTasksSubscription?.cancel();
+
+    int updateCount = 0;
+
+    // دالة لحساب المهام المكتملة من جميع المصادر
+    Future<int> _calculateCompletedTasks() async {
+      int completed = 0;
+
+      try {
+        // 1️⃣ التحقق من userTasks (المهمة الرئيسية)
+        final mainSnapshot = await FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc(dayKey)
+            .get(GetOptions(source: Source.server));
+
+        if (mainSnapshot.exists) {
+          final status = mainSnapshot.data()?['status'] as String?;
+          print('📄 Main userTask status (server): $status');
+          if (status == 'completed') completed++;
+        }
+
+        // 2️⃣ التحقق من userTasks (المهمة الإضافية)
+        final bonusSnapshot = await FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc(bonusKey)
+            .get(GetOptions(source: Source.server));
+
+        if (bonusSnapshot.exists) {
+          final status = bonusSnapshot.data()?['status'] as String?;
+          print('📄 Bonus userTask status (server): $status');
+          if (status == 'completed') completed++;
+        }
+
+        // 🔥🔥🔥 التصحيح هنا 🔥🔥🔥
+        // 3️⃣ التحقق من dailyTasks - استخدام completed بدلاً من status
+        final dailySnapshot = await FirebaseFirestore.instance
+            .collection('dailyTasks')
+            .doc(_uid)
+            .collection('tasks')
+            .doc(dailyTaskDate)
+            .get(GetOptions(source: Source.server));
+
+        if (dailySnapshot.exists) {
+          // dailyTasks تستخدم حقل 'completed' (boolean) وليس 'status'
+          final isCompleted = dailySnapshot.data()?['completed'] == true;
+          print('📄 Daily task completed: $isCompleted');
+          if (isCompleted) completed++;
+        }
+      } catch (e) {
+        print('❌ Error calculating tasks: $e');
+      }
+
+      return completed;
+    }
+
+    // 🔥 راقب التغييرات في المهمة الرئيسية
+    FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(dayKey)
+        .snapshots(includeMetadataChanges: true)
+        .listen((_) async {
+          if (!mounted) return;
+          int completed = await _calculateCompletedTasks();
+          updateCount++;
+          setState(() => _completedTasksToday = completed);
+          print(
+            '✅ Progress update #$updateCount (from main): $completed/$_requiredTasksToday',
+          );
+        });
+
+    // 🔥 راقب التغييرات في المهمة الإضافية
+    FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(bonusKey)
+        .snapshots(includeMetadataChanges: true)
+        .listen((_) async {
+          if (!mounted) return;
+          int completed = await _calculateCompletedTasks();
+          updateCount++;
+          setState(() => _completedTasksToday = completed);
+          print(
+            '✅ Progress update #$updateCount (from bonus): $completed/$_requiredTasksToday',
+          );
+        });
+
+    // 🔥 راقب التغييرات في dailyTasks
+    FirebaseFirestore.instance
+        .collection('dailyTasks')
+        .doc(_uid)
+        .collection('tasks')
+        .doc(dailyTaskDate)
+        .snapshots(includeMetadataChanges: true)
+        .listen((snapshot) async {
+          if (!mounted) return;
+
+          // نجيب القيمة المحدثة مباشرة
+          int completed = 0;
+
+          // تحقق من userTasks
+          final mainSnap = await FirebaseFirestore.instance
+              .collection('userTasks')
+              .doc(dayKey)
+              .get(GetOptions(source: Source.server));
+          if (mainSnap.exists && mainSnap.data()?['status'] == 'completed') {
+            completed++;
+          }
+
+          final bonusSnap = await FirebaseFirestore.instance
+              .collection('userTasks')
+              .doc(bonusKey)
+              .get(GetOptions(source: Source.server));
+          if (bonusSnap.exists && bonusSnap.data()?['status'] == 'completed') {
+            completed++;
+          }
+
+          // 🔥 تحقق من dailyTasks باستخدام completed
+          if (snapshot.exists && snapshot.data()?['completed'] == true) {
+            completed++;
+          }
+
+          updateCount++;
+          setState(() => _completedTasksToday = completed);
+          print(
+            '✅ Progress update #$updateCount (from daily): $completed/$_requiredTasksToday',
+          );
+        });
+  }
+
+  Future<void> _loadUserProgress() async {
+    if (_uid == null || _selectedDay == null) return;
+
+    setState(() => _isLoadingProgress = true);
+
+    try {
+      // جلب مستوى المستخدم من users collection
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .get();
+
+      _userLevel = userDoc.data()?['userLevel'] ?? 'beginner';
+      _userLevelName = _getLevelName(_userLevel!);
+      _requiredTasksToday = _getRequiredTasksPerDay(_userLevel!);
+
+      // جلب المهام المكتملة لليوم المحدد - استخدم get مباشرة
+      _completedTasksToday = await _getCompletedTasksForDay(
+        _uid!,
+        _selectedDay!,
+      );
+
+      print(
+        '📊 User progress loaded - Level: $_userLevel, Completed: $_completedTasksToday/$_requiredTasksToday',
+      );
+
+      // بدء مراقبة التغييرات
+      _watchUserProgress();
+    } catch (e) {
+      debugPrint('❌ Error loading progress: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingProgress = false);
+      }
+    }
+  }
+
   DateTime _monthStart(DateTime d) => DateTime(d.year, d.month, 1);
   DateTime _monthEnd(DateTime d) => DateTime(d.year, d.month + 1, 0);
 
@@ -807,6 +1083,13 @@ class _taskPageState extends State<taskPage> {
   void initState() {
     super.initState();
     _initializeApp();
+    _loadUserProgress();
+  }
+
+  @override
+  void dispose() {
+    _userTasksSubscription?.cancel();
+    super.dispose();
   }
 
   // =======================
@@ -1045,6 +1328,24 @@ class _taskPageState extends State<taskPage> {
     if (_uid == null || _selectedDay == null) return;
 
     final selected = _dayStart(_selectedDay!);
+    final today = _dayStart(DateTime.now());
+
+    // ❌ منع تحديث المهام للأيام الماضية
+    if (!selected.isAtSameMomentAs(today)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'يمكنك تغيير مهمة اليوم الحالي فقط',
+              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+            ),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+      return;
+    }
+
     final monthKey =
         "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
     final utKey = '${_uid!}_${_yyyyMMdd(selected)}';
@@ -1358,6 +1659,195 @@ class _taskPageState extends State<taskPage> {
     });
   }
 
+  // -------------------------------------------------------------
+  // 1) اختيار مهمة إضافية عشوائية (مختلفة عن مهمة اليوم)
+  // -------------------------------------------------------------
+  Future<Map<String, dynamic>?> _suggestBonusTask() async {
+    if (_uid == null) return null;
+
+    try {
+      // ✅ جلب آخر موقع معروف من Firestore
+      GeoPoint? lastLocation;
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_uid)
+            .get();
+
+        if (userDoc.exists &&
+            userDoc.data()?.containsKey('lastLocation') == true) {
+          lastLocation = userDoc.data()!['lastLocation'] as GeoPoint?;
+          print('📍 Using last known location: $lastLocation');
+        }
+      } catch (e) {
+        print('⚠️ Could not fetch location: $e');
+      }
+
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'suggestBonusTask',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+      );
+
+      // ✅ إرسال الموقع إذا كان موجوداً
+      final Map<String, dynamic> data = {
+        'pressedAt': DateTime.now().toIso8601String(),
+      };
+
+      if (lastLocation != null) {
+        data['userLocation'] = {
+          'latitude': lastLocation.latitude,
+          'longitude': lastLocation.longitude,
+        };
+      }
+
+      final result = await callable.call(data);
+
+      // ✅ النتيجة تحتوي على taskId فقط أو بيانات كاملة؟
+      // إذا كانت تحتوي على taskId فقط، نحتاج لجلب بيانات المهمة
+      final Map<String, dynamic> response = Map<String, dynamic>.from(
+        result.data as Map,
+      );
+
+      if (response.containsKey('taskId')) {
+        // جلب بيانات المهمة كاملة من Firestore
+        final taskDoc = await FirebaseFirestore.instance
+            .collection('tasks')
+            .doc(response['taskId'])
+            .get();
+
+        if (taskDoc.exists) {
+          return {'id': taskDoc.id, ...taskDoc.data()!};
+        }
+      }
+
+      return response;
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'not-found' && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'لا توجد مهام إضافية متاحة الآن.',
+              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+            ),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+      return null;
+    } catch (e) {
+      print('❌ Error in _suggestBonusTask: $e');
+      return null;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 2) حفظ المهمة الإضافية وفتح شيت الإتمام
+  // -------------------------------------------------------------
+  Future<void> _saveBonusTaskAndOpen(Map<String, dynamic> bonusTask) async {
+    if (_uid == null || _selectedDay == null) return;
+
+    final sel = _dayStart(_selectedDay!);
+    final bonusDocId = '${_uid!}_${_yyyyMMdd(sel)}_bonus';
+
+    final today = _dayStart(DateTime.now());
+
+    // ❌ منع حفظ المهام الإضافية للأيام الماضية
+    if (!sel.isAtSameMomentAs(today)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'يمكنك إضافة مهام إضافية لليوم الحالي فقط',
+              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+            ),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    // ✅ التحقق من نوع المهمة
+    final validationStrategy =
+        bonusTask['validationStrategy']?.toString() ?? '';
+
+    if (validationStrategy == "التحقق عبر اجراء اختبار قصير") {
+      // 📖 مهمة قراءة مقال - نفتح ArticlePage
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ArticlePage(
+            userTaskDocId: bonusDocId,
+            taskId: bonusTask['taskId'] ?? bonusTask['id'],
+          ),
+        ),
+      );
+    } else {
+      // 📸 مهمة تصوير - نفتح CompleteTaskSheet
+      final result = await showCompleteTaskSheet(
+        context,
+        bonusTask,
+        selectedDay: sel,
+        userTaskDocId: bonusDocId,
+      );
+
+      // ✅ لو أكمل المهمة (result == true) → نحفظ في Firestore
+      if (result == true && mounted) {
+        final start = _dayStart(sel);
+        final end = _dayEnd(sel);
+
+        final utRef = FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc(bonusDocId);
+
+        final dailyTaskRef = FirebaseFirestore.instance
+            .collection('dailyTasks')
+            .doc(_uid!)
+            .collection('tasks')
+            .doc('${_yyyyMMdd(sel)}_bonus');
+
+        await utRef.set({
+          'userId': _uid,
+          'taskId': bonusTask['taskId'] ?? bonusTask['id'],
+          'taskTitle': bonusTask['title'] ?? '(بدون عنوان)',
+          'taskDescription': bonusTask['description'] ?? '',
+          'taskPoints': bonusTask['points'] ?? 0,
+          'taskValidation': bonusTask['validationStrategy'] ?? 'غير محددة',
+          'selectedAt': Timestamp.fromDate(start),
+          'windowStart': Timestamp.fromDate(start),
+          'windowEnd': Timestamp.fromDate(end),
+          'status': 'completed',
+          'completedAt': FieldValue.serverTimestamp(),
+          'isExtra': true,
+          'ignored': false,
+          'ignoredAt': null,
+        }, SetOptions(merge: true));
+
+        await StreakService.updateStreakOnTaskCompletion();
+
+        await dailyTaskRef.set({
+          'userId': _uid,
+          'taskId': bonusTask['taskId'] ?? bonusTask['id'],
+          'title': bonusTask['title'] ?? '(بدون عنوان)',
+          'description': bonusTask['description'] ?? '',
+          'category': bonusTask['category'] ?? '',
+          'estimatedCarbonSaving': bonusTask['estimatedCarbonSaving'] ?? 0,
+          'type': bonusTask['type'] ?? 'ecoAction',
+          'isExtra': true,
+          'completed': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        // تحديث البروقريس
+        await _loadUserProgress();
+
+        // أخفي كرت الاقتراح
+        setState(() => _suggestedBonusTask = null);
+      }
+    }
+  }
+
   void _attachUserTaskStreamFor(DateTime day) {
     if (_uid == null) return;
     final key = '${_uid!}_${_yyyyMMdd(day)}';
@@ -1538,6 +2028,27 @@ class _taskPageState extends State<taskPage> {
 
                     _buildCalendar(),
                     const SizedBox(height: 8),
+                    // ✅ البروقريس بار هنا - فوق كرت المهمة
+                    if (!_scheduleMode &&
+                        _selectedDay != null &&
+                        _uid != null) ...[
+                      _isLoadingProgress
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 20,
+                              ),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            )
+                          : DailyProgressBar(
+                              completed: _completedTasksToday,
+                              required: _requiredTasksToday,
+                            ),
+                    ],
 
                     if (!_scheduleMode) ...[
                       Builder(
@@ -1642,7 +2153,7 @@ class _taskPageState extends State<taskPage> {
                                 'status': ut['status'] ?? 'pending',
                               };
 
-                              final canPerformDay = !sel.isAfter(today);
+                              final canPerformDay = sel.isAtSameMomentAs(today);
 
                               if ((ut['taskTitle'] == null ||
                                       ut['taskDescription'] == null) &&
@@ -2005,6 +2516,8 @@ class _taskPageState extends State<taskPage> {
 
               // ✅ منطقك الحالي لليوم والماضي
               await _ensureUserTaskForDate(sel);
+              _userTasksSubscription?.cancel();
+              await _loadUserProgress();
               _precheckDone = false;
               _precheckError = null;
               setState(() {});
@@ -2140,6 +2653,8 @@ class _taskPageState extends State<taskPage> {
     final points = taskData['points'] ?? 0;
     final validation = taskData['validationStrategy'] ?? 'غير محددة';
     final status = taskData['status'] ?? 'pending';
+    final today = _dayStart(DateTime.now());
+
     // final taskType = (taskData['taskType'] ?? '').toString();
     // final articleContent = (taskData['articleContent'] ?? '').toString().trim();
 
@@ -2354,7 +2869,9 @@ class _taskPageState extends State<taskPage> {
                               ? 'بانتظار المراجعة ⏳'
                               : (canPerform
                                     ? 'بدء المهمة'
-                                    : 'يومها لم يحن بعد ')),
+                                    : (sel.isBefore(today)
+                                          ? 'انتهى موعد المهمة '
+                                          : 'يومها لم يحن بعد'))),
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
@@ -2363,6 +2880,460 @@ class _taskPageState extends State<taskPage> {
                           : Colors.white,
                     ),
                   ),
+                ),
+              ),
+            ),
+          ),
+          // ✅ أضيفي هذا هنا
+          if (isCompleted) ...[
+            const SizedBox(height: 16),
+            _buildBonusTaskSection(),
+          ],
+        ],
+      ),
+    );
+  }
+  // =====================================================================
+  // ✅ الدوال الجديدة — أضيفيها بعد _buildUserTaskCard
+  // =====================================================================
+
+  Widget _buildBonusTaskSection() {
+    final sel = _dayStart(_selectedDay ?? DateTime.now());
+    final bonusDocId = '${_uid ?? ''}_${_yyyyMMdd(sel)}_bonus';
+    final today = _dayStart(DateTime.now());
+
+    //  منع ظهور المهام الإضافية للأيام الماضية
+    if (!sel.isAtSameMomentAs(today)) {
+      return const SizedBox.shrink();
+    }
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(bonusDocId)
+          .snapshots(),
+      builder: (context, snap) {
+        // المهمة الإضافية موجودة في Firestore
+        if (snap.hasData && snap.data!.exists) {
+          final bonusData = snap.data!.data() as Map<String, dynamic>;
+          final bonusStatus = bonusData['status'] as String? ?? 'pending';
+
+          if (bonusStatus == 'completed') {
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.primary33,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.primary, width: 1.2),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.star, color: AppColors.primary, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'أحسنت! أكملتِ المهمة الإضافية اليوم 🌱',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          // المهمة موجودة لكن لم تكتمل بعد
+          return _buildActiveBonusCard(bonusData, bonusDocId, bonusStatus);
+        }
+
+        // لا توجد مهمة إضافية في Firestore بعد
+        // لو عندنا مهمة مقترحة في الذاكرة — اعرضها
+        if (_suggestedBonusTask != null) {
+          return _buildProposedBonusCard(
+            task: _suggestedBonusTask!,
+            onAccept: () => _saveBonusTaskAndOpen(_suggestedBonusTask!),
+            onReject: () =>
+                setState(() => _suggestedBonusTask = null), // ← يرجع للزر
+            onAlternative: () async {
+              setState(() => _bonusLoading = true);
+              final next = await _suggestBonusTask();
+              if (mounted && next != null) {
+                setState(() {
+                  _suggestedBonusTask = next;
+                  _bonusLoading = false;
+                });
+              } else if (mounted) {
+                setState(() => _bonusLoading = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'لا توجد مهام بديلة متاحة',
+                      style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+                    ),
+                    backgroundColor: AppColors.primary,
+                  ),
+                );
+              }
+            },
+            isLoading: _bonusLoading,
+          );
+        }
+
+        // الحالة الافتراضية — زر "اقتراح مهمة إضافية"
+        return _bonusLoading
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+              )
+            : SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.add_task, color: AppColors.primary),
+                  label: Text(
+                    'اقتراح مهمة إضافية ✨',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: AppColors.primary,
+                      width: 1.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () async {
+                    setState(() => _bonusLoading = true);
+                    final task = await _suggestBonusTask();
+                    if (mounted)
+                      setState(() {
+                        _suggestedBonusTask = task;
+                        _bonusLoading = false;
+                      });
+                  },
+                ),
+              );
+      },
+    );
+  }
+
+  Widget _buildProposedBonusCard({
+    required Map<String, dynamic> task,
+    required VoidCallback onAccept,
+    required VoidCallback onReject,
+    required VoidCallback onAlternative,
+    bool isLoading = false,
+  }) {
+    final title = task['title'] ?? '(بدون عنوان)';
+    final description = task['description'] ?? '';
+    final points = task['points'] ?? 0;
+
+    // ✅ إظهار معلومات الموقع إذا كانت موجودة
+    final bool hasLocation =
+        task['location'] != null ||
+        (task['latitude'] != null && task['longitude'] != null);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.accent, width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x18000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: AppColors.accent, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'مهمة إضافية مقترحة ✨',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: AppColors.accent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              color: AppColors.dark,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            description,
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 13.5,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // ✅ إظهار الموقع إذا كان موجوداً
+          if (hasLocation) ...[
+            Row(
+              children: [
+                Icon(Icons.location_on, size: 14, color: AppColors.primary),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    task['location'] ?? 'موقع قريب منك',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 12,
+                      color: AppColors.primary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
+
+          Row(
+            children: [
+              const Icon(Icons.star_border, color: AppColors.primary, size: 18),
+              const SizedBox(width: 4),
+              Text(
+                '$points نقطة',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          if (isLoading)
+            const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onReject,
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey.shade400),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    child: Text(
+                      'لا شكراً',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onAlternative,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.primary),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    child: Text(
+                      'بديل 🔄',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: onAccept,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      'قبول ✅',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveBonusCard(
+    Map<String, dynamic> bonusData,
+    String bonusDocId,
+    String status,
+  ) {
+    final sel = _dayStart(_selectedDay ?? DateTime.now());
+    final title = bonusData['taskTitle'] ?? '(بدون عنوان)';
+    final description = bonusData['taskDescription'] ?? '';
+    final points = bonusData['taskPoints'] ?? 0;
+    final validation = bonusData['taskValidation'] ?? 'غير محددة';
+    final isSubmitted = status == 'submitted';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.accent, width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x18000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: AppColors.accent, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'مهمتك الإضافية ✨',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: AppColors.accent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              color: AppColors.dark,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            description,
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 13.5,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.star_border, color: AppColors.primary, size: 18),
+              const SizedBox(width: 4),
+              Text(
+                '$points نقطة',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                  fontSize: 13,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                validation,
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: isSubmitted
+                  ? null
+                  : () async {
+                      final taskId = bonusData['taskId'] as String?;
+                      final fullTask = {
+                        ...bonusData,
+                        'title': title,
+                        'description': description,
+                        'points': points,
+                        'validationStrategy': validation,
+                        'id': taskId,
+                        'taskId': taskId,
+                        'status': status,
+                      };
+
+                      final result = await showCompleteTaskSheet(
+                        context,
+                        fullTask,
+                        selectedDay: sel,
+                        userTaskDocId: bonusDocId,
+                      );
+                      await _loadUserProgress();
+                      if (result == true && mounted) setState(() {});
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isSubmitted
+                    ? Colors.grey.shade300
+                    : AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: Text(
+                isSubmitted ? 'بانتظار المراجعة ⏳' : 'بدء المهمة الإضافية',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: isSubmitted ? AppColors.dark : Colors.white,
                 ),
               ),
             ),
@@ -2414,4 +3385,96 @@ Future<bool?> showCompleteTaskSheet(
       userTaskDocId: userTaskDocId,
     ),
   );
+}
+
+// ====================================================
+// DailyProgressBar Widget
+// ====================================================
+class DailyProgressBar extends StatelessWidget {
+  final int completed;
+  final int required;
+
+  const DailyProgressBar({
+    super.key,
+    required this.completed,
+    required this.required,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = completed / required;
+    final isComplete = completed >= required;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isComplete ? Icons.check_circle : Icons.eco,
+                color: isComplete ? Colors.green : AppColors.primary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'تقدمك اليوم',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.dark,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$completed / $required مهام',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isComplete ? Colors.green : AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progress.clamp(0.0, 1.0),
+              backgroundColor: Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isComplete ? Colors.green : AppColors.primary,
+              ),
+              minHeight: 8,
+            ),
+          ),
+          if (isComplete) ...[
+            const SizedBox(height: 8),
+            Text(
+              '🎉 أحسنت! أكملت كل مهام اليوم',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 13,
+                color: Colors.green,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

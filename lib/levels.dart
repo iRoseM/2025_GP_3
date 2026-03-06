@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:developer' as developer;
+
 import 'home.dart';
 import 'task.dart';
 import 'map.dart';
@@ -120,4 +124,75 @@ class _levelsPageState extends State<levelsPage> {
       ),
     );
   }
+}
+
+// ====================================================
+// دالة تحسب عدد المهام المطلوبة حسب مستوى المستخدم
+// ====================================================
+int getRequiredTasksPerDay(String levelId) {
+  switch (levelId) {
+    case 'hard':
+      return 2;
+    case 'medium':
+      return 2;
+    case 'beginner':
+    default:
+      return 1;
+  }
+}
+
+// ====================================================
+// دالة تحول levelId إلى اسم عربي
+// ====================================================
+String getLevelName(String levelId) {
+  switch (levelId) {
+    case 'beginner':
+      return 'مبتدئ';
+    case 'medium':
+      return 'متوسط';
+    case 'hard':
+      return 'متقدم';
+    default:
+      return 'مبتدئ';
+  }
+}
+
+String _yyyyMMdd(DateTime d) {
+  return '${d.year.toString().padLeft(4, '0')}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
+}
+
+// ====================================================
+// دالة تحسب المهام المكتملة لليوم
+// ====================================================
+Future<int> getCompletedTasksForDay(String userId, DateTime day) async {
+  final dayKey = '${userId}_${_yyyyMMdd(day)}';
+  final bonusKey = '${userId}_${_yyyyMMdd(day)}_bonus';
+
+  int count = 0;
+
+  try {
+    // المهمة الرئيسية
+    final mainTask = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(dayKey)
+        .get();
+
+    if (mainTask.exists && mainTask.data()?['status'] == 'completed') {
+      count++;
+    }
+
+    // المهمة الإضافية (إذا كانت موجودة)
+    final bonusTask = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(bonusKey)
+        .get();
+
+    if (bonusTask.exists && bonusTask.data()?['status'] == 'completed') {
+      count++;
+    }
+  } catch (e) {
+    debugPrint('⚠️ Error getting completed tasks: $e');
+  }
+
+  return count;
 }
