@@ -303,7 +303,7 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
                           'إبلاغ عن مهمة',
                           style: GoogleFonts.ibmPlexSansArabic(
                             fontSize: 24,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                             color: appColors.dark,
                           ),
                         ),
@@ -401,7 +401,7 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
                                               style:
                                                   GoogleFonts.ibmPlexSansArabic(
                                                     fontSize: 14,
-                                                    fontWeight: FontWeight.w700,
+                                                    fontWeight: FontWeight.w600,
                                                     color: appColors.dark,
                                                   ),
                                             ),
@@ -512,7 +512,7 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
                                           title,
                                           overflow: TextOverflow.ellipsis,
                                           style: GoogleFonts.ibmPlexSansArabic(
-                                            fontWeight: FontWeight.w700,
+                                            fontWeight: FontWeight.w600,
                                             color: appColors.dark,
                                           ),
                                         ),
@@ -653,7 +653,7 @@ class _SectionCard extends StatelessWidget {
               title,
               style: GoogleFonts.ibmPlexSansArabic(
                 fontSize: 15,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
                 color: appColors.dark,
               ),
             ),

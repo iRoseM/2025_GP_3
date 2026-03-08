@@ -21,6 +21,10 @@ import 'services/title_header.dart';
 import 'admin_task_check.dart';
 import '../services/app_colors.dart';
 import 'admin_task_reports.dart';
+import 'admin_task_reports.dart'
+    as taskReports; // للكلاسات العامة في ملف البلاغات
+import 'admin_reports.dart'
+    as containerReports; // للكلاسات العامة في ملف بلاغات الحاويات
 
 class AdminHomePage extends StatefulWidget {
   const AdminHomePage({super.key});
@@ -49,6 +53,56 @@ class _AdminHomePageState extends State<AdminHomePage> {
   Map<int, Map<String, dynamic>> _barCategoriesInfo =
       {}; // لتخزين معلومات كل شريط
   bool _isLoadingTopUsers = false;
+  int _selectedQuickIconIndex = 0; // 0: لوحة التحكم, 1: البلاغات, 2: التوصيات
+  int _selectedReportsTab = 0; // 0: بلاغات المهام, 1: بلاغات الحاويات
+  int _unreadTaskReports = 0;
+  int _unreadContainerReports = 0;
+  bool _isRefreshing = false; // أضف هذا مع باقي المتغيرات
+  // متغيرات التخزين المؤقت للمستخدمين
+  Map<String, dynamic> _cachedUsersData = {};
+  DateTime _lastUsersUpdate = DateTime.now();
+  bool _isLoadingUsers = false;
+  // أضف هذا المتغير
+  Future<QuerySnapshot<Map<String, dynamic>>>? _taskReportsFuture;
+  Future<List<Map<String, dynamic>>>? _containerReportsFuture;
+
+  // متغيرات التخزين المؤقت لبلاغات المهام
+  Map<String, dynamic> _cachedTaskReportsData = {};
+  DateTime _lastTaskReportsUpdate = DateTime.now();
+  bool _isLoadingTaskReports = false;
+  // متغيرات التخزين المؤقت لبلاغات الحاويات
+  List<Map<String, dynamic>> _cachedContainerReports = [];
+  DateTime _lastContainerReportsUpdate = DateTime.now();
+  bool _isLoadingContainerReports = false;
+  // متغيرات للتحكم في عرض البلاغات
+  bool _showAllTaskReports = false;
+  bool _showAllContainerReports = false;
+  Map<String, bool> _viewedTaskReports = {}; // لتخزين البلاغات التي تم عرضها
+  Map<String, bool> _viewedContainerReports = {};
+  // أضف هذه المتغيرات مع باقي المتغيرات في بداية الكلاس
+  int _cachedTotalReportsCount = 0;
+  DateTime _lastTotalReportsUpdate = DateTime.now();
+  bool _isLoadingTotalReports = false;
+
+  bool _initialReportsLoaded = false;
+  bool _isInReportsTab = false;
+  bool _initialContainerReportsLoaded = false;
+
+  // أضف هذا مع باقي المتغيرات
+  final GlobalKey<ScaffoldMessengerState> _messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
+  void _markTaskReportAsViewed(String reportId) {
+    // لا تفعل شيئاً هنا - سنقوم بالتحديث فقط عند الضغط على البلاغ
+    print('📝 ملاحظة: محاولة تحديث البلاغ $reportId');
+  }
+
+  void _markContainerReportAsViewed(String reportId) {
+    setState(() {
+      _viewedContainerReports[reportId] = true;
+    });
+  }
+
   // 🔧 دوال الفترات الزمنية
   List<String> _generatePeriodKeys(DateTime start, DateTime end, String range) {
     final List<String> keys = [];
@@ -121,27 +175,106 @@ class _AdminHomePageState extends State<AdminHomePage> {
   void initState() {
     super.initState();
 
-    Future.microtask(() async {
-      if (!await hasInternetConnection()) {
-        if (mounted) {
-          showNoInternetDialog(context);
-          return;
-        }
-      } else {
-        FCMService.requestPermissionAndSaveToken();
-        FCMService.listenToForegroundMessages();
-        await _loadTargetFromFirebase();
-        _loadTopUsers();
-        await _loadTaskCompletionData();
-      }
+    // // ✅ تحسين: استخدام WidgetsBinding.instance.addPostFrameCallback
+    // WidgetsBinding.instance.addPostFrameCallback((_) {
+    //   _initializeApp();
+    // });
+    // Force refresh للبلاغات
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        _containerReportsFuture = _getContainerReports();
+      });
     });
-
-    _refreshTimer = Timer.periodic(const Duration(hours: 1), (_) {
+    // ✅ تحسين: تقليل فترة التحديث إلى 30 دقيقة بدلاً من ساعة
+    _refreshTimer = Timer.periodic(const Duration(minutes: 30), (_) {
       if (mounted) {
-        setState(() {});
-        _loadChartData();
+        _refreshData();
       }
     });
+  }
+
+  Future<void> _initializeApp() async {
+    // ✅ تحسين: التحقق من الاتصال أولاً
+    final hasConnection = await hasInternetConnection();
+
+    if (!hasConnection) {
+      if (mounted) {
+        showNoInternetDialog(context);
+      }
+      return;
+    }
+
+    // ✅ تحسين: إظهار حالة التحميل
+    if (mounted) {
+      setState(() => _isLoadingTopUsers = true);
+    }
+
+    try {
+      // ✅ تحسين: تحميل البيانات بالتوازي
+      await Future.wait([
+        _loadTargetFromFirebase(),
+        _loadTopUsers(),
+        _loadTaskCompletionData(),
+        _loadChartData(),
+        _loadUnreadCounts(),
+      ]);
+
+      // ✅ إضافة سطر التشخيص هنا
+      _debugCheckNewReports();
+
+      // ✅ تحسين: إعداد FCM بعد التحميل الأساسي
+      FCMService.requestPermissionAndSaveToken();
+      FCMService.listenToForegroundMessages();
+    } catch (e) {
+      debugPrint('❌ Initialization error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('حدث خطأ في تحميل البيانات: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingTopUsers = false);
+      }
+    }
+  }
+
+  Future<void> _refreshData() async {
+    if (_isRefreshing) return;
+
+    setState(() => _isRefreshing = true);
+
+    try {
+      // إعادة تعيين الكاش
+      _cachedUsersData = {};
+      _cachedTaskData = {};
+      _cachedContainerReports = []; // أضف هذا السطر
+      _cachedTaskReportsData = {};
+
+      _lastUsersUpdate = DateTime.now().subtract(const Duration(hours: 1));
+      _lastTaskDataUpdate = DateTime.now().subtract(const Duration(hours: 1));
+      _lastContainerReportsUpdate = DateTime.now().subtract(
+        const Duration(hours: 1),
+      ); // أضف هذا السطر
+      _lastTaskReportsUpdate = DateTime.now().subtract(
+        const Duration(hours: 1),
+      );
+
+      await Future.wait([
+        _loadTopUsers(),
+        _loadChartData(),
+        _loadUnreadCounts(),
+      ]);
+    } catch (e) {
+      debugPrint('❌ Refresh error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
+    }
   }
 
   void dispose() {
@@ -182,17 +315,153 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
+  Color _statusColor(String s) {
+    switch (s) {
+      case 'pending':
+        return Colors.orange;
+      case 'approved':
+        return Colors.green;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return appColors.sea;
+    }
+  }
+
+  String _statusLabel(String s) {
+    switch (s) {
+      case 'pending':
+        return 'قيد المراجعة';
+      case 'approved':
+        return 'تمت المعالجة';
+      case 'rejected':
+        return 'مرفوض';
+      default:
+        return s;
+    }
+  }
+
+  Future<void> _loadUnreadCounts() async {
+    try {
+      // تحميل عدد بلاغات المهام (pending فقط)
+      final taskReports = await FirebaseFirestore.instance
+          .collection('taskReports')
+          .where('decision', isEqualTo: 'pending')
+          .get();
+
+      // تحميل عدد بلاغات الحاويات
+      final containerReports = await FirebaseFirestore.instance
+          .collection('facilityReports')
+          .where('status', isEqualTo: 'pending')
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _unreadTaskReports = taskReports.docs.length;
+          _unreadContainerReports = containerReports.docs.length;
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading unread counts: $e');
+    }
+  }
+
+  Future<int> _getTotalReportsCount() async {
+    // إذا كان التحميل جارياً، أرجع القيمة المخزنة مؤقتاً
+    if (_isLoadingTotalReports) {
+      return _cachedTotalReportsCount;
+    }
+
+    // استخدام الكاش إذا كان حديثاً (أقل من 30 ثانية)
+    if (DateTime.now().difference(_lastTotalReportsUpdate).inSeconds < 30) {
+      return _cachedTotalReportsCount;
+    }
+
+    setState(() => _isLoadingTotalReports = true);
+
+    try {
+      // تنفيذ الاستعلامات بالتوازي
+      final results = await Future.wait([
+        FirebaseFirestore.instance
+            .collection('taskReports')
+            .where('decision', isEqualTo: 'pending')
+            .get()
+            .then((snapshot) {
+              final allReports = snapshot.docs;
+
+              // حساب عدد البلاغات الجديدة فقط (غير المقروءة)
+              final newReportsCount = allReports.where((doc) {
+                final reportId = doc.id;
+                return !(_viewedTaskReports[reportId] ?? false);
+              }).length;
+
+              // تحديث عداد بلاغات المهام
+              if (mounted) {
+                setState(() {
+                  _unreadTaskReports = newReportsCount;
+                });
+              }
+              return newReportsCount;
+            }),
+
+        FirebaseFirestore.instance
+            .collection('facilityReports')
+            .where('status', isEqualTo: 'pending')
+            .get()
+            .then((snapshot) {
+              final allReports = snapshot.docs;
+
+              // حساب عدد البلاغات الجديدة فقط (غير المقروءة)
+              final newReportsCount = allReports.where((doc) {
+                final reportId = doc.id;
+                return !(_viewedContainerReports[reportId] ?? false);
+              }).length;
+
+              // تحديث عداد بلاغات الحاويات
+              if (mounted) {
+                setState(() {
+                  _unreadContainerReports = newReportsCount;
+                });
+              }
+              return newReportsCount;
+            }),
+      ]);
+
+      final total = results[0] + results[1];
+
+      if (mounted) {
+        setState(() {
+          _cachedTotalReportsCount = total;
+          _lastTotalReportsUpdate = DateTime.now();
+          _isLoadingTotalReports = false;
+        });
+      }
+
+      return total;
+    } catch (e) {
+      debugPrint('❌ Error getting reports count: $e');
+      if (mounted) {
+        setState(() => _isLoadingTotalReports = false);
+      }
+      return _cachedTotalReportsCount; // أرجع القيمة المخزنة مؤقتاً في حالة الخطأ
+    }
+  }
+
   Future<void> _loadUserGrowthData() async {
     try {
       final startDate = _getStartDateForRange(_selectedTimeRange);
       final endDate = _getEndDateForRange(_selectedTimeRange);
 
-      // خيار 1: احصل على جميع المستخدمين ثم فلتر محلياً (أقل كفاءة)
+      debugPrint('📅 Loading users from $startDate to $endDate');
+
+      // ✅ حل مؤقت: نجلب كل المستخدمين ثم نفلتر يدوياً
       final usersSnapshot = await FirebaseFirestore.instance
           .collection('users')
+          .where('isVerified', isEqualTo: true)
           .get();
 
-      // أنشئ قائمة الأيام/الفترات
+      debugPrint('📦 Total users fetched: ${usersSnapshot.docs.length}');
+
       final Map<String, int> periodCounts = {};
       final periodKeys = _generatePeriodKeys(
         startDate,
@@ -204,19 +473,19 @@ class _AdminHomePageState extends State<AdminHomePage> {
         periodCounts[key] = 0;
       }
 
-      // فلتر محلياً للمستخدمين المؤكدين في الفترة
+      // ✅ فلترة يدوية حسب التاريخ
+      int validUsers = 0;
       for (final doc in usersSnapshot.docs) {
         final data = doc.data();
-        final isVerified = data['isVerified'] == true;
         final createdAt = data['createdAt'];
 
-        if (isVerified && createdAt is Timestamp) {
+        if (createdAt is Timestamp) {
           final userDate = createdAt.toDate();
 
-          // تحقق إذا كان في الفترة المحددة
+          // تحقق يدوي من التاريخ
           if (userDate.isAfter(startDate) && userDate.isBefore(endDate)) {
+            validUsers++;
             final periodKey = _getPeriodKey(userDate, _selectedTimeRange);
-
             if (periodCounts.containsKey(periodKey)) {
               periodCounts[periodKey] = periodCounts[periodKey]! + 1;
             }
@@ -224,7 +493,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
         }
       }
 
-      // حوّل إلى FlSpots
+      debugPrint('✅ Valid users in range: $validUsers');
+      debugPrint('📊 Period counts: $periodCounts');
+
       final List<FlSpot> spots = [];
       int index = 0;
       double cumulative = 0;
@@ -235,12 +506,44 @@ class _AdminHomePageState extends State<AdminHomePage> {
         index++;
       }
 
-      setState(() {
-        _userGrowthSpots = spots;
-      });
+      debugPrint('📈 Generated spots: $spots');
+
+      if (mounted) {
+        setState(() {
+          _userGrowthSpots = spots;
+        });
+      }
     } catch (e) {
       debugPrint('❌ User growth error: $e');
     }
+  }
+
+  void _debugCheckNewReports() async {
+    debugPrint('🔍 تشخيص البلاغات الجديدة:');
+
+    // جلب جميع البلاغات من Firebase
+    final taskReports = await FirebaseFirestore.instance
+        .collection('taskReports')
+        .where('decision', isEqualTo: 'pending')
+        .get();
+
+    debugPrint('📊 عدد البلاغات في Firebase: ${taskReports.docs.length}');
+
+    for (var doc in taskReports.docs) {
+      final data = doc.data();
+      debugPrint('   - بلاغ: ${doc.id}');
+      debugPrint('     taskTitle: ${data['taskTitle']}');
+      debugPrint('     decision: ${data['decision']}');
+      debugPrint('     createdAt: ${data['createdAt']}');
+      debugPrint('     viewed: ${_viewedTaskReports[doc.id] ?? false}');
+    }
+
+    // البلاغات الجديدة في الواجهة
+    final newReports = taskReports.docs.where((doc) {
+      return !(_viewedTaskReports[doc.id] ?? false);
+    }).toList();
+
+    debugPrint('✅ البلاغات الجديدة في الواجهة: ${newReports.length}');
   }
 
   Widget _buildRangeNavigator() {
@@ -622,14 +925,184 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
+  // دالة لجلب بيانات المستخدمين
+  Future<Map<String, dynamic>> _getUsersData() async {
+    // استخدام الكاش إذا كان حديثاً
+    if (DateTime.now().difference(_lastUsersUpdate).inMinutes < 5 &&
+        _cachedUsersData.isNotEmpty) {
+      return _cachedUsersData;
+    }
+
+    setState(() => _isLoadingUsers = true);
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('isVerified', isEqualTo: true)
+          .get();
+
+      num totalCarbon = 0;
+      for (final doc in snapshot.docs) {
+        totalCarbon += (doc.data()['totalCarbonSaved'] as num?) ?? 0;
+      }
+
+      final data = {
+        'totalCarbon': totalCarbon,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      };
+
+      // تحديث الكاش
+      _cachedUsersData = data;
+      _lastUsersUpdate = DateTime.now();
+
+      return data;
+    } catch (e) {
+      debugPrint('❌ Error loading users data: $e');
+      return {'totalCarbon': 0};
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingUsers = false);
+      }
+    }
+  }
+
+  Future<QuerySnapshot<Map<String, dynamic>>> _getTaskReports() async {
+    print('📥 جلب البلاغات من Firebase...');
+
+    // ❌ إزالة فلترة decision
+    final snapshot = await FirebaseFirestore.instance
+        .collection('taskReports')
+        .orderBy('createdAt', descending: true) // فقط الترتيب
+        .get();
+
+    print('📦 تم جلب ${snapshot.docs.length} بلاغ');
+
+    // فقط في أول مرة نضيف البلاغات كـ false
+    if (!_initialReportsLoaded) {
+      print('🆕 تهيئة البلاغات كـ false...');
+      for (final doc in snapshot.docs) {
+        if (!_viewedTaskReports.containsKey(doc.id)) {
+          _viewedTaskReports[doc.id] = false;
+          print('   + ${doc.id} -> false');
+        }
+      }
+      _initialReportsLoaded = true;
+      print('✅ تم تهيئة البلاغات كـ false');
+    }
+
+    return snapshot;
+  }
+
+  // دالة محسنة لجلب بلاغات الحاويات مع تخزين مؤقت
+  Future<List<Map<String, dynamic>>> _getContainerReports() async {
+    print('📥 جلب بلاغات الحاويات من Firebase...');
+
+    setState(() => _isLoadingContainerReports = true);
+
+    try {
+      // ✅ جلب جميع المستندات بدون أي شروط
+      final snapshot = await FirebaseFirestore.instance
+          .collection('facilityReports')
+          .get();
+
+      print('📦 تم جلب ${snapshot.docs.length} بلاغ حاوية من Firebase');
+
+      // طباعة معلومات المجموعة
+      print('🔍 معلومات المجموعة:');
+      print('   - عدد المستندات: ${snapshot.docs.length}');
+
+      if (snapshot.docs.isEmpty) {
+        // جرب مجموعة أخرى للتحقق
+        final altSnapshot = await FirebaseFirestore.instance
+            .collection('facilitiesReports')
+            .get();
+        print(
+          '📦 محاولة بديلة (facilitiesReports): ${altSnapshot.docs.length}',
+        );
+      } else {
+        // طباعة أول مستند لمعرفة الحقول
+        final firstDoc = snapshot.docs.first;
+        print('🔍 أول مستند:');
+        print('   - id: ${firstDoc.id}');
+        print('   - الحقول: ${firstDoc.data().keys}');
+        print('   - البيانات: ${firstDoc.data()}');
+      }
+
+      final reports = snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+
+      // فقط في أول مرة نضيف البلاغات كـ false
+      if (!_initialContainerReportsLoaded) {
+        print('🆕 تهيئة بلاغات الحاويات كـ false...');
+        for (final report in reports) {
+          final reportId = report['id'];
+          if (!_viewedContainerReports.containsKey(reportId)) {
+            _viewedContainerReports[reportId] = false;
+            print('   + ${reportId} -> false');
+          }
+        }
+        _initialContainerReportsLoaded = true;
+        print('✅ تم تهيئة بلاغات الحاويات كـ false');
+      } else {
+        // للبلاغات الجديدة بعد التهيئة الأولى
+        for (final report in reports) {
+          final reportId = report['id'];
+          if (!_viewedContainerReports.containsKey(reportId)) {
+            _viewedContainerReports[reportId] = false;
+            print('   + بلاغ جديد واصل: $reportId');
+          }
+        }
+      }
+
+      // تحديث العداد
+      final pendingCount = reports.where((r) {
+        final reportId = r['id'];
+        return !(_viewedContainerReports[reportId] ?? false);
+      }).length;
+
+      if (mounted) {
+        setState(() {
+          _unreadContainerReports = pendingCount;
+          _cachedContainerReports = reports;
+          _lastContainerReportsUpdate = DateTime.now();
+          _isLoadingContainerReports = false;
+        });
+      }
+
+      print('📊 عدد البلاغات الجديدة: $pendingCount من أصل ${reports.length}');
+
+      // ✅ أضف هذا السطر المهم جداً
+      return reports;
+    } catch (e) {
+      debugPrint('❌ Error loading container reports: $e');
+      if (mounted) {
+        setState(() => _isLoadingContainerReports = false);
+      }
+      return _cachedContainerReports.isEmpty ? [] : _cachedContainerReports;
+    }
+  }
+
+  // ✅ تحسين: تخزين مؤقت للبيانات
+  Map<String, dynamic> _cachedTaskData = {};
+  DateTime _lastTaskDataUpdate = DateTime.now();
+  bool _isLoadingTaskData = false;
+
   Future<void> _loadTaskCompletionData() async {
+    // ✅ منع التحميل المتكرر
+    if (_isLoadingTaskData) return;
+
+    setState(() => _isLoadingTaskData = true);
+
     try {
       final startDate = _getStartDateForRange(_selectedTimeRange);
       final endDate = _getEndDateForRange(_selectedTimeRange);
 
       debugPrint('📅 Loading tasks from $startDate to $endDate');
 
-      // احصل على جميع التقديمات المعتمدة في الفترة
+      // ✅ استعلام لجلب جميع التقديمات المعتمدة
       final submissionsSnapshot = await FirebaseFirestore.instance
           .collection('submissions')
           .where('status', isEqualTo: 'approved')
@@ -639,6 +1112,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
           )
           .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
           .get();
+
+      debugPrint('📦 Loaded ${submissionsSnapshot.docs.length} submissions');
 
       // أنشئ قائمة الفترات
       final periodKeys = _generatePeriodKeys(
@@ -668,11 +1143,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
         tempCategoryNames[emissionFactorRef] = taskTitle;
       }
 
-      // تحديث أسماء التصنيفات
-      setState(() {
-        _categoryNames.addAll(tempCategoryNames);
-      });
-
       // توليد ألوان ديناميكية لكل تصنيف
       final Map<String, Color> tempCategoryColors = {};
       final colorPalette = [
@@ -700,11 +1170,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
             colorPalette[colorIndex % colorPalette.length];
         colorIndex++;
       }
-
-      // تحديث ألوان التصنيفات
-      setState(() {
-        _categoryColors.addAll(tempCategoryColors);
-      });
 
       // عد المهام حسب emissionFactorRef لكل فترة
       for (final doc in submissionsSnapshot.docs) {
@@ -756,15 +1221,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
       // إعادة تعيين index
       index = 0;
-      final Map<int, Map<String, dynamic>> tempBarInfo =
-          {}; // للمعلومات المؤقتة
+      final Map<int, Map<String, dynamic>> tempBarInfo = {};
 
       for (final key in periodKeys) {
         final periodData = categoryCounts[key] ?? {};
 
         // إنشاء أشرطة لكل تصنيف في نفس المجموعة
         final List<BarChartRodData> rods = [];
-        final Map<String, dynamic> groupInfo = {}; // تخزين معلومات هذه المجموعة
+        final Map<String, dynamic> groupInfo = {};
 
         // ترتيب التصنيفات حسب العدد (تنازلياً)
         final sortedCategories = periodData.entries.toList()
@@ -775,7 +1239,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         for (final entry in sortedCategories) {
           final category = entry.key;
           final count = entry.value.toDouble();
-          final displayName = _categoryNames[category] ?? category;
+          final displayName = tempCategoryNames[category] ?? category;
 
           if (count > 0) {
             // تخزين معلومات هذا الشريط
@@ -783,7 +1247,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
               'category': category,
               'name': displayName,
               'count': count,
-              'color': _categoryColors[category] ?? Colors.grey,
+              'color': tempCategoryColors[category] ?? Colors.grey,
               'startY': currentStack,
               'endY': currentStack + count,
             };
@@ -796,7 +1260,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   topLeft: Radius.circular(4),
                   topRight: Radius.circular(4),
                 ),
-                color: _categoryColors[category] ?? Colors.grey,
+                color: tempCategoryColors[category] ?? Colors.grey,
               ),
             );
             currentStack += count;
@@ -818,25 +1282,27 @@ class _AdminHomePageState extends State<AdminHomePage> {
           );
         }
 
-        barGroups.add(
-          BarChartGroupData(
-            x: index,
-            barRods: rods,
-            barsSpace: 0, // لا مسافة بين الأشرطة المتراكمة
-          ),
-        );
+        barGroups.add(BarChartGroupData(x: index, barRods: rods, barsSpace: 0));
 
         index++;
       }
 
-      setState(() {
-        _taskBarGroups = barGroups;
-        _taskCompletionSpots = spots;
-        _uniqueCategories = allCategories;
-        _barCategoriesInfo = tempBarInfo; // تخزين معلومات الأشرطة
-      });
+      if (mounted) {
+        setState(() {
+          _taskBarGroups = barGroups;
+          _taskCompletionSpots = spots;
+          _categoryNames.addAll(tempCategoryNames);
+          _categoryColors.addAll(tempCategoryColors);
+          _uniqueCategories = allCategories;
+          _barCategoriesInfo = tempBarInfo;
+          _isLoadingTaskData = false;
+        });
+      }
     } catch (e) {
       debugPrint('❌ Task completion error: $e');
+      if (mounted) {
+        setState(() => _isLoadingTaskData = false);
+      }
     }
   }
 
@@ -1721,10 +2187,15 @@ class _AdminHomePageState extends State<AdminHomePage> {
           setState(() {
             _carbonTarget = target.toDouble();
           });
+          print('✅ Loaded carbon target from Firebase: $_carbonTarget');
         }
+      } else {
+        // ✅ المستند غير موجود → هذا طبيعي، نستخدم القيمة الافتراضية
+        print('ℹ️ No saved carbon target, using default: $_carbonTarget');
       }
     } catch (e) {
-      debugPrint('❌ Error loading target: $e');
+      // ✅ في حالة خطأ (مثلاً مشكلة إنترنت)، نستخدم القيمة الافتراضية
+      print('⚠️ Could not load carbon target, using default: $_carbonTarget');
     }
   }
 
@@ -2316,8 +2787,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 4),
-
+                  // ✅ StreamBuilder حق الترحيب (البروفايل)
                   StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                     stream: userStream,
                     builder: (context, snap) {
@@ -2443,220 +2913,104 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     },
                   ),
 
-                  const SizedBox(height: 26),
-
-                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: FirebaseFirestore.instance
-                        .collection('users')
-                        .where('isVerified', isEqualTo: true)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return _buildLoadingStats();
-                      }
-
-                      if (snapshot.hasError) {
-                        return _buildErrorStats();
-                      }
-
-                      final docs = snapshot.data?.docs ?? [];
-                      final totalUsers = docs.length;
-
-                      num totalPoints = 0;
-                      num totalCarbon = 0;
-                      num totalCompletedTasks = 0;
-                      final now = DateTime.now();
-                      final todayStart = DateTime(now.year, now.month, now.day);
-
-                      for (final doc in docs) {
-                        final data = doc.data();
-
-                        final p = data['points'];
-                        if (p is num)
-                          totalPoints += p;
-                        else if (p != null)
-                          totalPoints += num.tryParse(p.toString()) ?? 0;
-
-                        final c = data['totalCarbonSaved'];
-                        if (c is num)
-                          totalCarbon += c;
-                        else if (c != null)
-                          totalCarbon += num.tryParse(c.toString()) ?? 0;
-
-                        final ct = data['completedTask'];
-                        if (ct is num)
-                          totalCompletedTasks += ct;
-                        else if (ct != null)
-                          totalCompletedTasks +=
-                              num.tryParse(ct.toString()) ?? 0;
-                      }
-                      return Column(
-                        children: [
-                          _buildCarbonOverviewCard(
-                            totalCarbon: totalCarbon,
-                            carbonSpots: _carbonSpots,
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          SizedBox(
-                            height: 380,
-                            child: PageView(
-                              children: [
-                                _buildBarChartCard(
-                                  'إكمال المهام',
-                                  _taskCompletionSpots,
-                                  appColors.sea,
-                                  _selectedTimeRange,
-                                ),
-                                _buildChartCard(
-                                  'تراكم النقاط',
-                                  _pointsSpots,
-                                  appColors.accent,
-                                  _selectedTimeRange,
-                                ),
-                                _buildChartCard(
-                                  'نمو المستخدمين',
-                                  _userGrowthSpots,
-                                  appColors.primary,
-                                  _selectedTimeRange,
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(
-                            height: 16,
-                          ), // قللت من الـ SizedBox هنا
-                          // باقي الكود (طلبات المهام والبلاغات) يبقى كما هو...
-                        ],
-                      );
-                    },
-                  ),
-
-                  _buildLeaderboardCard(),
                   const SizedBox(height: 16),
-
-                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: FirebaseFirestore.instance
-                        .collection('taskReports')
-                        .where('decision', isEqualTo: 'pending')
-                        .snapshots(),
-                    builder: (context, snap) {
-                      final isLoading =
-                          snap.connectionState == ConnectionState.waiting;
-                      final count = (snap.data?.docs.length ?? 0);
-
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const AdminTaskReportsPage(),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 16,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.grey.withOpacity(0.15),
-                                blurRadius: 8,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                            border: Border.all(
-                              color: appColors.accent.withOpacity(0.25),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: appColors.accent.withOpacity(.14),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.report_gmailerrorred_rounded,
-                                  color: appColors.accent,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'بلاغات المهام للمراجعة',
-                                      style: GoogleFonts.ibmPlexSansArabic(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                        color: appColors.dark,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      isLoading
-                                          ? 'جاري التحميل...'
-                                          : (count == 0
-                                                ? 'لا توجد بلاغات جديدة حالياً'
-                                                : 'لديك $count بلاغ${count == 1 ? '' : 'ات'} بانتظار المراجعة'),
-                                      style: GoogleFonts.ibmPlexSansArabic(
-                                        fontSize: 13.5,
-                                        color: Colors.grey[700],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: appColors.accent.withOpacity(.14),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Text(
-                                      isLoading ? '—' : '$count',
-                                      style: GoogleFonts.ibmPlexSansArabic(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: appColors.accent,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  const Icon(
-                                    Icons.chevron_left,
-                                    color: appColors.accent,
-                                  ),
-                                ],
-                              ),
-                            ],
+                  // ✅ أيقونات سريعة - موسعة مع اختيار
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        // 1️⃣ أيقونة لوحة التحكم (مختارة افتراضياً)
+                        Expanded(
+                          child: _buildQuickIcon(
+                            icon: Icons.dashboard_outlined,
+                            label: 'لوحة التحكم',
+                            color: appColors.primary,
+                            isSelected: _selectedQuickIconIndex == 0,
+                            onTap: () {
+                              // إذا كنا في تبويب البلاغات ونخرج منه
+                              if (_selectedQuickIconIndex == 1 &&
+                                  _isInReportsTab) {
+                                // هنا نحدث جميع البلاغات كمقروءة
+                                _markAllReportsAsRead();
+                              }
+                              setState(() {
+                                _selectedQuickIconIndex = 0;
+                                _isInReportsTab = false;
+                              });
+                            },
                           ),
                         ),
-                      );
-                    },
+
+                        const SizedBox(width: 4),
+
+                        // 2️⃣ أيقونة البلاغات الموحدة (بدون StreamBuilder)
+                        // 2️⃣ أيقونة البلاغات
+                        Expanded(
+                          child: FutureBuilder<int>(
+                            future: _getTotalReportsCount(),
+                            builder: (context, snapshot) {
+                              final totalCount = snapshot.data ?? 0;
+
+                              return _buildQuickIconWithBadge(
+                                icon: Icons.report_outlined,
+                                label: 'البلاغات',
+                                color: appColors.accent,
+                                badgeCount: totalCount,
+                                isSelected: _selectedQuickIconIndex == 1,
+                                onTap: () {
+                                  // إذا كنا خارج تبويب البلاغات ونضغط للدخول
+                                  if (_selectedQuickIconIndex != 1) {
+                                    setState(() {
+                                      _selectedQuickIconIndex = 1;
+                                      _isInReportsTab = true;
+                                    });
+                                  }
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+
+                        // 3️⃣ أيقونة التوصيات
+                        Expanded(
+                          child: _buildQuickIcon(
+                            icon: Icons.lightbulb_outline,
+                            label: 'التوصيات',
+                            color: appColors.primary,
+                            isSelected: _selectedQuickIconIndex == 2,
+                            onTap: () {
+                              // إذا كنا في تبويب البلاغات ونخرج منه
+                              if (_selectedQuickIconIndex == 1 &&
+                                  _isInReportsTab) {
+                                // هنا نحدث جميع البلاغات كمقروءة
+                                _markAllReportsAsRead();
+                              }
+                              setState(() {
+                                _selectedQuickIconIndex = 2;
+                                _isInReportsTab = false;
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
 
-                  const SizedBox(height: 24),
+                  // ✅ منطقة المحتوى الرئيسية (يتغير حسب الأيقونة المختارة)
+                  IndexedStack(
+                    index: _selectedQuickIconIndex,
+                    children: [
+                      // 0: محتوى لوحة التحكم
+                      _buildDashboardContent(),
+
+                      // 1: محتوى البلاغات
+                      _buildReportsContent(),
+
+                      // 2: محتوى التوصيات (مؤقت)
+                      _buildRecommendationsContent(),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -2670,6 +3024,1347 @@ class _AdminHomePageState extends State<AdminHomePage> {
     );
   }
 
+  void _markAllReportsAsRead() async {
+    print('📝 تحديث جميع البلاغات كمقروءة...');
+
+    // تحديث بلاغات المهام
+    final taskReports = await FirebaseFirestore.instance
+        .collection('taskReports')
+        .where('decision', isEqualTo: 'pending')
+        .get();
+
+    for (final doc in taskReports.docs) {
+      if (_viewedTaskReports[doc.id] == false) {
+        setState(() {
+          _viewedTaskReports[doc.id] = true;
+        });
+      }
+    }
+
+    // تحديث بلاغات الحاويات
+    final containerReports = await FirebaseFirestore.instance
+        .collection('facilityReports')
+        .where('status', isEqualTo: 'pending')
+        .get();
+
+    for (final doc in containerReports.docs) {
+      if (_viewedContainerReports[doc.id] == false) {
+        setState(() {
+          _viewedContainerReports[doc.id] = true;
+        });
+      }
+    }
+
+    // إعادة تحميل العدادات
+    _getTotalReportsCount();
+
+    print('✅ تم تحديث جميع البلاغات كمقروءة');
+  }
+
+  // ================== دوال المحتوى المتغير ==================
+  Widget _buildDashboardContent() {
+    return Column(
+      children: [
+        const SizedBox(height: 26),
+
+        // ✅ استخدام FutureBuilder بدلاً من StreamBuilder للمستخدمين
+        FutureBuilder<Map<String, dynamic>>(
+          future: _getUsersData(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !_cachedUsersData.containsKey('totalCarbon')) {
+              return _buildCarbonShimmer();
+            }
+
+            final totalCarbon =
+                snapshot.data?['totalCarbon'] ??
+                _cachedUsersData['totalCarbon'] ??
+                0;
+
+            return _buildCarbonOverviewCard(
+              totalCarbon: totalCarbon,
+              carbonSpots: _carbonSpots,
+            );
+          },
+        ),
+
+        const SizedBox(height: 20),
+
+        // الرسوم البيانية (تبقى كما هي)
+        SizedBox(
+          height: 380,
+          child: PageView(
+            children: [
+              _buildBarChartCard(
+                'إكمال المهام',
+                _taskCompletionSpots,
+                appColors.sea,
+                _selectedTimeRange,
+              ),
+              _buildChartCard(
+                'تراكم النقاط',
+                _pointsSpots,
+                appColors.accent,
+                _selectedTimeRange,
+              ),
+              _buildChartCard(
+                'نمو المستخدمين',
+                _userGrowthSpots,
+                appColors.primary,
+                _selectedTimeRange,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        _buildLeaderboardCard(),
+
+        const SizedBox(height: 16),
+
+        // ✅ استخدام FutureBuilder بدلاً من StreamBuilder لبلاغات المهام
+        // ✅ استخدام FutureBuilder بدلاً من StreamBuilder لبلاغات المهام
+        FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          future: _getTaskReports(),
+          builder: (context, snap) {
+            // ✅ حساب عدد البلاغات pending فقط
+            final pendingCount =
+                snap.data?.docs.where((doc) {
+                  final decision = doc.data()['decision'] ?? 'pending';
+                  return decision == 'pending';
+                }).length ??
+                _unreadTaskReports;
+
+            return InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AdminTaskReportsPage(),
+                  ),
+                );
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.15),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: appColors.accent.withOpacity(0.25),
+                    width: 1.5,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: appColors.accent.withOpacity(.14),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.report_gmailerrorred_rounded,
+                        color: appColors.accent,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'بلاغات المهام للمراجعة',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: appColors.dark,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            snap.connectionState == ConnectionState.waiting
+                                ? 'جاري التحميل...'
+                                : (pendingCount == 0
+                                      ? 'لا توجد بلاغات جديدة حالياً'
+                                      : 'لديك $pendingCount بلاغ${pendingCount == 1 ? '' : 'ات'} بانتظار المراجعة'),
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 13.5,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: appColors.accent.withOpacity(.14),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        snap.connectionState == ConnectionState.waiting
+                            ? '—'
+                            : '$pendingCount',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: appColors.accent,
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.chevron_left, color: appColors.accent),
+                  ],
+                ),
+              ),
+            );
+          },
+        ), // ✅ قوس إغلاق FutureBuilder
+        const SizedBox(
+          height: 24,
+        ), // ✅ الآن الـ SizedBox في المكان الصحيح        const SizedBox(height: 24), // ✅ الآن الـ SizedBox في المكان الصحيح
+      ], // ✅ قوس إغلاق Column
+    ); // ✅ قوس إغلاق _buildDashboardContent
+  }
+
+  // ✅ دالة مساعدة لشimmer الكربون
+  Widget _buildCarbonShimmer() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(width: 100, height: 16, color: Colors.grey[200]),
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  height: 8,
+                  color: Colors.grey[200],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportsContent() {
+    // عند دخول تبويب البلاغات
+    if (_selectedQuickIconIndex == 1 && !_isInReportsTab) {
+      _isInReportsTab = true;
+    }
+    return Container(
+      height:
+          MediaQuery.of(context).size.height *
+          0.60, // ارتفاع ثابت 70% من الشاشة
+      child: Column(
+        children: [
+          // تبويبات البلاغات
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 16),
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(30),
+            ),
+            child: Row(
+              children: [
+                // تبويب بلاغات المهام
+                Expanded(
+                  child: _buildReportTab(
+                    label: 'بلاغات المهام',
+                    count: _unreadTaskReports,
+                    isSelected: _selectedReportsTab == 0,
+                    onTap: () {
+                      setState(() {
+                        _selectedReportsTab = 0;
+                      });
+                    },
+                  ),
+                ),
+                // تبويب بلاغات الحاويات
+                Expanded(
+                  child: _buildReportTab(
+                    label: 'بلاغات الحاويات',
+                    count: _unreadContainerReports,
+                    isSelected: _selectedReportsTab == 1,
+                    onTap: () {
+                      setState(() {
+                        _selectedReportsTab = 1;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ✅ المحتوى حسب التبويب المختار - مع Expanded
+          Expanded(
+            child: IndexedStack(
+              index: _selectedReportsTab,
+              children: [
+                // 0: بلاغات المهام
+                _buildTaskReportsView(),
+
+                // 1: بلاغات الحاويات
+                _buildContainerReportsView(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportTab({
+    required String label,
+    required int count,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? appColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaskReportsView() {
+    // إنشاء future جديد فقط إذا كان فارغاً
+    _taskReportsFuture ??= _getTaskReports();
+
+    return FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      future: _taskReportsFuture,
+      builder: (context, snapshot) {
+        // حالة التحميل
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        // حالة الخطأ
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 12),
+                Text('حدث خطأ في تحميل البلاغات'),
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _taskReportsFuture = null;
+                    });
+                  },
+                  child: const Text('إعادة المحاولة'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final allReports = snapshot.data?.docs ?? [];
+
+        // فصل البلاغات الجديدة (غير المقروءة) عن القديمة
+        final newReports = allReports.where((doc) {
+          return !(_viewedTaskReports[doc.id] ?? false);
+        }).toList();
+
+        final oldReports = allReports.where((doc) {
+          return _viewedTaskReports[doc.id] ?? false;
+        }).toList();
+
+        // لا توجد بلاغات نهائياً
+        if (allReports.isEmpty) {
+          return Container(
+            width: double.infinity,
+            height:
+                MediaQuery.of(context).size.height *
+                0.4, // ارتفاع ثابت 40% من الشاشة
+            child: Column(
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween, // يوزع المسافة بين العناصر
+              children: [
+                // الجزء العلوي (الأيقونة والنصوص)
+                Column(
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline,
+                      size: 48,
+                      color: Colors.green[400],
+                    ),
+                    const SizedBox(height: 16),
+                    Text('لا توجد بلاغات مهام'),
+                    const SizedBox(height: 8),
+                    Text('كل البلاغات تمت معالجتها'),
+                  ],
+                ),
+
+                // الزر في الأسفل
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AdminTaskReportsPage(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.list_alt),
+                    label: Text(
+                      'عرض جميع البلاغات',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: appColors.primary,
+                      minimumSize: const Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20), // مسافة إضافية في الأسفل
+              ],
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            children: [
+              // عنوان بعدد البلاغات الجديدة
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Row(
+                  children: [
+                    Text(
+                      'البلاغات الجديدة',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: appColors.dark,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: appColors.accent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${newReports.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // قائمة البلاغات الجديدة
+              if (newReports.isNotEmpty)
+                Expanded(
+                  flex: 3,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(8),
+                    itemCount: newReports.length,
+                    itemBuilder: (context, index) {
+                      final doc = newReports[index];
+                      final report = doc.data();
+                      final createdAt = report['createdAt'] as Timestamp?;
+
+                      return _buildTaskReportCard(
+                        report: report,
+                        reportId: doc.id,
+                        createdAt: createdAt,
+                        isNew: true,
+                        onTap: () {
+                          // تحديث حالة المشاهدة عند النقر فقط
+                          if (_viewedTaskReports[doc.id] == false) {
+                            setState(() {
+                              _viewedTaskReports[doc.id] = true;
+                            });
+                          }
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AdminTaskReportsPage(),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                )
+              else
+                Expanded(
+                  flex: 2,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 40,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'لا توجد بلاغات جديدة',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.grey[500],
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 16),
+
+              // ✅ زر "جميع البلاغات" يظهر دائماً في الأسفل
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AdminTaskReportsPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.list_alt),
+                  label: Text(
+                    oldReports.isNotEmpty
+                        ? 'عرض جميع البلاغات (${oldReports.length})'
+                        : 'عرض جميع البلاغات',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: appColors.primary,
+                    minimumSize: const Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // دالة مساعدة لبناء كارد البلاغ (بنفس التصميم الأصلي)
+  Widget _buildTaskReportCard({
+    required Map<String, dynamic> report,
+    required String reportId,
+    required Timestamp? createdAt,
+    required bool isNew,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.05),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isNew ? appColors.accent : Colors.grey[300]!,
+          width: isNew ? 1.5 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // أيقونة البلاغ مع لون مختلف للجديد
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isNew
+                      ? appColors.accent.withOpacity(0.1)
+                      : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.assignment_late,
+                  color: isNew ? appColors.accent : Colors.grey[600],
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // محتوى البلاغ
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            report['taskTitle'] ?? 'مهمة غير محددة',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 15,
+                              fontWeight: isNew
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: isNew ? appColors.dark : Colors.grey[700],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isNew)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: appColors.accent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'جديد',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isNew
+                            ? appColors.accent.withOpacity(0.1)
+                            : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'سبب البلاغ: ${report['reason'] ?? 'غير محدد'}',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 12,
+                          color: isNew ? appColors.accent : Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                    if (createdAt != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            size: 12,
+                            color: Colors.grey[500],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            DateFormat(
+                              'dd/MM/yyyy hh:mm a',
+                            ).format(createdAt.toDate()),
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 11,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_left, color: appColors.accent, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContainerReportsView() {
+    _containerReportsFuture ??= _getContainerReports();
+
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _containerReportsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 12),
+                Text('حدث خطأ في تحميل البلاغات'),
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _containerReportsFuture = null;
+                    });
+                  },
+                  child: const Text('إعادة المحاولة'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final allReports = snapshot.data ?? [];
+
+        // فصل البلاغات الجديدة (غير المقروءة) عن القديمة
+        final newReports = allReports.where((report) {
+          final reportId = report['id'];
+          return !(_viewedContainerReports[reportId] ?? false);
+        }).toList();
+
+        final oldReports = allReports.where((report) {
+          final reportId = report['id'];
+          return _viewedContainerReports[reportId] ?? false;
+        }).toList();
+        // لا توجد بلاغات نهائياً
+        if (allReports.isEmpty) {
+          return Container(
+            width: double.infinity,
+            height:
+                MediaQuery.of(context).size.height *
+                0.45, // ارتفاع ثابت 45% من الشاشة
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // الجزء العلوي (الدائرة والنصوص)
+                Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.check_circle_outline,
+                        size: 48,
+                        color: Colors.green[400],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'لا توجد بلاغات حاويات',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'كل البلاغات تمت معالجتها',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 14,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+
+                // الزر في الأسفل
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const containerReports.AdminReportPage(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.list_alt),
+                    label: Text(
+                      'عرض جميع البلاغات',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: appColors.primary,
+                      minimumSize: const Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20), // مسافة في الأسفل
+              ],
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            children: [
+              // عنوان بعدد البلاغات الجديدة
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Row(
+                  children: [
+                    Text(
+                      'البلاغات الجديدة',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: appColors.dark,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: appColors.accent,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${newReports.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // قائمة البلاغات الجديدة
+              if (newReports.isNotEmpty)
+                Expanded(
+                  flex: 3,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(8),
+                    itemCount: newReports.length,
+                    itemBuilder: (context, index) {
+                      final report = newReports[index];
+
+                      return _buildContainerReportCard(
+                        report: report,
+                        isNew: true,
+                        onTap: () {
+                          // تحديث حالة المشاهدة عند النقر فقط
+                          if (_viewedContainerReports[report['id']] == false) {
+                            setState(() {
+                              _viewedContainerReports[report['id']] = true;
+                            });
+                          }
+                          // فتح صفحة التفاصيل
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const containerReports.AdminReportPage(),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                )
+              else
+                Expanded(
+                  flex: 2,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 40,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'لا توجد بلاغات جديدة',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.grey[500],
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 16),
+
+              // ✅ زر "جميع البلاغات" يظهر دائماً في الأسفل
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const containerReports.AdminReportPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.list_alt),
+                  label: Text(
+                    oldReports.isNotEmpty
+                        ? 'عرض جميع البلاغات (${oldReports.length})'
+                        : 'عرض جميع البلاغات',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: appColors.primary,
+                    minimumSize: const Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildContainerReportCard({
+    required Map<String, dynamic> report,
+    required bool isNew,
+    required VoidCallback onTap,
+  }) {
+    final createdAt = report['createdAt'] as Timestamp?;
+    final status = report['status'] ?? 'pending';
+    final reportId = report['id'];
+
+    Color _statusColor(String s) {
+      switch (s) {
+        case 'pending':
+          return Colors.orange;
+        case 'approved':
+          return Colors.green;
+        case 'rejected':
+          return Colors.red;
+        default:
+          return appColors.sea;
+      }
+    }
+
+    String _statusLabel(String s) {
+      switch (s) {
+        case 'pending':
+          return 'قيد المراجعة';
+        case 'approved':
+          return 'تمت المعالجة';
+        case 'rejected':
+          return 'مرفوض';
+        default:
+          return s;
+      }
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.05),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isNew ? appColors.accent : Colors.grey[300]!,
+          width: isNew ? 1.5 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // أيقونة البلاغ مع لون مختلف للجديد
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isNew
+                      ? appColors.accent.withOpacity(0.1)
+                      : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.delete_outline,
+                  color: isNew ? appColors.accent : Colors.grey[600],
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+
+              // محتوى البلاغ
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            report['type'] ?? 'بلاغ حاوية',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 15,
+                              fontWeight: isNew
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: isNew ? appColors.dark : Colors.grey[700],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isNew)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: appColors.accent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'جديد',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // حالة البلاغ
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isNew
+                            ? _statusColor(status).withOpacity(0.1) // ✅ status
+                            : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'الحالة: ${_statusLabel(status)}', // ✅ status
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 12,
+                          color: isNew
+                              ? _statusColor(status)
+                              : Colors.grey[600], // ✅ status
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    // وصف البلاغ
+                    Text(
+                      report['description'] ?? 'لا يوجد وصف',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 13,
+                        color: Colors.grey[800],
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (createdAt != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            size: 12,
+                            color: Colors.grey[500],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            DateFormat(
+                              'dd/MM/yyyy hh:mm a',
+                            ).format(createdAt.toDate()),
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 11,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_left, color: appColors.accent, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecommendationsContent() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32.0),
+        child: Text(
+          'سيتم عرض التوصيات هنا قريباً',
+          style: TextStyle(fontSize: 16, color: Colors.grey),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickIcon({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        height: 70,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color.withOpacity(0.08)
+              : Colors.white, // خلفية أفتح (0.08 بدل 0.15)
+          borderRadius: BorderRadius.circular(16),
+          border: isSelected
+              ? Border.all(color: color.withOpacity(0.3), width: 1.5)
+              : null, // حدود شفافة
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? color : color.withOpacity(0.5),
+              size: 26,
+            ), // أيقونة أفتح
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                color: isSelected
+                    ? color
+                    : Colors.grey[600], // نص بلون الأيقونة أو رمادي
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickIconWithBadge({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required int badgeCount,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        height: 70,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.08) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: isSelected
+              ? Border.all(color: color.withOpacity(0.3), width: 1.5)
+              : null,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(
+                      icon,
+                      color: isSelected ? color : color.withOpacity(0.5),
+                      size: 26,
+                    ),
+                    // ✅ نقطة حمراء صغيرة - تظهر فقط إذا كان badgeCount > 0
+                    if (badgeCount > 0)
+                      Positioned(
+                        top: -2,
+                        right: -2,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: appColors.red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  label,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 11,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                    color: isSelected ? color : Colors.grey[600],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showFullLeaderboard() {
     showModalBottomSheet(
       context: context,
@@ -2677,7 +4372,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
       isScrollControlled: true,
       builder: (context) {
         return Container(
-          height: MediaQuery.of(context).size.height * 0.85,
+          height: MediaQuery.of(context).size.height * 0.60,
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.only(
