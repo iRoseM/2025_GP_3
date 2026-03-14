@@ -2382,7 +2382,7 @@ if (Object.keys(taskPerformanceData).length > 0) { // 👈 تحقق إضافي
     .map(([id, stats]) => ({ id, ...stats }))
     .sort((a, b) => (b.ignored - b.completed) - (a.ignored - a.completed));
 }
-
+let tasksToDelete = [];
 // التأكد من أن weakPerformanceTasks مصفوفة قبل التكرار
 if (Array.isArray(weakPerformanceTasks) && weakPerformanceTasks.length > 0) {
   for (const item of weakPerformanceTasks) {
@@ -2616,7 +2616,7 @@ if (Array.isArray(weakPerformanceTasks) && weakPerformanceTasks.length > 0) {
  * ============================================================ */
 exports.scheduledGetAdminRecommendations = onSchedule(
   {
-    schedule: "35 3 * * *",
+    schedule: "1 4 * * *",
     timeZone: "Asia/Riyadh",
   },
   async () => {

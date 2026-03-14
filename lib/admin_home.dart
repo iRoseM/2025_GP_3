@@ -144,9 +144,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
-  // دالة جلب التوصيات الحقيقية
   Future<void> _loadAdminRecommendations() async {
-    // منع التكرار
     if (_isFetchingRecommendations) return;
 
     _isFetchingRecommendations = true;
@@ -174,7 +172,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
           if (data.containsKey('recommendations')) {
             final recs = data['recommendations'] as List;
 
-            // ✅ أضف ID لكل توصية إذا لم يكن موجوداً
             final recommendationsWithIds = recs.asMap().entries.map((entry) {
               final index = entry.key;
               final e = entry.value;
@@ -186,12 +183,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
               return rec;
             }).toList();
 
-            // ✅ تصفية التوصيات المخفية من المصدرين
+            // ✅ تصفية التوصيات المخفية من SharedPreferences فقط
             _adminRecommendations = recommendationsWithIds.where((rec) {
               final recId =
                   rec['id'] ?? rec['taskId'] ?? rec.hashCode.toString();
-              return !_hiddenRecommendations.contains(recId) &&
-                  !_firebaseHiddenRecommendations.contains(recId);
+              return !_hiddenRecommendations.contains(recId);
             }).toList();
 
             print('📊 Recommendations loaded: ${_adminRecommendations.length}');
@@ -335,7 +331,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
-  @override
   @override
   void initState() {
     super.initState();
@@ -4460,24 +4455,20 @@ class _AdminHomePageState extends State<AdminHomePage> {
       }
     }
 
-    // دالة لإخفاء التوصية
+    // دالة لإخفاء التوصية (محلياً فقط)
     Future<void> _hideRecommendation(String recId) async {
       if (_isProcessingRecommendation) return;
       _isProcessingRecommendation = true;
 
       setState(() {
         _hiddenRecommendations.add(recId);
-        _firebaseHiddenRecommendations.add(recId);
       });
 
-      // حفظ في SharedPreferences
+      // حفظ في SharedPreferences فقط
       await _prefs.setStringList(
         'hidden_recommendations',
         _hiddenRecommendations.toList(),
       );
-
-      // حفظ في Firebase
-      await _saveHiddenRecommendationToFirebase(recId);
 
       _isProcessingRecommendation = false;
     }
@@ -4625,7 +4616,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   // زر تجاهل
                   TextButton.icon(
                     onPressed: () async {
-                      await _logRecommendationAction(rec, 'ignore');
+                      // await _logRecommendationAction(rec, 'ignore');
                       await _hideRecommendation(recId);
                     },
                     icon: const Icon(Icons.close, size: 14),
