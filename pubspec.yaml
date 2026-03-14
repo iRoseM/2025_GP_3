@@ -51,7 +51,6 @@ dependencies:
   fl_chart: ^0.64.0 
   firebase_app_check: ^0.3.2+10
 
-
 dev_dependencies:
   webview_flutter: ^4.4.2
   http: ^1.2.0

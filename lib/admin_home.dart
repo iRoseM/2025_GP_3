@@ -4,10 +4,12 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'services/connection.dart';
 import 'services/fcm_service.dart';
@@ -74,6 +76,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   List<Map<String, dynamic>> _cachedContainerReports = [];
   DateTime _lastContainerReportsUpdate = DateTime.now();
   bool _isLoadingContainerReports = false;
+  bool _isFetchingRecommendations = false;
   // متغيرات للتحكم في عرض البلاغات
   bool _showAllTaskReports = false;
   bool _showAllContainerReports = false;
@@ -87,6 +90,167 @@ class _AdminHomePageState extends State<AdminHomePage> {
   bool _initialReportsLoaded = false;
   bool _isInReportsTab = false;
   bool _initialContainerReportsLoaded = false;
+
+  // في AdminHomePageState أضف هذه المتغيرات
+  List<Map<String, dynamic>> _adminRecommendations = [];
+  bool _isLoadingRecommendations = false;
+  String? _currentSeason;
+  Map<String, dynamic>? _summary;
+  // أضف هذا المتغير
+  bool _isTestingFunction = false;
+
+  late SharedPreferences _prefs;
+  Set<String> _hiddenRecommendations = {};
+
+  // أضف هذه الدالة
+  Future<void> _testFunctionDirectly() async {
+    if (_isTestingFunction) return;
+
+    setState(() => _isTestingFunction = true);
+
+    try {
+      print('🔵 [Test] جاري اختبار الدالة مباشرة...');
+      final functions = FirebaseFunctions.instanceFor(region: 'us-central1');
+      final result = await functions
+          .httpsCallable('getAdminRecommendations')
+          .call();
+
+      print('✅ [Test] الدالة اشتغلت بنجاح!');
+      print('📦 [Test] النتيجة: ${result.data}');
+
+      // حول البيانات
+      final data = Map<String, dynamic>.from(result.data);
+      final recs = data['recommendations'] as List;
+
+      print('📊 [Test] عدد التوصيات: ${recs.length}');
+
+      if (recs.isNotEmpty) {
+        setState(() {
+          _adminRecommendations = List<Map<String, dynamic>>.from(
+            recs.map((e) => Map<String, dynamic>.from(e)),
+          );
+        });
+        print('✅ [Test] تم تحديث الواجهة');
+      }
+    } on FirebaseFunctionsException catch (e) {
+      print('❌ [Test] خطأ في الدالة:');
+      print('   - الكود: ${e.code}');
+      print('   - الرسالة: ${e.message}');
+      print('   - التفاصيل: ${e.details}');
+    } catch (e) {
+      print('❌ [Test] خطأ عام: $e');
+    } finally {
+      setState(() => _isTestingFunction = false);
+    }
+  }
+
+  // دالة جلب التوصيات الحقيقية
+  Future<void> _loadAdminRecommendations() async {
+    // منع التكرار
+    if (_isFetchingRecommendations) return;
+
+    _isFetchingRecommendations = true;
+
+    setState(() {
+      _isLoadingRecommendations = true;
+    });
+
+    try {
+      final function = FirebaseFunctions.instanceFor(region: 'us-central1');
+      final callable = function.httpsCallable('getAdminRecommendations');
+
+      final result = await callable().timeout(const Duration(seconds: 30));
+
+      if (!mounted) return;
+
+      if (result.data != null) {
+        final Map<String, dynamic> data = Map<String, dynamic>.from(
+          result.data as Map,
+        );
+
+        print('📦 Raw data from function: $data');
+
+        setState(() {
+          if (data.containsKey('recommendations')) {
+            final recs = data['recommendations'] as List;
+
+            // ✅ أضف ID لكل توصية إذا لم يكن موجوداً
+            final recommendationsWithIds = recs.asMap().entries.map((entry) {
+              final index = entry.key;
+              final e = entry.value;
+              final rec = Map<String, dynamic>.from(e as Map);
+              if (!rec.containsKey('id')) {
+                rec['id'] =
+                    'rec_${rec['type']}_${DateTime.now().millisecondsSinceEpoch}_$index';
+              }
+              return rec;
+            }).toList();
+
+            // ✅ تصفية التوصيات المخفية من المصدرين
+            _adminRecommendations = recommendationsWithIds.where((rec) {
+              final recId =
+                  rec['id'] ?? rec['taskId'] ?? rec.hashCode.toString();
+              return !_hiddenRecommendations.contains(recId) &&
+                  !_firebaseHiddenRecommendations.contains(recId);
+            }).toList();
+
+            print('📊 Recommendations loaded: ${_adminRecommendations.length}');
+          }
+
+          if (data['season'] != null) {
+            _currentSeason = Map<String, dynamic>.from(
+              data['season'] as Map,
+            )['season'];
+          }
+
+          if (data['summary'] != null) {
+            _summary = Map<String, dynamic>.from(data['summary'] as Map);
+          }
+
+          _isLoadingRecommendations = false;
+        });
+      }
+    } catch (e) {
+      print('🔴 Error loading recommendations: $e');
+
+      if (mounted) {
+        setState(() {
+          _adminRecommendations = [];
+          _isLoadingRecommendations = false;
+        });
+      }
+    } finally {
+      _isFetchingRecommendations = false;
+    }
+  }
+
+  // في AdminHomePageState أضف هذا المتغير
+  List<String> _taskCategories = [];
+
+  // وأضف دالة لجلب التصنيفات
+  Future<void> _loadTaskCategories() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('categories')
+          .get();
+
+      final categories =
+          snapshot.docs
+              .map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return data['name']?.toString() ?? '';
+              })
+              .where((name) => name.isNotEmpty)
+              .toList()
+            ..sort();
+
+      setState(() {
+        _taskCategories = categories;
+      });
+    } catch (e) {
+      debugPrint('❌ Error loading categories: $e');
+    }
+  }
 
   // أضف هذا مع باقي المتغيرات
   final GlobalKey<ScaffoldMessengerState> _messengerKey =
@@ -172,74 +336,28 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   @override
+  @override
   void initState() {
     super.initState();
 
-    // // ✅ تحسين: استخدام WidgetsBinding.instance.addPostFrameCallback
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   _initializeApp();
-    // });
-    // Force refresh للبلاغات
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() {
-        _containerReportsFuture = _getContainerReports();
+    _initPrefs().then((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadTaskCategories();
+        _loadAdminRecommendations();
+        _testFunctionDirectly();
+        _loadTopUsers();
+
+        setState(() {
+          _containerReportsFuture = _getContainerReports();
+        });
       });
     });
-    // ✅ تحسين: تقليل فترة التحديث إلى 30 دقيقة بدلاً من ساعة
+
     _refreshTimer = Timer.periodic(const Duration(minutes: 30), (_) {
       if (mounted) {
         _refreshData();
       }
     });
-  }
-
-  Future<void> _initializeApp() async {
-    // ✅ تحسين: التحقق من الاتصال أولاً
-    final hasConnection = await hasInternetConnection();
-
-    if (!hasConnection) {
-      if (mounted) {
-        showNoInternetDialog(context);
-      }
-      return;
-    }
-
-    // ✅ تحسين: إظهار حالة التحميل
-    if (mounted) {
-      setState(() => _isLoadingTopUsers = true);
-    }
-
-    try {
-      // ✅ تحسين: تحميل البيانات بالتوازي
-      await Future.wait([
-        _loadTargetFromFirebase(),
-        _loadTopUsers(),
-        _loadTaskCompletionData(),
-        _loadChartData(),
-        _loadUnreadCounts(),
-      ]);
-
-      // ✅ إضافة سطر التشخيص هنا
-      _debugCheckNewReports();
-
-      // ✅ تحسين: إعداد FCM بعد التحميل الأساسي
-      FCMService.requestPermissionAndSaveToken();
-      FCMService.listenToForegroundMessages();
-    } catch (e) {
-      debugPrint('❌ Initialization error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('حدث خطأ في تحميل البيانات: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingTopUsers = false);
-      }
-    }
   }
 
   Future<void> _refreshData() async {
@@ -277,6 +395,23 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
+  Future<void> _initPrefs() async {
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      final hiddenList = _prefs.getStringList('hidden_recommendations') ?? [];
+      setState(() {
+        _hiddenRecommendations = hiddenList.toSet();
+      });
+      print(
+        '✅ SharedPreferences initialized with ${_hiddenRecommendations.length} hidden items',
+      );
+    } catch (e) {
+      print('❌ Error initializing SharedPreferences: $e');
+      // في حالة الخطأ، نستخدم مجموعة فارغة
+      _hiddenRecommendations = {};
+    }
+  }
+
   void dispose() {
     _refreshTimer?.cancel();
     _targetController.dispose();
@@ -285,11 +420,21 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   Future<void> _loadTopUsers() async {
     setState(() => _isLoadingTopUsers = true);
-    final topUsers = await _fetchTopUsers();
-    setState(() {
-      _topUsers = topUsers;
-      _isLoadingTopUsers = false;
-    });
+    try {
+      final topUsers = await _fetchTopUsers();
+
+      if (mounted) {
+        setState(() {
+          _topUsers = topUsers;
+          _isLoadingTopUsers = false;
+        });
+      }
+    } catch (e) {
+      print('❌ Error in _loadTopUsers: $e');
+      if (mounted) {
+        setState(() => _isLoadingTopUsers = false);
+      }
+    }
   }
 
   Future<void> _loadChartData() async {
@@ -452,15 +597,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
       final startDate = _getStartDateForRange(_selectedTimeRange);
       final endDate = _getEndDateForRange(_selectedTimeRange);
 
-      debugPrint('📅 Loading users from $startDate to $endDate');
-
-      // ✅ حل مؤقت: نجلب كل المستخدمين ثم نفلتر يدوياً
       final usersSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('isVerified', isEqualTo: true)
           .get();
-
-      debugPrint('📦 Total users fetched: ${usersSnapshot.docs.length}');
 
       final Map<String, int> periodCounts = {};
       final periodKeys = _generatePeriodKeys(
@@ -967,27 +1107,20 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   Future<QuerySnapshot<Map<String, dynamic>>> _getTaskReports() async {
-    print('📥 جلب البلاغات من Firebase...');
-
     // ❌ إزالة فلترة decision
     final snapshot = await FirebaseFirestore.instance
         .collection('taskReports')
         .orderBy('createdAt', descending: true) // فقط الترتيب
         .get();
 
-    print('📦 تم جلب ${snapshot.docs.length} بلاغ');
-
     // فقط في أول مرة نضيف البلاغات كـ false
     if (!_initialReportsLoaded) {
-      print('🆕 تهيئة البلاغات كـ false...');
       for (final doc in snapshot.docs) {
         if (!_viewedTaskReports.containsKey(doc.id)) {
           _viewedTaskReports[doc.id] = false;
-          print('   + ${doc.id} -> false');
         }
       }
       _initialReportsLoaded = true;
-      print('✅ تم تهيئة البلاغات كـ false');
     }
 
     return snapshot;
@@ -995,8 +1128,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   // دالة محسنة لجلب بلاغات الحاويات مع تخزين مؤقت
   Future<List<Map<String, dynamic>>> _getContainerReports() async {
-    print('📥 جلب بلاغات الحاويات من Firebase...');
-
     setState(() => _isLoadingContainerReports = true);
 
     try {
@@ -1004,21 +1135,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
       final snapshot = await FirebaseFirestore.instance
           .collection('facilityReports')
           .get();
-
-      print('📦 تم جلب ${snapshot.docs.length} بلاغ حاوية من Firebase');
-
-      // طباعة معلومات المجموعة
-      print('🔍 معلومات المجموعة:');
-      print('   - عدد المستندات: ${snapshot.docs.length}');
-
       if (snapshot.docs.isEmpty) {
         // جرب مجموعة أخرى للتحقق
         final altSnapshot = await FirebaseFirestore.instance
             .collection('facilitiesReports')
             .get();
-        print(
-          '📦 محاولة بديلة (facilitiesReports): ${altSnapshot.docs.length}',
-        );
       } else {
         // طباعة أول مستند لمعرفة الحقول
         final firstDoc = snapshot.docs.first;
@@ -1083,6 +1204,76 @@ class _AdminHomePageState extends State<AdminHomePage> {
       }
       return _cachedContainerReports.isEmpty ? [] : _cachedContainerReports;
     }
+  }
+
+  // أضف مع باقي المتغيرات
+  Set<String> _firebaseHiddenRecommendations = {};
+
+  // دالة لجلب التوصيات المخفية من Firebase
+  Future<void> _loadFirebaseHiddenRecommendations() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final doc = await FirebaseFirestore.instance
+          .collection('adminHiddenRecommendations')
+          .doc(user.uid)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data();
+        if (data != null && data['hiddenIds'] != null) {
+          final List<dynamic> hiddenList = data['hiddenIds'];
+          setState(() {
+            _firebaseHiddenRecommendations = hiddenList
+                .map((e) => e.toString())
+                .toSet();
+          });
+          print(
+            '✅ Loaded ${_firebaseHiddenRecommendations.length} hidden recommendations from Firebase',
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Error loading hidden recommendations from Firebase: $e');
+    }
+  }
+
+  // دالة لحفظ التوصية المخفية في Firebase
+  Future<void> _saveHiddenRecommendationToFirebase(String recId) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final docRef = FirebaseFirestore.instance
+          .collection('adminHiddenRecommendations')
+          .doc(user.uid);
+
+      await docRef.set({
+        'hiddenIds': FieldValue.arrayUnion([recId]),
+        'lastUpdated': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      print('✅ Saved hidden recommendation to Firebase: $recId');
+    } catch (e) {
+      print('❌ Error saving hidden recommendation to Firebase: $e');
+    }
+  }
+
+  // دالة لجلب التوصيات المخفية من المصدرين (Firebase + SharedPreferences)
+  Future<void> _loadAllHiddenRecommendations() async {
+    await _loadFirebaseHiddenRecommendations();
+
+    // دمج مع SharedPreferences
+    setState(() {
+      _hiddenRecommendations.addAll(_firebaseHiddenRecommendations);
+    });
+
+    // تحديث SharedPreferences
+    await _prefs.setStringList(
+      'hidden_recommendations',
+      _hiddenRecommendations.toList(),
+    );
   }
 
   // ✅ تحسين: تخزين مؤقت للبيانات
@@ -2748,6 +2939,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final baseTheme = Theme.of(context);
@@ -2775,247 +2967,241 @@ class _AdminHomePageState extends State<AdminHomePage> {
           extendBody: false,
           backgroundColor: appColors.background,
           body: AnimatedBackgroundContainer(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                18,
-                18,
-                18,
-                18 +
-                    MediaQuery.of(context).padding.bottom +
-                    kBottomNavigationBarHeight,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ✅ StreamBuilder حق الترحيب (البروفايل)
-                  StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    stream: userStream,
-                    builder: (context, snap) {
-                      final isLoading =
-                          snap.connectionState == ConnectionState.waiting;
-                      final data = snap.data?.data();
+            child: Column(
+              children: [
+                // ✅ الجزء الثابت (البروفايل والأيقونات) - بدون scroll
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // StreamBuilder حق الترحيب
+                      // StreamBuilder حق الترحيب
+                      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                        stream: userStream,
+                        builder: (context, snap) {
+                          final isLoading =
+                              snap.connectionState == ConnectionState.waiting;
+                          final data = snap.data?.data();
 
-                      final String displayName = isLoading
-                          ? '...'
-                          : (data?['username']?.toString().trim().isNotEmpty ==
-                                    true
-                                ? data!['username'].toString()
-                                : (user?.displayName?.trim().isNotEmpty == true
-                                      ? user!.displayName!
-                                      : (user?.email ?? 'مستخدم')));
+                          final String displayName = isLoading
+                              ? '...'
+                              : (data?['username']
+                                            ?.toString()
+                                            .trim()
+                                            .isNotEmpty ==
+                                        true
+                                    ? data!['username'].toString()
+                                    : (user?.displayName?.trim().isNotEmpty ==
+                                              true
+                                          ? user!.displayName!
+                                          : (user?.email ?? 'مستخدم')));
 
-                      int? pfpIndex;
-                      if (data?['pfpIndex'] is int) {
-                        pfpIndex = data!['pfpIndex'] as int;
-                      } else if (data?['pfpIndex'] != null) {
-                        pfpIndex = int.tryParse(data!['pfpIndex'].toString());
-                      }
-                      String? avatarPath;
-                      if (pfpIndex != null && pfpIndex >= 0 && pfpIndex < 8) {
-                        avatarPath = 'assets/pfp/pfp${pfpIndex + 1}.png';
-                      }
+                          int? pfpIndex;
+                          if (data?['pfpIndex'] is int) {
+                            pfpIndex = data!['pfpIndex'] as int;
+                          } else if (data?['pfpIndex'] != null) {
+                            pfpIndex = int.tryParse(
+                              data!['pfpIndex'].toString(),
+                            );
+                          }
+                          String? avatarPath;
+                          if (pfpIndex != null &&
+                              pfpIndex >= 0 &&
+                              pfpIndex < 8) {
+                            avatarPath = 'assets/pfp/pfp${pfpIndex + 1}.png';
+                          }
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                width: 46,
-                                height: 46,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      appColors.primary.withOpacity(.2),
-                                      appColors.sea.withOpacity(.1),
-                                    ],
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: appColors.primary.withOpacity(.2),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(999),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => const profilePage(),
-                                      ),
-                                    );
-                                  },
-                                  child: CircleAvatar(
-                                    backgroundColor: Colors.transparent,
-                                    radius: 23,
-                                    backgroundImage:
-                                        (avatarPath != null && !isLoading)
-                                        ? AssetImage(avatarPath)
-                                        : null,
-                                    child: (avatarPath == null || isLoading)
-                                        ? const Icon(
-                                            Icons.person_outline,
-                                            color: appColors.primary,
-                                            size: 26,
-                                          )
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  RichText(
-                                    text: TextSpan(
-                                      children: [
-                                        TextSpan(
-                                          text: "مرحباً، ",
-                                          style: GoogleFonts.ibmPlexSansArabic(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w800,
-                                            color: appColors.dark,
+                                  Container(
+                                    width: 46,
+                                    height: 46,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          appColors.primary.withOpacity(.2),
+                                          appColors.sea.withOpacity(.1),
+                                        ],
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: appColors.primary.withOpacity(
+                                            .2,
                                           ),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
                                         ),
-                                        TextSpan(
-                                          text: displayName,
-                                          style: GoogleFonts.ibmPlexSansArabic(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w800,
-                                            color: appColors.dark,
-                                          ),
-                                        ),
-                                        const TextSpan(text: " 👋"),
                                       ],
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    "لوحة تحكم متكاملة للنظام",
-                                    style: GoogleFonts.ibmPlexSansArabic(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: appColors.sea,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(999),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => const profilePage(),
+                                          ),
+                                        );
+                                      },
+                                      child: CircleAvatar(
+                                        backgroundColor: Colors.transparent,
+                                        radius: 23,
+                                        backgroundImage:
+                                            (avatarPath != null && !isLoading)
+                                            ? AssetImage(avatarPath)
+                                            : null,
+                                        child: (avatarPath == null || isLoading)
+                                            ? const Icon(
+                                                Icons.person_outline,
+                                                color: appColors.primary,
+                                                size: 26,
+                                              )
+                                            : null,
+                                      ),
                                     ),
+                                  ),
+                                  const SizedBox(width: 6),
+
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      RichText(
+                                        text: TextSpan(
+                                          children: [
+                                            TextSpan(
+                                              text: "مرحباً، ",
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    fontSize: 20,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: appColors.dark,
+                                                  ),
+                                            ),
+                                            TextSpan(
+                                              text: displayName,
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    fontSize: 20,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: appColors.dark,
+                                                  ),
+                                            ),
+                                            const TextSpan(text: " 👋"),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        "لوحة تحكم متكاملة للنظام",
+                                        style: GoogleFonts.ibmPlexSansArabic(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: appColors.sea,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
                             ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // أيقونات سريعة
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildQuickIcon(
+                              icon: Icons.dashboard_outlined,
+                              label: 'نشاط المستخدمين',
+                              color: appColors.primary,
+                              isSelected: _selectedQuickIconIndex == 0,
+                              onTap: () {
+                                if (_selectedQuickIconIndex == 1 &&
+                                    _isInReportsTab) {
+                                  _markAllReportsAsRead();
+                                }
+                                setState(() {
+                                  _selectedQuickIconIndex = 0;
+                                  _isInReportsTab = false;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: FutureBuilder<int>(
+                              future: _getTotalReportsCount(),
+                              builder: (context, snapshot) {
+                                final totalCount = snapshot.data ?? 0;
+                                return _buildQuickIconWithBadge(
+                                  icon: Icons.report_outlined,
+                                  label: 'البلاغات',
+                                  color: appColors.accent,
+                                  badgeCount: totalCount,
+                                  isSelected: _selectedQuickIconIndex == 1,
+                                  onTap: () {
+                                    if (_selectedQuickIconIndex != 1) {
+                                      setState(() {
+                                        _selectedQuickIconIndex = 1;
+                                        _isInReportsTab = true;
+                                      });
+                                    }
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: _buildQuickIcon(
+                              icon: Icons.lightbulb_outline,
+                              label: 'التوصيات',
+                              color: appColors.primary,
+                              isSelected: _selectedQuickIconIndex == 2,
+                              onTap: () {
+                                if (_selectedQuickIconIndex == 1 &&
+                                    _isInReportsTab) {
+                                  _markAllReportsAsRead();
+                                }
+                                setState(() {
+                                  _selectedQuickIconIndex = 2;
+                                  _isInReportsTab = false;
+                                });
+                                _loadAdminRecommendations();
+                              },
+                            ),
                           ),
                         ],
-                      );
-                    },
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                   ),
+                ),
 
-                  const SizedBox(height: 16),
-                  // ✅ أيقونات سريعة - موسعة مع اختيار
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        // 1️⃣ أيقونة لوحة التحكم (مختارة افتراضياً)
-                        Expanded(
-                          child: _buildQuickIcon(
-                            icon: Icons.dashboard_outlined,
-                            label: 'لوحة التحكم',
-                            color: appColors.primary,
-                            isSelected: _selectedQuickIconIndex == 0,
-                            onTap: () {
-                              // إذا كنا في تبويب البلاغات ونخرج منه
-                              if (_selectedQuickIconIndex == 1 &&
-                                  _isInReportsTab) {
-                                // هنا نحدث جميع البلاغات كمقروءة
-                                _markAllReportsAsRead();
-                              }
-                              setState(() {
-                                _selectedQuickIconIndex = 0;
-                                _isInReportsTab = false;
-                              });
-                            },
-                          ),
-                        ),
-
-                        const SizedBox(width: 4),
-
-                        // 2️⃣ أيقونة البلاغات الموحدة (بدون StreamBuilder)
-                        // 2️⃣ أيقونة البلاغات
-                        Expanded(
-                          child: FutureBuilder<int>(
-                            future: _getTotalReportsCount(),
-                            builder: (context, snapshot) {
-                              final totalCount = snapshot.data ?? 0;
-
-                              return _buildQuickIconWithBadge(
-                                icon: Icons.report_outlined,
-                                label: 'البلاغات',
-                                color: appColors.accent,
-                                badgeCount: totalCount,
-                                isSelected: _selectedQuickIconIndex == 1,
-                                onTap: () {
-                                  // إذا كنا خارج تبويب البلاغات ونضغط للدخول
-                                  if (_selectedQuickIconIndex != 1) {
-                                    setState(() {
-                                      _selectedQuickIconIndex = 1;
-                                      _isInReportsTab = true;
-                                    });
-                                  }
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-
-                        // 3️⃣ أيقونة التوصيات
-                        Expanded(
-                          child: _buildQuickIcon(
-                            icon: Icons.lightbulb_outline,
-                            label: 'التوصيات',
-                            color: appColors.primary,
-                            isSelected: _selectedQuickIconIndex == 2,
-                            onTap: () {
-                              // إذا كنا في تبويب البلاغات ونخرج منه
-                              if (_selectedQuickIconIndex == 1 &&
-                                  _isInReportsTab) {
-                                // هنا نحدث جميع البلاغات كمقروءة
-                                _markAllReportsAsRead();
-                              }
-                              setState(() {
-                                _selectedQuickIconIndex = 2;
-                                _isInReportsTab = false;
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // ✅ منطقة المحتوى الرئيسية (يتغير حسب الأيقونة المختارة)
-                  IndexedStack(
+                // ✅ المحتوى الرئيسي - مع Expanded لملء المساحة
+                Expanded(
+                  child: IndexedStack(
                     index: _selectedQuickIconIndex,
                     children: [
-                      // 0: محتوى لوحة التحكم
                       _buildDashboardContent(),
-
-                      // 1: محتوى البلاغات
                       _buildReportsContent(),
-
-                      // 2: محتوى التوصيات (مؤقت)
                       _buildRecommendationsContent(),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-
           bottomNavigationBar: isKeyboardOpen
               ? null
               : AdminBottomNav(currentIndex: _currentIndex, onTap: _onTap),
@@ -3063,184 +3249,61 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   // ================== دوال المحتوى المتغير ==================
   Widget _buildDashboardContent() {
-    return Column(
-      children: [
-        const SizedBox(height: 26),
-
-        // ✅ استخدام FutureBuilder بدلاً من StreamBuilder للمستخدمين
-        FutureBuilder<Map<String, dynamic>>(
-          future: _getUsersData(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting &&
-                !_cachedUsersData.containsKey('totalCarbon')) {
-              return _buildCarbonShimmer();
-            }
-
-            final totalCarbon =
-                snapshot.data?['totalCarbon'] ??
-                _cachedUsersData['totalCarbon'] ??
-                0;
-
-            return _buildCarbonOverviewCard(
-              totalCarbon: totalCarbon,
-              carbonSpots: _carbonSpots,
-            );
-          },
-        ),
-
-        const SizedBox(height: 20),
-
-        // الرسوم البيانية (تبقى كما هي)
-        SizedBox(
-          height: 380,
-          child: PageView(
-            children: [
-              _buildBarChartCard(
-                'إكمال المهام',
-                _taskCompletionSpots,
-                appColors.sea,
-                _selectedTimeRange,
-              ),
-              _buildChartCard(
-                'تراكم النقاط',
-                _pointsSpots,
-                appColors.accent,
-                _selectedTimeRange,
-              ),
-              _buildChartCard(
-                'نمو المستخدمين',
-                _userGrowthSpots,
-                appColors.primary,
-                _selectedTimeRange,
-              ),
-            ],
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Column(
+        children: [
+          const SizedBox(height: 26),
+          FutureBuilder<Map<String, dynamic>>(
+            future: _getUsersData(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  !_cachedUsersData.containsKey('totalCarbon')) {
+                return _buildCarbonShimmer();
+              }
+              final totalCarbon =
+                  snapshot.data?['totalCarbon'] ??
+                  _cachedUsersData['totalCarbon'] ??
+                  0;
+              return _buildCarbonOverviewCard(
+                totalCarbon: totalCarbon,
+                carbonSpots: _carbonSpots,
+              );
+            },
           ),
-        ),
-
-        const SizedBox(height: 16),
-
-        _buildLeaderboardCard(),
-
-        const SizedBox(height: 16),
-
-        // ✅ استخدام FutureBuilder بدلاً من StreamBuilder لبلاغات المهام
-        // ✅ استخدام FutureBuilder بدلاً من StreamBuilder لبلاغات المهام
-        FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          future: _getTaskReports(),
-          builder: (context, snap) {
-            // ✅ حساب عدد البلاغات pending فقط
-            final pendingCount =
-                snap.data?.docs.where((doc) {
-                  final decision = doc.data()['decision'] ?? 'pending';
-                  return decision == 'pending';
-                }).length ??
-                _unreadTaskReports;
-
-            return InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AdminTaskReportsPage(),
-                  ),
-                );
-              },
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 16,
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 380,
+            child: PageView(
+              children: [
+                _buildBarChartCard(
+                  'إكمال المهام',
+                  _taskCompletionSpots,
+                  appColors.sea,
+                  _selectedTimeRange,
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.15),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: appColors.accent.withOpacity(0.25),
-                    width: 1.5,
-                  ),
+                _buildChartCard(
+                  'تراكم النقاط',
+                  _pointsSpots,
+                  appColors.accent,
+                  _selectedTimeRange,
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: appColors.accent.withOpacity(.14),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.report_gmailerrorred_rounded,
-                        color: appColors.accent,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'بلاغات المهام للمراجعة',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: appColors.dark,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            snap.connectionState == ConnectionState.waiting
-                                ? 'جاري التحميل...'
-                                : (pendingCount == 0
-                                      ? 'لا توجد بلاغات جديدة حالياً'
-                                      : 'لديك $pendingCount بلاغ${pendingCount == 1 ? '' : 'ات'} بانتظار المراجعة'),
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 13.5,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: appColors.accent.withOpacity(.14),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        snap.connectionState == ConnectionState.waiting
-                            ? '—'
-                            : '$pendingCount',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w700,
-                          color: appColors.accent,
-                        ),
-                      ),
-                    ),
-                    const Icon(Icons.chevron_left, color: appColors.accent),
-                  ],
+                _buildChartCard(
+                  'نمو المستخدمين',
+                  _userGrowthSpots,
+                  appColors.primary,
+                  _selectedTimeRange,
                 ),
-              ),
-            );
-          },
-        ), // ✅ قوس إغلاق FutureBuilder
-        const SizedBox(
-          height: 24,
-        ), // ✅ الآن الـ SizedBox في المكان الصحيح        const SizedBox(height: 24), // ✅ الآن الـ SizedBox في المكان الصحيح
-      ], // ✅ قوس إغلاق Column
-    ); // ✅ قوس إغلاق _buildDashboardContent
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildLeaderboardCard(),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
   }
 
   // ✅ دالة مساعدة لشimmer الكربون
@@ -3282,71 +3345,50 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   Widget _buildReportsContent() {
-    // عند دخول تبويب البلاغات
     if (_selectedQuickIconIndex == 1 && !_isInReportsTab) {
       _isInReportsTab = true;
     }
-    return Container(
-      height:
-          MediaQuery.of(context).size.height *
-          0.60, // ارتفاع ثابت 70% من الشاشة
-      child: Column(
-        children: [
-          // تبويبات البلاغات
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 16),
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: Row(
-              children: [
-                // تبويب بلاغات المهام
-                Expanded(
-                  child: _buildReportTab(
-                    label: 'بلاغات المهام',
-                    count: _unreadTaskReports,
-                    isSelected: _selectedReportsTab == 0,
-                    onTap: () {
-                      setState(() {
-                        _selectedReportsTab = 0;
-                      });
-                    },
-                  ),
-                ),
-                // تبويب بلاغات الحاويات
-                Expanded(
-                  child: _buildReportTab(
-                    label: 'بلاغات الحاويات',
-                    count: _unreadContainerReports,
-                    isSelected: _selectedReportsTab == 1,
-                    onTap: () {
-                      setState(() {
-                        _selectedReportsTab = 1;
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
 
-          // ✅ المحتوى حسب التبويب المختار - مع Expanded
-          Expanded(
-            child: IndexedStack(
-              index: _selectedReportsTab,
-              children: [
-                // 0: بلاغات المهام
-                _buildTaskReportsView(),
-
-                // 1: بلاغات الحاويات
-                _buildContainerReportsView(),
-              ],
-            ),
+    return Column(
+      children: [
+        // تبويبات البلاغات
+        Container(
+          margin: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(30),
           ),
-        ],
-      ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildReportTab(
+                  label: 'بلاغات المهام',
+                  count: _unreadTaskReports,
+                  isSelected: _selectedReportsTab == 0,
+                  onTap: () => setState(() => _selectedReportsTab = 0),
+                ),
+              ),
+              Expanded(
+                child: _buildReportTab(
+                  label: 'بلاغات الحاويات',
+                  count: _unreadContainerReports,
+                  isSelected: _selectedReportsTab == 1,
+                  onTap: () => setState(() => _selectedReportsTab = 1),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // المحتوى - مع Expanded
+        Expanded(
+          child: IndexedStack(
+            index: _selectedReportsTab,
+            children: [_buildTaskReportsView(), _buildContainerReportsView()],
+          ),
+        ),
+      ],
     );
   }
 
@@ -4220,12 +4262,577 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   Widget _buildRecommendationsContent() {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(32.0),
-        child: Text(
-          'سيتم عرض التوصيات هنا قريباً',
-          style: TextStyle(fontSize: 16, color: Colors.grey),
+    if (_isLoadingRecommendations) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // تصفية التوصيات المخفية
+    final visibleRecommendations = _adminRecommendations.where((rec) {
+      final recId = rec['id'] ?? rec['taskId'] ?? rec.hashCode.toString();
+      return !_hiddenRecommendations.contains(recId);
+    }).toList();
+
+    if (visibleRecommendations.isEmpty) {
+      return Center(
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: _buildEmptyRecommendations(),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(12),
+      itemCount: visibleRecommendations.length,
+      itemBuilder: (context, index) {
+        return _buildRecommendationCard(
+          visibleRecommendations[index],
+          index,
+          _taskCategories,
+        );
+      },
+    );
+  }
+
+  // حالة عدم وجود توصيات
+  Widget _buildEmptyRecommendations() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: appColors.primary.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.lightbulb_outline,
+              size: 48,
+              color: appColors.primary.withOpacity(0.5),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'لا توجد توصيات حالياً',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'سيتم إنشاء التوصيات قريباً',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _loadAdminRecommendations,
+            icon: const Icon(Icons.refresh),
+            label: Text(
+              'تحديث',
+              style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w600),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: appColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // أضف مع باقي المتغيرات
+  bool _isProcessingRecommendation = false;
+
+  // دالة لتسجيل تنفيذ التوصية في Firestore
+  Future<void> _logRecommendationAction(
+    Map<String, dynamic> rec,
+    String action,
+  ) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      await FirebaseFirestore.instance.collection('recommendationActions').add({
+        'recommendationId': rec['id'] ?? rec['taskId'] ?? 'unknown',
+        'recommendationType': rec['type'],
+        'recommendationTitle': rec['title'],
+        'action': action, // 'ignore', 'add', 'modify', 'delete', 'review'
+        'userId': user.uid,
+        'userEmail': user.email,
+        'timestamp': FieldValue.serverTimestamp(),
+        'metadata': {
+          'category': rec['category'],
+          'basedOn': rec['basedOn'],
+          'taskId': rec['taskId'],
+          'facilityId': rec['facilityId'],
+          'reportCount': rec['reportCount'],
+        },
+      });
+
+      print('✅ Logged recommendation action: $action');
+    } catch (e) {
+      print('❌ Error logging recommendation action: $e');
+    }
+  }
+
+  Widget _buildRecommendationCard(
+    Map<String, dynamic> rec,
+    int index,
+    List<String> categories,
+  ) {
+    // إنشاء ID فريد للتوصية
+    final String recId =
+        rec['id'] ??
+        rec['taskId'] ??
+        'rec_${rec['type']}_${rec['title']}_${DateTime.now().millisecondsSinceEpoch}';
+
+    // اختيار الأيقونة واللون حسب نوع التوصية
+    IconData getIcon() {
+      switch (rec['type']) {
+        case 'add':
+          return Icons.add_circle_outline;
+        case 'delete':
+          return Icons.delete_outline;
+        case 'modify':
+        case 'modify_points':
+          return Icons.edit_outlined;
+        case 'review_reports':
+          return Icons.report_outlined;
+        case 'add_category':
+          return Icons.category_outlined;
+        case 'activate_category':
+          return Icons.rocket_launch_outlined;
+        default:
+          return Icons.lightbulb_outline;
+      }
+    }
+
+    Color getColor() {
+      switch (rec['type']) {
+        case 'add':
+          return Colors.green;
+        case 'delete':
+          return Colors.red;
+        case 'modify':
+        case 'modify_points':
+          return Colors.orange;
+        case 'review_reports':
+          return Colors.purple;
+        case 'add_category':
+          return Colors.blue;
+        case 'activate_category':
+          return Colors.teal;
+        default:
+          return appColors.primary;
+      }
+    }
+
+    String getTypeText() {
+      switch (rec['type']) {
+        case 'add':
+          return 'إضافة مهمة';
+        case 'delete':
+          return 'حذف مهمة';
+        case 'modify':
+          return 'تعديل مهمة';
+        case 'modify_points':
+          return 'تعديل نقاط';
+        case 'review_reports':
+          return 'مراجعة بلاغات';
+        case 'add_category':
+          return 'إضافة تصنيف';
+        case 'activate_category':
+          return 'تنشيط تصنيف';
+        default:
+          return 'توصية';
+      }
+    }
+
+    // دالة لإخفاء التوصية
+    Future<void> _hideRecommendation(String recId) async {
+      if (_isProcessingRecommendation) return;
+      _isProcessingRecommendation = true;
+
+      setState(() {
+        _hiddenRecommendations.add(recId);
+        _firebaseHiddenRecommendations.add(recId);
+      });
+
+      // حفظ في SharedPreferences
+      await _prefs.setStringList(
+        'hidden_recommendations',
+        _hiddenRecommendations.toList(),
+      );
+
+      // حفظ في Firebase
+      await _saveHiddenRecommendationToFirebase(recId);
+
+      _isProcessingRecommendation = false;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.05),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: getColor().withOpacity(0.3), width: 1),
+      ),
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [getColor().withOpacity(0.05), Colors.white],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // الصف العلوي: النوع + التصنيف
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: getColor().withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(getIcon(), color: getColor(), size: 18),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          getTypeText(),
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: getColor(),
+                          ),
+                        ),
+                        if (rec['category'] != null)
+                          Text(
+                            rec['category']?.toString() ?? '',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 10,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Source badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      (rec['basedOn']?.toString() ?? 'تحليل').length > 15
+                          ? '${rec['basedOn'].toString().substring(0, 15)}...'
+                          : (rec['basedOn']?.toString() ?? 'تحليل'),
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 8,
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+              // العنوان
+              Text(
+                rec['title'] ?? 'توصية',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
+                ),
+              ),
+
+              const SizedBox(height: 4),
+              // الوصف
+              Text(
+                rec['description'] ?? '',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 12,
+                  color: Colors.grey[700],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+
+              const SizedBox(height: 8),
+              // صندوق الاقتراح
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: getColor().withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lightbulb, size: 14, color: getColor()),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        rec['suggestion'] ?? '',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: getColor(),
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 4),
+              // أزرار سريعة
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  // زر تجاهل
+                  TextButton.icon(
+                    onPressed: () async {
+                      await _logRecommendationAction(rec, 'ignore');
+                      await _hideRecommendation(recId);
+                    },
+                    icon: const Icon(Icons.close, size: 14),
+                    label: Text(
+                      'تجاهل',
+                      style: GoogleFonts.ibmPlexSansArabic(fontSize: 10),
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey[600],
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      minimumSize: const Size(40, 24),
+                    ),
+                  ),
+
+                  // زر تنفيذ حسب النوع
+                  if (rec['type'] == 'add')
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await _logRecommendationAction(rec, 'add');
+                        await _hideRecommendation(recId);
+
+                        await Future.delayed(const Duration(milliseconds: 50));
+
+                        if (mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AddTaskPage(
+                                categories: _taskCategories,
+                                preFillData: {
+                                  'category': rec['category'],
+                                  'title': rec['title'],
+                                  'description': rec['description'],
+                                  'suggestion': rec['suggestion'],
+                                  'validationStrategy':
+                                      rec['validationStrategy'],
+                                  'calcMode': rec['calcMode'],
+                                  'askCount': rec['askCount'],
+                                  'askDistanceKm': rec['askDistanceKm'],
+                                  'autoDistance': rec['autoDistance'],
+                                  'emissionFactorRef': rec['emissionFactorRef'],
+                                  'baselineFactorRef': rec['baselineFactorRef'],
+                                },
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.add, size: 14),
+                      label: Text(
+                        'إضافة',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: getColor(),
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(50, 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+
+                  if (rec['type'] == 'modify')
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await _logRecommendationAction(rec, 'modify');
+                        await _hideRecommendation(recId);
+
+                        await Future.delayed(const Duration(milliseconds: 50));
+
+                        if (mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AddTaskPage(
+                                categories: _taskCategories,
+                                preFillData: {
+                                  'category': rec['category'],
+                                  'title': rec['title'],
+                                  'description': rec['description'],
+                                  'suggestion': rec['suggestion'],
+                                  'validationStrategy':
+                                      rec['validationStrategy'],
+                                  'type': 'modify',
+                                },
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.edit, size: 14),
+                      label: Text(
+                        'تعديل',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: getColor(),
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(50, 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+
+                  if (rec['type'] == 'delete')
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await _logRecommendationAction(rec, 'delete');
+                        await _hideRecommendation(recId);
+
+                        await Future.delayed(const Duration(milliseconds: 50));
+
+                        if (mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AdminTasksPage(
+                                preFillData: {
+                                  'category': rec['category'],
+                                  'title': rec['title'],
+                                  'description': rec['description'],
+                                  'type': 'delete',
+                                  'taskId': rec['taskId'],
+                                },
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.delete, size: 14),
+                      label: Text(
+                        'حذف',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: getColor(),
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(50, 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+
+                  if (rec['type'] == 'review_reports')
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await _logRecommendationAction(rec, 'review');
+                        await _hideRecommendation(recId);
+
+                        await Future.delayed(const Duration(milliseconds: 50));
+
+                        if (mounted) {
+                          if (rec['category']?.contains('حاوية') ?? false) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const containerReports.AdminReportPage(),
+                              ),
+                            );
+                          } else {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AdminTaskReportsPage(),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.visibility, size: 14),
+                      label: Text(
+                        'مراجعة',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: getColor(),
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(50, 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -4463,48 +5070,57 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   Future<List<Map<String, dynamic>>> _fetchTopUsers() async {
     try {
+      print('🔍 Fetching top users...');
+
+      // ✅ نجيب كل المستخدمين أولاً بدون فلترة
       final usersSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .where('isVerified', isEqualTo: true)
           .get();
-      // ✅ تعريف startDate و endDate داخل الدالة
-      // final startDate = _getStartDateForRange(_selectedTimeRange);
-      // final endDate = _getEndDateForRange(_selectedTimeRange);
 
-      // final usersSnapshot = await FirebaseFirestore.instance
-      //     .collection('users')
-      //     .where('isVerified', isEqualTo: true)
-      //     .where(
-      //       'createdAt',
-      //       isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
-      //     )
-      //     .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
-      //     .get();
+      print('📊 Total users found: ${usersSnapshot.docs.length}');
 
       final List<Map<String, dynamic>> usersData = [];
 
       for (final doc in usersSnapshot.docs) {
         final data = doc.data();
-        final completedTasks = data['completedTask'] ?? 0;
-        final points = data['points'] ?? 0;
-        final username = data['username'] ?? 'مستخدم';
-        final pfpIndex = data['pfpIndex'] ?? 0;
 
+        // ✅ نجيب البيانات بشكل آمن
+        final completedTasks = (data['completedTask'] as num?)?.toInt() ?? 0;
+        final points = (data['points'] as num?)?.toInt() ?? 0;
+        final username = data['username']?.toString() ?? 'مستخدم';
+        final pfpIndex = (data['pfpIndex'] as num?)?.toInt() ?? 0;
+
+        // ✅ نضيف المستخدم حتى لو completedTasks = 0
         usersData.add({
           'id': doc.id,
           'username': username,
-          'completedTasks': completedTasks is num ? completedTasks.toInt() : 0,
-          'points': points is num ? points.toInt() : 0,
+          'completedTasks': completedTasks,
+          'points': points,
           'pfpIndex': pfpIndex,
         });
       }
 
-      // ترتيب تنازلي حسب عدد المهام المكتملة
-      usersData.sort(
-        (a, b) => b['completedTasks'].compareTo(a['completedTasks']),
-      );
+      print('📊 Users after mapping: ${usersData.length}');
 
-      return usersData.take(3).toList();
+      // ✅ ترتيب تنازلي حسب المهام المكتملة
+      usersData.sort((a, b) {
+        final aTasks = a['completedTasks'] as int;
+        final bTasks = b['completedTasks'] as int;
+        return bTasks.compareTo(aTasks);
+      });
+
+      // ✅ نأخذ أول 3 مستخدمين فقط
+      final topThree = usersData.take(3).toList();
+
+      print('🏆 Top 3 users:');
+      for (var i = 0; i < topThree.length; i++) {
+        print(
+          '   ${i + 1}. ${topThree[i]['username']} - ${topThree[i]['completedTasks']} tasks',
+        );
+      }
+
+      return topThree;
     } catch (e) {
       debugPrint('❌ Leaderboard error: $e');
       return [];

@@ -13,7 +13,12 @@ import 'admin_category.dart';
 import '../services/app_colors.dart';
 
 class AdminTasksPage extends StatefulWidget {
-  const AdminTasksPage({super.key});
+  final Map<String, dynamic>? preFillData; // 👈 أضف هذا
+
+  const AdminTasksPage({
+    super.key,
+    this.preFillData,
+  }); // 👈 أضف this.preFillData
 
   @override
   State<AdminTasksPage> createState() => _AdminTasksPageState();
@@ -41,6 +46,40 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
   @override
   void initState() {
     super.initState();
+
+    // إذا في بيانات جاهزة، عبّي الحقول قبل fetch tasks
+    if (widget.preFillData != null) {
+      final data = widget.preFillData!;
+
+      // إذا كانت التوصية تحتوي على validationStrategy
+      if (data['validationStrategy'] != null) {
+        // هنا اختيار validationStrategy من القائمة المنسدلة
+        // هذا يحتاج تعديل حسب طريقة تخزينها في صفحة المهام
+      }
+
+      // إذا كانت المهمة من نوع modify، ممكن نعرض رسالة
+      if (data['type'] == 'modify') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('تعديل مهمة موجودة بناءً على توصية'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        });
+      } else if (data['type'] == 'add') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('إضافة مهمة جديدة بناءً على توصية'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        });
+      }
+    }
+
+    // جلب المهام والتصنيفات كالمعتاد
     _fetchTasks();
     _fetchCategories();
   }
@@ -973,7 +1012,10 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
                   final updated = await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => AddTaskPage(categories: _categories),
+                      builder: (_) => AddTaskPage(
+                        categories: _categories,
+                        preFillData: widget.preFillData, // 👈 تمرير البيانات
+                      ),
                     ),
                   );
                   if (updated == true) _fetchTasks();
@@ -1178,10 +1220,15 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 class AddTaskPage extends StatefulWidget {
   final Map<String, dynamic>? task;
   final List<String> categories;
-  const AddTaskPage({super.key, this.task, required this.categories});
-
   @override
   State<AddTaskPage> createState() => _AddTaskPageState();
+  final Map<String, dynamic>? preFillData;
+  const AddTaskPage({
+    super.key,
+    this.task,
+    required this.categories,
+    this.preFillData, // 👈 أضف هذا
+  });
 }
 
 class _AddTaskPageState extends State<AddTaskPage> {
@@ -1210,6 +1257,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
   bool _catsLoading = true;
 
   @override
+  @override
   void initState() {
     super.initState();
     currentMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
@@ -1217,12 +1265,36 @@ class _AddTaskPageState extends State<AddTaskPage> {
     nextMonth = "${n.year}-${n.month.toString().padLeft(2, '0')}";
     _generateMonths();
     _loadCategories();
-    _prefillIfEditing();
 
-    // Track unsaved edits
-    for (final ctrl in [_titleCtrl, _descCtrl, _pointsCtrl]) {
-      ctrl.addListener(() => _isDirty = true);
+    // ✅ تعبئة البيانات من preFillData إذا كانت موجودة
+    if (widget.preFillData != null) {
+      final data = widget.preFillData!;
+      _titleCtrl.text = data['title'] ?? '';
+      _descCtrl.text = data['description'] ?? '';
+      _selectedCategory = data['category'];
+      _validationType = data['validationStrategy'];
+      // عرض رسالة ترحيبية
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('إضافة مهمة جديدة بناءً على توصية'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      });
+      if (data['type'] == 'delete') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('تم توجيهك لصفحة المهام لحذف المهمة'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        });
+      }
     }
+
+    _prefillIfEditing(); // هذا للـ task الحالي (تعديل)
   }
 
   void _generateMonths() {

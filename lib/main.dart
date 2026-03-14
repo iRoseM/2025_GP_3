@@ -101,11 +101,20 @@ Future<void> main() async {
 
   // Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // ✅ App Check (للتطوير استخدمي debug)
+
+  // ✅ تعطيل App Check مؤقتاً (للاختبار فقط)
+  await Firebase.initializeApp();
+
+  // ✅ هذا مهم جداً - يسمح بالتطوير بدون App Check
   await FirebaseAppCheck.instance.activate(
-    androidProvider: AndroidProvider.debug, // <-- Dev
-    // androidProvider: AndroidProvider.playIntegrity, // <-- Prod لاحقاً
+    androidProvider: AndroidProvider.debug,
   );
+
+  // ✅ App Check (للتطوير استخدمي debug)
+  // await FirebaseAppCheck.instance.activate(
+  //   androidProvider: AndroidProvider.debug, // <-- Dev
+  //   // androidProvider: AndroidProvider.playIntegrity, // <-- Prod لاحقاً
+  // );
   // تتبّع الخلفية (نفعّله قبل runApp)
   await BackgroundTracker.initialize();
   // الإشعارات المحلية + FCM
