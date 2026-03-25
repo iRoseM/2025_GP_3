@@ -92,7 +92,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   Map<String, String> _categoryLabelMap() {
     return {
-      'dry_food': 'أغذية جافة',
+      'dry_food': 'منتجات غذائية',
       'dairy': 'ألبان',
       'non_dairy_drink': 'مشروبات غير ألبان',
       'cleaning_products': 'منظفات',
@@ -321,8 +321,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   String? _selectedProductCategory;
   String? _selectedProductCategoryLabel;
   String? _selectedEfRef;
-  String? _selectedBaselineFactorRef;
-  String? _selectedActualFactorRef;
   String? _tempCategorySelection;
 
   // ✅ متغيرات التحقق بالـ AI
@@ -1020,35 +1018,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final efCalcMode = (efDoc['calcMode'] ?? '').toString().trim();
     final rawMode = (taskCalcMode.isNotEmpty ? taskCalcMode : efCalcMode);
     final calcMode = rawMode.toLowerCase();
-
-    final baseRef = (_isLocalProductTask && _selectedBaselineFactorRef != null)
-        ? _selectedBaselineFactorRef
-        : (widget.taskData['baselineFactorRef'] ?? efDoc['baselineFactorRef'])
-              ?.toString();
-
-    final actRef = (_isLocalProductTask && _selectedActualFactorRef != null)
-        ? _selectedActualFactorRef
-        : (widget.taskData['actualFactorRef'] ?? efDoc['actualFactorRef'])
-              ?.toString();
-
-    if (calcMode == 'deltaperkm' && km != null && km > 0) {
-      final baseline = baseRef != null
-          ? await _getEfPerUnit(baseRef, valueFieldFromTask: valueFieldFromTask)
-          : null;
-      double? actual = await _getEfPerUnit(
-        efIdFromTask,
-        valueFieldFromTask: valueFieldFromTask,
-      );
-      if ((actual == null || actual == 0.0) && actRef != null) {
-        actual = await _getEfPerUnit(
-          actRef,
-          valueFieldFromTask: valueFieldFromTask,
-        );
-      }
-      final delta = ((baseline ?? 0.0) - (actual ?? 0.0));
-      final res = (delta > 0 ? delta : 0.0) * km;
-      return res;
-    }
 
     if (calcMode == 'deltaperitem' && items != null && items > 0) {
       final directDelta = _asDouble(
