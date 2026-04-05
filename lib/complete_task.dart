@@ -1299,13 +1299,19 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       if (!picked) return;
     }
 
+    
+    if (taskType == TaskType.metro || taskType == TaskType.bus) {
+      // مهام المواصلات → نفتح خريطة المحطات
+      await _startFlowForTransportTask();
+      return;
+    }
+ 
     if (taskType != null) {
+      // باقي المهام (RVM, ورق, ملابس...) → التحقق بالموقع العادي
       if (mounted) setState(() => _isVerifying = true);
-
       final locationResult = await LocationValidator.validate(taskType);
-
       if (mounted) setState(() => _isVerifying = false);
-
+ 
       if (locationResult.isValid) {
         if (mounted) {
           setState(() {
@@ -1320,7 +1326,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         return;
       }
     }
-
+ 
     _openCamera();
   }
 
@@ -1414,43 +1420,199 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     super.dispose();
   }
 
+
   Future<void> _startFlowForTransportTask() async {
-    final MapRoutePickResult? res =
-        await Navigator.of(
-          context,
-          rootNavigator: true,
-        ).push<MapRoutePickResult>(
-          MaterialPageRoute(
-            builder: (_) => MapPickRoutePage(
-              initialStart: _manualStart,
-              initialEnd: _manualEnd,
-            ),
-            fullscreenDialog: true,
-          ),
-        );
-
+    final taskTitle = widget.taskData['title']?.toString() ?? '';
+ 
+    // تحديد نوع المحطة من عنوان المهمة
+    final stationType =
+        (taskTitle.contains('مترو') || taskTitle.contains('metro'))
+            ? 'metro'
+            : 'bus';
+ 
+    final MapRoutePickResult? res = await Navigator.of(
+      context,
+      rootNavigator: true,
+    ).push<MapRoutePickResult>(
+      MaterialPageRoute(
+        builder: (_) => MapPickRoutePage(
+          stationType: stationType,   // ← جديد: نمرر النوع
+          // حذفنا initialStart/initialEnd — المحطات جاهزة من JSON
+        ),
+        fullscreenDialog: true,
+      ),
+    );
+ 
     if (!mounted || res == null) return;
-
+ 
     setState(() {
-      _manualStart = res.start;
-      _manualEnd = res.end;
-      _manualDistanceKm = _haversineKm(
-        res.start.latitude,
-        res.start.longitude,
-        res.end.latitude,
-        res.end.longitude,
-      );
+      // نحفظ إحداثيات المحطتين
+      _manualStart  = res.start;
+      _manualEnd    = res.end;
+      _manualDistanceKm = res.distanceKm;          // ← المسافة جاهزة من الـ result
       _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
-      _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
+      _geoEnd   = GeoPoint(_manualEnd!.latitude,   _manualEnd!.longitude);
     });
-    await Future.delayed(const Duration(milliseconds: 200));
-    if (!mounted) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _openCamera();
-      }
-    });
+ 
+    // لا نفتح الكاميرا — نذهب مباشرة للتحقق بالموقع
+    await _verifyTransportByLocation();
   }
+
+  
+Future<void> _verifyTransportByLocation() async {
+  if (_manualStart == null || _manualEnd == null) return;
+  if (mounted) setState(() => _isVerifying = true);
+
+  try {
+    await _ensureLocationPermission();
+    final pos = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    const radiusMeters = 150.0;
+
+    double haversineMeters(LatLng a, LatLng b) {
+      const R = 6371000.0;
+      final dLat = _deg2rad(b.latitude - a.latitude);
+      final dLon = _deg2rad(b.longitude - a.longitude);
+      final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
+          math.cos(_deg2rad(a.latitude)) *
+              math.cos(_deg2rad(b.latitude)) *
+              math.sin(dLon / 2) *
+              math.sin(dLon / 2);
+      return 2 * R * math.atan2(math.sqrt(h), math.sqrt(1 - h));
+    }
+
+    final userLatLng = LatLng(pos.latitude, pos.longitude);
+    final distToStart = haversineMeters(userLatLng, _manualStart!);
+    final distToEnd   = haversineMeters(userLatLng, _manualEnd!);
+    final nearStart   = distToStart <= radiusMeters;
+    final nearEnd     = distToEnd   <= radiusMeters;
+    final isValid     = nearStart || nearEnd;
+
+    if (mounted) setState(() => _isVerifying = false);
+
+    if (isValid) {
+      setState(() {
+        _verificationResult = TaskVerificationResult(
+          success: true,
+          verified: true,
+          verificationSource: 'location',
+        );
+      });
+      await _uploadAndComplete();
+    } else {
+      // ✅ Dialog واضح بدل inline error
+      final nearest = math.min(distToStart, distToEnd);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.location_off_rounded,
+                      color: Colors.redAccent, size: 52),
+                  const SizedBox(height: 12),
+                  Text(
+                    'أنت بعيد عن المحطة',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: appColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'يجب أن تكون قريباً من إحدى المحطتين المختارتين\n'
+                    'أقرب محطة على بُعد: ${(nearest).toStringAsFixed(0)} متر\n'
+                    'المسافة المسموحة: ${radiusMeters.toInt()} متر',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            // يرجع لاختيار محطات جديدة
+                            setState(() {
+                              _manualStart = null;
+                              _manualEnd = null;
+                              _manualDistanceKm = null;
+                              _geoStart = null;
+                              _geoEnd = null;
+                            });
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: appColors.primary),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: Text(
+                            'تغيير المحطات',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w700,
+                              color: appColors.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            // يحاول مرة ثانية بنفس المحطات
+                            _verifyTransportByLocation();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: appColors.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: Text(
+                            'إعادة المحاولة',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+  } catch (e) {
+    if (mounted) setState(() => _isVerifying = false);
+    _showInlineError('تعذر الحصول على الموقع');
+  }
+}
 
   Future<void> _promptForItemCountIfNeeded() async {
     if (!_requiresItemDialog) return;
@@ -1838,11 +2000,14 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                       loading: _openingCamera || _isVerifying,
                     ),
                   if (requiresPhotoExact && isTransport && !_ready) ...[
-                    _gradientButton(
-                      label: 'ابدأ',
-                      icon: Icons.play_arrow_rounded,
-                      onTap: () => _startFlowForTransportTask(),
-                    ),
+                        _gradientButton(
+      label: 'اختر محطات المسار',
+      icon: Icons.map_outlined,
+      onTap: (_openingCamera || _isVerifying)
+          ? null
+          : () => _startTaskFlow(),   // ← _startTaskFlow تتعامل مع مترو/باص تلقائياً
+      loading: _openingCamera || _isVerifying,
+    ),
                     if (_manualDistanceKm != null) ...[
                       const SizedBox(height: 10),
                       _hintCard(

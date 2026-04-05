@@ -1,123 +1,130 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:google_place_plus/google_place_plus.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+
+// ─── Models ───────────────────────────────────────────────────────────────────
 
 class MapRoutePickResult {
   final LatLng start;
   final LatLng end;
-  MapRoutePickResult(this.start, this.end);
+  final String startName;
+  final String endName;
+  final double distanceKm;
+
+  MapRoutePickResult({
+    required this.start,
+    required this.end,
+    required this.startName,
+    required this.endName,
+    required this.distanceKm,
+  });
 }
 
+class _Station {
+  final String id;
+  final String nameAr;
+  final String nameEn;
+  final LatLng position;
+
+  const _Station({
+    required this.id,
+    required this.nameAr,
+    required this.nameEn,
+    required this.position,
+  });
+
+  factory _Station.fromJson(Map<String, dynamic> j) => _Station(
+        id: j['id']?.toString() ?? '',
+        nameAr: j['name_ar']?.toString() ?? '',
+        nameEn: j['name_en']?.toString() ?? '',
+        position: LatLng(
+          (j['lat'] as num).toDouble(),
+          (j['lng'] as num).toDouble(),
+        ),
+      );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+/// [stationType] = 'metro' | 'bus'
 class MapPickRoutePage extends StatefulWidget {
+  final String stationType;
   final LatLng? initialStart;
   final LatLng? initialEnd;
 
-  const MapPickRoutePage({super.key, this.initialStart, this.initialEnd});
+  const MapPickRoutePage({
+    super.key,
+    required this.stationType,
+    this.initialStart,
+    this.initialEnd,
+  });
 
   @override
   State<MapPickRoutePage> createState() => _MapPickRoutePageState();
 }
 
 class _MapPickRoutePageState extends State<MapPickRoutePage> {
-  // افتراضي الرياض لو ما قدرنا نجيب GPS
   static const _riyadhCenter = LatLng(24.7136, 46.6753);
 
-  GoogleMapController? _controller;
-  LatLng? _start;
-  LatLng? _end;
+  GoogleMapController? _mapController;
 
-  // نصوص البحث
-  final _startController = TextEditingController();
-  final _endController = TextEditingController();
+  // المحطات المحمّلة من JSON
+  List<_Station> _stations = [];
+  bool _loadingStations = true;
 
-  // Google Places
-  GooglePlace? _places;           
-  String? _mapsApiKey;            
-  bool _isLoadingPlaces = false;  
+  // المحطتان المختارتان
+  _Station? _startStation;
+  _Station? _endStation;
 
-  final _debounce = _Debouncer(const Duration(milliseconds: 280));
-  List<AutocompletePrediction> _startPreds = [];
-  List<AutocompletePrediction> _endPreds = [];
-  String? _sessionStart;
-  String? _sessionEnd;
+  // موقع المستخدم الحالي
+  LatLng _userLocation = _riyadhCenter;
+  bool _gotGps = false;
 
-
-  LatLng _biasCenter = _riyadhCenter;
-  static const int _biasRadiusMeters = 5000;
-
-  // نقطة بداية الكاميرا
-  LatLng _cameraStart = _riyadhCenter;
-  bool _gotGpsOnce = false;
-
-  // لودينق بسيط لما نجيب تفاصيل مكان من الاقتراحات
-  bool _isLoadingPlace = false;
+  // حالة الاختيار: 0 = ننتظر البداية, 1 = ننتظر النهاية
+  int _pickStep = 0;
 
   @override
   void initState() {
     super.initState();
-
-    _start = widget.initialStart;
-    _end = widget.initialEnd;
-    _sessionStart = _newSessionToken();
-    _sessionEnd = _newSessionToken();
-
-    _loadPlacesClient();     
-    _initGpsAndCenter();     
+    _loadStations();
+    _initGps();
   }
-
 
   @override
   void dispose() {
-    _startController.dispose();
-    _endController.dispose();
-    _debounce.dispose();
+    _mapController?.dispose();
     super.dispose();
   }
 
-  // ===== Helper لعرض الأخطاء لليوزر =====
-  void _showError(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg, textDirection: TextDirection.rtl)),
-    );
-  }
+  // ─── Load stations from assets ────────────────────────────────────────────
 
+  Future<void> _loadStations() async {
+    final path = widget.stationType == 'metro'
+        ? 'assets/data/metro_stations.json'
+        : 'assets/data/bus_stations.json';
 
-    Future<void> _loadPlacesClient() async {
-    setState(() => _isLoadingPlaces = true);
     try {
-      final callable = FirebaseFunctions.instance.httpsCallable('getMapsKey');
-      final result = await callable();
-      final key = result.data['apiKey'] as String?;
+      final raw = await rootBundle.loadString(path);
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      final list = (json['stations'] as List)
+          .map((e) => _Station.fromJson(e as Map<String, dynamic>))
+          .toList();
 
-      if (key == null || key.isEmpty) {
-        debugPrint('❌ MAPS API key is empty from getMapsKey');
-        return;
-      }
-
-      setState(() {
-        _mapsApiKey = key;
-        _places = GooglePlace(key);
-      });
-
-      debugPrint('✅ GooglePlace client initialized with Cloud Functions key');
-    } catch (e, st) {
-      debugPrint('❌ Failed to init GooglePlace: $e\n$st');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingPlaces = false);
-      }
+      if (mounted) setState(() { _stations = list; _loadingStations = false; });
+    } catch (e) {
+      debugPrint('❌ Error loading stations: $e');
+      if (mounted) setState(() => _loadingStations = false);
     }
   }
 
+  // ─── GPS ──────────────────────────────────────────────────────────────────
 
-  // ===== GPS & تمركز أولي =====
-  Future<void> _initGpsAndCenter() async {
+  Future<void> _initGps() async {
     try {
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied ||
@@ -130,788 +137,534 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
           desiredAccuracy: LocationAccuracy.high,
         );
         final here = LatLng(pos.latitude, pos.longitude);
-        _gotGpsOnce = true;
-
-        //  لو ما عندنا initialStart، خلّي البداية هي موقعي الحالي
-        final label = await _nameForLatLng(here);
-
-        setState(() {
-          _cameraStart = here;
-          _biasCenter = here;
-
-          if (_start == null) {
-            _start = here;
-            _startController.text = label;
-          }
-        });
-
-        if (_controller != null) {
-          await _moveCameraTo(here, zoom: 16.5);
-        }
+        if (mounted) setState(() { _userLocation = here; _gotGps = true; });
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: here, zoom: 13.0),
+          ),
+        );
       }
-    } catch (e, st) {
-      debugPrint('GPS error: $e\n$st');
+    } catch (e) {
+      debugPrint('GPS error: $e');
     }
   }
 
-  // ===== Helpers =====
-  String _newSessionToken() {
-    final r = math.Random();
-    return List.generate(24, (_) => r.nextInt(16).toRadixString(16)).join();
-  }
-
-  double _deg2rad(double deg) => deg * math.pi / 180.0;
+  // ─── Helpers ──────────────────────────────────────────────────────────────
 
   double _haversineKm(LatLng a, LatLng b) {
     const R = 6371.0;
     final dLat = _deg2rad(b.latitude - a.latitude);
     final dLon = _deg2rad(b.longitude - a.longitude);
-    final la1 = _deg2rad(a.latitude);
-    final la2 = _deg2rad(b.latitude);
-    final h =
-        (math.sin(dLat / 2) * math.sin(dLat / 2)) +
-        (math.cos(la1) *
-            math.cos(la2) *
+    final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_deg2rad(a.latitude)) *
+            math.cos(_deg2rad(b.latitude)) *
             math.sin(dLon / 2) *
-            math.sin(dLon / 2));
+            math.sin(dLon / 2);
     return 2 * R * math.atan2(math.sqrt(h), math.sqrt(1 - h));
   }
 
-  Future<void> _moveCameraTo(LatLng pos, {double zoom = 17.8}) async {
-    await _controller?.animateCamera(
-      CameraUpdate.newCameraPosition(CameraPosition(target: pos, zoom: zoom)),
+  double _deg2rad(double d) => d * math.pi / 180.0;
+
+  void _fitBoth() {
+    if (_startStation == null || _endStation == null || _mapController == null) return;
+    final a = _startStation!.position;
+    final b = _endStation!.position;
+    final sw = LatLng(math.min(a.latitude, b.latitude), math.min(a.longitude, b.longitude));
+    final ne = LatLng(math.max(a.latitude, b.latitude), math.max(a.longitude, b.longitude));
+    _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(LatLngBounds(southwest: sw, northeast: ne), 80),
     );
   }
 
-  Future<void> _fitBoth() async {
-    if (_start == null || _end == null || _controller == null) return;
-    final sw = LatLng(
-      math.min(_start!.latitude, _end!.latitude),
-      math.min(_start!.longitude, _end!.longitude),
-    );
-    final ne = LatLng(
-      math.max(_start!.latitude, _end!.latitude),
-      math.max(_start!.longitude, _end!.longitude),
-    );
-    final bounds = LatLngBounds(southwest: sw, northeast: ne);
-    await _controller!.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
-  }
+  // ─── Station tap ──────────────────────────────────────────────────────────
 
-  // 🚀 قفزة دقيقة إلى إحداثيات المكان نفسه + ماركر + زوم عالي
-  Future<void> _goToExact({
-    required LatLng pos,
-    required String which, // 'start' أو 'end'
-    required String labelForTextField,
-  }) async {
-    setState(() {
-      if (which == 'start') {
-        _start = pos;
-        _startController.text = labelForTextField;
-      } else {
-        _end = pos;
-        _endController.text = labelForTextField;
-      }
-      _biasCenter = pos;
-    });
-
-    await _moveCameraTo(pos, zoom: 17.8);
-    await Future.delayed(const Duration(milliseconds: 90));
-    _controller?.showMarkerInfoWindow(MarkerId(which));
-  }
-
-  // 🔎 بحث نصّي مباشر بالاعتماد على Autocomplete + Details
-  Future<void> _searchByTextAndGo({
-    required String query,
-    required String which,
-  }) async {
-    if (query.trim().isEmpty) return;
-
-    if (_places == null) {
-      _showError('خدمة البحث عن الأماكن غير متاحة حاليًا، حاولي بعد لحظات.');
-      return;
-    }
-
-    setState(() => _isLoadingPlace = true);
-    try {
-      final ac = await _places!.autocomplete.get(
-        query,
-        language: 'ar',
-        components: [Component('country', 'sa')],
-        location: LatLon(_biasCenter.latitude, _biasCenter.longitude),
-        radius: _biasRadiusMeters,
-        sessionToken: (which == 'start') ? _sessionStart : _sessionEnd,
-      );
-
-      final status = ac?.status;
-      debugPrint(
-        'Autocomplete status: $status, preds: ${ac?.predictions?.length ?? 0}',
-      );
-
-      if (status != 'OK' ||
-          ac?.predictions == null ||
-          ac!.predictions!.isEmpty) {
-        if (!mounted) return;
-        final msg = (status == 'REQUEST_DENIED')
-            ? 'في مشكلة في إعدادات Google Places API key (REQUEST_DENIED).\nتأكدي من تفعيل Places + Billing وضبط القيود في Google Cloud.'
-            : 'ما قدرنا نحدد موقع للمكان المطلوب. (status: $status)';
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(msg)));
-        return;
-      }
-
-      final first = ac.predictions!.first;
-      final det = await _places!.details.get(
-        first.placeId!,
-        language: 'ar',
-        sessionToken: (which == 'start') ? _sessionStart : _sessionEnd,
-      );
-
-      final loc = det?.result?.geometry?.location;
-      if (loc == null) return;
-
-      final pos = LatLng(loc.lat!, loc.lng!);
-      final label = det?.result?.name ?? first.description ?? 'موقع مختار';
-
-      await _goToExact(pos: pos, which: which, labelForTextField: label);
-
-      if (which == 'start') {
-        _sessionStart = _newSessionToken();
-        setState(() => _startPreds = []);
-      } else {
-        _sessionEnd = _newSessionToken();
-        setState(() => _endPreds = []);
-      }
-
-      if (_start != null && _end != null) {
-        await _fitBoth();
-      }
-    } catch (e) {
-      debugPrint('Places error: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'حدث خطأ أثناء البحث عن المكان. تحقق من الاتصال أو إعدادات Google API.',
-          ),
+  void _onStationTap(_Station station) {
+    if (_pickStep == 0) {
+      // اختيار البداية
+      setState(() {
+        _startStation = station;
+        _endStation = null; // reset النهاية عند تغيير البداية
+        _pickStep = 1;
+      });
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: station.position, zoom: 14.5),
         ),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingPlace = false);
-      }
-    }
-  }
-
-  // اسم ودّي لموقع (lat,lng) بدون إحداثيات صِرفة
-  Future<String> _nameForLatLng(LatLng p) async {
-    if (_places == null) {
-      // لو لسه الكي ما تحمل، نرجع اسم عام
-      return 'الموقع على الخريطة';
-    }
-    try {
-      final res = await _places!.search.getNearBySearch(
-        Location(lat: p.latitude, lng: p.longitude),
-        80,
-        language: 'ar',
-      );
-      final first = res?.results?.firstWhere(
-        (r) => (r.name ?? '').isNotEmpty,
-        orElse: () => (res?.results?.isNotEmpty ?? false)
-            ? res!.results!.first
-            : null as dynamic,
-      );
-      final name = first?.name ?? first?.vicinity;
-      if (name != null && name.trim().isNotEmpty) return name;
-    } catch (e, st) {
-      debugPrint('nameForLatLng error: $e\n$st');
-    }
-    return 'الموقع على الخريطة';
-  }
-
-
-  // ======= Places Autocomplete (متحيز حول _biasCenter) =======
-  void _onStartChanged(String value) {
-    _debounce.run(() async {
-      if (value.trim().isEmpty) {
-        setState(() => _startPreds = []);
-        return;
-      }
-      if (_places == null) return; // لسه ما اتحمّل الكلاينت
-      try {
-        final res = await _places!.autocomplete.get(
-          value,
-          language: 'ar',
-          components: [Component('country', 'sa')],
-          sessionToken: _sessionStart,
-          location: LatLon(_biasCenter.latitude, _biasCenter.longitude),
-          radius: _biasRadiusMeters,
-        );
-        setState(() => _startPreds = res?.predictions ?? []);
-      } catch (e, st) {
-        debugPrint('onStartChanged autocomplete error: $e\n$st');
-      }
-    });
-  }
-
-  void _onEndChanged(String value) {
-    _debounce.run(() async {
-      if (value.trim().isEmpty) {
-        setState(() => _endPreds = []);
-        return;
-      }
-      if (_places == null) return; // ⬅️ أضيفي هذا
-
-      try {
-        final res = await _places!.autocomplete.get(
-          value,
-          language: 'ar',
-          components: [Component('country', 'sa')],
-          sessionToken: _sessionEnd,
-          location: LatLon(_biasCenter.latitude, _biasCenter.longitude),
-          radius: _biasRadiusMeters,
-        );
-        setState(() => _endPreds = res?.predictions ?? []);
-      } catch (e, st) {
-        debugPrint('onEndChanged autocomplete error: $e\n$st');
-      }
-    });
-  }
-
-
-Future<void> _pickStartFromPrediction(AutocompletePrediction p) async {
-  if (_places == null) {
-    _showError('خدمة الأماكن غير جاهزة بعد، حاولي مرة أخرى بعد لحظات.');
-    return;
-  }
-
-  setState(() => _isLoadingPlace = true);
-  try {
-    final det = await _places!.details.get(
-      p.placeId!,
-      language: 'ar',
-      sessionToken: _sessionStart,
-    );
-
-      final loc = det?.result?.geometry?.location;
-
-      if (loc == null) {
-        _showError(
-          'ما قدرنا نحدد موقع دقيق لهذا الاسم.\n'
-          'جرّبي اختيار الموقع من الخريطة مباشرة.',
+    } else {
+      // اختيار النهاية
+      if (station.id == _startStation?.id) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'اختر محطة مختلفة عن البداية',
+              style: GoogleFonts.ibmPlexSansArabic(),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
         );
         return;
       }
-
-      final pos = LatLng(loc.lat!, loc.lng!);
-      final label = det?.result?.name ?? p.description ?? 'موقع مختار';
-
-      _sessionStart = _newSessionToken();
-      setState(() => _startPreds = []);
-
-      await _goToExact(pos: pos, which: 'start', labelForTextField: label);
-
-      if (_end != null) {
-        await _fitBoth();
-      }
-    } catch (e, st) {
-      debugPrint('pickStartFromPrediction error: $e\n$st');
-      _showError(
-        'حدث خطأ أثناء تحديد نقطة البداية.\nحاولي مرة أخرى أو حددي الموقع من الخريطة.',
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingPlace = false);
-      }
+      setState(() {
+        _endStation = station;
+        _pickStep = 2;
+      });
+      Future.delayed(const Duration(milliseconds: 200), _fitBoth);
     }
   }
 
-Future<void> _pickEndFromPrediction(AutocompletePrediction p) async {
-  if (_places == null) {
-    _showError('خدمة الأماكن غير جاهزة بعد، حاولي مرة أخرى بعد لحظات.');
-    return;
-  }
+  // ─── Build markers ────────────────────────────────────────────────────────
 
-  setState(() => _isLoadingPlace = true);
-  try {
-    final det = await _places!.details.get(
-      p.placeId!,
-      language: 'ar',
-      sessionToken: _sessionEnd,
-    );
+  Set<Marker> _buildMarkers() {
+    final markers = <Marker>{};
 
-      final loc = det?.result?.geometry?.location;
+    for (final station in _stations) {
+      final isStart = station.id == _startStation?.id;
+      final isEnd = station.id == _endStation?.id;
 
-      if (loc == null) {
-        _showError('تعذر البحث عن الموقع');
-        return;
+      // لون الـ pin حسب الحالة
+      double hue;
+      if (isStart) {
+        hue = BitmapDescriptor.hueGreen;
+      } else if (isEnd) {
+        hue = BitmapDescriptor.hueAzure;
+      } else {
+        hue = widget.stationType == 'metro'
+            ? BitmapDescriptor.hueViolet
+            : BitmapDescriptor.hueOrange;
       }
 
-      final pos = LatLng(loc.lat!, loc.lng!);
-      final label = det?.result?.name ?? p.description ?? 'موقع مختار';
-
-      _sessionEnd = _newSessionToken();
-      setState(() => _endPreds = []);
-
-      await _goToExact(pos: pos, which: 'end', labelForTextField: label);
-
-      if (_start != null) {
-        await _fitBoth();
-      }
-    } catch (e, st) {
-      debugPrint('pickEndFromPrediction error: $e\n$st');
-      _showError(
-        'حدث خطأ أثناء تحديد نقطة النهاية.\nحاولي مرة أخرى أو حددي الموقع من الخريطة.',
+      markers.add(
+        Marker(
+          markerId: MarkerId(station.id),
+          position: station.position,
+          icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+          infoWindow: InfoWindow(
+            title: station.nameAr,
+            snippet: isStart
+                ? '🟢 محطة البداية'
+                : isEnd
+                    ? '🔵 محطة النهاية'
+                    : 'اضغط للاختيار',
+          ),
+          onTap: () => _onStationTap(station),
+          zIndex: (isStart || isEnd) ? 2.0 : 1.0,
+        ),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoadingPlace = false);
-      }
     }
+
+    return markers;
   }
 
-  // ===== واجهة =====
+  // ─── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final markers = <Marker>{};
-    if (_start != null) {
-      markers.add(
-        Marker(
-          markerId: const MarkerId('start'),
-          position: _start!,
-          infoWindow: InfoWindow(
-            title: _startController.text.isNotEmpty
-                ? _startController.text
-                : 'نقطة البداية',
-          ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueGreen,
-          ),
-          draggable: true,
-          onDragEnd: (p) async {
-            final label = await _nameForLatLng(p);
-            setState(() {
-              _start = p;
-              _startPreds = [];
-              _startController.text = label;
-              _biasCenter = p;
-            });
-          },
-        ),
-      );
-    }
-    if (_end != null) {
-      markers.add(
-        Marker(
-          markerId: const MarkerId('end'),
-          position: _end!,
-          infoWindow: InfoWindow(
-            title: _endController.text.isNotEmpty
-                ? _endController.text
-                : 'نقطة النهاية',
-          ),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueAzure,
-          ),
-          draggable: true,
-          onDragEnd: (p) async {
-            final label = await _nameForLatLng(p);
-            setState(() {
-              _end = p;
-              _endPreds = [];
-              _endController.text = label;
-              _biasCenter = p;
-            });
-          },
-        ),
-      );
-    }
+    final hasBoth = _startStation != null && _endStation != null;
+    final km = hasBoth
+        ? _haversineKm(_startStation!.position, _endStation!.position)
+        : null;
 
-    final hasBoth = _start != null && _end != null;
-    final km = hasBoth ? _haversineKm(_start!, _end!) : null;
+    final isMetro = widget.stationType == 'metro';
+    final typeColor = isMetro ? const Color(0xFF7B2FBE) : const Color(0xFFF4A340);
+    final typeLabel = isMetro ? 'مترو' : 'باص';
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: (_start ?? _end ?? _cameraStart),
-              zoom: _gotGpsOnce ? 16.0 : 13.0,
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // ─── الخريطة ────────────────────────────────────────────────────
+            GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: _userLocation,
+                zoom: _gotGps ? 13.0 : 11.5,
+              ),
+              onMapCreated: (c) {
+                _mapController = c;
+                if (_gotGps) {
+                  c.animateCamera(CameraUpdate.newCameraPosition(
+                    CameraPosition(target: _userLocation, zoom: 13.0),
+                  ));
+                }
+              },
+              myLocationEnabled: true,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              markers: _loadingStations ? {} : _buildMarkers(),
+              polylines: hasBoth
+                  ? {
+                      Polyline(
+                        polylineId: const PolylineId('route'),
+                        points: [
+                          _startStation!.position,
+                          _endStation!.position,
+                        ],
+                        color: typeColor,
+                        width: 4,
+                        patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+                      ),
+                    }
+                  : {},
             ),
-            onMapCreated: (c) {
-              _controller = c;
-              if (_gotGpsOnce) {
-                _moveCameraTo(_cameraStart, zoom: 16.5);
-              }
-            },
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            markers: markers,
-            polylines: hasBoth
-                ? {
-                    Polyline(
-                      polylineId: const PolylineId('seg'),
-                      points: [_start!, _end!],
-                      width: 4,
-                    ),
-                  }
-                : {},
-            onTap: (p) async {
-              final label = await _nameForLatLng(p);
-              setState(() {
-                if (_start == null) {
-                  _start = p;
-                  _startController.text = label;
-                  _startPreds = [];
-                } else if (_end == null) {
-                  _end = p;
-                  _endController.text = label;
-                  _endPreds = [];
-                } else {
-                  final dStart = _haversineKm(_start!, p);
-                  final dEnd = _haversineKm(_end!, p);
-                  if (dStart < dEnd) {
-                    _start = p;
-                    _startController.text = label;
-                    _startPreds = [];
-                  } else {
-                    _end = p;
-                    _endController.text = label;
-                    _endPreds = [];
-                  }
-                }
-                _biasCenter = p;
-              });
-            },
-            onCameraIdle: () async {
-              try {
-                final vr = await _controller?.getVisibleRegion();
-                if (vr != null) {
-                  final center = LatLng(
-                    (vr.southwest.latitude + vr.northeast.latitude) / 2,
-                    (vr.southwest.longitude + vr.northeast.longitude) / 2,
-                  );
-                  _biasCenter = center;
-                }
-              } catch (e, st) {
-                debugPrint('getVisibleRegion error: $e\n$st');
-              }
-            },
-          ),
 
-          // 🔹 زر الرجوع
-          Positioned(
-            top: 45,
-            right: 12,
-            child: Material(
-              color: Colors.white.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(50),
-              child: IconButton(
-                icon: const Icon(Icons.arrow_forward_ios_rounded),
-                onPressed: () => Navigator.pop(context),
+            // ─── Loading overlay ──────────────────────────────────────────
+            if (_loadingStations)
+              Container(
+                color: Colors.black.withOpacity(0.3),
+                child: const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+              ),
+
+            // ─── زر الرجوع ───────────────────────────────────────────────
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              right: 12,
+              child: _MapButton(
+                icon: Icons.arrow_forward_ios_rounded,
+                onTap: () => Navigator.pop(context),
               ),
             ),
-          ),
 
-          // 🔹 زر تبديل البداية/النهاية
-          Positioned(
-            top: 45,
-            left: 12,
-            child: Material(
-              color: Colors.white.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(50),
-              child: IconButton(
-                icon: const Icon(Icons.swap_vert_rounded),
-                tooltip: 'تبديل البداية والنهاية',
-                onPressed: () {
-                  setState(() {
-                    final tmp = _start;
-                    _start = _end;
-                    _end = tmp;
-                    final t2 = _startController.text;
-                    _startController.text = _endController.text;
-                    _endController.text = t2;
-                  });
-                  _fitBoth();
+            // ─── زر موقعي الحالي ─────────────────────────────────────────
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 12,
+              child: _MapButton(
+                icon: Icons.my_location_rounded,
+                onTap: () {
+                  if (_gotGps) {
+                    _mapController?.animateCamera(
+                      CameraUpdate.newCameraPosition(
+                        CameraPosition(target: _userLocation, zoom: 14.0),
+                      ),
+                    );
+                  }
                 },
               ),
             ),
-          ),
 
-          // 🔹 خانات البحث + اقتراحات
-          Positioned(
-            top: 90,
-            left: 16,
-            right: 16,
-            child: Column(
-              children: [
-                _SearchField(
-                  hint: 'ابحث عن نقطة البداية',
-                  controller: _startController,
-                  color: Colors.green,
-                  onChanged: _onStartChanged,
-                  onClear: () {
-                    setState(() {
-                      _startPreds = [];
-                      _startController.clear();
-                      _start = null;
-                    });
-                  },
-                  onSubmitted: (txt) async {
-                    if (_startPreds.isNotEmpty) {
-                      await _pickStartFromPrediction(_startPreds.first);
-                    } else {
-                      await _searchByTextAndGo(query: txt, which: 'start');
-                    }
-                  },
-                ),
-                _PredictionsList(
-                  preds: _startPreds,
-                  onPick: _pickStartFromPrediction,
-                  colorDot: Colors.green,
-                ),
-                const SizedBox(height: 10),
-                _SearchField(
-                  hint: 'ابحث عن نقطة النهاية',
-                  controller: _endController,
-                  color: Colors.blue,
-                  onChanged: _onEndChanged,
-                  onClear: () {
-                    setState(() {
-                      _endPreds = [];
-                      _endController.clear();
-                      _end = null;
-                    });
-                  },
-                  onSubmitted: (txt) async {
-                    if (_endPreds.isNotEmpty) {
-                      await _pickEndFromPrediction(_endPreds.first);
-                    } else {
-                      await _searchByTextAndGo(query: txt, which: 'end');
-                    }
-                  },
-                ),
-                _PredictionsList(
-                  preds: _endPreds,
-                  onPick: _pickEndFromPrediction,
-                  colorDot: Colors.blue,
-                ),
-              ],
-            ),
-          ),
-
-          if (hasBoth)
+            // ─── Step indicator + selected stations card ──────────────────
             Positioned(
-              bottom: 96,
+              top: MediaQuery.of(context).padding.top + 64,
+              left: 12,
+              right: 12,
+              child: _StepCard(
+                step: _pickStep,
+                typeLabel: typeLabel,
+                typeColor: typeColor,
+                startStation: _startStation,
+                endStation: _endStation,
+                onResetStart: () => setState(() {
+                  _startStation = null;
+                  _endStation = null;
+                  _pickStep = 0;
+                }),
+                onResetEnd: () => setState(() {
+                  _endStation = null;
+                  _pickStep = 1;
+                }),
+              ),
+            ),
+
+            // ─── Distance hint ────────────────────────────────────────────
+            if (hasBoth)
+              Positioned(
+                bottom: 100,
+                left: 16,
+                right: 16,
+                child: _HintCard(
+                  text: 'المسافة بين المحطتين: ${km!.toStringAsFixed(2)} كم',
+                  color: typeColor,
+                ),
+              ),
+
+            // ─── زر اعتماد ───────────────────────────────────────────────
+            Positioned(
+              bottom: 24,
               left: 16,
               right: 16,
-              child: _HintCard(
-                text: 'المسافة التقريبية: ${km!.toStringAsFixed(2)} كم',
+              child: _ConfirmButton(
+                enabled: hasBoth,
+                typeColor: typeColor,
+                label: hasBoth
+                    ? 'اعتماد المسار'
+                    : _pickStep == 0
+                        ? 'اضغط على محطة البداية'
+                        : 'اضغط على محطة النهاية',
+                onTap: hasBoth
+                    ? () => Navigator.pop(
+                          context,
+                          MapRoutePickResult(
+                            start: _startStation!.position,
+                            end: _endStation!.position,
+                            startName: _startStation!.nameAr,
+                            endName: _endStation!.nameAr,
+                            distanceKm: km!,
+                          ),
+                        )
+                    : null,
               ),
             ),
-
-          // 🔹 Overlay لودينق لما نختار مكان من الاقتراحات / نبحث بالاسم
-          if (_isLoadingPlace)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withOpacity(0.12),
-                child: const Center(child: CircularProgressIndicator()),
-              ),
-            ),
-
-          // 🔹 زر اعتماد
-          Positioned(
-            bottom: 20,
-            left: 16,
-            right: 16,
-            child: ElevatedButton.icon(
-              onPressed: hasBoth
-                  ? () => Navigator.pop(
-                      context,
-                      MapRoutePickResult(_start!, _end!),
-                    )
-                  : null,
-              icon: const Icon(Icons.check_circle_outline),
-              label: Text(
-                hasBoth ? 'اعتماد المسار' : 'اختر البداية ثم النهاية',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-          ),
-        ],
-      ),
-
-      // 🔹 أزرار عائمة
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 72),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FloatingActionButton.small(
-              heroTag: 'center_me',
-              onPressed: () async {
-                try {
-                  var perm = await Geolocator.checkPermission();
-                  if (perm == LocationPermission.denied ||
-                      perm == LocationPermission.deniedForever) {
-                    perm = await Geolocator.requestPermission();
-                  }
-                  final pos = await Geolocator.getCurrentPosition(
-                    desiredAccuracy: LocationAccuracy.high,
-                  );
-                  final here = LatLng(pos.latitude, pos.longitude);
-                  setState(() {
-                    _biasCenter = here;
-                  });
-                  await _moveCameraTo(here, zoom: 16.5);
-                } catch (e, st) {
-                  debugPrint('center_me error: $e\n$st');
-                  _showError('تعذر جلب موقعك الحالي.');
-                }
-              },
-              tooltip: 'موقعي الحالي',
-              child: const Icon(Icons.my_location),
-            ),
-            const SizedBox(height: 14),
-            if (_start != null || _end != null)
-              FloatingActionButton.small(
-                heroTag: 'reset_points',
-                backgroundColor: Colors.red.shade400,
-                onPressed: () => setState(() {
-                  _start = null;
-                  _end = null;
-                  _startController.clear();
-                  _endController.clear();
-                  _startPreds = [];
-                  _endPreds = [];
-                }),
-                tooltip: 'إعادة تعيين',
-                child: const Icon(Icons.clear),
-              ),
           ],
         ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
 
-// ------------------- Widgets -------------------
+// ─── Helper Widgets ───────────────────────────────────────────────────────────
 
-class _SearchField extends StatefulWidget {
-  final String hint;
-  final TextEditingController controller;
-  final Color color;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onClear;
-  final ValueChanged<String>? onSubmitted;
+class _MapButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
 
-  const _SearchField({
-    required this.hint,
-    required this.controller,
-    required this.color,
-    required this.onChanged,
-    required this.onClear,
-    this.onSubmitted,
-  });
-
-  @override
-  State<_SearchField> createState() => _SearchFieldState();
-}
-
-class _SearchFieldState extends State<_SearchField> {
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_onCtl);
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onCtl);
-    super.dispose();
-  }
-
-  void _onCtl() => setState(() {});
+  const _MapButton({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final hasText = widget.controller.text.isNotEmpty;
     return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(50),
       elevation: 3,
-      borderRadius: BorderRadius.circular(12),
-      child: TextField(
-        controller: widget.controller,
-        textInputAction: TextInputAction.search,
-        onChanged: widget.onChanged,
-        onSubmitted: widget.onSubmitted,
-        decoration: InputDecoration(
-          hintText: widget.hint,
-          prefixIcon: Icon(Icons.search, color: widget.color),
-          suffixIcon: hasText
-              ? IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: widget.onClear,
-                )
-              : null,
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 10,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(50),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Icon(icon, size: 22),
         ),
       ),
     );
   }
 }
 
-class _PredictionsList extends StatelessWidget {
-  final List<AutocompletePrediction> preds;
-  final Future<void> Function(AutocompletePrediction) onPick;
-  final Color colorDot;
+class _StepCard extends StatelessWidget {
+  final int step;
+  final String typeLabel;
+  final Color typeColor;
+  final _Station? startStation;
+  final _Station? endStation;
+  final VoidCallback onResetStart;
+  final VoidCallback onResetEnd;
 
-  const _PredictionsList({
-    required this.preds,
-    required this.onPick,
-    required this.colorDot,
+  const _StepCard({
+    required this.step,
+    required this.typeLabel,
+    required this.typeColor,
+    required this.startStation,
+    required this.endStation,
+    required this.onResetStart,
+    required this.onResetEnd,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (preds.isEmpty) return const SizedBox.shrink();
-    return Container(
-      margin: const EdgeInsets.only(top: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)],
-      ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        itemCount: preds.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
-        itemBuilder: (ctx, i) {
-          final p = preds[i];
-          return ListTile(
-            leading: Icon(Icons.place_rounded, color: colorDot),
-            title: Text(
-              p.structuredFormatting?.mainText ?? p.description ?? '',
+    return Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ─── العنوان
+            Row(
+              children: [
+                Icon(
+                  typeLabel == 'مترو'
+                      ? Icons.train_rounded
+                      : Icons.directions_bus_rounded,
+                  color: typeColor,
+                  size: 20,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'اختر محطات $typeLabel',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: const Color(0xFF3C3C3B),
+                  ),
+                ),
+              ],
             ),
-            subtitle: Text(p.structuredFormatting?.secondaryText ?? ''),
-            onTap: () => onPick(p),
-          );
-        },
+            const SizedBox(height: 10),
+
+            // ─── Step indicator
+            Row(
+              children: [
+                _StepDot(
+                  number: '1',
+                  label: 'البداية',
+                  done: startStation != null,
+                  active: step == 0,
+                  color: Colors.green,
+                ),
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                    color: startStation != null
+                        ? Colors.green
+                        : Colors.grey.shade300,
+                  ),
+                ),
+                _StepDot(
+                  number: '2',
+                  label: 'النهاية',
+                  done: endStation != null,
+                  active: step == 1,
+                  color: Colors.blue,
+                ),
+              ],
+            ),
+
+            // ─── محطة البداية المختارة
+            if (startStation != null) ...[
+              const SizedBox(height: 10),
+              _SelectedChip(
+                label: startStation!.nameAr,
+                icon: Icons.radio_button_checked,
+                color: Colors.green,
+                onClear: onResetStart,
+              ),
+            ],
+
+            // ─── محطة النهاية المختارة
+            if (endStation != null) ...[
+              const SizedBox(height: 6),
+              _SelectedChip(
+                label: endStation!.nameAr,
+                icon: Icons.location_on_rounded,
+                color: Colors.blue,
+                onClear: onResetEnd,
+              ),
+            ],
+
+            // ─── تعليمة
+            if (startStation == null || endStation == null) ...[
+              const SizedBox(height: 8),
+              Text(
+                step == 0
+                    ? '🟢 اضغط على محطة البداية من الخريطة'
+                    : '🔵 اضغط على محطة النهاية',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 12.5,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StepDot extends StatelessWidget {
+  final String number;
+  final String label;
+  final bool done;
+  final bool active;
+  final Color color;
+
+  const _StepDot({
+    required this.number,
+    required this.label,
+    required this.done,
+    required this.active,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: done || active ? color : Colors.grey.shade200,
+          ),
+          child: Center(
+            child: done
+                ? const Icon(Icons.check, color: Colors.white, size: 14)
+                : Text(
+                    number,
+                    style: TextStyle(
+                      color: active ? Colors.white : Colors.grey,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          style: GoogleFonts.ibmPlexSansArabic(
+            fontSize: 10.5,
+            color: done || active ? color : Colors.grey,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SelectedChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onClear;
+
+  const _SelectedChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          GestureDetector(
+            onTap: onClear,
+            child: Icon(Icons.close_rounded, color: color, size: 16),
+          ),
+        ],
       ),
     );
   }
@@ -919,33 +672,93 @@ class _PredictionsList extends StatelessWidget {
 
 class _HintCard extends StatelessWidget {
   final String text;
-  const _HintCard({required this.text});
+  final Color color;
+
+  const _HintCard({required this.text, required this.color});
+
   @override
   Widget build(BuildContext context) {
     return Material(
-      elevation: 2,
+      elevation: 3,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
         ),
-        child: Text(text, textAlign: TextAlign.center),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.straighten_rounded, color: color, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF3C3C3B),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ====== Debouncer بسيط ======
-class _Debouncer {
-  final Duration delay;
-  Timer? _t;
-  _Debouncer(this.delay);
-  void run(VoidCallback f) {
-    _t?.cancel();
-    _t = Timer(delay, f);
-  }
+class _ConfirmButton extends StatelessWidget {
+  final bool enabled;
+  final Color typeColor;
+  final String label;
+  final VoidCallback? onTap;
 
-  void dispose() => _t?.cancel();
+  const _ConfirmButton({
+    required this.enabled,
+    required this.typeColor,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: enabled ? typeColor : Colors.grey.shade300,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  enabled
+                      ? Icons.check_circle_outline_rounded
+                      : Icons.touch_app_rounded,
+                  color: enabled ? Colors.white : Colors.grey.shade600,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: enabled ? Colors.white : Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

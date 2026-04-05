@@ -78,6 +78,8 @@ flutter:
     - assets/img/nameerStand.png
     - assets/img/nameerHappy.png
     - assets/img/nameerSad.png
+    - assets/data/bus_stations.json
+    - assets/data/metro_stations.json
 
 flutter_native_splash:
   color: "#FAFCFB"
