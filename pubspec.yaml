@@ -50,12 +50,14 @@ dependencies:
   google_mlkit_text_recognition: ^0.15.1
   fl_chart: ^0.64.0 
   firebase_app_check: ^0.3.2+10
-  model_viewer_plus: ^1.9.3
+  # model_viewer_plus: ^1.9.3
+  model_viewer_plus: ^1.7.0
   # flutter_gl: ^0.1.0
   # flutter_3d_obj: ^1.0.0
   # flutter_gltf: ^1.0.0
   interactive_3d: ^1.2.1
-  flutter_3d_controller: ^2.0.2
+  # flutter_3d_controller: ^2.0.2
+  flutter_3d_controller: ^1.4.0
   # asset_3d_viewer: ^1.0.0
   cached_network_image: ^3.3.0
 
