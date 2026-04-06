@@ -25,6 +25,7 @@ import '../services/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'article.dart';
 import 'levels.dart';
+import 'widgets/ecoland_grid.dart';
 
 class homePage extends StatefulWidget {
   const homePage({super.key});
@@ -45,6 +46,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   final GlobalKey _friendsKey = GlobalKey();
   final GlobalKey _carbonKey = GlobalKey(); // كرت "إجمالي خفض الكربون"
   final GlobalKey<_homePageState> _homePageKey = GlobalKey();
+  List<IsoItem> _ecoLandItems = [];
 
   OverlayEntry? _skipEntry;
   bool _tourRunning = false;
@@ -96,6 +98,14 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
     _skipEntry = null;
   }
 
+  void _onEcoLandItemsLoaded(List<IsoItem> items) {
+    if (mounted) {
+      setState(() {
+        _ecoLandItems = items;
+      });
+    }
+  }
+
   late final AnimationController _bgCtrl;
   AnimationController? _floatingCtrl;
   bool _didScheduleShowcase = false; // ✅ عشان ما نعيده كل build
@@ -104,24 +114,22 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // أنيميشن الخلفية
     _bgCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 14),
     )..repeat();
 
-    // أنيميشن الكرت الطاير
     _floatingCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
 
-    // FCM + توكن
-    _initHome();
-
-    // تأكد من وجود حقول الكربون في user
-    ensureUserCarbonFields();
-    StreakService.initializeStreakFields();
+    // 🔥 الحل هنا
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initHome();
+      ensureUserCarbonFields();
+      StreakService.initializeStreakFields();
+    });
   }
 
   Future<void> _initHome() async {
@@ -237,6 +245,8 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                             builder: (context) {
                               final uid =
                                   FirebaseAuth.instance.currentUser?.uid;
+                              final String guestName =
+                                  "زائر"; // اسم افتراضي للزوار
 
                               // لو ما فيه مستخدم مسجل
                               if (uid == null) {
@@ -249,7 +259,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                   ),
                                   child: Row(
                                     children: [
-                                      // صورة البروفايل → تودّي لصفحة البروفايل
                                       Material(
                                         color: Colors.transparent,
                                         child: InkWell(
@@ -297,23 +306,21 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                           ),
                                         ),
                                       ),
-
                                       const SizedBox(width: 12),
-
-                                      const Expanded(
+                                      Expanded(
                                         child: Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              'مرحبًا 👋',
-                                              style: TextStyle(
+                                              'مرحبًا، $guestName 👋',
+                                              style: const TextStyle(
                                                 fontSize: 20,
                                                 fontWeight: FontWeight.w800,
                                                 color: appColors.dark,
                                               ),
                                             ),
-                                            Text(
+                                            const Text(
                                               'لنجعل اليوم مميزاً!',
                                               style: TextStyle(
                                                 fontSize: 13,
@@ -385,9 +392,11 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                     );
                                   }
 
-                                  // 🔸 لو البيانات ما وصلت بعد
-                                  if (snap.connectionState ==
-                                      ConnectionState.waiting) {
+                                  final data = snap.data?.data();
+
+                                  if (data == null &&
+                                      snap.connectionState ==
+                                          ConnectionState.waiting) {
                                     return const Padding(
                                       padding: EdgeInsets.fromLTRB(
                                         16,
@@ -414,12 +423,9 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                     );
                                   }
 
-                                  // 🔸 لو البيانات جاهزة نعرضها
-                                  final data = snap.data?.data();
                                   final username =
                                       (data?['username'] ?? 'مستخدم')
                                           .toString();
-
                                   int _asInt(dynamic v) {
                                     if (v is int) return v;
                                     if (v is double) return v.toInt();
@@ -439,26 +445,9 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                     child: Row(
                                       children: [
                                         // صورة البروفايل → Showcase + شرح + تخطي
-                                        StreamBuilder<
-                                          DocumentSnapshot<Map<String, dynamic>>
-                                        >(
-                                          stream:
-                                              FirebaseAuth
-                                                      .instance
-                                                      .currentUser ==
-                                                  null
-                                              ? const Stream.empty()
-                                              : FirebaseFirestore.instance
-                                                    .collection('users')
-                                                    .doc(
-                                                      FirebaseAuth
-                                                          .instance
-                                                          .currentUser!
-                                                          .uid,
-                                                    )
-                                                    .snapshots(),
-                                          builder: (context, snapshot) {
-                                            final data = snapshot.data?.data();
+                                        Builder(
+                                          builder: (context) {
+                                            // نستخدم data من الـ StreamBuilder الخارجي مباشرة
                                             final int? pfpIndex =
                                                 (data?['pfpIndex'] is int)
                                                 ? (data?['pfpIndex'] as int)
@@ -476,9 +465,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             return Showcase.withWidget(
                                               key: _profileKey,
                                               overlayColor: Colors.black
-                                                  .withOpacity(
-                                                    0.35,
-                                                  ), // غامق — يخلي التور واضح
+                                                  .withOpacity(0.35),
                                               overlayOpacity: 0.35,
                                               blurValue: 0,
                                               container: Builder(
@@ -536,7 +523,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                           'من هنا يمكن متابعة الملف، تعديل الصورة واسم المستخدم، والاطلاع على الإنجازات.',
                                                           textDirection: ui
                                                               .TextDirection
-                                                              .rtl, // 👈 أضف هذا
+                                                              .rtl,
                                                           style: TextStyle(
                                                             fontSize: 13,
                                                             height: 1.6,
@@ -559,7 +546,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                             ),
                                                           ),
                                                         ),
-                                                        // ⭐ Skip Button (Inside Bubble)
                                                         Align(
                                                           alignment: Alignment
                                                               .centerLeft,
@@ -588,7 +574,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                   ),
                                                 ),
                                               ),
-
                                               child: Material(
                                                 color: Colors.transparent,
                                                 child: InkWell(
@@ -663,27 +648,15 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              if (snap.connectionState ==
-                                                  ConnectionState.waiting)
-                                                const Text(
-                                                  'مرحبًا 👋',
-                                                  style: TextStyle(
-                                                    fontSize: 20,
-                                                    fontWeight: FontWeight.w800,
-                                                    color: appColors.dark,
-                                                  ),
-                                                )
-                                              else
-                                                Text(
-                                                  'مرحبًا، $username 👋',
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontSize: 20,
-                                                    fontWeight: FontWeight.w800,
-                                                    color: appColors.dark,
-                                                  ),
+                                              Text(
+                                                'مرحبًا $username 👋',
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: appColors.dark,
                                                 ),
+                                              ),
                                               const Text(
                                                 'لنجعل اليوم مميزاً!',
                                                 style: TextStyle(
@@ -698,9 +671,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                         Showcase.withWidget(
                                           key: _pointsKey,
                                           overlayColor: Colors.black
-                                              .withOpacity(
-                                                0.35,
-                                              ), // غامق — يخلي التور واضح
+                                              .withOpacity(0.35),
                                           overlayOpacity: 0.35,
                                           blurValue: 0,
                                           container: Builder(
@@ -717,8 +688,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
 
                                               return SizedBox(
                                                 width: size.width,
-                                                height:
-                                                    300, // رفعنا الارتفاع عشان يسمح للنزلة
+                                                height: 300,
                                                 child: Stack(
                                                   clipBehavior: Clip.none,
                                                   children: [
@@ -778,10 +748,10 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                                           .dark,
                                                                 ),
                                                               ),
-                                                              SizedBox(
+                                                              const SizedBox(
                                                                 height: 8,
                                                               ),
-                                                              Text(
+                                                              const Text(
                                                                 'كل مهمة تُنجَز تضيف نقاطًا إلى رصيدك هنا، ويمكن استبدالها في صفحة الجوائز.',
                                                                 style: TextStyle(
                                                                   fontSize: 13,
@@ -819,13 +789,11 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
 
                                                     // صورة Nameer — أكبر ولأسفل
                                                     Positioned(
-                                                      right: -14, // أقرب للحافة
-                                                      bottom:
-                                                          -60, // نزّلناها لتحت
+                                                      right: -14,
+                                                      bottom: -60,
                                                       child: Image.asset(
                                                         'assets/img/nameerLeft.png',
-                                                        height:
-                                                            imgH, // أكبر بشكل متناسب
+                                                        height: imgH,
                                                         fit: BoxFit.contain,
                                                       ),
                                                     ),
@@ -1121,8 +1089,8 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
 
                                         const SizedBox(height: 14),
 
-                                        // 🌍 EcoLand — ظاهرة دايم
-                                        const SizedBox(
+                                        // 🌍 EcoLand — تعرض المكافآت التي حصل عليها المستخدم
+                                        SizedBox(
                                           width: double.infinity,
                                           height: 170,
                                           child: IsoLand(
@@ -1134,7 +1102,20 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             sideColor: appColors.tealSoft,
                                             gridColor: appColors.sea,
                                             gridOpacity: .08,
+                                            items:
+                                                _ecoLandItems, // ✅ هذا السطر مهم
                                           ),
+                                        ),
+
+                                        // هذا يجلب البيانات فقط (لا يظهر شيء)
+                                        EcoLandGrid(
+                                          userId:
+                                              FirebaseAuth
+                                                  .instance
+                                                  .currentUser
+                                                  ?.uid ??
+                                              '',
+                                          onItemsLoaded: _onEcoLandItemsLoaded,
                                         ),
 
                                         // 👇 الاكسباند (التشارت فقط)
@@ -1181,35 +1162,33 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                       .collection('dailyTasks')
                                       .doc(
                                         FirebaseAuth.instance.currentUser?.uid,
-                                      ) // ← document المستخدم
-                                      .collection(
-                                        'tasks',
-                                      ) // ← sub-collection tasks
-                                      .doc(today) // ← document id = التاريخ
+                                      )
+                                      .collection('tasks')
+                                      .doc(today)
                                       .snapshots(),
                                   builder: (context, snapshot) {
-                                    // ===== Loading =====
-                                    if (snapshot.connectionState ==
-                                        ConnectionState.waiting) {
-                                      return Container(
-                                        height: 100,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[100],
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                        ),
-                                        child: const Center(
-                                          child: CircularProgressIndicator(
-                                            color: appColors.primary,
-                                          ),
-                                        ),
-                                      );
-                                    }
-
-                                    // ===== No Task =====
+                                    // ===== No Task / Loading =====
                                     if (!snapshot.hasData ||
                                         !snapshot.data!.exists) {
+                                      // لو لسا loading بدون كاش
+                                      if (snapshot.connectionState ==
+                                          ConnectionState.waiting) {
+                                        return Container(
+                                          height: 100,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[100],
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                          ),
+                                          child: const Center(
+                                            child: CircularProgressIndicator(
+                                              color: appColors.primary,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      // كاش موجود لكن ما في مهمة لهذا اليوم
                                       return Container(
                                         height: 100,
                                         decoration: BoxDecoration(
@@ -2853,13 +2832,6 @@ class _FriendCard extends StatelessWidget {
 
 /* ======================= IsoLand 2.5D Platform ======================= */
 
-class IsoItem {
-  final int row;
-  final int col;
-  final Widget child;
-  const IsoItem({required this.row, required this.col, required this.child});
-}
-
 class IsoLand extends StatelessWidget {
   final int rows;
   final int cols;
@@ -3078,35 +3050,89 @@ class _IsoPositioned extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (_, c) {
-        final w = c.maxWidth;
-        final h = c.maxHeight;
+    return _IsoPositionedLayout(
+      rows: rows,
+      cols: cols,
+      row: row,
+      col: col,
+      child: child,
+    );
+  }
+}
 
-        final top = Offset(w * .50, h * .16);
-        final right = Offset(w * .86, h * .50);
-        final bottom = Offset(w * .50, h * .84);
-        final left = Offset(w * .14, h * .50);
+// ✅ فصل LayoutBuilder في Widget منفصل
+class _IsoPositionedLayout extends StatefulWidget {
+  final int rows, cols, row, col;
+  final Widget child;
 
-        Offset lerp(Offset a, Offset b, double t) =>
-            Offset(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t);
+  const _IsoPositionedLayout({
+    required this.rows,
+    required this.cols,
+    required this.row,
+    required this.col,
+    required this.child,
+  });
 
-        final u = (col + .5) / cols; // يسار ↔ يمين
-        final v = (row + .5) / rows; // أعلى ↔ أسفل
+  @override
+  State<_IsoPositionedLayout> createState() => _IsoPositionedLayoutState();
+}
 
-        final edgeA = lerp(left, top, 1 - v);
-        final edgeB = lerp(bottom, right, 1 - v);
-        final p = lerp(edgeA, edgeB, u);
+class _IsoPositionedLayoutState extends State<_IsoPositionedLayout> {
+  late double _left = 0;
+  late double _top = 0;
+  bool _hasPosition = false;
 
-        return Positioned(
-          left: p.dx,
-          top: p.dy,
-          child: Transform.translate(
-            offset: const Offset(-16, -28),
-            child: child,
-          ),
-        );
-      },
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _calculatePosition();
+    });
+  }
+
+  void _calculatePosition() {
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox != null) {
+      final size = renderBox.size;
+      final w = size.width;
+      final h = size.height;
+
+      final top = Offset(w * .50, h * .16);
+      final right = Offset(w * .86, h * .50);
+      final bottom = Offset(w * .50, h * .84);
+      final left = Offset(w * .14, h * .50);
+
+      Offset lerp(Offset a, Offset b, double t) =>
+          Offset(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t);
+
+      final u = (widget.col + .5) / widget.cols;
+      final v = (widget.row + .5) / widget.rows;
+
+      final edgeA = lerp(left, top, 1 - v);
+      final edgeB = lerp(bottom, right, 1 - v);
+      final p = lerp(edgeA, edgeB, u);
+
+      setState(() {
+        _left = p.dx;
+        _top = p.dy;
+        _hasPosition = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_hasPosition) {
+      return Container(); // مؤقت حتى يتم حساب الموقع
+    }
+
+    return Positioned(
+      left: _left,
+      top: _top,
+      child: Transform.translate(
+        offset: const Offset(-16, -28),
+        child: widget.child,
+      ),
     );
   }
 }

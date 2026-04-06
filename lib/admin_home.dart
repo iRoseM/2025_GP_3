@@ -4401,14 +4401,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
         case 'delete':
           return Icons.delete_outline;
         case 'modify':
-        case 'modify_points':
           return Icons.edit_outlined;
         case 'review_reports':
-          return Icons.report_outlined;
-        case 'add_category':
-          return Icons.category_outlined;
-        case 'activate_category':
-          return Icons.rocket_launch_outlined;
+          // ✅ التحقق إذا كانت توصية حاوية أم مهمة
+          if (rec.containsKey('facilityId') && rec['facilityId'] != null) {
+            return Icons.delete_outline; // أيقونة حاوية
+          }
+          return Icons.report_outlined; // أيقونة مهمة
         default:
           return Icons.lightbulb_outline;
       }
@@ -4421,14 +4420,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
         case 'delete':
           return Colors.red;
         case 'modify':
-        case 'modify_points':
           return Colors.orange;
         case 'review_reports':
           return Colors.purple;
-        case 'add_category':
-          return Colors.blue;
-        case 'activate_category':
-          return Colors.teal;
         default:
           return appColors.primary;
       }
@@ -4442,20 +4436,34 @@ class _AdminHomePageState extends State<AdminHomePage> {
           return 'حذف مهمة';
         case 'modify':
           return 'تعديل مهمة';
-        case 'modify_points':
-          return 'تعديل نقاط';
         case 'review_reports':
-          return 'مراجعة بلاغات';
-        case 'add_category':
-          return 'إضافة تصنيف';
-        case 'activate_category':
-          return 'تنشيط تصنيف';
+          // ✅ تمييز بين بلاغات المهام والحاويات
+          if (rec.containsKey('facilityId') && rec['facilityId'] != null) {
+            return 'بلاغات حاوية';
+          }
+          return 'بلاغات مهمة';
         default:
           return 'توصية';
       }
     }
 
-    // دالة لإخفاء التوصية (محلياً فقط)
+    // ✅ دالة للحصول على وصف المهمة (لنوع add)
+    String getUserDescription() {
+      if (rec['type'] == 'add' && rec.containsKey('userDescription')) {
+        return rec['userDescription']?.toString() ?? '';
+      }
+      return '';
+    }
+
+    // ✅ دالة للحصول على استراتيجية التحقق (لنوع add)
+    String getValidationStrategy() {
+      if (rec['type'] == 'add' && rec.containsKey('validationStrategy')) {
+        return rec['validationStrategy']?.toString() ?? '';
+      }
+      return '';
+    }
+
+    // ✅ دالة لإخفاء التوصية
     Future<void> _hideRecommendation(String recId) async {
       if (_isProcessingRecommendation) return;
       _isProcessingRecommendation = true;
@@ -4464,7 +4472,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
         _hiddenRecommendations.add(recId);
       });
 
-      // حفظ في SharedPreferences فقط
       await _prefs.setStringList(
         'hidden_recommendations',
         _hiddenRecommendations.toList(),
@@ -4532,32 +4539,34 @@ class _AdminHomePageState extends State<AdminHomePage> {
                       ],
                     ),
                   ),
-                  // Source badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      (rec['basedOn']?.toString() ?? 'تحليل').length > 15
-                          ? '${rec['basedOn'].toString().substring(0, 15)}...'
-                          : (rec['basedOn']?.toString() ?? 'تحليل'),
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 8,
-                        color: Colors.grey[600],
+                  // ✅ مصدر التوصية (basedOn) - تأكد من وجوده
+                  if (rec['basedOn'] != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        (rec['basedOn']?.toString() ?? 'تحليل').length > 15
+                            ? '${rec['basedOn'].toString().substring(0, 15)}...'
+                            : (rec['basedOn']?.toString() ?? 'تحليل'),
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 8,
+                          color: Colors.grey[600],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
                 ],
               ),
 
               const SizedBox(height: 8),
+
               // العنوان
               Text(
                 rec['title'] ?? 'توصية',
@@ -4569,46 +4578,165 @@ class _AdminHomePageState extends State<AdminHomePage> {
               ),
 
               const SizedBox(height: 4),
-              // الوصف
-              Text(
-                rec['description'] ?? '',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 12,
-                  color: Colors.grey[700],
+
+              // ✅ الوصف - موجود لجميع الأنواع
+              if (rec['description'] != null &&
+                  rec['description'].toString().isNotEmpty)
+                Text(
+                  rec['description']?.toString() ?? '',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 12,
+                    color: Colors.grey[700],
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
+
+              // ✅ وصف المستخدم (لنوع add فقط)
+              if (rec['type'] == 'add' && getUserDescription().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.description, size: 14, color: Colors.green),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            getUserDescription(),
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 11,
+                              color: Colors.green[700],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
               const SizedBox(height: 8),
-              // صندوق الاقتراح
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: getColor().withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.lightbulb, size: 14, color: getColor()),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        rec['suggestion'] ?? '',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: getColor(),
+
+              // ✅ صندوق الاقتراح - موجود لجميع الأنواع
+              if (rec['suggestion'] != null &&
+                  rec['suggestion'].toString().isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: getColor().withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lightbulb, size: 14, color: getColor()),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          rec['suggestion']?.toString() ?? '',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: getColor(),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+
+              // ✅ معلومات إضافية للحاويات (نوع review_reports مع facilityId)
+              if (rec['type'] == 'review_reports' &&
+                  rec.containsKey('facilityId') &&
+                  rec['facilityId'] != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.location_on,
+                        size: 12,
+                        color: Colors.grey[500],
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '${rec['facilityName'] ?? 'حاوية'} - ${rec['facilityAddress'] ?? 'عنوان غير معروف'}',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 10,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ),
+                      if (rec['facilityIssueType'] != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            rec['facilityIssueType'].toString(),
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 9,
+                              color: Colors.red,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+
+              // ✅ معلومات إضافية للمهام (نوع review_reports مع taskId)
+              if (rec['type'] == 'review_reports' &&
+                  rec.containsKey('taskId') &&
+                  rec['taskId'] != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.task, size: 12, color: Colors.grey[500]),
+                      const SizedBox(width: 4),
+                      Text(
+                        'المهمة: ${rec['taskId']}',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 10,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${rec['reportCount'] ?? 0} بلاغ',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 9,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               const SizedBox(height: 4),
+
               // أزرار سريعة
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -4616,7 +4744,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   // زر تجاهل
                   TextButton.icon(
                     onPressed: () async {
-                      // await _logRecommendationAction(rec, 'ignore');
                       await _hideRecommendation(recId);
                     },
                     icon: const Icon(Icons.close, size: 14),
@@ -4631,34 +4758,29 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     ),
                   ),
 
-                  // زر تنفيذ حسب النوع
+                  // ✅ زر إضافة (لنوع add)
                   if (rec['type'] == 'add')
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await _logRecommendationAction(rec, 'add');
                         await _hideRecommendation(recId);
-
                         await Future.delayed(const Duration(milliseconds: 50));
-
                         if (mounted) {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => AddTaskPage(
-                                categories: _taskCategories,
+                                categories: categories,
                                 preFillData: {
                                   'category': rec['category'],
                                   'title': rec['title'],
                                   'description': rec['description'],
+                                  'userDescription': rec['userDescription'],
                                   'suggestion': rec['suggestion'],
                                   'validationStrategy':
                                       rec['validationStrategy'],
                                   'calcMode': rec['calcMode'],
                                   'askCount': rec['askCount'],
-                                  'askDistanceKm': rec['askDistanceKm'],
-                                  'autoDistance': rec['autoDistance'],
-                                  'emissionFactorRef': rec['emissionFactorRef'],
-                                  'baselineFactorRef': rec['baselineFactorRef'],
+                                  'points': rec['points'],
                                 },
                               ),
                             ),
@@ -4684,27 +4806,24 @@ class _AdminHomePageState extends State<AdminHomePage> {
                       ),
                     ),
 
+                  // ✅ زر تعديل (لنوع modify)
                   if (rec['type'] == 'modify')
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await _logRecommendationAction(rec, 'modify');
                         await _hideRecommendation(recId);
-
                         await Future.delayed(const Duration(milliseconds: 50));
-
                         if (mounted) {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => AddTaskPage(
-                                categories: _taskCategories,
+                                categories: categories,
                                 preFillData: {
                                   'category': rec['category'],
                                   'title': rec['title'],
                                   'description': rec['description'],
                                   'suggestion': rec['suggestion'],
-                                  'validationStrategy':
-                                      rec['validationStrategy'],
+                                  'taskId': rec['taskId'],
                                   'type': 'modify',
                                 },
                               ),
@@ -4731,14 +4850,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
                       ),
                     ),
 
+                  // ✅ زر حذف (لنوع delete)
                   if (rec['type'] == 'delete')
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await _logRecommendationAction(rec, 'delete');
                         await _hideRecommendation(recId);
-
                         await Future.delayed(const Duration(milliseconds: 50));
-
                         if (mounted) {
                           Navigator.push(
                             context,
@@ -4775,16 +4892,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
                       ),
                     ),
 
+                  // ✅ زر مراجعة (لنوع review_reports)
                   if (rec['type'] == 'review_reports')
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await _logRecommendationAction(rec, 'review');
                         await _hideRecommendation(recId);
-
                         await Future.delayed(const Duration(milliseconds: 50));
-
                         if (mounted) {
-                          if (rec['category']?.contains('حاوية') ?? false) {
+                          // ✅ تحديد الوجهة حسب نوع البلاغ
+                          if (rec.containsKey('facilityId') &&
+                              rec['facilityId'] != null) {
+                            // بلاغات حاوية
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -4793,6 +4911,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                               ),
                             );
                           } else {
+                            // بلاغات مهمة
                             Navigator.push(
                               context,
                               MaterialPageRoute(

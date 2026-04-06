@@ -1220,15 +1220,17 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
 class AddTaskPage extends StatefulWidget {
   final Map<String, dynamic>? task;
   final List<String> categories;
-  @override
-  State<AddTaskPage> createState() => _AddTaskPageState();
   final Map<String, dynamic>? preFillData;
+
   const AddTaskPage({
     super.key,
     this.task,
     required this.categories,
-    this.preFillData, // 👈 أضف هذا
+    this.preFillData,
   });
+
+  @override
+  State<AddTaskPage> createState() => _AddTaskPageState();
 }
 
 class _AddTaskPageState extends State<AddTaskPage> {
@@ -1256,7 +1258,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
   List<String> _categories = [];
   bool _catsLoading = true;
 
-  @override
   @override
   void initState() {
     super.initState();
@@ -1295,6 +1296,87 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
 
     _prefillIfEditing(); // هذا للـ task الحالي (تعديل)
+  }
+
+  void _fillFromPreFillData(Map<String, dynamic> data) {
+    print('📦 Filling from preFillData: $data');
+
+    // تعبئة العنوان
+    if (data['title'] != null && data['title'].toString().isNotEmpty) {
+      _titleCtrl.text = data['title'];
+    }
+
+    // تعبئة الوصف
+    if (data['description'] != null &&
+        data['description'].toString().isNotEmpty) {
+      _descCtrl.text = data['description'];
+    }
+
+    // تعبئة التصنيف
+    if (data['category'] != null && data['category'].toString().isNotEmpty) {
+      _selectedCategory = data['category'];
+    }
+
+    // ✅ معالجة validationStrategy - الجزء المهم
+    if (data['validationStrategy'] != null) {
+      final strategy = data['validationStrategy'].toString();
+
+      // القيم الصالحة للـ DropdownButton
+      const validStrategies = [
+        'التحقق عبر الصور',
+        'التحقق عبر اجراء اختبار قصير',
+      ];
+
+      if (validStrategies.contains(strategy)) {
+        _validationType = strategy;
+      } else {
+        // محاولة التطابق الضمني
+        if (strategy.contains('صور') ||
+            strategy.contains('معالجة') ||
+            strategy.contains('image')) {
+          _validationType = 'التحقق عبر معالجة الصور';
+        } else if (strategy.contains('اختبار') ||
+            strategy.contains('قراءة') ||
+            strategy.contains('quiz')) {
+          _validationType = 'التحقق عبر اجراء اختبار قصير';
+        } else {
+          _validationType = validStrategies.first; // القيمة الافتراضية
+        }
+        print(
+          '⚠️ Mapped validation strategy: "$strategy" -> "$_validationType"',
+        );
+      }
+    }
+
+    // تعبئة النقاط
+    if (data['points'] != null) {
+      _pointsCtrl.text = data['points'].toString();
+    }
+
+    _isDirty = true;
+
+    // عرض رسالة للمستخدم
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              data['type'] == 'modify'
+                  ? '✏️ تعديل مهمة بناءً على توصية'
+                  : '➕ إضافة مهمة جديدة بناءً على توصية',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            backgroundColor: data['type'] == 'modify'
+                ? Colors.orange
+                : Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    });
   }
 
   void _generateMonths() {
@@ -1748,7 +1830,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   const SizedBox(width: 6),
                                   Tooltip(
                                     message:
-                                        'التحقق عبر الصور: للمهام التي تتطلب إثباتًا بصريًا\nالتحقق عبر اختبار قصير/قراءة: للمهام المعرفية',
+                                        'التحقق عبر معالجة الصور: للمهام التي تتطلب إثباتًا بصريًا\nالتحقق عبر اختبار قصير/قراءة: للمهام المعرفية',
                                     textStyle: GoogleFonts.ibmPlexSansArabic(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700,

@@ -633,6 +633,35 @@ try {
     try {
       const parsed = JSON.parse(jsonStr);
       aiRecommendations = parsed.recommendations || [];
+
+      // ✅ تصحيح validationStrategy في التوصيات
+aiRecommendations = aiRecommendations.map(rec => {
+  // إذا كانت التوصية من نوع add أو modify
+  if (rec.type === 'add' || rec.type === 'modify') {
+    const strategy = rec.validationStrategy;
+    
+    // القيم الصحيحة
+    const validStrategies = [
+      'التحقق عبر معالجة الصور',
+      'التحقق عبر اجراء اختبار قصير'
+    ];
+    
+    // إذا كانت القيمة غير صحيحة
+    if (strategy && !validStrategies.includes(strategy)) {
+      // تطابق ضمني
+      if (strategy.includes('صور') || strategy.includes('معالجة') || strategy.includes('image')) {
+        rec.validationStrategy = 'التحقق عبر معالجة الصور';
+      } else if (strategy.includes('اختبار') || strategy.includes('قراءة') || strategy.includes('quiz')) {
+        rec.validationStrategy = 'التحقق عبر اجراء اختبار قصير';
+      } else {
+        rec.validationStrategy = validStrategies[0]; // القيمة الافتراضية
+      }
+      console.log(`🔄 Fixed validationStrategy: "${strategy}" -> "${rec.validationStrategy}"`);
+    }
+  }
+  return rec;
+});
+
       console.log(`✅ [Gemini API] - Generated ${aiRecommendations.length} recommendations`);
       geminiSuccess = true;
     } catch (e) {
@@ -1071,86 +1100,143 @@ exports.generateDailyTasks = onSchedule(
         });
       });
 
-      const ignoredTaskIds = [];
-      const ignoredSnapshot = await db
-        .collection("userTasks")
-        .where("userId", "==", userId)
-        .where("ignored", "==", true)
-        .orderBy("ignoredAt", "desc")
-        .limit(20)
-        .get();
+// جلب المهام المتجاهلة من userTasks
+const ignoredTaskIds = [];
+const ignoredSnapshot = await db
+  .collection("userTasks")
+  .where("userId", "==", userId)
+  .where("ignored", "==", true)
+  .orderBy("ignoredAt", "desc")
+  .limit(20)
+  .get();
 
-      ignoredSnapshot.forEach((d) => {
-        const tid = d.data().taskId;
-        if (tid) ignoredTaskIds.push(tid);
-      });
+ignoredSnapshot.forEach((d) => {
+  const tid = d.data().taskId;
+  if (tid) ignoredTaskIds.push(tid);
+});
 
-      let yesterdayTask = null;
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStart = new Date(yesterday);
-      yesterdayStart.setHours(0, 0, 0, 0);
-      const yesterdayEnd = new Date(yesterday);
-      yesterdayEnd.setHours(23, 59, 59, 999);
+// ✅ ✅ ✅ جلب المهام المتروكة من dailyTasks (عرضت ولم تكتمل) ✅ ✅ ✅
+const pendingDailyTaskIds = [];
+const cutoffDate = new Date();
+cutoffDate.setDate(cutoffDate.getDate() - 7); // آخر 7 أيام
 
-      const yesterdaySnapshot = await db
-        .collection("userTasks")
-        .where("userId", "==", userId)
-        .where("selectedAt", ">=", admin.firestore.Timestamp.fromDate(yesterdayStart))
-        .where("selectedAt", "<=", admin.firestore.Timestamp.fromDate(yesterdayEnd))
-        .limit(1)
-        .get();
+const pendingTasksSnapshot = await db
+  .collection("dailyTasks")
+  .doc(userId)
+  .collection("tasks")
+  .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(cutoffDate))
+  .where("status", "==", "pending")
+  .get();
 
-      if (yesterdaySnapshot.docs.length > 0) {
-        const data = yesterdaySnapshot.docs[0].data();
-        yesterdayTask = {
-          id: data.taskId,
-          title: data.taskTitle,
-          category: data.category
-        };
-      }
+pendingTasksSnapshot.forEach((doc) => {
+  const taskData = doc.data();
+  if (taskData.id) {
+    pendingDailyTaskIds.push(taskData.id);
+    console.log(`   ⏳ Pending daily task: ${taskData.title} (${taskData.id})`);
+  }
+});
 
-      const taskListWithIds = availableTasks
-        .map((t, i) => `${i + 1}. [${t.id}] ${t.title} - ${t.category || 'عام'}`)
-        .join('\n');
+// ✅ دمج جميع المهام التي يجب تجنبها
+const tasksToAvoid = new Set([
+  ...ignoredTaskIds,
+  ...pendingDailyTaskIds
+]);
 
-      const favoriteTasksText = completedTasksWithCount
-        .filter(t => t.count >= 2)
-        .map(t => `   • ${t.title} (أكملها ${t.count} مرات)`)
-        .join('\n');
+console.log(`   🚫 Ignored from userTasks: ${ignoredTaskIds.length}`);
+console.log(`   ⏳ Pending from dailyTasks: ${pendingDailyTaskIds.length}`);
+console.log(`   🚫 Total tasks to avoid: ${tasksToAvoid.size}`);
 
-      const ignoredTasksText = ignoredTaskIds
-        .map(id => {
-          const task = availableTasks.find(t => t.id === id);
-          return task ? `   • ${task.title}` : null;
-        })
-        .filter(Boolean)
-        .join('\n');
+// جلب مهمة الأمس من userTasks
+let yesterdayTask = null;
+const yesterday = new Date();
+yesterday.setDate(yesterday.getDate() - 1);
+const yesterdayStart = new Date(yesterday);
+yesterdayStart.setHours(0, 0, 0, 0);
+const yesterdayEnd = new Date(yesterday);
+yesterdayEnd.setHours(23, 59, 59, 999);
 
-      const prompt = `
+const yesterdaySnapshot = await db
+  .collection("userTasks")
+  .where("userId", "==", userId)
+  .where("selectedAt", ">=", admin.firestore.Timestamp.fromDate(yesterdayStart))
+  .where("selectedAt", "<=", admin.firestore.Timestamp.fromDate(yesterdayEnd))
+  .limit(1)
+  .get();
+
+if (yesterdaySnapshot.docs.length > 0) {
+  const data = yesterdaySnapshot.docs[0].data();
+  yesterdayTask = {
+    id: data.taskId,
+    title: data.taskTitle,
+    category: data.category
+  };
+  // ✅ أيضاً تجنب مهمة الأمس
+  if (yesterdayTask.id) {
+    tasksToAvoid.add(yesterdayTask.id);
+    console.log(`   📅 Yesterday's task avoided: ${yesterdayTask.title}`);
+  }
+}
+
+const taskListWithIds = availableTasks
+  .map((t, i) => `${i + 1}. [${t.id}] ${t.title} - ${t.category || 'عام'}`)
+  .join('\n');
+
+const favoriteTasksText = completedTasksWithCount
+  .filter(t => t.count >= 2)
+  .map(t => `   • ${t.title} (أكملها ${t.count} مرات)`)
+  .join('\n');
+
+// ✅ المهام المتجاهلة من userTasks
+const ignoredTasksText = ignoredTaskIds
+  .map(id => {
+    const task = availableTasks.find(t => t.id === id);
+    return task ? `   • ${task.title}` : null;
+  })
+  .filter(Boolean)
+  .join('\n');
+
+// ✅ ✅ ✅ المهام المتروكة من dailyTasks (جديدة) ✅ ✅ ✅
+const pendingTasksText = pendingDailyTaskIds
+  .map(id => {
+    const task = availableTasks.find(t => t.id === id);
+    return task ? `   • ${task.title} (عرضت سابقاً ولم تكتمل)` : null;
+  })
+  .filter(Boolean)
+  .join('\n');
+
+// ✅ دمج جميع المهام التي يجب تجنبها في نص واحد
+const allAvoidedTasksText = [
+  ignoredTasksText ? `🚫 **المهام المتجاهلة (من userTasks):**\n${ignoredTasksText}` : '',
+  pendingTasksText ? `⏳ **المهام المتروكة (من dailyTasks):**\n${pendingTasksText}` : ''
+].filter(Boolean).join('\n\n');
+
+const prompt = `
 أنت مساعد بيئي ذكي متخصص في اختيار المهام اليومية. مهمتك: اختر مهمة واحدة فقط من القائمة تناسب هذا المستخدم.
 
 📊 **تاريخ المستخدم التفصيلي:**
 
-${favoriteTasksText ? `👍 المهام المفضلة (أكملها عدة مرات):\n${favoriteTasksText}` : '👍 لا توجد مهام مفضلة واضحة'}
+${favoriteTasksText ? `👍 **المهام المفضلة (أكملها عدة مرات):**\n${favoriteTasksText}` : '👍 لا توجد مهام مفضلة واضحة'}
 
-${ignoredTasksText ? `👎 المهام المتجاهلة سابقاً (تجنبها تماماً):\n${ignoredTasksText}` : ''}
+${allAvoidedTasksText ? `\n👎 **المهام الممنوعة تماماً (لا تختارها):**\n${allAvoidedTasksText}` : ''}
 
-${yesterdayTask ? `📅 مهمة الأمس: ${yesterdayTask.title}` : '📅 لا توجد مهمة للأمس'}
+${yesterdayTask ? `\n📅 **مهمة الأمس:** ${yesterdayTask.title} (لا تكررها)` : '📅 لا توجد مهمة للأمس'}
 
 📋 **المهام المتاحة اليوم:**
 ${taskListWithIds}
 
 🎯 **قواعد الاختيار بدقة:**
 1. **الأولوية القصوى**: اختر من المهام المفضلة (اللي أكملها عدة مرات) إن وجدت
-2. **تجنب تماماً**: لا تختار أي مهمة من قائمة المتجاهلة
+2. **تجنب تماماً**: لا تختار أي مهمة من القوائم التالية:
+   - المهام المتجاهلة (من userTasks)
+   - المهام المتروكة (من dailyTasks - عرضت سابقاً ولم تكتمل)
+   - مهمة الأمس
 3. **تنويع**: إذا كانت مهمة الأمس من المفضلة، اختر مهمة مفضلة مختلفة
 4. **التوازن**: إذا ما في مهام مفضلة، وزع الاختيار على التصنيفات المختلفة
 
 ⚠️ **تنبيهات مهمة:**
 - إذا المستخدم عنده مهام مفضلة (أكملها ٣+ مرات)، اختر منها حتماً
 - لا تكرر نفس المهمة كل يوم
-- تجنب المهام المتجاهلة نهائياً
+- تجنب المهام الممنوعة نهائياً (من القوائم أعلاه)
 
 📝 **الوصف المخصص:**
 اكتب وصفاً قصيراً ودافئاً (١٥-٢٠ كلمة) يكون:
@@ -1397,7 +1483,28 @@ ${taskListWithIds}
             .collection("tasks")
             .doc(tomorrow)
             .set(task);
-
+// 🆕 تحديث viewCount للمهمة التي تم عرضها
+if (taskData && taskData.id) {
+  try {
+    const prefsRef = db.collection("userTaskPreferences").doc(userId);
+    const prefsDoc = await prefsRef.get();
+    
+    if (prefsDoc.exists) {
+      const currentViewCount = prefsDoc.data()?.taskPreferences?.[taskData.id]?.viewCount || 0;
+      
+      await prefsRef.update({
+        [`taskPreferences.${taskData.id}.viewCount`]: admin.firestore.FieldValue.increment(1),
+        [`taskPreferences.${taskData.id}.lastViewedAt`]: admin.firestore.FieldValue.serverTimestamp(),
+        [`taskPreferences.${taskData.id}.title`]: taskData.title,
+        [`taskPreferences.${taskData.id}.category`]: taskData.category,
+      });
+      
+      console.log(`   👁️ Updated viewCount for ${taskData.title}: ${currentViewCount + 1}`);
+    }
+  } catch (viewError) {
+    console.log(`   ⚠️ Could not update viewCount: ${viewError.message}`);
+  }
+}
           console.log(`✅ AI Task created for: ${userId} | ${task.title}`);
           tasksCreated++;
         } else {
@@ -1437,7 +1544,30 @@ ${taskListWithIds}
     console.log(`\n🎉 Daily AI tasks generated - Created ${tasksCreated} tasks`);
   }
 );
-
+// دالة لجلب المهام التي تم عرضها في dailyTasks ولم تكتمل (متروكة)
+async function getPendingDailyTasks(userId, daysBack = 7) {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+  
+  const pendingTasksSnapshot = await db
+    .collection("dailyTasks")
+    .doc(userId)
+    .collection("tasks")
+    .where("createdAt", ">=", admin.firestore.Timestamp.fromDate(cutoffDate))
+    .where("status", "==", "pending")
+    .get();
+  
+  const pendingTaskIds = new Set();
+  pendingTasksSnapshot.docs.forEach(doc => {
+    const taskData = doc.data();
+    if (taskData.id) {
+      pendingTaskIds.add(taskData.id);
+      console.log(`   📋 Pending task found: ${taskData.title} (${taskData.id})`);
+    }
+  });
+  
+  return pendingTaskIds;
+}
 // ============================================================
 // ✅ 2. دالة تجاهل المهام غير المكتملة
 // ============================================================
@@ -1615,45 +1745,77 @@ exports.updateUserPreferences = onSchedule(
             taskPreferences[taskId].lastIgnoredAt = task.ignoredAt;
           }
         });
-        
+        // في updateUserPreferences، قبل حساب taskScores
+for (const taskId in taskPreferences) {
+  const stats = taskPreferences[taskId];
+  
+  // ✅ التأكد من وجود viewCount (إذا لم يكن موجوداً، اجعله 0)
+  if (stats.viewCount === undefined) {
+    stats.viewCount = 0;
+  }
+  
+  // ✅ التأكد من وجود lastViewedAt
+  if (stats.lastViewedAt === undefined) {
+    stats.lastViewedAt = null;
+  }
+}
         const taskScores = {};
         let topTaskId = null;
         let topScore = -100;
         
-        for (const taskId in taskPreferences) {
-          const stats = taskPreferences[taskId];
-          
-          let score = 1.0;
-          score += stats.completed * 2;
-          score -= stats.ignored * 3;
-          
-          if (stats.lastCompletedAt) {
-            const daysSinceLastComplete = (Date.now() - stats.lastCompletedAt.toDate()) / (1000 * 60 * 60 * 24);
-            if (daysSinceLastComplete < 7) {
-              score -= 2;
-            }
-          }
-          
-          if (stats.lastIgnoredAt) {
-            const daysSinceLastIgnored = (Date.now() - stats.lastIgnoredAt.toDate()) / (1000 * 60 * 60 * 24);
-            if (daysSinceLastIgnored < 14) {
-              score -= 5;
-            }
-          }
-          
-          score = Math.max(0.1, score);
-          
-          taskScores[taskId] = {
-            ...stats,
-            score,
-            preferenceLevel: score > 5 ? "high" : score > 2 ? "medium" : "low"
-          };
-          
-          if (score > topScore) {
-            topScore = score;
-            topTaskId = taskId;
-          }
-        }
+       for (const taskId in taskPreferences) {
+  const stats = taskPreferences[taskId];
+  
+  // ✅ التأكد من وجود viewCount (قيمة افتراضية 0)
+  const viewCount = stats.viewCount || 0;
+  
+  let score = 1.0;
+  
+  // رفع وزن الإنجازات بشكل أكبر
+  score += (stats.completed || 0) * 5;
+  
+  // عقوبة أشد للتجاهل
+  score -= (stats.ignored || 0) * 10;
+  
+  // عقوبة للمهام المعروضة كثيراً دون إنجاز
+  if ((stats.completed || 0) === 0 && viewCount > 3) {
+    score -= viewCount * 2;
+    console.log(`   📉 Task ${stats.title}: viewCount=${viewCount}, penalty=${viewCount * 2}`);
+  }
+  
+  // ✅ مكافأة إضافية للمهام المكتملة حديثاً (آخر 7 أيام)
+  if (stats.lastCompletedAt) {
+    const daysSinceLastComplete = (Date.now() - stats.lastCompletedAt.toDate()) / (1000 * 60 * 60 * 24);
+    if (daysSinceLastComplete < 7) {
+      score += 3;  // مكافأة إضافية للمهام التي أكملها مؤخراً
+      console.log(`   ⭐ ${stats.title}: bonus for recent completion (+3)`);
+    }
+  }
+  
+  // عقوبة أشد للتجاهل الحديث
+  if (stats.lastIgnoredAt) {
+    const daysSinceLastIgnored = (Date.now() - stats.lastIgnoredAt.toDate()) / (1000 * 60 * 60 * 24);
+    if (daysSinceLastIgnored < 14) {
+      score -= 8;
+      console.log(`   🚫 ${stats.title}: penalty for recent ignore (-8)`);
+    }
+  }
+  
+  score = Math.max(0.1, score);
+  
+  console.log(`   📊 ${stats.title}: completed=${stats.completed}, ignored=${stats.ignored}, viewCount=${viewCount}, score=${score.toFixed(2)}`);
+  
+  taskScores[taskId] = {
+    ...stats,
+    score,
+    preferenceLevel: score > 5 ? "high" : score > 2 ? "medium" : "low"
+  };
+  
+  if (score > topScore) {
+    topScore = score;
+    topTaskId = taskId;
+  }
+}
         
         const sortedTasks = Object.values(taskScores)
           .sort((a, b) => b.score - a.score)
@@ -1983,50 +2145,72 @@ async function getProblematicReports(minReports = 5) {
     }
   }
 
-  const containerIssues = {};
-  pendingContainerReports.docs.forEach(doc => {
-    const data = doc.data();
-    const facilityId = data.facilityID;
-    if (facilityId) {
-      if (!containerIssues[facilityId]) {
-        containerIssues[facilityId] = {
-          count: 0,
-          types: [],
-          reports: []
-        };
+const containerIssues = {};
+pendingContainerReports.docs.forEach(doc => {
+  const data = doc.data();
+  const facilityId = data.facilityID;
+  if (facilityId) {
+    if (!containerIssues[facilityId]) {
+      containerIssues[facilityId] = {
+        count: 0,
+        types: [],
+        mainIssueType: null,  // ✅ أضفنا حقل للمشكلة الرئيسية
+        reports: []
+      };
+    }
+    containerIssues[facilityId].count++;
+    if (data.type) {
+      containerIssues[facilityId].types.push(data.type);
+    }
+    containerIssues[facilityId].reports.push({
+      id: doc.id,
+      type: data.type,
+      description: data.description,
+      createdAt: data.createdAt
+    });
+  }
+});
+
+// ✅ بعد جمع البيانات، حدد المشكلة الأكثر شيوعاً لكل حاوية
+for (const facilityId in containerIssues) {
+  const issue = containerIssues[facilityId];
+  if (issue.types.length > 0) {
+    // حساب أكثر نوع مشكلة تكراراً
+    const typeCount = {};
+    issue.types.forEach(type => {
+      typeCount[type] = (typeCount[type] || 0) + 1;
+    });
+    let maxCount = 0;
+    let mainType = null;
+    for (const [type, count] of Object.entries(typeCount)) {
+      if (count > maxCount) {
+        maxCount = count;
+        mainType = type;
       }
-      containerIssues[facilityId].count++;
-      if (data.type) {
-        containerIssues[facilityId].types.push(data.type);
-      }
-      containerIssues[facilityId].reports.push({
-        id: doc.id,
-        type: data.type,
-        description: data.description,
-        createdAt: data.createdAt
+    }
+    issue.mainIssueType = mainType;
+  }
+}
+const problematicContainers = [];
+for (const [facilityId, data] of Object.entries(containerIssues)) {
+  if (data.count >= minReports) {
+    const facilityDoc = await db.collection("facilities").doc(facilityId).get();
+    if (facilityDoc.exists) {
+      const facilityData = facilityDoc.data();
+      problematicContainers.push({
+        type: 'container',
+        id: facilityId,
+        name: facilityData.name || facilityData.type || 'حاوية غير معروفة',
+        address: facilityData.address || 'عنوان غير معروف',
+        location: facilityData.location || 'موقع غير معروف',
+        reportCount: data.count,
+        types: [...new Set(data.types)].slice(0, 3),
+        mainIssueType: data.mainIssueType,
+        reports: data.reports.slice(0, 5)
       });
     }
-  });
-
-  const problematicContainers = [];
-  for (const [facilityId, data] of Object.entries(containerIssues)) {
-    if (data.count >= minReports) {
-      const facilityDoc = await db.collection("facilities").doc(facilityId).get();
-      if (facilityDoc.exists) {
-        const facilityData = facilityDoc.data();
-        problematicContainers.push({
-          type: 'container',
-          id: facilityId,
-          name: facilityData.name || facilityData.type || 'حاوية غير معروفة',
-          address: facilityData.address || 'عنوان غير معروف',
-          location: facilityData.location || 'موقع غير معروف',
-          reportCount: data.count,
-          types: [...new Set(data.types)].slice(0, 3),
-          reports: data.reports.slice(0, 5)
-        });
-      }
-    }
   }
+}
 
   return { problematicTasks, problematicContainers };
 }
@@ -2062,7 +2246,7 @@ exports.getAdminRecommendations = onCall(async (request) => {
   const now = Date.now();
 
   if (lastCall.exists) {
-    const lastCallTime = lastCall.data().timestamp;
+    const lastCallTime = lastCall.data().timestamfp;
     if (now - lastCallTime < 60000) { // دقيقة واحدة
       console.log("⚠️ Rate limit: using cached recommendations");
       const lastMonth = new Date().toISOString().slice(0, 7);
@@ -2196,8 +2380,9 @@ exports.getAdminRecommendations = onCall(async (request) => {
    - بلاغات مهام معلقة: ${pendingTaskReports.size}
    - بلاغات حاويات معلقة: ${pendingContainerReports.size}
    ${problematicTasks.length > 0 ? '- مهام بها بلاغات متكررة:\n' + problematicTasks.map(t => `     * ${t.title}: ${t.reportCount} بلاغ - الأسباب: ${t.reasons.join('، ')}`).join('\n') : ''}
-   ${problematicContainers.length > 0 ? '- حاويات بها بلاغات متكررة:\n' + problematicContainers.map(c => `     * ${c.name} (${c.address}): ${c.reportCount} بلاغ`).join('\n') : ''}
-
+${problematicContainers.length > 0 ? '- حاويات بها بلاغات متكررة:\n' + problematicContainers.map(c => 
+  `     * ${c.name} (${c.address}): ${c.reportCount} بلاغ - أبرز المشاكل: ${c.mainIssueType || c.types.join('، ')}`
+).join('\n') : ''}
 3. **أداء المهام (آخر 30 يوم):**
    - إجمالي المهام النشطة: ${activeTasks.size}
    - مهام بدون إنجازات: ${zeroCompletionTasks.length}
@@ -2221,7 +2406,7 @@ exports.getAdminRecommendations = onCall(async (request) => {
 5. **للموسم الحالي** - اقترح مهام جديدة مناسبة (add)
 
 6. **صياغة دقيقة**: 
-   - ✅ **صحيح**: "أضف مهمة: تدوير البلاستيك - التحقق عبر الصور" (لا تذكر الوقت)
+   - ✅ **صحيح**: "أضف مهمة: تدوير البلاستيك -التحقق عبر معالجة الصور" (لا تذكر الوقت)
    - ✅ **صحيح**: "مهمة 'فرز الورق' لم يحققها أحد - يُقترح حذفها"
    - ✅ **صحيح**: "حاوية الملز (حي الملز) - 7 بلاغات معلقة"
    - ❌ **خطأ**: "امشِ لمدة 15 دقيقة" (لا يوجد تحقق بالوقت)
@@ -2229,39 +2414,83 @@ exports.getAdminRecommendations = onCall(async (request) => {
 
 7. **التصنيفات**: استخدم التصنيفات الموجودة في القائمة أعلاه فقط
 
-أرجع JSON فقط بهذا الهيكل:
+أرجع JSON فقط بهذا الهيكل حسب نوع التوصية:
+
+**للتوصية من نوع add:**
 {
-  "recommendations": [
-    {
-      "type": "add/modify/delete/review_reports",
-      "category": "اسم التصنيف من القائمة أعلاه",
-      "title": "عنوان التوصية",
-      "description": "شرح مفصل للمشكلة أو الفرصة (موجه للإدمن)",
-      "userDescription": "وصف المهمة للمستخدم النهائي فقط إذا type=add",
-      "suggestion": "الاقتراح العملي (موجه للإدمن)",
-      "basedOn": "السبب (تحليل البيانات)",
-      "validationStrategy": "التحقق عبر معالجة الصور أو التحقق عبر اجراء اختبار قصير",
-      "calcMode": "deltaPerItem",
-      "askCount": true,
-      "askDistanceKm": false,
-      "autoDistance": false,
-      "reportCount": 0,
-      "taskId": "معرف المهمة إذا موجود",
-      "facilityId": "معرف الحاوية إذا موجود",
-      "facilityName": "اسم الحاوية إذا موجود",
-      "facilityAddress": "عنوان الحاوية إذا موجود"
-    }
-  ],
-  "summary": {
-    "totalTasks": ${activeTasks.size},
-    "pendingReports": ${pendingTaskReports.size + pendingContainerReports.size},
-    "zeroCompletionTasks": ${zeroCompletionTasks.length},
-    "ignoredTasksCount": ${ignoredTasksWithDetails.length},
-    "problematicTasks": ${problematicTasks.length},
-    "problematicContainers": ${problematicContainers.length}
-  }
+  "type": "add",
+  "category": "اسم التصنيف",
+  "title": "عنوان التوصية",
+  "description": "شرح مفصل للإدمن",
+  "userDescription": "وصف المهمة للمستخدم",
+  "suggestion": "الاقتراح العملي",
+  "basedOn": "سبب التوصية",
+  "validationStrategy": "التحقق عبر معالجة الصور أو التحقق عبر اجراء اختبار قصير",
+  "calcMode": "deltaPerItem",
+  "askCount": true,
+  "points": 10
 }
+
+**للتوصية من نوع modify:**
+{
+  "type": "modify",
+  "category": "اسم التصنيف",
+  "title": "عنوان التوصية",
+  "description": "شرح المشكلة",
+  "suggestion": "الاقتراح للتعديل",
+  "basedOn": "سبب التعديل",
+  "taskId": "معرف المهمة"
+}
+
+**للتوصية من نوع delete:**
+{
+  "type": "delete",
+  "category": "اسم التصنيف",
+  "title": "عنوان التوصية",
+  "description": "سبب الحذف",
+  "suggestion": "اقتراح الحذف",
+  "basedOn": "تحليل الأداء",
+  "taskId": "معرف المهمة"
+}
+
+**للتوصية من نوع review_reports (للمهام):**
+{
+  "type": "review_reports",
+  "category": "اسم التصنيف",
+  "title": "عنوان التوصية",
+  "description": "وصف البلاغات",
+  "suggestion": "الإجراء المقترح",
+  "basedOn": "تحليل البلاغات",
+  "reportCount": عدد البلاغات,
+  "taskId": "معرف المهمة"
+}
+
+**للتوصية من نوع review_reports (للحاويات):**
+{
+  "type": "review_reports",
+  "category": "إعادة التدوير",
+  "title": "عنوان التوصية",
+  "description": "وصف البلاغات",
+  "suggestion": "الإجراء المقترح",
+  "basedOn": "تحليل البلاغات",
+  "reportCount": عدد البلاغات,
+  "facilityId": "معرف الحاوية",
+  "facilityName": "اسم الحاوية",
+  "facilityAddress": "عنوان الحاوية",
+  "facilityIssueType": "نوع المشكلة (ممتلئة/مكسورة/الخ)"
+}
+
+**ملاحظة مهمة:** لا تضف أي حقول غير مذكورة أعلاه لكل نوع.
 `;
+//   "summary": {
+//     "totalTasks": ${activeTasks.size},
+//     "pendingReports": ${pendingTaskReports.size + pendingContainerReports.size},
+//     "zeroCompletionTasks": ${zeroCompletionTasks.length},
+//     "ignoredTasksCount": ${ignoredTasksWithDetails.length},
+//     "problematicTasks": ${problematicTasks.length},
+//     "problematicContainers": ${problematicContainers.length}
+//   }
+// }
 
     console.log("🔵 [Gemini API] - إرسال الطلب إلى Gemini...");
     console.log("🔵 [Gemini API] - طول الـ Prompt:", prompt.length);
@@ -2435,20 +2664,15 @@ if (Array.isArray(weakPerformanceTasks) && weakPerformanceTasks.length > 0) {
             break;
         }
         
-        aiRecommendations.push({
-          type: "delete",
-          category: task.category || 'غير محدد',
-          title: `حذف مهمة "${task.title}"`,
-          description: descriptionText,
-          suggestion: "يُقترح حذف هذه المهمة أو تطويرها لتصبح أكثر جاذبية للمستخدمين",
-          basedOn: basedOnText,
-          taskId: task.id,
-          metadata: {
-            reason: task.reason,
-            ignoreCount: task.ignoreCount || 0,
-            completionCount: task.completionCount || 0
-          }
-        });
+aiRecommendations.push({
+  type: "delete",
+  category: task.category || 'غير محدد',
+  title: `حذف مهمة "${task.title}"`,
+  description: descriptionText,
+  suggestion: "يُقترح حذف هذه المهمة أو تطويرها",
+  basedOn: basedOnText,
+  taskId: task.id
+});
       }
     }
 
@@ -2534,7 +2758,7 @@ if (Array.isArray(weakPerformanceTasks) && weakPerformanceTasks.length > 0) {
         category: defaultCategory.name,
         title: seasonName === "الربيع" ? "المشي" : "النشاط البدني",
         userDescription: `استمتع بأجواء ${seasonName} ومارس المشي يومياً`,
-        suggestion: `أضف مهمة: '${seasonName === "الربيع" ? "المشي" : "النشاط البدني"}' - تعتمد على التحقق عبر الصور`,
+        suggestion: `أضف مهمة: '${seasonName === "الربيع" ? "المشي" : "النشاط البدني"}' - تعتمد على التحقق عبر معالجة الصور`,
         basedOn: `توصية تلقائية لفصل ${seasonName}`,
         validationStrategy: "التحقق عبر معالجة الصور",
         calcMode: "deltaPerItem",
@@ -2544,15 +2768,19 @@ if (Array.isArray(weakPerformanceTasks) && weakPerformanceTasks.length > 0) {
       });
       
       // إضافة توصية بلاغات إذا وجدت
-      fallbackRecs.push({
-        type: "review_reports",
-        category: "إعادة التدوير",
-        title: "مراجعة البلاغات المعلقة",
-        description: "يوجد بلاغات معلقة تحتاج إلى مراجعة",
-        suggestion: "يُرجى مراجعة البلاغات والعمل على حلها",
-        basedOn: "بلاغات المستخدمين",
-        reportCount: 5
-      });
+aiRecommendations.push({
+  type: "review_reports",
+  category: "إعادة التدوير",
+  title: `مراجعة بلاغات حاوية: ${container.name}`,
+  description: `حاوية ${container.name} في ${container.address} لديها ${container.reportCount} بلاغ`,
+  suggestion: `معاينة الحاوية وحل مشكلة: ${container.mainIssueType}`,
+  basedOn: `${container.reportCount} بلاغ من المستخدمين`,
+  reportCount: container.reportCount,
+  facilityId: container.id,
+  facilityName: container.name,
+  facilityAddress: container.address,
+  facilityIssueType: container.mainIssueType
+});
       
       return {
         month: new Date().toISOString().slice(0, 7),
@@ -2580,7 +2808,7 @@ if (Array.isArray(weakPerformanceTasks) && weakPerformanceTasks.length > 0) {
             category: "المشي",
             title: "المشي",
             description: "مارس المشي يومياً واستمتع بالهواء الطلق",
-            suggestion: "أضف مهمة: 'المشي' - تعتمد على التحقق عبر الصور",
+            suggestion: "أضف مهمة: 'المشي' - تعتمد على التحقق عبر معالجة الصور",
             basedOn: "توصية تلقائية",
             validationStrategy: "التحقق عبر معالجة الصور",
             calcMode: "deltaPerItem",
@@ -2616,7 +2844,8 @@ if (Array.isArray(weakPerformanceTasks) && weakPerformanceTasks.length > 0) {
  * ============================================================ */
 exports.scheduledGetAdminRecommendations = onSchedule(
   {
-    schedule: "1 4 * * *",
+    schedule: "16 18 * * *", 
+    // schedule: "0 0 28-31 * *", 
     timeZone: "Asia/Riyadh",
   },
   async () => {
