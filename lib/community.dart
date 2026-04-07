@@ -11,6 +11,7 @@ import 'services/bottom_nav.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
 import '../services/app_colors.dart';
+import 'friend_profile.dart';
 
 /* ======================= صفحة الأصدقاء ======================= */
 
@@ -278,69 +279,93 @@ class _communityPageState extends State<communityPage> {
     }
   }
 
-  // ✅ إلغاء متابعة صديق
+// ✅ إلغاء متابعة صديق
   Future<void> _unfollowFriend(String friendId, String friendName) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
 
     final confirm = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => Directionality(
         textDirection: TextDirection.rtl,
-        child: AlertDialog(
+        child: Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: Text(
-            'إلغاء المتابعة',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w800,
-              color: appColors.dark,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ✅ صورة نمير
+                Image.asset(
+                  'assets/img/nameerThink.png',
+                  height: 120,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 16),
+                // ✅ النص
+                Text(
+                  'هل أنت متأكد أنك تريد إلغاء متابعة $friendName؟',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: appColors.dark,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // ✅ الأزرار — تأكيد على اليسار، إلغاء على اليمين (نفس الـ logout)
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: appColors.primary),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: Text(
+                          'إلغاء',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: appColors.primary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: appColors.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: Text(
+                          'تأكيد',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            textAlign: TextAlign.center,
           ),
-          content: Text(
-            'هل أنت متأكد من إلغاء متابعة $friendName؟',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 15,
-              color: appColors.dark.withOpacity(0.8),
-            ),
-            textAlign: TextAlign.center,
-          ),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(
-                'إلغاء',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: appColors.red,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 10,
-                ),
-              ),
-              child: Text(
-                'إلغاء المتابعة',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -1107,7 +1132,7 @@ class _communityPageState extends State<communityPage> {
     );
   }
 
-  // ✅ بطاقة الصديق (من أتابعهم)
+// ✅ بطاقة الصديق (من أتابعهم)
   Widget _buildFriendCard(
     Map<String, dynamic> friend,
     int rank, {
@@ -1115,107 +1140,119 @@ class _communityPageState extends State<communityPage> {
   }) {
     final pfpIndex = friend['pfpIndex'];
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FriendProfilePage(
+            friendId: friend['id'],
+            friendUsername: friend['username'] ?? '',
+            pfpIndex: pfpIndex,
           ),
-        ],
+        ),
       ),
-      child: Row(
-        children: [
-          // رقم الترتيب
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              color: rank <= 3
-                  ? (rank == 1
-                        ? const Color(0xFFFFD700)
-                        : rank == 2
-                        ? const Color(0xFFC0C0C0)
-                        : const Color(0xFFCD7F32))
-                  : appColors.primary.withOpacity(0.1),
-              shape: BoxShape.circle,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
-            child: Center(
-              child: Text(
-                '$rank',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: rank <= 3 ? Colors.white : appColors.primary,
-                ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // رقم الترتيب
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: rank <= 3
+                    ? (rank == 1
+                          ? const Color(0xFFFFD700)
+                          : rank == 2
+                          ? const Color(0xFFC0C0C0)
+                          : const Color(0xFFCD7F32))
+                    : appColors.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // صورة الصديق
-          _buildAvatar(pfpIndex, 26),
-          const SizedBox(width: 14),
-
-          // معلومات الصديق
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  friend['username'] ?? '',
+              child: Center(
+                child: Text(
+                  '$rank',
                   style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: appColors.dark,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    _buildFriendStat(
-                      icon: Icons.stars_rounded,
-                      value: 'المستوى ${friend['level']}',
-                      color: Colors.amber,
-                    ),
-                    const SizedBox(width: 14),
-                    _buildFriendStat(
-                      icon: Icons.eco_rounded,
-                      value: '${friend['points']} نقطة',
-                      color: appColors.primary,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // زر إلغاء المتابعة
-          if (showUnfollow)
-            Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => _unfollowFriend(friend['id'], friend['username']),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.person_remove_outlined,
-                    color: Colors.grey.shade500,
-                    size: 20,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: rank <= 3 ? Colors.white : appColors.primary,
                   ),
                 ),
               ),
             ),
-        ],
+            const SizedBox(width: 12),
+
+            // صورة الصديق
+            _buildAvatar(pfpIndex, 26),
+            const SizedBox(width: 14),
+
+            // معلومات الصديق
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    friend['username'] ?? '',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: appColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      _buildFriendStat(
+                        icon: Icons.stars_rounded,
+                        value: 'المستوى ${friend['level']}',
+                        color: Colors.amber,
+                      ),
+                      const SizedBox(width: 14),
+                      _buildFriendStat(
+                        icon: Icons.eco_rounded,
+                        value: '${friend['points']} نقطة',
+                        color: appColors.primary,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // زر إلغاء المتابعة
+            if (showUnfollow)
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _unfollowFriend(friend['id'], friend['username']),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.person_remove_outlined,
+                      color: Colors.grey.shade500,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
