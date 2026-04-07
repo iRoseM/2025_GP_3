@@ -26,6 +26,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'article.dart';
 import 'levels.dart';
 import 'widgets/ecoland_grid.dart';
+import 'services/xp_service.dart'; 
+
 
 class homePage extends StatefulWidget {
   const homePage({super.key});
@@ -4700,16 +4702,16 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
         usersData.add({
           'id': doc.id,
           'username': username,
-          'completedTasks': completedTasks is num ? completedTasks.toInt() : 0,
+          'xp': (data['xp'] ?? 0) is num ? (data['xp'] ?? 0) as int : 0,
+            'completedTasks': (data['completedTask'] ?? 0) is num  // ← أضيفي هذا
+      ? (data['completedTask'] ?? 0) as int : 0,
           'points': points is num ? points.toInt() : 0,
           'pfpIndex': pfpIndex,
           'isCurrentUser': doc.id == currentUserId,
         });
       }
 
-      usersData.sort(
-        (a, b) => b['completedTasks'].compareTo(a['completedTasks']),
-      );
+      usersData.sort((a, b) => (b['xp'] as int).compareTo(a['xp'] as int));
 
       for (int i = 0; i < usersData.length; i++) {
         usersData[i]['rank'] = i + 1;
@@ -4962,6 +4964,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
     required int completedTasks,
     required int points,
     required int pfpIndex,
+    required int xp, 
     int? rank,
   }) {
     final actualRank = rank ?? (index + 1);
@@ -5075,24 +5078,12 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                     // المهام المكتملة
                     Row(
                       children: [
-                        Icon(Icons.task_alt, size: 12, color: Colors.green),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$completedTasks',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.green,
-                          ),
-                        ),
-                        Text(
-                          ' مهام',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            fontSize: 11,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
+                        Text(getCurrentLevel(xp).icon, style: TextStyle(fontSize: 12)),
+                        SizedBox(width: 4),
+                          Text('$xp XP', style: TextStyle(
+    fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF2E7D32))),
+]
+                     
                     ),
 
                     const SizedBox(width: 12),
@@ -5147,47 +5138,45 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
     );
   }
 
-  Future<List<Map<String, dynamic>>> _fetchFullLeaderboard() async {
-    try {
-      final usersSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .where('isVerified', isEqualTo: true)
-          .get();
+Future<List<Map<String, dynamic>>> _fetchFullLeaderboard() async {
+  try {
+    final usersSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .where('isVerified', isEqualTo: true)
+        .get();
 
-      final List<Map<String, dynamic>> usersData = [];
-      final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final List<Map<String, dynamic>> usersData = [];
+    final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-      for (final doc in usersSnapshot.docs) {
-        final data = doc.data();
-        final completedTasks = data['completedTask'] ?? 0;
-        final points = data['points'] ?? 0;
-        final username = data['username'] ?? 'مستخدم';
-        final pfpIndex = data['pfpIndex'] ?? 0;
+    for (final doc in usersSnapshot.docs) {
+      final data = doc.data();
+      final points = data['points'] ?? 0;
+      final username = data['username'] ?? 'مستخدم';
+      final pfpIndex = data['pfpIndex'] ?? 0;
 
-        usersData.add({
-          'id': doc.id,
-          'username': username,
-          'completedTasks': completedTasks is num ? completedTasks.toInt() : 0,
-          'points': points is num ? points.toInt() : 0,
-          'pfpIndex': pfpIndex,
-          'isCurrentUser': doc.id == currentUserId,
-        });
-      }
-
-      usersData.sort(
-        (a, b) => b['completedTasks'].compareTo(a['completedTasks']),
-      );
-
-      for (int i = 0; i < usersData.length; i++) {
-        usersData[i]['rank'] = i + 1;
-      }
-
-      return usersData;
-    } catch (e) {
-      debugPrint('❌ Full leaderboard error: $e');
-      return [];
+      usersData.add({
+        'id': doc.id,
+        'username': username,
+        'xp': (data['xp'] ?? 0) is num ? (data['xp'] ?? 0) as int : 0, // ← أضفناه
+        'points': points is num ? points.toInt() : 0,
+        'pfpIndex': pfpIndex,
+        'isCurrentUser': doc.id == currentUserId,
+      });
     }
+
+    // ← رتّب بناءً على XP
+    usersData.sort((a, b) => (b['xp'] as int).compareTo(a['xp'] as int));
+
+    for (int i = 0; i < usersData.length; i++) {
+      usersData[i]['rank'] = i + 1;
+    }
+
+    return usersData;
+  } catch (e) {
+    debugPrint('❌ Full leaderboard error: $e');
+    return [];
   }
+}
 
   void _showFullLeaderboard() {
     showModalBottomSheet(
@@ -5274,9 +5263,10 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                         return _buildLeaderItem(
                           index: index,
                           username: user['username'],
-                          completedTasks: user['completedTasks'],
+                          completedTasks: user['completedTasks'] ?? 0,
                           points: user['points'],
                           pfpIndex: user['pfpIndex'],
+                          xp: user['xp'] ?? 0,
                           rank: user['rank'],
                         );
                       },
@@ -5316,7 +5306,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'أعلى 3 مستخدمين إنجازًا',
+                  'لوحة الصدارة 🏆',
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -5383,9 +5373,10 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                     return _buildLeaderItem(
                       index: index,
                       username: user['username'],
-                      completedTasks: user['completedTasks'],
+                      completedTasks: user['completedTasks'] ?? 0,
                       points: user['points'],
                       pfpIndex: user['pfpIndex'],
+                      xp: user['xp'] ?? 0,
                       rank: user['rank'],
                     );
                   }).toList(),

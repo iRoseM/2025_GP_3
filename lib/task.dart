@@ -1968,13 +1968,6 @@ class _taskPageState extends State<taskPage> {
                       ],
                     ),
 
-                    _buildGrowthIndicator(
-                      levelName: 'بذرة',
-                      level: 1,
-                      tasksPerDay: 1,
-                      progressToNext: 0.45,
-                    ),
-
                     const SizedBox(height: 15),
 
                     // ✅ هنا حطي كود رسالة وضع الجدولة

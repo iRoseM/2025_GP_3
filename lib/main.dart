@@ -331,6 +331,8 @@ class _RegisterPageState extends State<RegisterPage>
           'gender': gender,
           'role': 'regular',
           'isVerified': true,
+          'xp': 0,                        
+          'currentLevel': 'seedling', 
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
@@ -1974,6 +1976,8 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
               'gender': gender,
               'role': 'regular',
               'isVerified': false,
+              'xp': 0,                        
+              'currentLevel': 'seedling', 
               'createdAt': FieldValue.serverTimestamp(),
               'updatedAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));

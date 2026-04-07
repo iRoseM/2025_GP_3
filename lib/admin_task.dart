@@ -1242,6 +1242,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   String? _selectedCategory;
   String? _validationType;
+  String? _difficulty; 
   bool _isEditing = false;
 
   // 🔹 الشهر القادم والشهر الحالي
@@ -1410,24 +1411,25 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
   }
 
-  void _prefillIfEditing() {
-    final t = widget.task;
-    if (t == null) return;
-
-    _isEditing = true;
-
-    _titleCtrl.text = t['title']?.toString() ?? '';
-    _descCtrl.text = t['description']?.toString() ?? '';
-    _pointsCtrl.text = t['points']?.toString() ?? '';
-
-    _selectedCategory = t['category']?.toString();
-    _validationType = t['validationStrategy']?.toString();
-    _expiryMonth = t['expiry_month']?.toString();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() {});
-    });
-  }
+void _prefillIfEditing() {
+  final t = widget.task;
+  if (t == null) return;
+ 
+  _isEditing = true;
+ 
+  _titleCtrl.text = t['title']?.toString() ?? '';
+  _descCtrl.text = t['description']?.toString() ?? '';
+  _pointsCtrl.text = t['points']?.toString() ?? '';
+ 
+  _selectedCategory = t['category']?.toString();
+  _validationType = t['validationStrategy']?.toString();
+  _expiryMonth = t['expiry_month']?.toString();
+  _difficulty = t['difficulty']?.toString(); // ← أضيفي هذا السطر
+ 
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) setState(() {});
+  });
+}
 
   // ---------------------------------------------------------------------------
   // ✅ تطبيع نص بسيط
@@ -1889,6 +1891,62 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   return null;
                                 },
                               ),
+
+                              
+const SizedBox(height: 14),
+ 
+_fieldLabel('مستوى الصعوبة', required: true),
+const SizedBox(height: 8),
+DropdownButtonFormField<String>(
+  value: _difficulty,
+  alignment: Alignment.centerRight,
+  isExpanded: true,
+  decoration: const InputDecoration(
+    hintText: 'اختر مستوى الصعوبة',
+    prefixIcon: Icon(
+      Icons.signal_cellular_alt_rounded,
+      color: appColors.primary,
+    ),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.all(Radius.circular(12)),
+    ),
+  ),
+  items: const [
+    DropdownMenuItem(
+      value: 'beginner',
+      child: Row(
+        children: [
+          Text('🟢  '),
+          Text('مبتدئ  —  10 XP'),
+        ],
+      ),
+    ),
+    DropdownMenuItem(
+      value: 'medium',
+      child: Row(
+        children: [
+          Text('🟡  '),
+          Text('متوسط  —  20 XP'),
+        ],
+      ),
+    ),
+    DropdownMenuItem(
+      value: 'hard',
+      child: Row(
+        children: [
+          Text('🔴  '),
+          Text('متقدم  —  35 XP'),
+        ],
+      ),
+    ),
+  ],
+  onChanged: (v) {
+    setState(() => _difficulty = v);
+    _isDirty = true;
+  },
+  validator: (v) =>
+      (v == null || v.isEmpty) ? 'اختر مستوى الصعوبة' : null,
+),
                               const SizedBox(height: 20),
 
                               _fieldLabel('تاريخ انتهاء المهمة (شهر)'),
@@ -2184,6 +2242,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
       'points': int.parse(_pointsCtrl.text),
       'category': _selectedCategory,
       'validationStrategy': _validationType,
+      'difficulty': _difficulty, 
       'status': status,
       'visible_from': nextMonth,
       if (_expiryMonth != null) 'expiry_month': _expiryMonth,

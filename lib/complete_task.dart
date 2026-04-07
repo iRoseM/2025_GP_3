@@ -16,6 +16,8 @@ import '../services/app_colors.dart';
 import '../../home.dart';
 import 'services/ocr_service.dart';
 import 'task.dart';
+import 'services/xp_service.dart'; 
+
 
 class CompleteTaskSheet extends StatefulWidget {
   final Map<String, dynamic> taskData;
@@ -1213,6 +1215,16 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     try {
       await StreakService.updateStreakOnTaskCompletion();
     } catch (_) {}
+
+    // ✅ إضافة XP بعد إكمال المهمة
+try {
+  final taskDifficulty = widget.taskData['difficulty']?.toString()
+      ?? widget.taskData['level']?.toString()
+      ?? 'beginner';
+  await XpService.addXpForTask(taskLevelId: taskDifficulty);
+} catch (e) {
+  print('⚠️ خطأ في إضافة XP: $e');
+}
 
     await _grantEcoReward(uid, taskTitle);
     print('🎉 المهمة اكتملت بنجاح');
