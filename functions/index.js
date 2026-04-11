@@ -186,7 +186,7 @@ exports.getMapsKey = onCall((request) => {
  * ✅ suggestBonusTask → Callable Function
  * ============================================================ */
 exports.suggestBonusTask = onCall(async (request) => {
-  const auth = request.auth;
+    const auth = request.auth;
   if (!auth || !auth.uid) {
     throw new HttpsError("unauthenticated", "User not logged in");
   }
@@ -194,6 +194,7 @@ exports.suggestBonusTask = onCall(async (request) => {
   const userId = auth.uid;
   const pressedAt = request.data?.pressedAt || new Date().toISOString();
   const userLocation = request.data?.userLocation || null;
+  const excludeTaskId = request.data?.excludeTaskId || null;
 
   const apiKey = GEMINI_API_KEY.value();
   if (!apiKey) {
@@ -414,7 +415,12 @@ exports.suggestBonusTask = onCall(async (request) => {
 
   const availableTasks = [];
   activeTasksSnapshot.forEach((doc) => {
+    //  استبعاد مهمة اليوم
     if (doc.id === todayTaskId) return;
+    
+    //  استبعاد المهمة المطلوب تجنبها (excludeTaskId)
+    if (excludeTaskId && doc.id === excludeTaskId) return;
+    
     const task = doc.data();
     if (task.visible_from && task.visible_from > currentMonth) return;
     if (task.expiry_month && task.expiry_month < currentMonth) return;
@@ -430,6 +436,7 @@ exports.suggestBonusTask = onCall(async (request) => {
   if (availableTasks.length === 0) {
     throw new HttpsError("not-found", "NO_TASKS_AVAILABLE");
   }
+
 
   availableTasks.sort((a, b) => (b.preferenceScore || 1) - (a.preferenceScore || 1));
 
@@ -608,76 +615,56 @@ ${taskListText}
   // ====================================================
   // 📝 معالجة نتيجة Gemini
   // ====================================================
-  let pickedTask = null;
-  let personalizedDescription = null;
+ let pickedTask = null;
+let personalizedDescription = null;
 
-  if (geminiSuccess && geminiText) {
-    try {
-      // تنظيف النص من علامات Markdown
-let clean = text.replace(/```json/g, "").replace(/```/g, "").replace(/`/g, "").trim();
+if (geminiSuccess && geminiText) {
+  try {
+    // ✅ استخدم geminiText بدلاً من text
+    let clean = geminiText.replace(/```json/g, "").replace(/```/g, "").replace(/`/g, "").trim();
 
-// محاولة إصلاح JSON إذا كان فيه أخطاء
-try {
-  // البحث عن أول { وآخر }
-  const first = clean.indexOf("{");
-  const last = clean.lastIndexOf("}");
-  
-  if (first !== -1 && last !== -1 && last > first) {
-    let jsonStr = clean.substring(first, last + 1);
+    // البحث عن أول { وآخر }
+    const first = clean.indexOf("{");
+    const last = clean.lastIndexOf("}");
     
-    // محاولة إصلاح الأخطاء الشائعة في JSON
-    jsonStr = jsonStr
-      .replace(/,(\s*[}\]])/g, '$1') // إزالة الفواصل الزائدة قبل ] أو }
-      .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3'); // إضافة علامات اقتباس للمفاتيح
-    
-    try {
-      const parsed = JSON.parse(jsonStr);
-      aiRecommendations = parsed.recommendations || [];
-
-      // ✅ تصحيح validationStrategy في التوصيات
-aiRecommendations = aiRecommendations.map(rec => {
-  // إذا كانت التوصية من نوع add أو modify
-  if (rec.type === 'add' || rec.type === 'modify') {
-    const strategy = rec.validationStrategy;
-    
-    // القيم الصحيحة
-    const validStrategies = [
-      'التحقق عبر معالجة الصور',
-      'التحقق عبر اجراء اختبار قصير'
-    ];
-    
-    // إذا كانت القيمة غير صحيحة
-    if (strategy && !validStrategies.includes(strategy)) {
-      // تطابق ضمني
-      if (strategy.includes('صور') || strategy.includes('معالجة') || strategy.includes('image')) {
-        rec.validationStrategy = 'التحقق عبر معالجة الصور';
-      } else if (strategy.includes('اختبار') || strategy.includes('قراءة') || strategy.includes('quiz')) {
-        rec.validationStrategy = 'التحقق عبر اجراء اختبار قصير';
-      } else {
-        rec.validationStrategy = validStrategies[0]; // القيمة الافتراضية
+    if (first !== -1 && last !== -1 && last > first) {
+      let jsonStr = clean.substring(first, last + 1);
+      
+      // محاولة إصلاح الأخطاء الشائعة في JSON
+      jsonStr = jsonStr
+        .replace(/,(\s*[}\]])/g, '$1') // إزالة الفواصل الزائدة قبل ] أو }
+        .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3'); // إضافة علامات اقتباس للمفاتيح
+      
+      try {
+        const parsed = JSON.parse(jsonStr);
+        
+        // ✅ استخراج taskId و personalizedDescription لـ suggestBonusTask
+        if (parsed.taskId) {
+          pickedTask = availableTasks.find(t => t.id === parsed.taskId);
+          personalizedDescription = parsed.personalizedDescription;
+          
+          if (pickedTask) {
+            console.log(`✅ Gemini selected task: ${pickedTask.title}`);
+          } else {
+            console.log(`⚠️ Task not found for ID: ${parsed.taskId}`);
+          }
+        } else {
+          console.log("⚠️ No taskId in Gemini response");
+        }
+        
+      } catch (e) {
+        console.error("❌ JSON parse error after cleanup:", e.message);
+        console.log("📝 Problematic JSON:", jsonStr.substring(0, 200) + "...");
       }
-      console.log(`🔄 Fixed validationStrategy: "${strategy}" -> "${rec.validationStrategy}"`);
+    } else {
+      console.error("❌ No valid JSON object found");
+      console.log("📝 Cleaned text:", clean.substring(0, 500));
     }
+    
+  } catch (e) {
+    console.log("⚠️ Failed to parse Gemini response:", e.message);
   }
-  return rec;
-});
-
-      console.log(`✅ [Gemini API] - Generated ${aiRecommendations.length} recommendations`);
-      geminiSuccess = true;
-    } catch (e) {
-      console.error("❌ [Gemini API] - JSON parse error after cleanup:", e.message);
-      console.log("📝 Problematic JSON:", jsonStr.substring(0, 200) + "...");
-    }
-  } else {
-    console.error("❌ [Gemini API] - No valid JSON object found");
-  }
-} catch (e) {
-  console.error("❌ [Gemini API] - Error processing response:", e.message);
 }
-    } catch (e) {
-      console.log("⚠️ Failed to parse Gemini response:", e.message);
-    }
-  }
 
   // ====================================================
   // 🧠 FALLBACK الذكي باستخدام التفضيلات
@@ -2423,7 +2410,7 @@ ${problematicContainers.length > 0 ? '- حاويات بها بلاغات متك�
   "title": "عنوان التوصية",
   "description": "شرح مفصل للإدمن",
   "userDescription": "وصف المهمة للمستخدم",
-  "suggestion": "الاقتراح العملي",
+  "suggestion": "الاقتراح العملي (مصاغ كمهمة للمستخدم)",
   "basedOn": "سبب التوصية",
   "validationStrategy": "التحقق عبر معالجة الصور أو التحقق عبر اجراء اختبار قصير",
   "calcMode": "deltaPerItem",
@@ -2436,11 +2423,12 @@ ${problematicContainers.length > 0 ? '- حاويات بها بلاغات متك�
   "type": "modify",
   "category": "اسم التصنيف",
   "title": "عنوان التوصية",
-  "description": "شرح المشكلة",
-  "suggestion": "الاقتراح للتعديل",
-  "basedOn": "سبب التعديل",
+  "description": "شرح المشكلة الحالية في المهمة (موجه للإدمن)",
+  "suggestion": " **المهمة المعدلة (مصاغة مباشرة للمستخدم):** مثل استخدم الدراجة الهوائية لمسافاتك القصيرة بدلاً من السيارة",
+  "basedOn": "سبب التعديل (مثل: المهمة الحالية غير واضحة أو غير محفزة)",
   "taskId": "معرف المهمة"
 }
+
 
 **للتوصية من نوع delete:**
 {
