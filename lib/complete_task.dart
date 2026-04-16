@@ -11,12 +11,68 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'services/location_validator.dart';
 import 'services/map_pick_route.dart';
-import 'services/task_verification_service.dart'; // ✅ أضيفي هذا
+import 'services/task_verification_service.dart';
 import '../services/app_colors.dart';
 import '../../home.dart';
 import 'services/ocr_service.dart';
 import 'task.dart';
-import 'services/xp_service.dart'; 
+import 'services/xp_service.dart';
+
+// ─────────────────────────────────────────────
+//  كلاسات مساعدة لتتبع المسار
+// ─────────────────────────────────────────────
+
+class _TrackPoint {
+  final double lat;
+  final double lng;
+  final DateTime time;
+  const _TrackPoint({
+    required this.lat,
+    required this.lng,
+    required this.time,
+  });
+}
+
+class _TrackAnalysis {
+  final bool isValid;
+  final double avgSpeed;
+  final double maxSpeed;
+  final int totalPoints;
+  final String? rejectionReason;
+
+  const _TrackAnalysis({
+    required this.isValid,
+    this.avgSpeed = 0,
+    this.maxSpeed = 0,
+    this.totalPoints = 0,
+    this.rejectionReason,
+  });
+}
+
+// ─────────────────────────────────────────────
+//  Thresholds حسب نوع المواصلات
+//  (مبنية على أرقام مترو الرياض ونقل العام
+//   مع هامش خطأ سخي لصالح اليوزر)
+// ─────────────────────────────────────────────
+
+class _TransportThresholds {
+  final double maxAvgSpeed;   // رفض لو المتوسط فوق هذا
+  final double maxPeakSpeed;  // رفض لو القصوى فوق هذا
+  const _TransportThresholds({
+    required this.maxAvgSpeed,
+    required this.maxPeakSpeed,
+  });
+}
+
+const _metroThresholds = _TransportThresholds(
+  maxAvgSpeed: 75,   // مترو الرياض متوسط فعلي ~35-50، نعطي هامش حتى 75
+  maxPeakSpeed: 130, // سرعة قصوى رسمية 120، نعطي هامش 10 إضافية
+);
+
+const _busThresholds = _TransportThresholds(
+  maxAvgSpeed: 55,   // باص نقل متوسط ~15-35، نعطي هامش حتى 55
+  maxPeakSpeed: 90,  // سرعة قصوى باص ~80، نعطي هامش 10 إضافية
+);
 
 
 class CompleteTaskSheet extends StatefulWidget {
@@ -40,10 +96,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   bool get _isLocalProductTask {
     final id = (widget.taskData['id'] ?? '').toString().trim().toLowerCase();
-    final taskId = (widget.taskData['taskId'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
+    final taskId =
+        (widget.taskData['taskId'] ?? '').toString().trim().toLowerCase();
     return id == _localProductTaskId.toLowerCase() ||
         taskId == _localProductTaskId.toLowerCase();
   }
@@ -57,12 +111,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   bool _isCapturing = false;
   bool _isUploading = false;
   bool _isCompleted = false;
+
+  // ─── Route Tracking ───
+  final List<_TrackPoint> _trackPoints = [];
+  Timer? _trackingTimer;
+  bool _isTracking = false;
+  String _transportVerifyPhase = 'start'; // 'start' أو 'end'
+
   bool _isAiApproved(TaskVerificationResult? r) {
     if (r == null) return false;
     if (r.success != true) return false;
     if (r.verified != true) return false;
 
-    // ✅ location verification لا تحتاج confidence
     if (r.verificationSource == 'location') return true;
 
     final conf = r.confidence ?? 0.0;
@@ -128,9 +188,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       barrierDismissible: true,
       builder: (dialogContext) {
         return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
           insetPadding: const EdgeInsets.symmetric(horizontal: 24),
           child: StatefulBuilder(
             builder: (context, setLocalState) {
@@ -169,62 +228,22 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                           ),
                           icon: const Icon(Icons.keyboard_arrow_down_rounded),
                           borderRadius: BorderRadius.circular(16),
-                          items: [
-                            DropdownMenuItem(
-                              value: 'dry_food',
-                              child: Text(
-                                labels['dry_food']!,
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
+                          items: labels.entries
+                              .map(
+                                (e) => DropdownMenuItem(
+                                  value: e.key,
+                                  child: Text(
+                                    e.value,
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'dairy',
-                              child: Text(
-                                labels['dairy']!,
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'non_dairy_drink',
-                              child: Text(
-                                labels['non_dairy_drink']!,
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'cleaning_products',
-                              child: Text(
-                                labels['cleaning_products']!,
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'personal_care',
-                              child: Text(
-                                labels['personal_care']!,
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
+                              )
+                              .toList(),
                           onChanged: (value) {
-                            setLocalState(() {
-                              _tempCategorySelection = value;
-                            });
+                            setLocalState(() => _tempCategorySelection = value);
                           },
                         ),
                       ),
@@ -239,9 +258,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                             _showInlineError('اختاري فئة المنتج أولاً');
                             return;
                           }
-                          Navigator.of(
-                            dialogContext,
-                          ).pop(_tempCategorySelection);
+                          Navigator.of(dialogContext)
+                              .pop(_tempCategorySelection);
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
@@ -288,7 +306,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     if (result == null || result.isEmpty) return false;
 
     final refs = _categoryFactorRefs(result);
-
     if (!mounted) return false;
 
     setState(() {
@@ -325,7 +342,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   String? _selectedEfRef;
   String? _tempCategorySelection;
 
-  // ✅ متغيرات التحقق بالـ AI
   TaskVerificationResult? _verificationResult;
   bool _isVerifying = false;
 
@@ -360,10 +376,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   }
 
   bool get _requiresItemDialog {
-    final mode = (widget.taskData['calcMode'] ?? '')
-        .toString()
-        .toLowerCase()
-        .trim();
+    final mode =
+        (widget.taskData['calcMode'] ?? '').toString().toLowerCase().trim();
     return mode == 'deltaperitem';
   }
 
@@ -376,8 +390,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     const R = 6371.0;
     final dLat = _deg2rad(lat2 - lat1);
     final dLon = _deg2rad(lon2 - lon1);
-    final a =
-        math.sin(dLat / 2) * math.sin(dLat / 2) +
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(_deg2rad(lat1)) *
             math.cos(_deg2rad(lat2)) *
             math.sin(dLon / 2) *
@@ -422,19 +435,575 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
   }
 
+  // ─────────────────────────────────────────────
+  //  Route Tracking — بدء / إيقاف / تسجيل نقطة
+  // ─────────────────────────────────────────────
+
+  void _startRouteTracking() {
+    _trackPoints.clear();
+    _isTracking = true;
+    _trackingTimer?.cancel();
+
+    // نسجل أول نقطة فوراً
+    _recordTrackPoint();
+
+    // ثم كل 15 ثانية — توازن بين الدقة واستهلاك البطارية
+    _trackingTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) {
+        if (_isTracking) _recordTrackPoint();
+      },
+    );
+    print('🛤️ بدأ تتبع المسار');
+  }
+
+  void _stopRouteTracking() {
+    _trackingTimer?.cancel();
+    _trackingTimer = null;
+    _isTracking = false;
+    print('🛑 توقف تتبع المسار — عدد النقاط: ${_trackPoints.length}');
+  }
+
+  Future<void> _recordTrackPoint() async {
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium, // medium يوفر البطارية
+        timeLimit: const Duration(seconds: 8),
+      );
+
+      // تجاهل قراءات GPS ضعيفة الدقة (أكثر من 50 متر خطأ)
+      if (pos.accuracy > 50) {
+        print('⚠️ دقة GPS ضعيفة: ${pos.accuracy}م — تجاهل النقطة');
+        return;
+      }
+
+      _trackPoints.add(_TrackPoint(
+        lat: pos.latitude,
+        lng: pos.longitude,
+        time: DateTime.now(),
+      ));
+      print('📍 نقطة #${_trackPoints.length}: ${pos.latitude}, ${pos.longitude}');
+    } catch (e) {
+      // نتجاهل الخطأ — الانقطاعات القصيرة طبيعية في الأنفاق
+      print('⚠️ فشل تسجيل نقطة GPS: $e');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  تحليل المسار مع thresholds حسب نوع المواصلات
+  // ─────────────────────────────────────────────
+
+  _TrackAnalysis _analyzeTrack(
+    List<_TrackPoint> points,
+    _TransportThresholds thresholds,
+  ) {
+    // رحلة قصيرة جداً — نقاط غير كافية للتحليل، نقبلها
+    if (points.length < 2) {
+      print('ℹ️ نقاط غير كافية للتحليل (${points.length}) — قبول تلقائي');
+      return const _TrackAnalysis(isValid: true);
+    }
+
+    final speeds = <double>[];
+
+    for (int i = 1; i < points.length; i++) {
+      final distKm = _haversineKm(
+        points[i - 1].lat,
+        points[i - 1].lng,
+        points[i].lat,
+        points[i].lng,
+      );
+      final seconds =
+          points[i].time.difference(points[i - 1].time).inSeconds;
+      if (seconds <= 0) continue;
+
+      final speedKmh = (distKm / seconds) * 3600;
+
+      // تجاهل القفزات الشاذة في GPS
+      // (أكثر من 200 كم/س = خطأ في الجهاز وليس سرعة حقيقية)
+      if (speedKmh > 200) {
+        print('⚠️ قفزة GPS شاذة: ${speedKmh.toStringAsFixed(0)} كم/س — تجاهل');
+        continue;
+      }
+
+      speeds.add(speedKmh);
+    }
+
+    if (speeds.isEmpty) {
+      return const _TrackAnalysis(isValid: true, totalPoints: 0);
+    }
+
+    final avgSpeed = speeds.reduce((a, b) => a + b) / speeds.length;
+    final maxSpeed = speeds.reduce(math.max);
+
+    print('📊 تحليل المسار:');
+    print('   - نقاط: ${points.length}');
+    print('   - متوسط السرعة: ${avgSpeed.toStringAsFixed(1)} كم/س');
+    print('   - السرعة القصوى: ${maxSpeed.toStringAsFixed(1)} كم/س');
+    print('   - الحد المسموح للمتوسط: ${thresholds.maxAvgSpeed} كم/س');
+    print('   - الحد المسموح للقصوى: ${thresholds.maxPeakSpeed} كم/س');
+
+    // الرفض يتطلب تجاوز الحدين معاً (شرط مزدوج)
+    // عشان ما نعاقب يوزر شريف بسبب قراءة GPS عرضية واحدة
+    final avgTooHigh = avgSpeed > thresholds.maxAvgSpeed;
+    final peakTooHigh = maxSpeed > thresholds.maxPeakSpeed;
+
+    if (avgTooHigh && peakTooHigh) {
+      return _TrackAnalysis(
+        isValid: false,
+        avgSpeed: avgSpeed,
+        maxSpeed: maxSpeed,
+        totalPoints: points.length,
+        rejectionReason:
+            'السرعة المسجلة تتجاوز حد المواصلات العامة\n'
+            'متوسط: ${avgSpeed.toStringAsFixed(0)} كم/س  •  '
+            'أقصى: ${maxSpeed.toStringAsFixed(0)} كم/س',
+      );
+    }
+
+    return _TrackAnalysis(
+      isValid: true,
+      avgSpeed: avgSpeed,
+      maxSpeed: maxSpeed,
+      totalPoints: points.length,
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  تحديد الـ thresholds من عنوان المهمة
+  // ─────────────────────────────────────────────
+
+  _TransportThresholds _getThresholdsForTask() {
+    final title =
+        (widget.taskData['title'] ?? '').toString().toLowerCase();
+    if (title.contains('مترو') || title.contains('metro')) {
+      return _metroThresholds;
+    }
+    return _busThresholds; // باص كـ default لباقي المواصلات
+  }
+
+  // ─────────────────────────────────────────────
+  //  Transport Flow
+  // ─────────────────────────────────────────────
+
+  Future<void> _startFlowForTransportTask() async {
+    final taskTitle = widget.taskData['title']?.toString() ?? '';
+    final stationType =
+        (taskTitle.contains('مترو') || taskTitle.contains('metro'))
+            ? 'metro'
+            : 'bus';
+
+    final MapRoutePickResult? res = await Navigator.of(
+      context,
+      rootNavigator: true,
+    ).push<MapRoutePickResult>(
+      MaterialPageRoute(
+        builder: (_) => MapPickRoutePage(stationType: stationType),
+        fullscreenDialog: true,
+      ),
+    );
+
+    if (!mounted || res == null) return;
+
+    setState(() {
+      _manualStart = res.start;
+      _manualEnd = res.end;
+      _manualDistanceKm = res.distanceKm;
+      _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
+      _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
+      _transportVerifyPhase = 'start';
+    });
+
+    await _verifyTransportByLocation();
+  }
+
+  Future<void> _verifyTransportByLocation() async {
+    if (_manualStart == null || _manualEnd == null) return;
+    if (mounted) setState(() => _isVerifying = true);
+
+    try {
+      await _ensureLocationPermission();
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
+      );
+
+      const radiusMeters = 150.0;
+
+      double haversineMeters(LatLng a, LatLng b) {
+        const R = 6371000.0;
+        final dLat = _deg2rad(b.latitude - a.latitude);
+        final dLon = _deg2rad(b.longitude - a.longitude);
+        final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
+            math.cos(_deg2rad(a.latitude)) *
+                math.cos(_deg2rad(b.latitude)) *
+                math.sin(dLon / 2) *
+                math.sin(dLon / 2);
+        return 2 * R * math.atan2(math.sqrt(h), math.sqrt(1 - h));
+      }
+
+      final userLatLng = LatLng(pos.latitude, pos.longitude);
+      final distToStart = haversineMeters(userLatLng, _manualStart!);
+      final distToEnd = haversineMeters(userLatLng, _manualEnd!);
+      final nearStart = distToStart <= radiusMeters;
+      final nearEnd = distToEnd <= radiusMeters;
+
+      if (mounted) setState(() => _isVerifying = false);
+
+      // ══════════════════════════════════════
+      //  المرحلة الأولى — عند محطة البداية
+      // ══════════════════════════════════════
+      if (_transportVerifyPhase == 'start') {
+        if (nearStart) {
+          // ✅ بدأ التتبع فوراً
+          _startRouteTracking();
+
+          if (!mounted) return;
+          await showDialog<void>(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => Directionality(
+              textDirection: TextDirection.rtl,
+              child: Dialog(
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+                insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.directions_transit_rounded,
+                          color: appColors.primary, size: 52),
+                      const SizedBox(height: 12),
+                      Text(
+                        'تم التحقق من محطة البداية ✅',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: appColors.dark),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'سيتم تتبع مسارك تلقائياً أثناء الرحلة.\n'
+                        'عند وصولك لمحطة الوصول اضغط "وصلت".',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 14,
+                            height: 1.7,
+                            color: Colors.black87),
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            if (mounted) {
+                              setState(
+                                  () => _transportVerifyPhase = 'end');
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: appColors.primary,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Text(
+                            'حسناً، سأتوجه الآن',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                fontSize: 15),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        } else {
+          // ❌ بعيد عن محطة البداية
+          await _showNotNearStationDialog(
+            distanceMeters: distToStart,
+            radiusMeters: radiusMeters,
+            message: 'يجب أن تكون عند محطة البداية أولاً',
+            onRetry: _verifyTransportByLocation,
+            onChangeStations: () => setState(() {
+              _manualStart = _manualEnd = null;
+              _manualDistanceKm = null;
+              _geoStart = _geoEnd = null;
+              _transportVerifyPhase = 'start';
+              _stopRouteTracking();
+              _trackPoints.clear();
+            }),
+          );
+        }
+        return;
+      }
+
+      // ══════════════════════════════════════
+      //  المرحلة الثانية — عند محطة النهاية
+      // ══════════════════════════════════════
+      if (_transportVerifyPhase == 'end') {
+        // أوقف التتبع وسجل آخر نقطة قبل التحليل
+        _stopRouteTracking();
+        await _recordTrackPoint();
+
+        if (nearEnd) {
+          // ✅ موقع النهاية صحيح — حلل المسار
+          final thresholds = _getThresholdsForTask();
+          final analysis = _analyzeTrack(_trackPoints, thresholds);
+
+          if (analysis.isValid) {
+            // ✅ كل شيء سليم — أكمل المهمة
+            setState(() {
+              _verificationResult = TaskVerificationResult(
+                success: true,
+                verified: true,
+                verificationSource: 'location',
+              );
+              _transportVerifyPhase = 'start';
+            });
+            await _uploadAndComplete();
+          } else {
+            // ❌ تحليل المسار يشير لسيارة
+            if (!mounted) return;
+            await showDialog<void>(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => Directionality(
+                textDirection: TextDirection.rtl,
+                child: Dialog(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                  insetPadding:
+                      const EdgeInsets.symmetric(horizontal: 24),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset('assets/img/nameerSad.png',
+                            height: 100, fit: BoxFit.contain),
+                        const SizedBox(height: 12),
+                        Text(
+                          'لم يتم التحقق من الرحلة',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: appColors.dark),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          analysis.rejectionReason ??
+                              'يبدو أن الرحلة لم تكن بالمواصلات العامة',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 14,
+                              height: 1.6,
+                              color: Colors.black87),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                Navigator.of(ctx).pop();
+                                setState(() {
+                                  _manualStart = _manualEnd = null;
+                                  _manualDistanceKm = null;
+                                  _geoStart = _geoEnd = null;
+                                  _transportVerifyPhase = 'start';
+                                  _trackPoints.clear();
+                                });
+                              },
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                    color: appColors.primary),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12),
+                              ),
+                              child: Text('تغيير المحطات',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                      fontWeight: FontWeight.w700,
+                                      color: appColors.primary)),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.of(ctx).pop();
+                                // إعادة المحاولة من محطة البداية
+                                setState(() {
+                                  _transportVerifyPhase = 'start';
+                                  _trackPoints.clear();
+                                });
+                                _verifyTransportByLocation();
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: appColors.primary,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12),
+                              ),
+                              child: Text('إعادة المحاولة',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white)),
+                            ),
+                          ),
+                        ]),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+        } else {
+          // ❌ بعيد عن محطة النهاية — نعيد التتبع لو قرر يكمل
+          await _showNotNearStationDialog(
+            distanceMeters: distToEnd,
+            radiusMeters: radiusMeters,
+            message: 'يجب أن تكون عند محطة الوصول للتحقق',
+            onRetry: () {
+              // نكمل التتبع من حيث توقف
+              _startRouteTracking();
+              _verifyTransportByLocation();
+            },
+            onChangeStations: () => setState(() {
+              _manualStart = _manualEnd = null;
+              _manualDistanceKm = null;
+              _geoStart = _geoEnd = null;
+              _transportVerifyPhase = 'start';
+              _stopRouteTracking();
+              _trackPoints.clear();
+            }),
+          );
+        }
+      }
+    } catch (e) {
+      _stopRouteTracking();
+      if (mounted) setState(() => _isVerifying = false);
+      _showInlineError('تعذر الحصول على الموقع');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  Dialog مساعد — "أنت بعيد عن المحطة"
+  // ─────────────────────────────────────────────
+
+  Future<void> _showNotNearStationDialog({
+    required double distanceMeters,
+    required double radiusMeters,
+    required String message,
+    required VoidCallback onRetry,
+    required VoidCallback onChangeStations,
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.location_off_rounded,
+                    color: Colors.redAccent, size: 52),
+                const SizedBox(height: 12),
+                Text(
+                  'أنت بعيد عن المحطة',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: appColors.dark),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '$message\n'
+                  'المسافة الحالية: ${distanceMeters.toStringAsFixed(0)} متر\n'
+                  'المسافة المسموحة: ${radiusMeters.toInt()} متر',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 14, height: 1.6, color: Colors.black87),
+                ),
+                const SizedBox(height: 20),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        onChangeStations();
+                      },
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: appColors.primary),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text('تغيير المحطات',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w700,
+                              color: appColors.primary)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        onRetry();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: appColors.primary,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text('إعادة المحاولة',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white)),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> showTaskCompletedDialogAndRedirect(BuildContext context) async {
-    // تأخير بسيط للتأكد من أن جميع العمليات قد اكتملت
     await Future.delayed(const Duration(milliseconds: 300));
 
-    // عرض الديالوج
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
         return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           insetPadding: const EdgeInsets.symmetric(horizontal: 24),
           child: SizedBox(
             width: 340,
@@ -443,30 +1012,25 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset(
-                    'assets/img/nameerLove.png',
-                    height: 120,
-                    fit: BoxFit.contain,
-                  ),
+                  Image.asset('assets/img/nameerLove.png',
+                      height: 120, fit: BoxFit.contain),
                   const SizedBox(height: 16),
                   Text(
                     'تم إنجاز المهمة',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: appColors.dark,
-                    ),
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: appColors.dark),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'أحسنتِ! تم تسجيل إنجازك بنجاح\nوتمت إضافة نقاطك مباشرة',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: appColors.dark,
-                    ),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: appColors.dark),
                   ),
                   const SizedBox(height: 24),
                   Center(
@@ -476,41 +1040,28 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: appColors.primary,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                              borderRadius: BorderRadius.circular(12)),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 10,
-                          ),
+                              horizontal: 24, vertical: 10),
                         ),
                         onPressed: () async {
-                          // 1. إغلاق الديالوج أولاً
                           Navigator.of(dialogContext).pop();
-
-                          // 2. تأخير بسيط قبل الإغلاق والتوجيه
                           await Future.delayed(
-                            const Duration(milliseconds: 200),
-                          );
-
-                          // 3. التحقق من أن context لا يزال active
+                              const Duration(milliseconds: 200));
                           if (!mounted) return;
-
-                          // 4. إغلاق الـ BottomSheet
                           Navigator.of(context).pop(true);
-
-                          // 5. التوجيه لصفحة المهام باستبدال كل الـ stack
                           Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (_) => const taskPage()),
+                            MaterialPageRoute(
+                                builder: (_) => const taskPage()),
                             (route) => false,
                           );
                         },
                         child: Text(
                           'تم',
                           style: GoogleFonts.ibmPlexSansArabic(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                          ),
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16),
                         ),
                       ),
                     ),
@@ -534,18 +1085,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
     try {
       final taskTitle = widget.taskData['title']?.toString() ?? '';
-      print('🔍 التحقق باستخدام العنوان: "$taskTitle"');
-      print('🧾 taskData keys: ${widget.taskData.keys.toList()}');
-      print(
-        '🧾 id: ${widget.taskData['id']} | taskId: ${widget.taskData['taskId']} | task_id: ${widget.taskData['task_id']}',
-      );
-      print('🧾 local? $_isLocalProductTask');
-
-      // 🗑️ حُذف التحقق بالموقع من هنا — انتقل لـ _startTaskFlow
 
       if (_isLocalProductTask) {
-        print('🟩 Local product task detected. Calling origin_check...');
-
         final originResult = await TaskVerificationService.verifyOriginFromFile(
           File(imagePath),
           threshold: 0.7,
@@ -557,8 +1098,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
         String msg;
         if (c == null || c.trim().isEmpty || conf < 0.6) {
-          msg =
-              '🔎 تم التحقق: بلد المنشأ غير واضح, يرجى إعادة التقاط صورة أوضح للمهمة';
+          msg = '🔎 تم التحقق: بلد المنشأ غير واضح, يرجى إعادة التقاط صورة أوضح';
         } else if (isLocal) {
           msg = '✅ تم التحقق: بلد المنشأ $c (محلي)';
         } else {
@@ -567,54 +1107,37 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
         if (mounted) {
           setState(() {
-            _verificationResult = originResult.copyWith(
-              verificationSource: 'origin_check',
-            );
+            _verificationResult =
+                originResult.copyWith(verificationSource: 'origin_check');
             _verificationHint = msg;
             _isVerifying = false;
           });
         }
 
         if (originResult.verified == true) {
-          WidgetsBinding.instance.endOfFrame.then((_) {
-            if (mounted) _uploadAndComplete();
-          });
+          WidgetsBinding.instance.endOfFrame
+              .then((_) { if (mounted) _uploadAndComplete(); });
         }
 
         return originResult;
       }
 
-      // 1️⃣ جرب المودل أولاً
       final cloudResult = await _tryCloudModelFirst(imagePath, taskTitle);
+      final extractedText =
+          await OCRService.extractTextFromFile(File(imagePath));
 
-      // 2️⃣ استخرج النص من الصورة
-      final extractedText = await OCRService.extractTextFromFile(
-        File(imagePath),
-      );
-      print('📝 النص المستخرج: "$extractedText"');
-
-      // 3️⃣ تحقق من صحة المودل
-      final isModelLogical = OCRService.isModelResultValid(
-        cloudResult?.taskName,
-        taskTitle,
-      );
-
-      final doesImageMatch = OCRService.doesImageMatchTask(
-        extractedText,
-        taskTitle,
-      );
-      print('📌 doesImageMatch: $doesImageMatch');
+      final isModelLogical =
+          OCRService.isModelResultValid(cloudResult?.taskName, taskTitle);
+      final doesImageMatch =
+          OCRService.doesImageMatchTask(extractedText, taskTitle);
 
       TaskVerificationResult finalResult;
 
-      // 4️⃣ القرار الذكي
       if (cloudResult != null &&
           cloudResult.success == true &&
           isModelLogical) {
         finalResult = cloudResult.copyWith(verificationSource: 'vision');
-        print('✅ المودل منطقي، نعتمد نتيجته');
       } else {
-        print('⚠️ المودل غير منطقي، نعتمد OCR');
         finalResult = TaskVerificationResult(
           success: doesImageMatch,
           taskName: taskTitle,
@@ -628,7 +1151,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         );
       }
 
-      // 5️⃣ تحديث الحالة
       if (mounted) {
         setState(() {
           _verificationResult = finalResult;
@@ -636,97 +1158,63 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         });
       }
 
-      // 6️⃣ إذا كان صحيح، ابدأ الرفع
       if (finalResult.verified == true) {
-        print('✅ تم التحقق بنجاح');
-        WidgetsBinding.instance.endOfFrame.then((_) {
-          if (mounted) _uploadAndComplete();
-        });
+        WidgetsBinding.instance.endOfFrame
+            .then((_) { if (mounted) _uploadAndComplete(); });
       } else {
         _showInlineError('❌ الصورة غير مطابقة للمهمة');
-        WidgetsBinding.instance.endOfFrame.then((_) {
-          if (mounted) showTaskFailedDialogAndRedirect(context);
-        });
+        WidgetsBinding.instance.endOfFrame
+            .then((_) { if (mounted) showTaskFailedDialogAndRedirect(context); });
       }
 
       return finalResult;
     } catch (e) {
-      print('❌ خطأ: $e');
       if (mounted) {
         setState(() => _isVerifying = false);
         _showInlineError('❌ فشل التحقق من الصورة');
       }
       return TaskVerificationResult(
-        success: false,
-        error: 'فشل التحقق: $e',
-        verificationSource: 'system',
-      );
+          success: false,
+          error: 'فشل التحقق: $e',
+          verificationSource: 'system');
     }
   }
 
-  // دالة مساعدة لعرض جزء من العنوان في رسالة الخطأ
-  // ✅ استخدم هذا بدل _extractMeaningfulTitle
   String _getDisplayTaskName(TaskVerificationResult? result, String taskTitle) {
     if (result?.taskNameAr != null && result!.taskNameAr!.isNotEmpty) {
       return result.taskNameAr!;
     }
-    // استخدام دالة OCRService الذكية
     return OCRService.extractArabicTitle(taskTitle);
   }
 
-  // 🗑️ احذف _extractMeaningfulTitle بالكامل
-  // 🗑️ احذف _stopWords (موجودة في OCRService)
-  // 🗑️ احذف _getArabicTaskName (موجودة في OCRService)
   Future<TaskVerificationResult?> _tryCloudModelFirst(
-    String imagePath,
-    String taskTitle,
-  ) async {
-    print('🔵 === استدعاء مودل Cloud Run ===');
-
+      String imagePath, String taskTitle) async {
     try {
       final modelResult = await TaskVerificationService.verifyFromFile(
         File(imagePath),
         expectedTask: taskTitle,
         threshold: 0.7,
       );
-
-      // 🔴 أضف هذا - لازم تشوف النتيجة!
-      print('📥 نتيجة Cloud Run:');
-      print('   - Success: ${modelResult.success}');
-      print('   - Verified: ${modelResult.verified}');
-      print('   - Confidence: ${modelResult.confidence}');
-      print('   - Task: ${modelResult.taskName}');
-      print('   - Error: ${modelResult.error}');
-
       return modelResult;
-    } catch (e, stack) {
+    } catch (e) {
       print('❌ خطأ في Cloud Run: $e');
-      print('📋 Stack: $stack');
       return null;
     }
   }
 
   Future<void> _uploadAndComplete() async {
-    print('🚨🚨🚨 دخلنا _uploadAndComplete 🚨🚨🚨');
+    if (_isUploading || _isVerifying) return;
 
-    if (_isUploading || _isVerifying) {
-      print('⚠️ العملية جارية بالفعل');
-      return;
-    }
-
-    // ✅ location لا تحتاج صورة
     final isLocationVerified =
         _verificationResult?.verificationSource == 'location';
 
     if (_capturedPath == null && !isLocationVerified) {
       _showInlineError('لم يتم التقاط صورة');
-      print('❌ لا توجد صورة');
       return;
     }
 
     if (!_isAiApproved(_verificationResult)) {
       _showInlineError('لم يتم اعتماد الصورة. أعد الالتقاط.');
-      print('❌ الصورة غير معتمدة');
       if (mounted) {
         WidgetsBinding.instance.endOfFrame.then((_) {
           if (mounted) showTaskFailedDialogAndRedirect(context);
@@ -734,8 +1222,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       }
       return;
     }
-
-    print('🚀 بدء عملية الرفع التلقائي...');
 
     final task = widget.taskData;
     final pts = (task['points'] ?? 0) as int;
@@ -770,9 +1256,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         if (_autoDistanceKmComputed != null &&
             _autoDistanceKmComputed!.isFinite &&
             _autoDistanceKmComputed! > 0) {
-          straightKm = double.parse(
-            _autoDistanceKmComputed!.toStringAsFixed(3),
-          );
+          straightKm =
+              double.parse(_autoDistanceKmComputed!.toStringAsFixed(3));
         }
         if (manualKm != null && manualKm > 0) {
           pickedKm = manualKm;
@@ -808,12 +1293,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       final efId = (_isLocalProductTask && _selectedEfRef != null)
           ? _selectedEfRef
           : (task['ef_ref'] ??
-                    task['efRef'] ??
-                    task['emissionFactorRef'] ??
-                    task['emission_factor_ref'])
-                ?.toString();
-      final valueFieldFromTask = (task['ef_valueField'] ?? task['valueField'])
-          ?.toString();
+                  task['efRef'] ??
+                  task['emissionFactorRef'] ??
+                  task['emission_factor_ref'])
+              ?.toString();
+      final valueFieldFromTask =
+          (task['ef_valueField'] ?? task['valueField'])?.toString();
       if (efId != null && efId.isNotEmpty) {
         final saved = await _computeCarbonSavedFlexible(
           efIdFromTask: efId,
@@ -827,7 +1312,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       }
 
       await _createSubmissionAndAutoApprove(
-        localPath: _capturedPath ?? '', // ✅ فارغ لو location
+        localPath: _capturedPath ?? '',
         taskPoints: pts,
         taskId: taskId,
         distanceKm: pickedKm,
@@ -850,25 +1335,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e, stackTrace) {
-      print('❌ خطأ في _uploadAndComplete: $e');
-      print('📋 Stack trace: $stackTrace');
-
+      print('❌ خطأ في _uploadAndComplete: $e\n$stackTrace');
       if (!mounted) return;
 
       String errorMessage = 'حدث خطأ أثناء إكمال المهمة';
-      if (e.toString().contains('403')) {
+      if (e.toString().contains('403'))
         errorMessage = 'خطأ في صلاحيات التطبيق. حاول مرة أخرى.';
-      } else if (e.toString().contains('Too many attempts')) {
+      else if (e.toString().contains('Too many attempts'))
         errorMessage = 'محاولات كثيرة جداً. انتظر قليلاً وحاول مرة أخرى.';
-      } else if (e.toString().contains('App attestation failed')) {
-        errorMessage = 'خطأ في التحقق من التطبيق. تأكد من إعدادات Firebase.';
-      } else if (e.toString().contains('network') ||
-          e.toString().contains('اتصال')) {
+      else if (e.toString().contains('network') ||
+          e.toString().contains('اتصال'))
         errorMessage = 'مشكلة في الاتصال بالإنترنت. تحقق من اتصالك.';
-      } else if (e.toString().contains('timeout') ||
-          e.toString().contains('مهلة')) {
-        errorMessage = 'انتهت مهلة الاتصال. حاول مرة أخرى.';
-      }
 
       _showInlineError(errorMessage);
       if (mounted) setState(() => _isUploading = false);
@@ -877,11 +1354,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }
   }
 
-  /// دالة للحصول على الاسم العربي للمهمة
   String? _getArabicTaskName(String? taskName) {
     if (taskName == null) return null;
-
-    final Map<String, String> arabicNames = {
+    const arabicNames = {
       'plastic': 'بلاستيك',
       'paper': 'ورق',
       'food': 'نفايات عضوية',
@@ -892,7 +1367,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       'scooter': 'سكوتر',
       'rvm': 'آلة التدوير',
     };
-
     return arabicNames[taskName] ?? taskName;
   }
 
@@ -903,11 +1377,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return TaskType.bus;
     if (t.contains('ملابس') || t.contains('cloth')) return TaskType.clothing;
     if (t.contains('ورق') || t.contains('paper') || t.contains('أوراق'))
-      return TaskType.paper; // ✅ قبل rvm
+      return TaskType.paper;
     if (t.contains('طعام') || t.contains('food') || t.contains('عضوي'))
       return TaskType.food;
     if (t.contains('rvm') || t.contains('تدوير') || t.contains('بلاستيك'))
-      return TaskType.rvm; // ✅ بعد paper
+      return TaskType.rvm;
     return null;
   }
 
@@ -926,8 +1400,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     try {
       await _ensureLocationPermission();
       final p = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+          desiredAccuracy: LocationAccuracy.high);
       _startPos = p;
       _geoStart = GeoPoint(p.latitude, p.longitude);
     } catch (_) {}
@@ -938,17 +1411,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     try {
       await _ensureLocationPermission();
       final end = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+          desiredAccuracy: LocationAccuracy.high);
       _geoEnd = GeoPoint(end.latitude, end.longitude);
       final start = _startPos ?? end;
-      final km = _haversineKm(
-        start.latitude,
-        start.longitude,
-        end.latitude,
-        end.longitude,
-      );
-      _autoDistanceKmComputed = km;
+      _autoDistanceKmComputed = _haversineKm(
+          start.latitude, start.longitude, end.latitude, end.longitude);
       if (mounted) setState(() {});
     } catch (_) {}
   }
@@ -977,10 +1444,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     return doc.data();
   }
 
-  Future<double?> _getEfPerUnit(String id, {String? valueFieldFromTask}) async {
+  Future<double?> _getEfPerUnit(String id,
+      {String? valueFieldFromTask}) async {
     final d = await _getEfDoc(id);
     if (d == null) return null;
-
     if (valueFieldFromTask != null && valueFieldFromTask.isNotEmpty) {
       final v = _asDouble(d[valueFieldFromTask]);
       if (v != null) return v;
@@ -990,7 +1457,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       final v = _asDouble(d[vfInDoc]);
       if (v != null) return v;
     }
-    final candidates = [
+    for (final k in [
       'ef_kgco2_per_unit',
       'ef_kgco2_per_item',
       'value',
@@ -1001,8 +1468,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       'co2PerKm',
       'co2_per_km',
       'factor',
-    ];
-    for (final k in candidates) {
+    ]) {
       final v = _asDouble(d[k]);
       if (v != null) return v;
     }
@@ -1018,24 +1484,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final efDoc = await _getEfDoc(efIdFromTask) ?? {};
     final taskCalcMode = (widget.taskData['calcMode'] ?? '').toString().trim();
     final efCalcMode = (efDoc['calcMode'] ?? '').toString().trim();
-    final rawMode = (taskCalcMode.isNotEmpty ? taskCalcMode : efCalcMode);
-    final calcMode = rawMode.toLowerCase();
+    final calcMode =
+        (taskCalcMode.isNotEmpty ? taskCalcMode : efCalcMode).toLowerCase();
 
     if (calcMode == 'deltaperitem' && items != null && items > 0) {
-      final directDelta = _asDouble(
-        efDoc['ef_kgco2_per_unit'] ??
-            efDoc['ef_kgco2_per_item'] ??
-            efDoc['value'] ??
-            efDoc['factor'],
-      );
-
+      final directDelta = _asDouble(efDoc['ef_kgco2_per_unit'] ??
+          efDoc['ef_kgco2_per_item'] ??
+          efDoc['value'] ??
+          efDoc['factor']);
       if (directDelta != null && directDelta > 0) {
         return double.parse((directDelta * items).toStringAsFixed(3));
       }
-
-      return 0.0;
     }
-
     return 0.0;
   }
 
@@ -1045,16 +1505,13 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       return null;
     }
     if (_controller!.value.isTakingPicture) return null;
-
     try {
       return await _controller!.takePicture();
     } on CameraException catch (e) {
       try {
         await Future.delayed(const Duration(milliseconds: 150));
         if (!_controller!.value.isInitialized ||
-            _controller!.value.isTakingPicture) {
-          return null;
-        }
+            _controller!.value.isTakingPicture) return null;
         return await _controller!.takePicture();
       } catch (_) {
         _showInlineError(_friendlyError(e));
@@ -1081,7 +1538,6 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final dayKey = _yyyyMMdd(widget.selectedDay);
     final taskTitle = (widget.taskData['title'] ?? '').toString();
 
-    // ✅ رفع الصورة فقط إذا موجودة
     final bool hasPhoto = localPath.isNotEmpty;
     String downloadUrl = '';
     String storagePath = '';
@@ -1090,26 +1546,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       final file = File(localPath);
       final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
       final name = DateTime.now().millisecondsSinceEpoch.toString();
-      final storageRef = FirebaseStorage.instance.ref('$basePath/$name.jpg');
-
+      final storageRef =
+          FirebaseStorage.instance.ref('$basePath/$name.jpg');
       await storageRef.putFile(
-        file,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
+          file, SettableMetadata(contentType: 'image/jpeg'));
       downloadUrl = await storageRef.getDownloadURL();
       storagePath = storageRef.fullPath;
-      print('🔗 رابط الصورة: $downloadUrl');
-    } else {
-      print('📍 تحقق بالموقع - لا توجد صورة');
     }
 
-    final double carbonForStore = (carbonSaved != null && carbonSaved.isFinite)
-        ? double.parse(carbonSaved.toStringAsFixed(3))
-        : 0.0;
+    final double carbonForStore =
+        (carbonSaved != null && carbonSaved.isFinite)
+            ? double.parse(carbonSaved.toStringAsFixed(3))
+            : 0.0;
 
     final firestore = FirebaseFirestore.instance;
     final usersRef = firestore.collection('users').doc(uid);
-    final utRef = firestore.collection('userTasks').doc(widget.userTaskDocId);
+    final utRef =
+        firestore.collection('userTasks').doc(widget.userTaskDocId);
     final subRef = firestore.collection('submissions').doc();
     final todayId = _dayId(DateTime.now());
     final dayMarkRef = firestore
@@ -1126,65 +1579,76 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final utSnapshot = await utRef.get();
     String currentStatus = 'pending';
     if (utSnapshot.exists) {
-      final ut = utSnapshot.data() as Map<String, dynamic>;
-      currentStatus = (ut['status'] as String?) ?? 'pending';
+      currentStatus =
+          ((utSnapshot.data() as Map<String, dynamic>)['status'] as String?) ??
+              'pending';
     }
 
     await firestore.runTransaction((trx) async {
-      trx.set(subRef, {
-        'userId': uid,
-        'userTaskDocId': widget.userTaskDocId,
-        'taskId': taskId ?? '',
-        'taskTitle': taskTitle,
-        'taskPoints': taskPoints,
-        'status': 'approved',
-        'imageUrls': hasPhoto ? [downloadUrl] : [],
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'carbonSaved': carbonForStore,
-        if (distanceKm != null) 'distanceKm': distanceKm,
-        if (itemCount != null) 'itemCount': itemCount,
-        if (_selectedProductCategory != null)
-          'productCategory': _selectedProductCategory,
-        if (_selectedProductCategoryLabel != null)
-          'productCategoryLabel': _selectedProductCategoryLabel,
-        if (_geoStart != null) 'geoStart': _geoStart,
-        if (_geoEnd != null) 'geoEnd': _geoEnd,
-      }, SetOptions(merge: true));
+      trx.set(
+          subRef,
+          {
+            'userId': uid,
+            'userTaskDocId': widget.userTaskDocId,
+            'taskId': taskId ?? '',
+            'taskTitle': taskTitle,
+            'taskPoints': taskPoints,
+            'status': 'approved',
+            'imageUrls': hasPhoto ? [downloadUrl] : [],
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'carbonSaved': carbonForStore,
+            if (distanceKm != null) 'distanceKm': distanceKm,
+            if (itemCount != null) 'itemCount': itemCount,
+            if (_selectedProductCategory != null)
+              'productCategory': _selectedProductCategory,
+            if (_selectedProductCategoryLabel != null)
+              'productCategoryLabel': _selectedProductCategoryLabel,
+            if (_geoStart != null) 'geoStart': _geoStart,
+            if (_geoEnd != null) 'geoEnd': _geoEnd,
+          },
+          SetOptions(merge: true));
 
-      trx.set(utRef, {
-        'userId': uid,
-        'status': 'completed',
-        'completedAt': FieldValue.serverTimestamp(),
-        'taskPoints': taskPoints,
-        'taskTitle': taskTitle,
-        'carbonSaved': carbonForStore,
-        'evidence': hasPhoto
-            ? {'type': 'photo', 'url': downloadUrl, 'storagePath': storagePath}
-            : {'type': 'location'},
-        if (distanceKm != null) 'distanceKm': distanceKm,
-        if (itemCount != null) 'itemCount': itemCount,
-        if (_selectedProductCategory != null)
-          'productCategory': _selectedProductCategory,
-        if (_selectedProductCategoryLabel != null)
-          'productCategoryLabel': _selectedProductCategoryLabel,
-        if (_geoStart != null) 'geoStart': _geoStart,
-        if (_geoEnd != null) 'geoEnd': _geoEnd,
-      }, SetOptions(merge: true));
+      trx.set(
+          utRef,
+          {
+            'userId': uid,
+            'status': 'completed',
+            'completedAt': FieldValue.serverTimestamp(),
+            'taskPoints': taskPoints,
+            'taskTitle': taskTitle,
+            'carbonSaved': carbonForStore,
+            'evidence': hasPhoto
+                ? {
+                    'type': 'photo',
+                    'url': downloadUrl,
+                    'storagePath': storagePath
+                  }
+                : {'type': 'location'},
+            if (distanceKm != null) 'distanceKm': distanceKm,
+            if (itemCount != null) 'itemCount': itemCount,
+            if (_selectedProductCategory != null)
+              'productCategory': _selectedProductCategory,
+            if (_selectedProductCategoryLabel != null)
+              'productCategoryLabel': _selectedProductCategoryLabel,
+            if (_geoStart != null) 'geoStart': _geoStart,
+            if (_geoEnd != null) 'geoEnd': _geoEnd,
+          },
+          SetOptions(merge: true));
 
       if (currentStatus != 'completed' && taskPoints > 0) {
-        trx.set(usersRef, {
-          'points': FieldValue.increment(taskPoints),
-          'completedTask': FieldValue.increment(1),
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        trx.set(
+            usersRef,
+            {
+              'points': FieldValue.increment(taskPoints),
+              'completedTask': FieldValue.increment(1),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true));
       }
 
-      final historyRef = firestore
-          .collection('users')
-          .doc(uid)
-          .collection('history')
-          .doc();
+      final historyRef =
+          firestore.collection('users').doc(uid).collection('history').doc();
       trx.set(historyRef, {
         'type': 'task_approved',
         'submissionId': subRef.id,
@@ -1194,37 +1658,42 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         'at': FieldValue.serverTimestamp(),
       });
 
-      trx.set(usersRef, {
-        'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
-        if (carbonForStore > 0)
-          'totalCarbonSaved': FieldValue.increment(carbonForStore),
-      }, SetOptions(merge: true));
+      trx.set(
+          usersRef,
+          {
+            'lastCarbonUpdateAt': FieldValue.serverTimestamp(),
+            if (carbonForStore > 0)
+              'totalCarbonSaved': FieldValue.increment(carbonForStore),
+          },
+          SetOptions(merge: true));
 
       trx.set(dailyTaskRef, {
         'status': 'completed',
         'completedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      trx.set(dayMarkRef, {
-        'count': FieldValue.increment(1),
-        'lastAt': FieldValue.serverTimestamp(),
-        'userId': uid,
-      }, SetOptions(merge: true));
+      trx.set(
+          dayMarkRef,
+          {
+            'count': FieldValue.increment(1),
+            'lastAt': FieldValue.serverTimestamp(),
+            'userId': uid,
+          },
+          SetOptions(merge: true));
     });
 
     try {
       await StreakService.updateStreakOnTaskCompletion();
     } catch (_) {}
 
-    // ✅ إضافة XP بعد إكمال المهمة
-try {
-  final taskDifficulty = widget.taskData['difficulty']?.toString()
-      ?? widget.taskData['level']?.toString()
-      ?? 'beginner';
-  await XpService.addXpForTask(taskLevelId: taskDifficulty);
-} catch (e) {
-  print('⚠️ خطأ في إضافة XP: $e');
-}
+    try {
+      final taskDifficulty = widget.taskData['difficulty']?.toString() ??
+          widget.taskData['level']?.toString() ??
+          'beginner';
+      await XpService.addXpForTask(taskLevelId: taskDifficulty);
+    } catch (e) {
+      print('⚠️ خطأ في إضافة XP: $e');
+    }
 
     await _grantEcoReward(uid, taskTitle);
     print('🎉 المهمة اكتملت بنجاح');
@@ -1238,7 +1707,7 @@ try {
       _openingCamera = true;
       _capturedPath = null;
       _ready = false;
-      _verificationResult = null; // ✅ إعادة تعيين نتيجة التحقق
+      _verificationResult = null;
       _isCompleted = false;
       _verificationHint = null;
     });
@@ -1270,16 +1739,11 @@ try {
 
       await controller.initialize();
 
-      final minZoom = await controller.getMinZoomLevel();
-      final maxZoom = await controller.getMaxZoomLevel();
-      final minExposure = await controller.getMinExposureOffset();
-      final maxExposure = await controller.getMaxExposureOffset();
-
-      _minZoom = minZoom;
-      _maxZoom = maxZoom;
+      _minZoom = await controller.getMinZoomLevel();
+      _maxZoom = await controller.getMaxZoomLevel();
       _zoom = _zoom.clamp(_minZoom, _maxZoom);
-      _minExposure = minExposure;
-      _maxExposure = maxExposure;
+      _minExposure = await controller.getMinExposureOffset();
+      _maxExposure = await controller.getMaxExposureOffset();
       _exposure = _exposure.clamp(_minExposure, _maxExposure);
 
       await controller.setFlashMode(_flashMode);
@@ -1304,22 +1768,17 @@ try {
     final taskTitle = widget.taskData['title']?.toString() ?? '';
     final taskType = _getLocationTaskType(taskTitle);
 
-    print('🏷️ taskTitle: "$taskTitle"');
-    print('📍 taskType: $taskType');
-
     if (_isLocalProductTask) {
       final picked = await _promptForLocalProductCategory();
       if (!picked) return;
     }
 
     if (taskType == TaskType.metro || taskType == TaskType.bus) {
-      // مهام المواصلات → نفتح خريطة المحطات
       await _startFlowForTransportTask();
       return;
     }
 
     if (taskType != null) {
-      // باقي المهام (RVM, ورق, ملابس...) → التحقق بالموقع العادي
       if (mounted) setState(() => _isVerifying = true);
       final locationResult = await LocationValidator.validate(taskType);
       if (mounted) setState(() => _isVerifying = false);
@@ -1398,14 +1857,11 @@ try {
   }
 
   Future<void> _setFocusAndExposurePoint(
-    TapDownDetails d,
-    Size previewSize,
-  ) async {
+      TapDownDetails d, Size previewSize) async {
     if (!(_controller?.value.isInitialized ?? false)) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null) return;
     final localPos = box.globalToLocal(d.globalPosition);
-
     final nx = (localPos.dx / previewSize.width).clamp(0.0, 1.0);
     final ny = (localPos.dy / previewSize.height).clamp(0.0, 1.0);
     try {
@@ -1427,412 +1883,20 @@ try {
 
   @override
   void dispose() {
+    _stopRouteTracking(); // ← مهم: أوقف التتبع عند إغلاق الشاشة
     _controller?.dispose();
     _itemCountCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _startFlowForTransportTask() async {
-    final taskTitle = widget.taskData['title']?.toString() ?? '';
-
-    // تحديد نوع المحطة من عنوان المهمة
-    final stationType =
-        (taskTitle.contains('مترو') || taskTitle.contains('metro'))
-        ? 'metro'
-        : 'bus';
-
-    final MapRoutePickResult? res =
-        await Navigator.of(
-          context,
-          rootNavigator: true,
-        ).push<MapRoutePickResult>(
-          MaterialPageRoute(
-            builder: (_) => MapPickRoutePage(
-              stationType: stationType, // ← جديد: نمرر النوع
-              // حذفنا initialStart/initialEnd — المحطات جاهزة من JSON
-            ),
-            fullscreenDialog: true,
-          ),
-        );
-
-    if (!mounted || res == null) return;
-
-    setState(() {
-      // نحفظ إحداثيات المحطتين
-      _manualStart = res.start;
-      _manualEnd = res.end;
-      _manualDistanceKm = res.distanceKm; // ← المسافة جاهزة من الـ result
-      _geoStart = GeoPoint(_manualStart!.latitude, _manualStart!.longitude);
-      _geoEnd = GeoPoint(_manualEnd!.latitude, _manualEnd!.longitude);
-    });
-
-    // لا نفتح الكاميرا — نذهب مباشرة للتحقق بالموقع
-    await _verifyTransportByLocation();
-  }
-
-  Future<void> _verifyTransportByLocation() async {
-    if (_manualStart == null || _manualEnd == null) return;
-    if (mounted) setState(() => _isVerifying = true);
-
-    try {
-      await _ensureLocationPermission();
-      final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-
-      const radiusMeters = 150.0;
-
-      double haversineMeters(LatLng a, LatLng b) {
-        const R = 6371000.0;
-        final dLat = _deg2rad(b.latitude - a.latitude);
-        final dLon = _deg2rad(b.longitude - a.longitude);
-        final h =
-            math.sin(dLat / 2) * math.sin(dLat / 2) +
-            math.cos(_deg2rad(a.latitude)) *
-                math.cos(_deg2rad(b.latitude)) *
-                math.sin(dLon / 2) *
-                math.sin(dLon / 2);
-        return 2 * R * math.atan2(math.sqrt(h), math.sqrt(1 - h));
-      }
-
-      final userLatLng = LatLng(pos.latitude, pos.longitude);
-      final distToStart = haversineMeters(userLatLng, _manualStart!);
-      final distToEnd = haversineMeters(userLatLng, _manualEnd!);
-      final nearStart = distToStart <= radiusMeters;
-      final nearEnd = distToEnd <= radiusMeters;
-      final isValid = nearStart || nearEnd;
-
-      if (mounted) setState(() => _isVerifying = false);
-
-      if (isValid) {
-        setState(() {
-          _verificationResult = TaskVerificationResult(
-            success: true,
-            verified: true,
-            verificationSource: 'location',
-          );
-        });
-        await _uploadAndComplete();
-      } else {
-        // ✅ Dialog واضح بدل inline error
-        final nearest = math.min(distToStart, distToEnd);
-        if (!mounted) return;
-        await showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => Directionality(
-            textDirection: TextDirection.rtl,
-            child: Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.location_off_rounded,
-                      color: Colors.redAccent,
-                      size: 52,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'أنت بعيد عن المحطة',
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: appColors.dark,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'يجب أن تكون قريباً من إحدى المحطتين المختارتين\n'
-                      'أقرب محطة على بُعد: ${(nearest).toStringAsFixed(0)} متر\n'
-                      'المسافة المسموحة: ${radiusMeters.toInt()} متر',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 14,
-                        height: 1.6,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              Navigator.of(ctx).pop();
-                              // يرجع لاختيار محطات جديدة
-                              setState(() {
-                                _manualStart = null;
-                                _manualEnd = null;
-                                _manualDistanceKm = null;
-                                _geoStart = null;
-                                _geoEnd = null;
-                              });
-                            },
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: appColors.primary),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            child: Text(
-                              'تغيير المحطات',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontWeight: FontWeight.w700,
-                                color: appColors.primary,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.of(ctx).pop();
-                              // يحاول مرة ثانية بنفس المحطات
-                              _verifyTransportByLocation();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: appColors.primary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            child: Text(
-                              'إعادة المحاولة',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isVerifying = false);
-      _showInlineError('تعذر الحصول على الموقع');
-    }
-  }
-
-  Future<void> _promptForItemCountIfNeeded() async {
-    if (!_requiresItemDialog) return;
-
-    final minItems = _asInt(widget.taskData['minItems']) ?? 1;
-    final maxItems = _asInt(widget.taskData['maxItems']) ?? 999;
-
-    int clamp(int v) => v.clamp(minItems, maxItems);
-
-    final def = (_itemCount != null && _itemCount! > 0)
-        ? _itemCount!
-        : (_asInt(widget.taskData['defaultItems']) ?? minItems);
-
-    _itemCountCtrl.text = def.toString();
-
-    final result = await showGeneralDialog<int>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'items',
-      barrierColor: Colors.black54,
-      useRootNavigator: true,
-      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
-      transitionDuration: const Duration(milliseconds: 180),
-      transitionBuilder: (ctx, anim, _, __child) {
-        return Transform.scale(
-          scale: 0.95 + 0.05 * anim.value,
-          child: Opacity(
-            opacity: anim.value,
-            child: Center(
-              child: Material(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 360),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.format_list_numbered,
-                              color: appColors.primary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'عدد العناصر المنجزة',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: appColors.dark,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            _counterButton(
-                              icon: Icons.remove_rounded,
-                              onTap: () {
-                                final cur = _asInt(_itemCountCtrl.text) ?? def;
-                                final next = clamp(cur - 1);
-                                _itemCountCtrl.text = next.toString();
-                                setState(() {});
-                              },
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextField(
-                                controller: _itemCountCtrl,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(),
-                                textAlign: TextAlign.center,
-                                decoration: InputDecoration(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                    horizontal: 12,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  hintText: '$def',
-                                ),
-                                onChanged: (_) => setState(() {}),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            _counterButton(
-                              icon: Icons.add_rounded,
-                              onTap: () {
-                                final cur = _asInt(_itemCountCtrl.text) ?? def;
-                                final next = clamp(cur + 1);
-                                _itemCountCtrl.text = next.toString();
-                                setState(() {});
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'الحد الأدنى: $minItems  •  الأقصى: $maxItems',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 12.5,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => Navigator.of(ctx).pop(null),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                    color: appColors.primary,
-                                    width: 2,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                  ),
-                                ),
-                                child: Text(
-                                  'إلغاء',
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                    color: appColors.primary,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () {
-                                  final raw = _asInt(_itemCountCtrl.text);
-                                  if (raw == null || raw <= 0) {
-                                    _showInlineError('أدخل عددًا صحيحًا.');
-                                    return;
-                                  }
-                                  final safe = clamp(raw);
-                                  _itemCountCtrl.text = safe.toString();
-                                  Navigator.of(ctx).pop(safe);
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: appColors.primary,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                ),
-                                child: Text(
-                                  'حفظ',
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-
-    if (!mounted) return;
-
-    if (result != null && result > 0) {
-      setState(() {
-        _itemCount = clamp(result);
-      });
-    }
-  }
-
-  // ✅ ودجت عرض نتيجة التحقق بالـ AI
   Widget _buildVerificationResult() {
     if (_verificationResult == null && !_isVerifying) {
       return const SizedBox.shrink();
     }
-    // ✅ إذا كان صحيح → ما نعرض شيء
-    if (_verificationResult!.verified == true) {
+    if (_verificationResult!.verified == true) return const SizedBox.shrink();
+    if (_verificationResult?.verificationSource == 'origin_check')
       return const SizedBox.shrink();
-    }
 
-    // ✅ origin_check: لا نعرض البرتقالي
-    if (_verificationResult?.verificationSource == 'origin_check') {
-      return const SizedBox.shrink();
-    }
     if (_isVerifying) {
       return Container(
         padding: const EdgeInsets.all(12),
@@ -1845,29 +1909,20 @@ try {
         child: Row(
           children: [
             const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2)),
             const SizedBox(width: 12),
-            Text(
-              'جاري التحقق من الصورة...',
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontWeight: FontWeight.w600,
-                color: Colors.blue,
-              ),
-            ),
+            Text('جاري التحقق من الصورة...',
+                style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w600, color: Colors.blue)),
           ],
         ),
       );
     }
 
-    // ✅ إذا كان صحيح → ما نعرض شيء (خلاص)
-    if (_verificationResult!.verified == true) {
-      return const SizedBox.shrink();
-    }
+    if (_verificationResult!.verified == true) return const SizedBox.shrink();
 
-    // ❌ إذا كان خطأ → نعرض المربع البرتقالي فقط
     return Container(
       padding: const EdgeInsets.all(12),
       margin: const EdgeInsets.only(bottom: 12),
@@ -1884,21 +1939,13 @@ try {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'الصورة غير مطابقة',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.orange,
-                  ),
-                ),
+                Text('الصورة غير مطابقة',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w600, color: Colors.orange)),
                 const SizedBox(height: 4),
-                Text(
-                  'يرجى إعادة التقاط صورة أوضح للمهمة',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 13,
-                    color: Colors.black87,
-                  ),
-                ),
+                Text('يرجى إعادة التقاط صورة أوضح للمهمة',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 13, color: Colors.black87)),
               ],
             ),
           ),
@@ -1913,7 +1960,6 @@ try {
     final title = task['title'] ?? 'مهمة غير معروفة';
     final desc = task['description'] ?? '';
     final pts = (task['points'] ?? 0) as int;
-    final taskId = task['id'] as String?;
     final requiresPhotoExact = true;
     final isTransport = (_autoDistance || _isTransportTask);
 
@@ -1947,65 +1993,45 @@ try {
                       ),
                     ),
                   ),
-                  Text(
-                    'إتمام المهمة',
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: appColors.dark,
-                    ),
-                  ),
+                  Text('إتمام المهمة',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: appColors.dark)),
                   const SizedBox(height: 8),
-                  Text(
-                    title,
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: appColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.star_border,
-                        color: appColors.primary,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$pts نقطة',
-                        style: GoogleFonts.ibmPlexSansArabic(
+                  Text(title,
+                      style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: appColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
+                          color: appColors.primary)),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    const Icon(Icons.star_border,
+                        color: appColors.primary, size: 20),
+                    const SizedBox(width: 6),
+                    Text('$pts نقطة',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                            fontWeight: FontWeight.w700,
+                            color: appColors.primary)),
+                  ]),
                   const SizedBox(height: 16),
-                  Text(
-                    desc,
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 14,
-                      height: 1.7,
-                    ),
-                  ),
+                  Text(desc,
+                      style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 14, height: 1.7)),
                   const SizedBox(height: 16),
                   if (!_ready) _buildPhotoInstructions(),
                   if (!_ready) const SizedBox(height: 16),
+
+                  // ─── زر مهام غير مواصلات ───
                   if (requiresPhotoExact && !isTransport && !_ready)
                     _gradientButton(
-                      label:
-                          _getLocationTaskType(
-                                widget.taskData['title']?.toString() ?? '',
-                              ) !=
+                      label: _getLocationTaskType(
+                                  widget.taskData['title']?.toString() ?? '') !=
                               null
-                          ? 'تحقق من المهمة' // مهام الموقع
-                          : 'ابدأ التصوير', // مهام التصوير
-                      icon:
-                          _getLocationTaskType(
-                                widget.taskData['title']?.toString() ?? '',
-                              ) !=
+                          ? 'تحقق من المهمة'
+                          : 'ابدأ التصوير',
+                      icon: _getLocationTaskType(
+                                  widget.taskData['title']?.toString() ?? '') !=
                               null
                           ? Icons.location_on
                           : Icons.camera_alt,
@@ -2014,230 +2040,239 @@ try {
                           : () => _startTaskFlow(),
                       loading: _openingCamera || _isVerifying,
                     ),
+
+                  // ─── زر مهام المواصلات (يتغير حسب المرحلة) ───
                   if (requiresPhotoExact && isTransport && !_ready) ...[
                     _gradientButton(
-                      label: 'اختر محطات المسار',
-                      icon: Icons.map_outlined,
+                      label: _transportVerifyPhase == 'end'
+                          ? 'وصلت إلى محطة الوصول'
+                          : 'اختر محطات المسار',
+                      icon: _transportVerifyPhase == 'end'
+                          ? Icons.location_on
+                          : Icons.map_outlined,
                       onTap: (_openingCamera || _isVerifying)
                           ? null
-                          : () =>
-                                _startTaskFlow(), // ← _startTaskFlow تتعامل مع مترو/باص تلقائياً
+                          : () => _transportVerifyPhase == 'end'
+                              ? _verifyTransportByLocation()
+                              : _startTaskFlow(),
                       loading: _openingCamera || _isVerifying,
                     ),
-                    if (_manualDistanceKm != null) ...[
+
+                    // مؤشر التتبع الجاري
+                    if (_isTracking) ...[
                       const SizedBox(height: 10),
-                      _hintCard(
-                        'المسار المحدد: ${_manualDistanceKm!.toStringAsFixed(2)} كم\nاضغط "ابدأ" مرة أخرى لفتح الكاميرا إذا رغبت بتعديل المسار.',
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: appColors.primary.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: appColors.primary.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: appColors.primary),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'جاري تتبع مسارك... (${_trackPoints.length} نقطة)',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                  fontSize: 13,
+                                  color: appColors.primary,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
+
+                    if (_manualDistanceKm != null &&
+                        _transportVerifyPhase == 'start') ...[
+                      const SizedBox(height: 10),
+                      _hintCard(
+                          'المسار المحدد: ${_manualDistanceKm!.toStringAsFixed(2)} كم'),
+                    ],
                   ],
+
                   const SizedBox(height: 16),
+
+                  // ─── الكاميرا ───
                   if (_ready)
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 250),
                       child: SizedBox(
                         height: 420,
-                        child: LayoutBuilder(
-                          builder: (context, cons) {
-                            final w = cons.maxWidth;
-                            final h = cons.maxHeight;
-                            return Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Positioned.fill(
-                                  child: _capturedPath != null
-                                      ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          child: Image.file(
+                        child: LayoutBuilder(builder: (context, cons) {
+                          final w = cons.maxWidth;
+                          final h = cons.maxHeight;
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Positioned.fill(
+                                child: _capturedPath != null
+                                    ? ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(16),
+                                        child: Image.file(
                                             File(_capturedPath!),
-                                            fit: BoxFit.cover,
-                                          ),
-                                        )
-                                      : ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          child: FittedBox(
-                                            fit: BoxFit.cover,
-                                            child: SizedBox(
-                                              width:
-                                                  _controller!
-                                                      .value
-                                                      .previewSize
-                                                      ?.height ??
-                                                  w,
-                                              height:
-                                                  _controller!
-                                                      .value
-                                                      .previewSize
-                                                      ?.width ??
-                                                  h,
-                                              child: GestureDetector(
-                                                behavior:
-                                                    HitTestBehavior.opaque,
-                                                onTapDown: (d) =>
-                                                    _setFocusAndExposurePoint(
-                                                      d,
-                                                      Size(w, h),
-                                                    ),
-                                                child: CameraPreview(
-                                                  _controller!,
-                                                ),
-                                              ),
+                                            fit: BoxFit.cover))
+                                    : ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(16),
+                                        child: FittedBox(
+                                          fit: BoxFit.cover,
+                                          child: SizedBox(
+                                            width: _controller!.value
+                                                    .previewSize?.height ??
+                                                w,
+                                            height: _controller!.value
+                                                    .previewSize?.width ??
+                                                h,
+                                            child: GestureDetector(
+                                              behavior:
+                                                  HitTestBehavior.opaque,
+                                              onTapDown: (d) =>
+                                                  _setFocusAndExposurePoint(
+                                                      d, Size(w, h)),
+                                              child:
+                                                  CameraPreview(_controller!),
                                             ),
                                           ),
                                         ),
-                                ),
-                                Positioned(
-                                  top: 10,
-                                  right: 10,
-                                  left: 10,
-                                  child: Row(
-                                    children: [
-                                      _roundedGlass(
-                                        child: IconButton(
+                                      ),
+                              ),
+                              Positioned(
+                                top: 10,
+                                right: 10,
+                                left: 10,
+                                child: Row(children: [
+                                  _roundedGlass(
+                                      child: IconButton(
                                           tooltip: 'تبديل الكاميرا',
                                           icon: const Icon(
-                                            Icons.cameraswitch_rounded,
-                                            color: Colors.white,
-                                          ),
-                                          onPressed: _switchCamera,
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      _roundedGlass(
-                                        child: IconButton(
+                                              Icons.cameraswitch_rounded,
+                                              color: Colors.white),
+                                          onPressed: _switchCamera)),
+                                  const Spacer(),
+                                  _roundedGlass(
+                                      child: IconButton(
                                           tooltip: 'وضع الفلاش',
                                           onPressed: _cycleFlash,
                                           icon: Icon(
                                             _flashMode == FlashMode.off
                                                 ? Icons.flash_off_rounded
                                                 : _flashMode == FlashMode.auto
-                                                ? Icons.flash_auto_rounded
-                                                : _flashMode == FlashMode.always
-                                                ? Icons.flash_on_rounded
-                                                : Icons.highlight_rounded,
+                                                    ? Icons.flash_auto_rounded
+                                                    : _flashMode ==
+                                                            FlashMode.always
+                                                        ? Icons.flash_on_rounded
+                                                        : Icons
+                                                            .highlight_rounded,
                                             color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                          ))),
+                                ]),
+                              ),
+                              Positioned(
+                                bottom: 10,
+                                left: 12,
+                                right: 12,
+                                child: Column(children: [
+                                  _sliderCard(
+                                      label: 'التقريب',
+                                      value: _zoom,
+                                      min: _minZoom,
+                                      max: _maxZoom,
+                                      onChanged: (v) => _setZoom(v)),
+                                  const SizedBox(height: 8),
+                                  _sliderCard(
+                                      label: 'التعريض',
+                                      value: _exposure,
+                                      min: _minExposure,
+                                      max: _maxExposure,
+                                      onChanged: (v) => _setExposure(v)),
+                                ]),
+                              ),
+                              if (_requiresItemDialog &&
+                                  (_itemCount != null && _itemCount! > 0))
                                 Positioned(
-                                  bottom: 10,
-                                  left: 12,
+                                  top: 54,
                                   right: 12,
-                                  child: Column(
-                                    children: [
-                                      _sliderCard(
-                                        label: 'التقريب',
-                                        value: _zoom,
-                                        min: _minZoom,
-                                        max: _maxZoom,
-                                        onChanged: (v) => _setZoom(v),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      _sliderCard(
-                                        label: 'التعريض',
-                                        value: _exposure,
-                                        min: _minExposure,
-                                        max: _maxExposure,
-                                        onChanged: (v) => _setExposure(v),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (_requiresItemDialog &&
-                                    (_itemCount != null && _itemCount! > 0))
-                                  Positioned(
-                                    top: 54,
-                                    right: 12,
-                                    child: _roundedGlass(
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 8,
-                                        ),
-                                        child: Row(
+                                  child: _roundedGlass(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 8),
+                                      child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            Text(
-                                              'عدد العناصر: $_itemCount',
-                                              style:
-                                                  GoogleFonts.ibmPlexSansArabic(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                            ),
+                                            Text('عدد العناصر: $_itemCount',
+                                                style:
+                                                    GoogleFonts.ibmPlexSansArabic(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w700)),
                                             const SizedBox(width: 6),
                                             InkWell(
-                                              onTap:
-                                                  _promptForItemCountIfNeeded,
+                                              onTap: _promptForItemCountIfNeeded,
                                               borderRadius:
                                                   BorderRadius.circular(999),
-                                              child: const Icon(
-                                                Icons.edit,
-                                                size: 18,
-                                                color: Colors.white,
-                                              ),
+                                              child: const Icon(Icons.edit,
+                                                  size: 18,
+                                                  color: Colors.white),
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                if (_inlineError != null)
-                                  Positioned(
-                                    top: 12,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withOpacity(0.72),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        _inlineError!,
-                                        style: GoogleFonts.ibmPlexSansArabic(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                IgnorePointer(
-                                  child: AnimatedOpacity(
-                                    opacity: _flashOpacity,
-                                    duration: const Duration(milliseconds: 120),
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.9),
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
+                                          ]),
                                     ),
                                   ),
                                 ),
-                              ],
-                            );
-                          },
-                        ),
+                              if (_inlineError != null)
+                                Positioned(
+                                  top: 12,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 10),
+                                    decoration: BoxDecoration(
+                                        color:
+                                            Colors.black.withOpacity(0.72),
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
+                                    child: Text(_inlineError!,
+                                        style: GoogleFonts.ibmPlexSansArabic(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600)),
+                                  ),
+                                ),
+                              IgnorePointer(
+                                child: AnimatedOpacity(
+                                  opacity: _flashOpacity,
+                                  duration:
+                                      const Duration(milliseconds: 120),
+                                  child: Container(
+                                      decoration: BoxDecoration(
+                                          color:
+                                              Colors.white.withOpacity(0.9),
+                                          borderRadius:
+                                              BorderRadius.circular(16))),
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
                       ),
                     ),
-                  const SizedBox(height: 12),
 
-                  // ✅ عرض نتيجة التحقق بالـ AI
+                  const SizedBox(height: 12),
                   const SizedBox(height: 10),
+
                   if (_ready) ...[
                     if (_capturedPath == null)
                       _gradientButton(
-                        label: _isCapturing
-                            ? 'جاري الالتقاط...'
-                            : 'التقاط صورة',
+                        label:
+                            _isCapturing ? 'جاري الالتقاط...' : 'التقاط صورة',
                         icon: Icons.camera,
                         onTap: _isCapturing
                             ? null
@@ -2248,14 +2283,12 @@ try {
                                   _flashOpacity = 0.9;
                                 });
                                 await Future.delayed(
-                                  const Duration(milliseconds: 90),
-                                );
+                                    const Duration(milliseconds: 90));
                                 if (mounted)
                                   setState(() => _flashOpacity = 0.0);
 
                                 final shot = await _safeTakePicture();
                                 if (!mounted) return;
-
                                 if (shot != null) {
                                   setState(() => _capturedPath = shot.path);
                                   await _verifyTaskImage(shot.path);
@@ -2266,70 +2299,58 @@ try {
                       )
                     else if (_isUploading)
                       _gradientButton(
-                        label: 'جاري إكمال المهمة...',
-                        icon: Icons.cloud_upload,
-                        enabled: false,
-                        loading: true,
-                        onTap: null,
-                      )
+                          label: 'جاري إكمال المهمة...',
+                          icon: Icons.cloud_upload,
+                          enabled: false,
+                          loading: true,
+                          onTap: null)
                     else if (_isVerifying)
                       _gradientButton(
-                        label: 'جاري التحقق...',
-                        icon: Icons.search,
-                        enabled: false,
-                        loading: true,
-                        onTap: null,
-                      )
-                    // في الـ build داخل else if (!_isCompleted)
+                          label: 'جاري التحقق...',
+                          icon: Icons.search,
+                          enabled: false,
+                          loading: true,
+                          onTap: null)
                     else if (!_isCompleted)
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (_verificationResult != null)
-                            _buildVerificationResult(), // ✅ المربع البرتقالي يظهر مرة واحدة فقط من هنا
+                            _buildVerificationResult(),
                           if (_verificationHint != null) ...[
                             const SizedBox(height: 10),
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.blueGrey.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.blueGrey.withOpacity(0.25),
-                                ),
-                              ),
-                              child: Text(
-                                _verificationHint!,
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  color: appColors.dark,
-                                ),
-                              ),
+                                  color:
+                                      Colors.blueGrey.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: Colors.blueGrey
+                                          .withOpacity(0.25))),
+                              child: Text(_verificationHint!,
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      color: appColors.dark)),
                             ),
                           ],
                           const SizedBox(height: 16),
-
-                          // زر إعادة التقاط
                           OutlinedButton.icon(
-                            icon: Icon(Icons.refresh, color: appColors.primary),
-                            label: Text(
-                              'إعادة التقاط',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                                color: appColors.primary,
-                              ),
-                            ),
+                            icon: Icon(Icons.refresh,
+                                color: appColors.primary),
+                            label: Text('إعادة التقاط',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                    color: appColors.primary)),
                             style: OutlinedButton.styleFrom(
                               side: BorderSide(
-                                color: appColors.primary,
-                                width: 2,
-                              ),
+                                  color: appColors.primary, width: 2),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
+                                  borderRadius: BorderRadius.circular(14)),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: () async {
                               try {
@@ -2350,10 +2371,6 @@ try {
                               }
                             },
                           ),
-
-                          // 🗑️ تم حذف المربع البرتقالي المكرر من هنا ❌
-
-                          // رسالة توجيهية إذا كانت الصورة معتمدة (المربع الأخضر فقط)
                           if (_verificationResult != null &&
                               _isAiApproved(_verificationResult) &&
                               !_isUploading)
@@ -2362,52 +2379,42 @@ try {
                               child: Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: Colors.green.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.green),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.check_circle,
-                                      color: Colors.green,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'الصورة معتمدة',
+                                    color:
+                                        Colors.green.withOpacity(0.1),
+                                    borderRadius:
+                                        BorderRadius.circular(12),
+                                    border:
+                                        Border.all(color: Colors.green)),
+                                child: Row(children: [
+                                  const Icon(Icons.check_circle,
+                                      color: Colors.green, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text('الصورة معتمدة',
                                             style:
                                                 GoogleFonts.ibmPlexSansArabic(
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.green,
-                                                ),
-                                          ),
-                                          Text(
-                                            'سيتم إكمال المهمة تلقائياً...',
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                    color: Colors.green)),
+                                        Text('سيتم إكمال المهمة تلقائياً...',
                                             style:
                                                 GoogleFonts.ibmPlexSansArabic(
-                                                  fontSize: 12,
-                                                  color: Colors.black87,
-                                                ),
-                                          ),
-                                        ],
-                                      ),
+                                                    fontSize: 12,
+                                                    color: Colors.black87)),
+                                      ],
                                     ),
-                                    const SizedBox(
+                                  ),
+                                  const SizedBox(
                                       width: 16,
                                       height: 16,
                                       child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                          strokeWidth: 2,
+                                          color: Colors.green)),
+                                ]),
                               ),
                             ),
                         ],
@@ -2422,22 +2429,19 @@ try {
     );
   }
 
-  Widget _hintCard(String text) => _hintCardWidget(text);
-
-  Widget _hintCardWidget(String text) {
-    return Material(
-      elevation: 2,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+  Widget _hintCard(String text) => Material(
+        elevation: 2,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(text, textAlign: TextAlign.center),
         ),
-        child: Text(text, textAlign: TextAlign.center),
-      ),
-    );
-  }
+      );
 
   Future<void> showTaskFailedDialogAndRedirect(BuildContext context) async {
     await showDialog<void>(
@@ -2446,8 +2450,7 @@ try {
       builder: (dialogContext) {
         return Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
+              borderRadius: BorderRadius.circular(20)),
           insetPadding: const EdgeInsets.symmetric(horizontal: 24),
           child: SizedBox(
             width: 340,
@@ -2456,58 +2459,43 @@ try {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset(
-                    'assets/img/nameerSad.png',
-                    height: 120,
-                    fit: BoxFit.contain,
-                  ),
+                  Image.asset('assets/img/nameerSad.png',
+                      height: 120, fit: BoxFit.contain),
                   const SizedBox(height: 16),
-                  Text(
-                    'لم يتم التحقق', // نفس حجم الخط والتنسيق
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: appColors.dark,
-                    ),
-                  ),
+                  Text('لم يتم التحقق',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: appColors.dark)),
                   const SizedBox(height: 12),
                   Text(
                     'يرجى إعادة التقاط الصورة مع:\n• إضاءة مناسبة\n• وضوح العنصر\n• زاوية تصوير جيدة',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: appColors.dark,
-                      height: 1.6,
-                    ),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: appColors.dark,
+                        height: 1.6),
                   ),
                   const SizedBox(height: 24),
                   Center(
                     child: SizedBox(
-                      width: 140, // 👈 نفس عرض الزر 140
+                      width: 140,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: appColors.primary,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                              borderRadius: BorderRadius.circular(12)),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 10, // 👈 نفس الـ padding
-                          ),
+                              horizontal: 24, vertical: 10),
                         ),
-                        onPressed: () {
-                          Navigator.of(dialogContext).pop();
-                        },
-                        child: Text(
-                          'حسناً',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16, // 👈 نفس حجم الخط
-                          ),
-                        ),
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: Text('حسناً',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16)),
                       ),
                     ),
                   ),
@@ -2520,16 +2508,14 @@ try {
     );
   }
 
-  Widget _roundedGlass({required Widget child}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.25),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white24, width: 1),
-      ),
-      child: child,
-    );
-  }
+  Widget _roundedGlass({required Widget child}) => Container(
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.25),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white24, width: 1),
+        ),
+        child: child,
+      );
 
   Widget _sliderCard({
     required String label,
@@ -2545,41 +2531,35 @@ try {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white24, width: 1),
       ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 56,
-            child: Text(
-              label,
+      child: Row(children: [
+        SizedBox(
+          width: 56,
+          child: Text(label,
               textAlign: TextAlign.center,
               style: GoogleFonts.ibmPlexSansArabic(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+                  color: Colors.white, fontWeight: FontWeight.w600)),
+        ),
+        Expanded(
+          child: Slider(
+            value: value.clamp(min, max).toDouble(),
+            min: min,
+            max: max == min ? min + 0.001 : max,
+            onChanged: onChanged,
+            activeColor: Colors.white,
+            inactiveColor: Colors.white54,
           ),
-          Expanded(
-            child: Slider(
-              value: value.clamp(min, max).toDouble(),
-              min: min,
-              max: max == min ? min + 0.001 : max,
-              onChanged: onChanged,
-              activeColor: Colors.white,
-              inactiveColor: Colors.white54,
-            ),
+        ),
+        SizedBox(
+          width: 58,
+          child: Text(
+            label == 'التقريب'
+                ? '${value.toStringAsFixed(1)}x'
+                : value.toStringAsFixed(1),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
-          SizedBox(
-            width: 58,
-            child: Text(
-              label == 'التقريب'
-                  ? '${value.toStringAsFixed(1)}x'
-                  : value.toStringAsFixed(1),
-              textAlign: TextAlign.center,
-              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 
@@ -2588,19 +2568,15 @@ try {
     IconData? icon,
     required VoidCallback? onTap,
     bool loading = false,
-    bool enabled = true, // ✅ جديد
+    bool enabled = true,
   }) {
     final bool isDisabled = !enabled || loading || onTap == null;
-
     final child = loading
         ? const SizedBox(
             height: 22,
             width: 22,
             child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.white,
-            ),
-          )
+                strokeWidth: 2, color: Colors.white))
         : Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -2608,14 +2584,11 @@ try {
                 Icon(icon, color: Colors.white),
                 const SizedBox(width: 8),
               ],
-              Text(
-                label,
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: Colors.white,
-                ),
-              ),
+              Text(label,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: Colors.white)),
             ],
           );
 
@@ -2627,17 +2600,15 @@ try {
               ? LinearGradient(
                   colors: [Colors.grey.shade400, Colors.grey.shade400],
                   begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                )
+                  end: Alignment.centerRight)
               : const LinearGradient(
                   colors: [appColors.primary, appColors.mint],
                   begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
+                  end: Alignment.centerRight),
           borderRadius: BorderRadius.circular(14),
         ),
         child: InkWell(
-          onTap: isDisabled ? null : onTap, // ✅ يمنع الضغط
+          onTap: isDisabled ? null : onTap,
           borderRadius: BorderRadius.circular(14),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -2665,52 +2636,40 @@ try {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.camera_alt_outlined,
-                color: appColors.primary,
-                size: 22,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'تعليمات التصوير',
+          Row(children: [
+            const Icon(Icons.camera_alt_outlined,
+                color: appColors.primary, size: 22),
+            const SizedBox(width: 8),
+            Text('تعليمات التصوير',
                 style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: appColors.dark,
-                ),
-              ),
-            ],
-          ),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: appColors.dark)),
+          ]),
           const SizedBox(height: 10),
-          ...bullets.map(
-            (txt) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('•  ', style: TextStyle(height: 1.7)),
-                  Expanded(
-                    child: Text(
-                      txt,
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 13.8,
-                        height: 1.8,
-                        color: Colors.black87,
-                      ),
+          ...bullets.map((txt) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('•  ', style: TextStyle(height: 1.7)),
+                    Expanded(
+                      child: Text(txt,
+                          style: GoogleFonts.ibmPlexSansArabic(
+                              fontSize: 13.8,
+                              height: 1.8,
+                              color: Colors.black87)),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+                  ],
+                ),
+              )),
         ],
       ),
     );
   }
 
-  Widget _counterButton({required IconData icon, required VoidCallback onTap}) {
+  Widget _counterButton(
+      {required IconData icon, required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -2721,17 +2680,182 @@ try {
           color: appColors.primary.withOpacity(0.08),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: appColors.primary.withOpacity(0.45),
-            width: 1.3,
-          ),
+              color: appColors.primary.withOpacity(0.45), width: 1.3),
         ),
         child: Icon(icon, size: 22, color: appColors.primary),
       ),
     );
   }
+
+  Future<void> _promptForItemCountIfNeeded() async {
+    if (!_requiresItemDialog) return;
+
+    final minItems = _asInt(widget.taskData['minItems']) ?? 1;
+    final maxItems = _asInt(widget.taskData['maxItems']) ?? 999;
+    int clamp(int v) => v.clamp(minItems, maxItems);
+
+    final def = (_itemCount != null && _itemCount! > 0)
+        ? _itemCount!
+        : (_asInt(widget.taskData['defaultItems']) ?? minItems);
+
+    _itemCountCtrl.text = def.toString();
+
+    final result = await showGeneralDialog<int>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'items',
+      barrierColor: Colors.black54,
+      useRootNavigator: true,
+      pageBuilder: (_, __, ___) => const SizedBox.shrink(),
+      transitionDuration: const Duration(milliseconds: 180),
+      transitionBuilder: (ctx, anim, _, __child) {
+        return Transform.scale(
+          scale: 0.95 + 0.05 * anim.value,
+          child: Opacity(
+            opacity: anim.value,
+            child: Center(
+              child: Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(children: [
+                          const Icon(Icons.format_list_numbered,
+                              color: appColors.primary),
+                          const SizedBox(width: 8),
+                          Text('عدد العناصر المنجزة',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: appColors.dark)),
+                        ]),
+                        const SizedBox(height: 12),
+                        Row(children: [
+                          _counterButton(
+                              icon: Icons.remove_rounded,
+                              onTap: () {
+                                final cur =
+                                    _asInt(_itemCountCtrl.text) ?? def;
+                                _itemCountCtrl.text =
+                                    clamp(cur - 1).toString();
+                                setState(() {});
+                              }),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _itemCountCtrl,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(),
+                              textAlign: TextAlign.center,
+                              decoration: InputDecoration(
+                                contentPadding:
+                                    const EdgeInsets.symmetric(
+                                        vertical: 10, horizontal: 12),
+                                border: OutlineInputBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(12)),
+                                hintText: '$def',
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          _counterButton(
+                              icon: Icons.add_rounded,
+                              onTap: () {
+                                final cur =
+                                    _asInt(_itemCountCtrl.text) ?? def;
+                                _itemCountCtrl.text =
+                                    clamp(cur + 1).toString();
+                                setState(() {});
+                              }),
+                        ]),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                              'الحد الأدنى: $minItems  •  الأقصى: $maxItems',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                  fontSize: 12.5,
+                                  color: Colors.black54)),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () =>
+                                  Navigator.of(ctx).pop(null),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                    color: appColors.primary, width: 2),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 10),
+                              ),
+                              child: Text('إلغاء',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                      color: appColors.primary,
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                final raw =
+                                    _asInt(_itemCountCtrl.text);
+                                if (raw == null || raw <= 0) {
+                                  _showInlineError('أدخل عددًا صحيحًا.');
+                                  return;
+                                }
+                                final safe = clamp(raw);
+                                _itemCountCtrl.text = safe.toString();
+                                Navigator.of(ctx).pop(safe);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: appColors.primary,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 12),
+                              ),
+                              child: Text('حفظ',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ),
+                        ]),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted) return;
+    if (result != null && result > 0) {
+      setState(() => _itemCount = clamp(result));
+    }
+  }
 }
 
-// 🎁 منح مكافأة EcoLand عند إنجاز المهمة
+// ─────────────────────────────────────────────
+//  🎁 منح مكافأة EcoLand عند إنجاز المهمة
+// ─────────────────────────────────────────────
+
 Future<void> _grantEcoReward(String userId, String taskTitle) async {
   try {
     String? rewardId;
@@ -2762,10 +2886,7 @@ Future<void> _grantEcoReward(String userId, String taskTitle) async {
       category = 'article';
     }
 
-    if (rewardId == null) {
-      print('ℹ️ لا توجد مكافأة مناسبة للمهمة: $taskTitle');
-      return;
-    }
+    if (rewardId == null) return;
 
     final today = DateTime.now();
     final todayKey =
@@ -2782,12 +2903,8 @@ Future<void> _grantEcoReward(String userId, String taskTitle) async {
         .limit(1)
         .get();
 
-    if (existingQuery.docs.isNotEmpty) {
-      print('⚠️ المكافأة موجودة مسبقاً اليوم');
-      return;
-    }
+    if (existingQuery.docs.isNotEmpty) return;
 
-    // ✅ بدون thumbnailUrl
     await ecoRewardsRef.add({
       'rewardId': rewardId,
       'name': rewardName,
