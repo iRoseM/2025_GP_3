@@ -10,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 
 import 'services/connection.dart';
 import 'services/fcm_service.dart';
@@ -146,18 +147,17 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
   Future<void> _loadAdminRecommendations() async {
     if (_isFetchingRecommendations) return;
-
     _isFetchingRecommendations = true;
 
-    setState(() {
-      _isLoadingRecommendations = true;
-    });
+    setState(() => _isLoadingRecommendations = true);
 
     try {
       final function = FirebaseFunctions.instanceFor(region: 'us-central1');
       final callable = function.httpsCallable('getAdminRecommendations');
 
-      final result = await callable().timeout(const Duration(seconds: 30));
+      final result = await callable().timeout(
+        const Duration(seconds: 60), // ← زيدها من 15 لـ 60
+      );
 
       if (!mounted) return;
 
@@ -166,12 +166,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
           result.data as Map,
         );
 
-        print('📦 Raw data from function: $data');
-
         setState(() {
           if (data.containsKey('recommendations')) {
             final recs = data['recommendations'] as List;
-
             final recommendationsWithIds = recs.asMap().entries.map((entry) {
               final index = entry.key;
               final e = entry.value;
@@ -183,14 +180,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
               return rec;
             }).toList();
 
-            // ✅ تصفية التوصيات المخفية من SharedPreferences فقط
             _adminRecommendations = recommendationsWithIds.where((rec) {
               final recId =
                   rec['id'] ?? rec['taskId'] ?? rec.hashCode.toString();
               return !_hiddenRecommendations.contains(recId);
             }).toList();
-
-            print('📊 Recommendations loaded: ${_adminRecommendations.length}');
           }
 
           if (data['season'] != null) {
@@ -206,17 +200,39 @@ class _AdminHomePageState extends State<AdminHomePage> {
           _isLoadingRecommendations = false;
         });
       }
+    } on TimeoutException catch (_) {
+      // ← هنا يمسك الـ timeout
+      print('⚠️ Recommendations timeout — loading from cache');
+      await _loadRecommendationsFromCache();
     } catch (e) {
       print('🔴 Error loading recommendations: $e');
+      await _loadRecommendationsFromCache(); // ← في حالة أي خطأ كمان جرب الكاش
+    } finally {
+      _isFetchingRecommendations = false;
+      if (mounted) setState(() => _isLoadingRecommendations = false);
+    }
+  }
 
-      if (mounted) {
+  Future<void> _loadRecommendationsFromCache() async {
+    try {
+      final currentMonth = DateTime.now().toIso8601String().substring(0, 7);
+      final cached = await FirebaseFirestore.instance
+          .collection('adminRecommendations')
+          .doc(currentMonth)
+          .get();
+
+      if (cached.exists && mounted) {
+        final data = cached.data()!;
+        final recs = data['recommendations'] as List? ?? [];
         setState(() {
-          _adminRecommendations = [];
+          _adminRecommendations = List<Map<String, dynamic>>.from(
+            recs.map((e) => Map<String, dynamic>.from(e)),
+          );
           _isLoadingRecommendations = false;
         });
       }
-    } finally {
-      _isFetchingRecommendations = false;
+    } catch (e) {
+      print('❌ Cache load failed: $e');
     }
   }
 
@@ -337,9 +353,10 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
     _initPrefs().then((_) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadTargetFromFirebase();
         _loadTaskCategories();
         _loadAdminRecommendations();
-        _testFunctionDirectly();
+        // _testFunctionDirectly();
         _loadTopUsers();
 
         setState(() {
@@ -2342,47 +2359,33 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
-  Future<void> _saveTargetToFirebase(double target) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await FirebaseFirestore.instance
-            .collection('adminSettings')
-            .doc('carbonTarget')
-            .set({
-              'target': target,
-              'updatedBy': user.uid,
-              'updatedAt': Timestamp.now(),
-            });
-      }
-    } catch (e) {
-      debugPrint('❌ Error saving target: $e');
-    }
-  }
-
   Future<void> _loadTargetFromFirebase() async {
     try {
       final doc = await FirebaseFirestore.instance
-          .collection('adminSettings')
+          .collection('appSettings') // ← هذا المسار الصحيح
           .doc('carbonTarget')
           .get();
 
-      if (doc.exists && doc.data() != null) {
-        final target = doc.data()!['target'];
-        if (target is num) {
-          setState(() {
-            _carbonTarget = target.toDouble();
-          });
-          print('✅ Loaded carbon target from Firebase: $_carbonTarget');
+      if (doc.exists) {
+        final target = (doc.data()?['target'] as num?)?.toDouble();
+        if (target != null && target > 0) {
+          setState(() => _carbonTarget = target);
         }
-      } else {
-        // ✅ المستند غير موجود → هذا طبيعي، نستخدم القيمة الافتراضية
-        print('ℹ️ No saved carbon target, using default: $_carbonTarget');
       }
     } catch (e) {
-      // ✅ في حالة خطأ (مثلاً مشكلة إنترنت)، نستخدم القيمة الافتراضية
-      print('⚠️ Could not load carbon target, using default: $_carbonTarget');
+      debugPrint('⚠️ Could not load carbon target: $e');
     }
+  }
+
+  Future<void> _saveTargetToFirebase(double target) async {
+    await FirebaseFirestore.instance
+        .collection('appSettings') // ← هذا المسار الصحيح
+        .doc('carbonTarget')
+        .set({
+          'target': target,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'updatedBy': 'admin_manual',
+        }, SetOptions(merge: true));
   }
 
   Widget _buildCarbonOverviewCard({
@@ -4650,6 +4653,93 @@ class _AdminHomePageState extends State<AdminHomePage> {
                     ],
                   ),
                 ),
+              // ✅ الوصف المحسن (للتوصيات من نوع modify)
+              if (rec['type'] == 'modify' &&
+                  rec['improvedDescription'] != null &&
+                  rec['improvedDescription'].toString().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.orange.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              size: 14,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'الوصف المحسن المقترح:',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          rec['improvedDescription'].toString(),
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 12,
+                            color: Colors.orange.shade800,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // زر نسخ الوصف
+                        GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(
+                              ClipboardData(
+                                text: rec['improvedDescription'].toString(),
+                              ),
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'تم نسخ الوصف ✅',
+                                  style: GoogleFonts.ibmPlexSansArabic(),
+                                ),
+                                backgroundColor: Colors.orange,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.copy, size: 12, color: Colors.orange),
+                              const SizedBox(width: 4),
+                              Text(
+                                'انسخ الوصف',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  fontSize: 10,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
               // ✅ معلومات إضافية للحاويات (نوع review_reports مع facilityId)
               if (rec['type'] == 'review_reports' &&
@@ -4773,7 +4863,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                 preFillData: {
                                   'category': rec['category'],
                                   'title': rec['title'],
-                                  'description': rec['description'],
+                                  'description': rec['userDescription'],
                                   'userDescription': rec['userDescription'],
                                   'suggestion': rec['suggestion'],
                                   'validationStrategy':
@@ -4821,7 +4911,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                 preFillData: {
                                   'category': rec['category'],
                                   'title': rec['title'],
-                                  'description': rec['description'],
+                                  'description':
+                                      rec['improvedDescription'] != null &&
+                                          rec['improvedDescription']
+                                              .toString()
+                                              .isNotEmpty
+                                      ? rec['improvedDescription']
+                                      : rec['description'],
                                   'suggestion': rec['suggestion'],
                                   'taskId': rec['taskId'],
                                   'type': 'modify',
@@ -4864,7 +4960,13 @@ class _AdminHomePageState extends State<AdminHomePage> {
                                 preFillData: {
                                   'category': rec['category'],
                                   'title': rec['title'],
-                                  'description': rec['description'],
+                                  'description':
+                                      rec['improvedDescription'] != null &&
+                                          rec['improvedDescription']
+                                              .toString()
+                                              .isNotEmpty
+                                      ? rec['improvedDescription']
+                                      : rec['description'],
                                   'type': 'delete',
                                   'taskId': rec['taskId'],
                                 },

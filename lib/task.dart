@@ -1695,31 +1695,21 @@ class _taskPageState extends State<taskPage> {
 
     try {
       GeoPoint? currentLocation;
-
-      // ✅ حاول جلب الموقع الحالي أولاً
       try {
         currentLocation = await LocationService.getCurrentLocation();
-        if (currentLocation != null) {
-          print('📍 Got current location: $currentLocation');
-        }
       } catch (e) {
-        print('⚠️ Could not get current location: $e');
+        print('⚠️ Could not get location: $e');
       }
 
-      // ✅ إذا فشل الموقع الحالي، استخدم آخر موقع مخزن في Firestore
       if (currentLocation == null) {
         try {
           final userDoc = await FirebaseFirestore.instance
               .collection('users')
               .doc(_uid)
               .get();
-
           if (userDoc.exists &&
               userDoc.data()?.containsKey('lastLocation') == true) {
             currentLocation = userDoc.data()!['lastLocation'] as GeoPoint?;
-            print(
-              '📍 Using last known location from Firestore: $currentLocation',
-            );
           }
         } catch (e) {
           print('⚠️ Could not fetch location from Firestore: $e');
@@ -1747,28 +1737,32 @@ class _taskPageState extends State<taskPage> {
       }
 
       final result = await callable.call(data);
-
       final Map<String, dynamic> response = Map<String, dynamic>.from(
         result.data as Map,
       );
 
       if (response.containsKey('taskId')) {
-        // ✅ تأكد إنها مو نفس المهمة المستبعدة
         if (excludeTaskId != null && response['taskId'] == excludeTaskId) {
-          print('⚠️ Got same task, retrying...');
-          return _suggestBonusTask(
-            excludeTaskId: excludeTaskId,
-          ); // Recursive retry
+          return _suggestBonusTask(excludeTaskId: excludeTaskId);
         }
 
-        final taskDoc = await FirebaseFirestore.instance
-            .collection('tasks')
-            .doc(response['taskId'])
-            .get();
-
-        if (taskDoc.exists) {
-          return {'id': taskDoc.id, ...taskDoc.data()!};
-        }
+        // ✅ استخدم البيانات من الأيجنت مباشرة بدل Firestore
+        // الأيجنت يرجع description مخصص — لا تستبدله ببيانات Firestore
+        return {
+          'id': response['taskId'],
+          'taskId': response['taskId'],
+          'title': response['title'] ?? '',
+          'description': response['description'] ?? '', // ← المخصص
+          'originalDescription': response['originalDescription'] ?? '',
+          'points': response['points'] ?? 0,
+          'validationStrategy': response['validationStrategy'] ?? 'غير محددة',
+          'category': response['category'] ?? '',
+          'calcMode': response['calcMode'] ?? '',
+          'ef_ref': response['ef_ref'] ?? '',
+          'status': 'pending',
+          'agentReasoning': response['agentReasoning'] ?? '',
+          'nearbyPlaces': response['nearbyPlaces'] ?? [],
+        };
       }
 
       return response;
