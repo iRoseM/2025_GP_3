@@ -25,7 +25,7 @@ import '../services/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'article.dart';
 import 'levels.dart';
-import 'widgets/ecoland_grid.dart';
+import 'widgets/ecoland_island.dart';
 import 'services/xp_service.dart'; 
 
 
@@ -48,7 +48,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   final GlobalKey _friendsKey = GlobalKey();
   final GlobalKey _carbonKey = GlobalKey(); // كرت "إجمالي خفض الكربون"
   final GlobalKey<_homePageState> _homePageKey = GlobalKey();
-  List<IsoItem> _ecoLandItems = [];
+  // List<IsoItem> _ecoLandItems = [];
 
   OverlayEntry? _skipEntry;
   bool _tourRunning = false;
@@ -100,13 +100,13 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
     _skipEntry = null;
   }
 
-  void _onEcoLandItemsLoaded(List<IsoItem> items) {
-    if (mounted) {
-      setState(() {
-        _ecoLandItems = items;
-      });
-    }
-  }
+  // void _onEcoLandItemsLoaded(List<IsoItem> items) {
+  //   if (mounted) {
+  //     setState(() {
+  //       _ecoLandItems = items;
+  //     });
+  //   }
+  // }
 
   late final AnimationController _bgCtrl;
   AnimationController? _floatingCtrl;
@@ -1033,115 +1033,136 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
 
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(20),
-                                  onTap: () {
-                                    setState(() {
-                                      _ecoLandExpanded = !_ecoLandExpanded;
-                                    });
-                                  },
+                                  // onTap: () {
+                                  //   setState(() {
+                                  //     _ecoLandExpanded = !_ecoLandExpanded;
+                                  //   });
+                                  // },
                                   child: Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.grey.withOpacity(0.12),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // 🔹 الهيدر
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              'EcoLand',
-                                              style:
-                                                  GoogleFonts.ibmPlexSansArabic(
-                                                    fontSize: 18,
-                                                    fontWeight: FontWeight.w800,
-                                                    color: appColors.dark,
-                                                  ),
-                                            ),
-                                            Icon(
-                                              _ecoLandExpanded
-                                                  ? Icons.keyboard_arrow_up
-                                                  : Icons.keyboard_arrow_down,
-                                              color: appColors.primary,
-                                            ),
-                                          ],
-                                        ),
-
-                                        const SizedBox(height: 6),
-
-                                        Text(
-                                          'تابع تقدمك في إكمال المهام',
-                                          style: GoogleFonts.ibmPlexSansArabic(
-                                            fontSize: 13,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-
-                                        const SizedBox(height: 14),
-
-                                        // 🌍 EcoLand — تعرض المكافآت التي حصل عليها المستخدم
-                                        SizedBox(
-                                          width: double.infinity,
-                                          height: 170,
-                                          child: IsoLand(
-                                            rows: 6,
-                                            cols: 6,
-                                            height: 150,
-                                            thickness: 14,
-                                            topColor: appColors.mint,
-                                            sideColor: appColors.tealSoft,
-                                            gridColor: appColors.sea,
-                                            gridOpacity: .08,
-                                            items:
-                                                _ecoLandItems, // ✅ هذا السطر مهم
-                                          ),
-                                        ),
-
-                                        // هذا يجلب البيانات فقط (لا يظهر شيء)
-                                        EcoLandGrid(
-                                          userId:
-                                              FirebaseAuth
-                                                  .instance
-                                                  .currentUser
-                                                  ?.uid ??
-                                              '',
-                                          onItemsLoaded: _onEcoLandItemsLoaded,
-                                        ),
-
-                                        // 👇 الاكسباند (التشارت فقط)
-                                        AnimatedSize(
-                                          duration: const Duration(
-                                            milliseconds: 320,
-                                          ),
-                                          curve: Curves.easeInOut,
-                                          child: _ecoLandExpanded
-                                              ? const Padding(
-                                                  padding: EdgeInsets.only(
-                                                    top: 16,
-                                                  ),
-                                                  child: SizedBox(
-                                                    height: 400,
-                                                    child:
-                                                        _UserTaskProgressCard(),
-                                                  ),
-                                                )
-                                              : const SizedBox.shrink(),
-                                        ),
-                                      ],
-                                    ),
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.grey.withOpacity(0.12),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // 🔹 الهيدر
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'EcoLand',
+                                            style: GoogleFonts.ibmPlexSansArabic(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w800,
+                                              color: appColors.dark,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+
+                                      const SizedBox(height: 6),
+
+                                      Text(
+                                        'تابع تقدمك في إكمال المهام',
+                                        style: GoogleFonts.ibmPlexSansArabic(
+                                          fontSize: 13,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+
+                                      const SizedBox(height: 14),
+
+                                      // 🌍 EcoLand
+                                      Container(
+                                        width: double.infinity,
+                                        height: 500,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                        clipBehavior: Clip.hardEdge,
+                                        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                                          stream: FirebaseFirestore.instance
+                                              .collection('users')
+                                              .doc(FirebaseAuth.instance.currentUser?.uid ?? '')
+                                              .snapshots(),
+                                          builder: (context, snap) {
+                                            final data = snap.data?.data() ?? {};
+                                            final int xp = data['xp'] ?? 0;
+                                            final currentLevel = getCurrentLevel(xp);
+                                            final islandLevel = islandLevelFromId(currentLevel.id);
+
+                                            return EcoLandIsland(
+                                              level: islandLevel,
+                                              isReadOnly: false,
+                                              allowPan: false,
+                                              showFriends: false,
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                      // 🔹 بار الإحصائيات
+                                      const SizedBox(height: 10),
+                                      GestureDetector(
+                                        onTap: () => setState(() => _ecoLandExpanded = !_ecoLandExpanded),
+                                        child: Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                                          decoration: BoxDecoration(
+                                            color: appColors.primary.withOpacity(0.07),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                _ecoLandExpanded
+                                                    ? Icons.keyboard_arrow_up
+                                                    : Icons.bar_chart_rounded,
+                                                color: appColors.primary,
+                                                size: 18,
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Text(
+                                                _ecoLandExpanded ? 'إخفاء الإحصائيات' : 'عرض الإحصائيات',
+                                                style: GoogleFonts.ibmPlexSansArabic(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: appColors.primary,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
+                                      // 👇 الإحصائيات
+                                      AnimatedSize(
+                                        duration: const Duration(milliseconds: 320),
+                                        curve: Curves.easeInOut,
+                                        child: _ecoLandExpanded
+                                            ? const Padding(
+                                                padding: EdgeInsets.only(top: 16),
+                                                child: SizedBox(
+                                                  height: 400,
+                                                  child: _UserTaskProgressCard(),
+                                                ),
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                                 ),
                               ),
                             ),
@@ -2834,310 +2855,310 @@ class _FriendCard extends StatelessWidget {
 
 /* ======================= IsoLand 2.5D Platform ======================= */
 
-class IsoLand extends StatelessWidget {
-  final int rows;
-  final int cols;
-  final double height;
-  final double thickness;
-  final Color topColor;
-  final Color sideColor;
-  final Color gridColor;
-  final double gridOpacity;
-  final List<IsoItem> items;
+// class IsoLand extends StatelessWidget {
+//   final int rows;
+//   final int cols;
+//   final double height;
+//   final double thickness;
+//   final Color topColor;
+//   final Color sideColor;
+//   final Color gridColor;
+//   final double gridOpacity;
+//   final List<IsoItem> items;
 
-  const IsoLand({
-    super.key,
-    this.rows = 6,
-    this.cols = 6,
-    this.height = 260,
-    this.thickness = 14,
-    this.topColor = const Color(0xFFBFE6C0),
-    this.sideColor = const Color(0xFFA1C9A3),
-    this.gridColor = const Color(0xFF1F7A8C),
-    this.gridOpacity = .08,
-    this.items = const [],
-  });
+//   const IsoLand({
+//     super.key,
+//     this.rows = 6,
+//     this.cols = 6,
+//     this.height = 260,
+//     this.thickness = 14,
+//     this.topColor = const Color(0xFFBFE6C0),
+//     this.sideColor = const Color(0xFFA1C9A3),
+//     this.gridColor = const Color(0xFF1F7A8C),
+//     this.gridOpacity = .08,
+//     this.items = const [],
+//   });
 
-  @override
-  Widget build(BuildContext context) {
-    final double width = height * 1.45;
+//   @override
+//   Widget build(BuildContext context) {
+//     final double width = height * 1.45;
 
-    return SizedBox(
-      width: width,
-      height: height,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // ظل أسفل المنصّة
-          Positioned.fill(
-            top: thickness,
-            child: CustomPaint(painter: _IsoShadowPainter()),
-          ),
+//     return SizedBox(
+//       width: width,
+//       height: height,
+//       child: Stack(
+//         clipBehavior: Clip.none,
+//         children: [
+//           // ظل أسفل المنصّة
+//           Positioned.fill(
+//             top: thickness,
+//             child: CustomPaint(painter: _IsoShadowPainter()),
+//           ),
 
-          // جسم المنصّة + الشبكة (تمرير السمك)
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _IsoPlatformPainter(
-                rows: rows,
-                cols: cols,
-                topColor: topColor,
-                sideColor: sideColor,
-                gridColor: gridColor.withOpacity(gridOpacity),
-                depth: thickness, // << جديد
-              ),
-            ),
-          ),
+//           // جسم المنصّة + الشبكة (تمرير السمك)
+//           Positioned.fill(
+//             child: CustomPaint(
+//               painter: _IsoPlatformPainter(
+//                 rows: rows,
+//                 cols: cols,
+//                 topColor: topColor,
+//                 sideColor: sideColor,
+//                 gridColor: gridColor.withOpacity(gridOpacity),
+//                 depth: thickness, // << جديد
+//               ),
+//             ),
+//           ),
 
-          // العناصر فوق الشبكة
-          ...items.map(
-            (it) => _IsoPositioned(
-              rows: rows,
-              cols: cols,
-              row: it.row,
-              col: it.col,
-              child: it.child,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+//           // العناصر فوق الشبكة
+//           ...items.map(
+//             (it) => _IsoPositioned(
+//               rows: rows,
+//               cols: cols,
+//               row: it.row,
+//               col: it.col,
+//               child: it.child,
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
 
-class _IsoPlatformPainter extends CustomPainter {
-  final int rows, cols;
-  final Color topColor, sideColor, gridColor;
-  final double depth; // << جديد
+// class _IsoPlatformPainter extends CustomPainter {
+//   final int rows, cols;
+//   final Color topColor, sideColor, gridColor;
+//   final double depth; // << جديد
 
-  _IsoPlatformPainter({
-    required this.rows,
-    required this.cols,
-    required this.topColor,
-    required this.sideColor,
-    required this.gridColor,
-    required this.depth,
-  });
+//   _IsoPlatformPainter({
+//     required this.rows,
+//     required this.cols,
+//     required this.topColor,
+//     required this.sideColor,
+//     required this.gridColor,
+//     required this.depth,
+//   });
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
+//   @override
+//   void paint(Canvas canvas, Size size) {
+//     final w = size.width;
+//     final h = size.height;
 
-    // رؤوس الرومبوس العلوي
-    final top = Offset(w * .50, h * .16);
-    final right = Offset(w * .86, h * .50);
-    final bottom = Offset(w * .50, h * .84);
-    final left = Offset(w * .14, h * .50);
+//     // رؤوس الرومبوس العلوي
+//     final top = Offset(w * .50, h * .16);
+//     final right = Offset(w * .86, h * .50);
+//     final bottom = Offset(w * .50, h * .84);
+//     final left = Offset(w * .14, h * .50);
 
-    // نسخ مُزاحة لأسفل بمقدار العمق
-    final top2 = top.translate(0, depth);
-    final right2 = right.translate(0, depth);
-    final bottom2 = bottom.translate(0, depth);
-    final left2 = left.translate(0, depth);
+//     // نسخ مُزاحة لأسفل بمقدار العمق
+//     final top2 = top.translate(0, depth);
+//     final right2 = right.translate(0, depth);
+//     final bottom2 = bottom.translate(0, depth);
+//     final left2 = left.translate(0, depth);
 
-    // === وجوه السمك (تكملة الفراغ) ===
-    final leftFace = Path()
-      ..moveTo(left.dx, left.dy)
-      ..lineTo(bottom.dx, bottom.dy)
-      ..lineTo(bottom2.dx, bottom2.dy)
-      ..lineTo(left2.dx, left2.dy)
-      ..close();
+//     // === وجوه السمك (تكملة الفراغ) ===
+//     final leftFace = Path()
+//       ..moveTo(left.dx, left.dy)
+//       ..lineTo(bottom.dx, bottom.dy)
+//       ..lineTo(bottom2.dx, bottom2.dy)
+//       ..lineTo(left2.dx, left2.dy)
+//       ..close();
 
-    final rightFace = Path()
-      ..moveTo(bottom.dx, bottom.dy)
-      ..lineTo(right.dx, right.dy)
-      ..lineTo(right2.dx, right2.dy)
-      ..lineTo(bottom2.dx, bottom2.dy)
-      ..close();
+//     final rightFace = Path()
+//       ..moveTo(bottom.dx, bottom.dy)
+//       ..lineTo(right.dx, right.dy)
+//       ..lineTo(right2.dx, right2.dy)
+//       ..lineTo(bottom2.dx, bottom2.dy)
+//       ..close();
 
-    final leftPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [sideColor.withOpacity(.95), sideColor.withOpacity(.8)],
-      ).createShader(Rect.fromPoints(left, bottom2));
+//     final leftPaint = Paint()
+//       ..shader = LinearGradient(
+//         begin: Alignment.topLeft,
+//         end: Alignment.bottomRight,
+//         colors: [sideColor.withOpacity(.95), sideColor.withOpacity(.8)],
+//       ).createShader(Rect.fromPoints(left, bottom2));
 
-    final rightPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topRight,
-        end: Alignment.bottomLeft,
-        colors: [sideColor.withOpacity(.95), sideColor.withOpacity(.8)],
-      ).createShader(Rect.fromPoints(bottom, right2));
+//     final rightPaint = Paint()
+//       ..shader = LinearGradient(
+//         begin: Alignment.topRight,
+//         end: Alignment.bottomLeft,
+//         colors: [sideColor.withOpacity(.95), sideColor.withOpacity(.8)],
+//       ).createShader(Rect.fromPoints(bottom, right2));
 
-    canvas.drawPath(leftFace, leftPaint);
-    canvas.drawPath(rightFace, rightPaint);
+//     canvas.drawPath(leftFace, leftPaint);
+//     canvas.drawPath(rightFace, rightPaint);
 
-    // سطح الرومبوس العلوي
-    final topPath = Path()
-      ..moveTo(top.dx, top.dy)
-      ..lineTo(right.dx, right.dy)
-      ..lineTo(bottom.dx, bottom.dy)
-      ..lineTo(left.dx, left.dy)
-      ..close();
+//     // سطح الرومبوس العلوي
+//     final topPath = Path()
+//       ..moveTo(top.dx, top.dy)
+//       ..lineTo(right.dx, right.dy)
+//       ..lineTo(bottom.dx, bottom.dy)
+//       ..lineTo(left.dx, left.dy)
+//       ..close();
 
-    canvas.drawPath(
-      topPath,
-      Paint()
-        ..shader = LinearGradient(
-          colors: [topColor.withOpacity(.95), topColor.withOpacity(.85)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ).createShader(Offset.zero & size),
-    );
+//     canvas.drawPath(
+//       topPath,
+//       Paint()
+//         ..shader = LinearGradient(
+//           colors: [topColor.withOpacity(.95), topColor.withOpacity(.85)],
+//           begin: Alignment.topLeft,
+//           end: Alignment.bottomRight,
+//         ).createShader(Offset.zero & size),
+//     );
 
-    // شبكة خفيفة على السطح
-    final gridPaint = Paint()
-      ..color = gridColor
-      ..strokeWidth = 1;
+//     // شبكة خفيفة على السطح
+//     final gridPaint = Paint()
+//       ..color = gridColor
+//       ..strokeWidth = 1;
 
-    Offset lerp(Offset a, Offset b, double t) =>
-        Offset(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t);
+//     Offset lerp(Offset a, Offset b, double t) =>
+//         Offset(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t);
 
-    for (int r = 1; r < rows; r++) {
-      final t = r / rows;
-      final a = lerp(top, right, t);
-      final b = lerp(left, bottom, t);
-      canvas.drawLine(a, b, gridPaint);
-    }
-    for (int c = 1; c < cols; c++) {
-      final t = c / cols;
-      final a = lerp(top, left, t);
-      final b = lerp(right, bottom, t);
-      canvas.drawLine(a, b, gridPaint);
-    }
-  }
+//     for (int r = 1; r < rows; r++) {
+//       final t = r / rows;
+//       final a = lerp(top, right, t);
+//       final b = lerp(left, bottom, t);
+//       canvas.drawLine(a, b, gridPaint);
+//     }
+//     for (int c = 1; c < cols; c++) {
+//       final t = c / cols;
+//       final a = lerp(top, left, t);
+//       final b = lerp(right, bottom, t);
+//       canvas.drawLine(a, b, gridPaint);
+//     }
+//   }
 
-  @override
-  bool shouldRepaint(covariant _IsoPlatformPainter old) =>
-      old.rows != rows ||
-      old.cols != cols ||
-      old.topColor != topColor ||
-      old.sideColor != sideColor ||
-      old.gridColor != gridColor ||
-      old.depth != depth;
-}
+//   @override
+//   bool shouldRepaint(covariant _IsoPlatformPainter old) =>
+//       old.rows != rows ||
+//       old.cols != cols ||
+//       old.topColor != topColor ||
+//       old.sideColor != sideColor ||
+//       old.gridColor != gridColor ||
+//       old.depth != depth;
+// }
 
-class _IsoShadowPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    final shadow = Path()
-      ..moveTo(w * .18, h * .60)
-      ..lineTo(w * .86, h * .60)
-      ..lineTo(w * .92, h * .72)
-      ..lineTo(w * .12, h * .72)
-      ..close();
+// class _IsoShadowPainter extends CustomPainter {
+//   @override
+//   void paint(Canvas canvas, Size size) {
+//     final w = size.width, h = size.height;
+//     final shadow = Path()
+//       ..moveTo(w * .18, h * .60)
+//       ..lineTo(w * .86, h * .60)
+//       ..lineTo(w * .92, h * .72)
+//       ..lineTo(w * .12, h * .72)
+//       ..close();
 
-    final paint = Paint()
-      ..color = Colors.black.withOpacity(.08)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawPath(shadow, paint);
-  }
+//     final paint = Paint()
+//       ..color = Colors.black.withOpacity(.08)
+//       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+//     canvas.drawPath(shadow, paint);
+//   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
+//   @override
+//   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+// }
 
-class _IsoPositioned extends StatelessWidget {
-  final int rows, cols, row, col;
-  final Widget child;
+// class _IsoPositioned extends StatelessWidget {
+//   final int rows, cols, row, col;
+//   final Widget child;
 
-  const _IsoPositioned({
-    required this.rows,
-    required this.cols,
-    required this.row,
-    required this.col,
-    required this.child,
-  });
+//   const _IsoPositioned({
+//     required this.rows,
+//     required this.cols,
+//     required this.row,
+//     required this.col,
+//     required this.child,
+//   });
 
-  @override
-  Widget build(BuildContext context) {
-    return _IsoPositionedLayout(
-      rows: rows,
-      cols: cols,
-      row: row,
-      col: col,
-      child: child,
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return _IsoPositionedLayout(
+//       rows: rows,
+//       cols: cols,
+//       row: row,
+//       col: col,
+//       child: child,
+//     );
+//   }
+// }
 
-// ✅ فصل LayoutBuilder في Widget منفصل
-class _IsoPositionedLayout extends StatefulWidget {
-  final int rows, cols, row, col;
-  final Widget child;
+// // ✅ فصل LayoutBuilder في Widget منفصل
+// class _IsoPositionedLayout extends StatefulWidget {
+//   final int rows, cols, row, col;
+//   final Widget child;
 
-  const _IsoPositionedLayout({
-    required this.rows,
-    required this.cols,
-    required this.row,
-    required this.col,
-    required this.child,
-  });
+//   const _IsoPositionedLayout({
+//     required this.rows,
+//     required this.cols,
+//     required this.row,
+//     required this.col,
+//     required this.child,
+//   });
 
-  @override
-  State<_IsoPositionedLayout> createState() => _IsoPositionedLayoutState();
-}
+//   @override
+//   State<_IsoPositionedLayout> createState() => _IsoPositionedLayoutState();
+// }
 
-class _IsoPositionedLayoutState extends State<_IsoPositionedLayout> {
-  late double _left = 0;
-  late double _top = 0;
-  bool _hasPosition = false;
+// class _IsoPositionedLayoutState extends State<_IsoPositionedLayout> {
+//   late double _left = 0;
+//   late double _top = 0;
+//   bool _hasPosition = false;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _calculatePosition();
-    });
-  }
+//   @override
+//   void initState() {
+//     super.initState();
+//     WidgetsBinding.instance.addPostFrameCallback((_) {
+//       _calculatePosition();
+//     });
+//   }
 
-  void _calculatePosition() {
-    final renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox != null) {
-      final size = renderBox.size;
-      final w = size.width;
-      final h = size.height;
+//   void _calculatePosition() {
+//     final renderBox = context.findRenderObject() as RenderBox?;
+//     if (renderBox != null) {
+//       final size = renderBox.size;
+//       final w = size.width;
+//       final h = size.height;
 
-      final top = Offset(w * .50, h * .16);
-      final right = Offset(w * .86, h * .50);
-      final bottom = Offset(w * .50, h * .84);
-      final left = Offset(w * .14, h * .50);
+//       final top = Offset(w * .50, h * .16);
+//       final right = Offset(w * .86, h * .50);
+//       final bottom = Offset(w * .50, h * .84);
+//       final left = Offset(w * .14, h * .50);
 
-      Offset lerp(Offset a, Offset b, double t) =>
-          Offset(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t);
+//       Offset lerp(Offset a, Offset b, double t) =>
+//           Offset(a.dx + (b.dx - a.dx) * t, a.dy + (b.dy - a.dy) * t);
 
-      final u = (widget.col + .5) / widget.cols;
-      final v = (widget.row + .5) / widget.rows;
+//       final u = (widget.col + .5) / widget.cols;
+//       final v = (widget.row + .5) / widget.rows;
 
-      final edgeA = lerp(left, top, 1 - v);
-      final edgeB = lerp(bottom, right, 1 - v);
-      final p = lerp(edgeA, edgeB, u);
+//       final edgeA = lerp(left, top, 1 - v);
+//       final edgeB = lerp(bottom, right, 1 - v);
+//       final p = lerp(edgeA, edgeB, u);
 
-      setState(() {
-        _left = p.dx;
-        _top = p.dy;
-        _hasPosition = true;
-      });
-    }
-  }
+//       setState(() {
+//         _left = p.dx;
+//         _top = p.dy;
+//         _hasPosition = true;
+//       });
+//     }
+//   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (!_hasPosition) {
-      return Container(); // مؤقت حتى يتم حساب الموقع
-    }
+//   @override
+//   Widget build(BuildContext context) {
+//     if (!_hasPosition) {
+//       return Container(); // مؤقت حتى يتم حساب الموقع
+//     }
 
-    return Positioned(
-      left: _left,
-      top: _top,
-      child: Transform.translate(
-        offset: const Offset(-16, -28),
-        child: widget.child,
-      ),
-    );
-  }
-}
+//     return Positioned(
+//       left: _left,
+//       top: _top,
+//       child: Transform.translate(
+//         offset: const Offset(-16, -28),
+//         child: widget.child,
+//       ),
+//     );
+//   }
+// }
 
 class _SkipTourButton extends StatelessWidget {
   final VoidCallback onSkip;

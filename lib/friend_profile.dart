@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'services/background_container.dart';
 import 'services/title_header.dart';
 import '../services/app_colors.dart';
-import 'home.dart' show IsoLand;
+import 'widgets/ecoland_island.dart';
 import 'services/xp_service.dart';
 
 /* ======================= صفحة بروفايل الصديق ======================= */
@@ -577,20 +577,46 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
           const SizedBox(height: 16),
 
           // الـ IsoLand
-          const SizedBox(
-            width: double.infinity,
-            height: 180,
-            child: IsoLand(
-              rows: 6,
-              cols: 6,
-              height: 160,
-              thickness: 14,
-              topColor: appColors.mint,
-              sideColor: appColors.tealSoft,
-              gridColor: appColors.sea,
-              gridOpacity: .08,
-            ),
-          ),
+          // const SizedBox(
+          //   width: double.infinity,
+          //   height: 180,
+          //   child: IsoLand(
+          //     rows: 6,
+          //     cols: 6,
+          //     height: 160,
+          //     thickness: 14,
+          //     topColor: appColors.mint,
+          //     sideColor: appColors.tealSoft,
+          //     gridColor: appColors.sea,
+          //     gridOpacity: .08,
+          //   ),
+          // ),
+
+          Builder(builder: (context) {
+            final int friendXp = (_friendData!['xp'] ?? 0) is int
+                ? _friendData!['xp'] ?? 0
+                : ((_friendData!['xp'] ?? 0) as num).toInt();
+            final currentLevel = getCurrentLevel(friendXp);
+
+            IslandLevel islandLevel;
+            switch (currentLevel.id) {
+              case 'seedling':  islandLevel = IslandLevel.seedling;  break;
+              case 'sprout':    islandLevel = IslandLevel.sprout;    break;
+              case 'tree':      islandLevel = IslandLevel.tree;      break;
+              case 'guardian':  islandLevel = IslandLevel.guardian;  break;
+              case 'champion':  islandLevel = IslandLevel.champion;  break;
+              default:          islandLevel = IslandLevel.seedling;
+            }
+
+            return SizedBox(
+              width: double.infinity,
+              height: 240,
+              child: EcoLandIsland(
+                level: islandLevel,
+                isReadOnly: true,
+              ),
+            );
+          }),
 
           const SizedBox(height: 12),
 

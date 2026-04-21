@@ -12,7 +12,7 @@ import 'services/connection.dart';
 import 'services/title_header.dart';
 import '../services/app_colors.dart';
 import 'friend_profile.dart';
-
+import 'widgets/ecoland_island.dart';
 /* ======================= صفحة الأصدقاء ======================= */
 
 class communityPage extends StatefulWidget {
@@ -486,7 +486,76 @@ class _communityPageState extends State<communityPage> {
                       ),
                     ),
                     const SizedBox(height: 15),
-
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const GlobalEcoLandPage()),
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        height: 56,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFF8C42), Color(0xFFFFB347)],
+                            begin: Alignment.centerRight,
+                            end: Alignment.centerLeft,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFF8C42).withOpacity(0.4),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // دوائر زخرفية
+                            Positioned(
+                              right: -10, top: -10,
+                              child: Container(
+                                width: 70, height: 70,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withOpacity(0.10),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: 20, bottom: -15,
+                              child: Container(
+                                width: 50, height: 50,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withOpacity(0.08),
+                                ),
+                              ),
+                            ),
+                            // المحتوى
+                            Center(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.public_rounded, color: Colors.white, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'واحة الأصدقاء',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     // مربع البحث
                     _buildSearchSection(),
 
