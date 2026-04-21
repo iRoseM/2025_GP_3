@@ -1577,7 +1577,6 @@ def _apply_recommendations_automatically(recommendations: list) -> dict:
 
     return {"applied": applied, "skipped": skipped}
 
-
 # ============================================================
 # Step 9: تحديث هدف الكربون تلقائياً
 # ============================================================
@@ -1587,17 +1586,40 @@ def _update_carbon_target(context: dict, season: dict) -> dict:
         seasonal = context.get("seasonal_patterns", {})
 
         total_users  = max(insights.get("totalUsers", 1), 1)
-        total_carbon = insights.get("totalCarbon", 0.0)
-        avg_carbon   = round(total_carbon / total_users, 2)
+
+        # ── جلب كربون هذا الشهر فقط (تراكمي شهري) ──────────
+        now           = datetime.now()
+        current_month = now.strftime("%Y-%m")
+        month_start   = datetime(now.year, now.month, 1)
+        month_end     = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
+
+        monthly_carbon = 0.0
+        try:
+            from google.cloud.firestore_v1 import FieldFilter
+            for doc in db.collection("submissions")\
+                .where(filter=FieldFilter("status", "==", "approved"))\
+                .where(filter=FieldFilter("createdAt", ">=", month_start))\
+                .where(filter=FieldFilter("createdAt", "<", month_end))\
+                .stream():
+                monthly_carbon += doc.to_dict().get("carbonSaved", 0) or 0
+        except Exception as e:
+            print(f"   ⚠️ Could not fetch monthly carbon from submissions, using totalCarbon: {e}")
+            # fallback: استخدم الإجمالي من users
+            monthly_carbon = insights.get("totalCarbon", 0.0)
+
+        monthly_carbon = round(monthly_carbon, 2)
+        avg_carbon     = round(monthly_carbon / total_users, 2)
+
+        print(f"   📅 Monthly carbon ({current_month}): {monthly_carbon} kg | Avg per user: {avg_carbon} kg")
 
         # ── جلب الهدف الحالي من Firestore ───────────────────
         settings_doc   = db.collection("appSettings").document("carbonTarget").get()
-        current_target = 50.0  # الهدف الافتراضي
+        current_target = 50.0
 
         if settings_doc.exists:
             current_target = float(settings_doc.to_dict().get("target", 50.0))
 
-        # ── جلب متوسط الكربون نفس الشهر السنة الماضية ───────
+        # ── جلب كربون نفس الشهر السنة الماضية ───────────────
         last_year_month = seasonal.get("lastYearSameMonth", "")
         last_year_avg   = 0.0
 
@@ -1619,26 +1641,24 @@ def _update_carbon_target(context: dict, season: dict) -> dict:
         direction  = "unchanged"
 
         if performance_ratio >= 0.8:
-            # أداء ممتاز → ارفع الهدف 20%
             new_target = round(current_target * 1.20, 1)
             reason     = (
-                f"متوسط الكربون ({avg_carbon} كجم) وصل {round(performance_ratio*100)}% "
-                f"من الهدف الحالي ({current_target} كجم) → رفع الهدف 20%"
+                f"متوسط الكربون الشهري ({avg_carbon} كجم/مستخدم) وصل {round(performance_ratio*100)}% "
+                f"من الهدف ({current_target} كجم) → رفع الهدف 20%"
             )
             direction = "up"
 
         elif performance_ratio < 0.4:
-            # أداء ضعيف → خفض الهدف 15% ليكون أكثر واقعية
             new_target = round(current_target * 0.85, 1)
             reason     = (
-                f"متوسط الكربون ({avg_carbon} كجم) فقط {round(performance_ratio*100)}% "
-                f"من الهدف الحالي ({current_target} كجم) → خفض الهدف 15%"
+                f"متوسط الكربون الشهري ({avg_carbon} كجم/مستخدم) فقط {round(performance_ratio*100)}% "
+                f"من الهدف ({current_target} كجم) → خفض الهدف 15%"
             )
             direction = "down"
 
         else:
             reason    = (
-                f"الأداء مقبول ({round(performance_ratio*100)}%) "
+                f"الأداء الشهري مقبول ({round(performance_ratio*100)}%) "
                 f"— الهدف يبقى {current_target} كجم"
             )
             direction = "unchanged"
@@ -1646,13 +1666,10 @@ def _update_carbon_target(context: dict, season: dict) -> dict:
         # ── تأثير الموسم ─────────────────────────────────────
         season_name = season.get("season", "")
         if season_name == "الصيف" and direction == "unchanged":
-            # الصيف عادةً أداء أقل بسبب الحر → تخفيض طفيف
             new_target = round(current_target * 0.92, 1)
             reason    += f" | موسم الصيف → تخفيض طفيف 8%"
             direction  = "down"
-
         elif season_name == "الربيع" and direction == "unchanged":
-            # الربيع موسم نشاط → رفع طفيف
             new_target = round(current_target * 1.05, 1)
             reason    += f" | موسم الربيع → رفع طفيف 5%"
             direction  = "up"
@@ -1661,7 +1678,6 @@ def _update_carbon_target(context: dict, season: dict) -> dict:
         if last_year_avg > 0:
             year_change_pct = ((avg_carbon - last_year_avg) / last_year_avg) * 100
             if year_change_pct > 30:
-                # أداء أفضل بكثير من السنة الماضية → ارفع أكثر
                 bonus = round(current_target * 0.10, 1)
                 new_target = round(new_target + bonus, 1)
                 reason += (
@@ -1669,7 +1685,6 @@ def _update_carbon_target(context: dict, season: dict) -> dict:
                     f"→ إضافة {bonus} كجم للهدف"
                 )
             elif year_change_pct < -30:
-                # أداء أسوأ بكثير من السنة الماضية → خفض إضافي
                 penalty = round(current_target * 0.08, 1)
                 new_target = round(new_target - penalty, 1)
                 reason += (
@@ -1677,38 +1692,39 @@ def _update_carbon_target(context: dict, season: dict) -> dict:
                     f"→ خفض {penalty} كجم من الهدف"
                 )
 
-        # ── حد أدنى وأقصى للهدف ──────────────────────────────
+        # ── حد أدنى وأقصى ────────────────────────────────────
         new_target = max(5.0, min(new_target, 500.0))
 
-        print(f"   📊 Avg carbon: {avg_carbon} kg | Current target: {current_target} | New target: {new_target}")
+        print(f"   📊 Monthly avg: {avg_carbon} kg | Current target: {current_target} | New target: {new_target}")
         print(f"   💡 Reason: {reason}")
         print(f"   📈 Direction: {direction}")
 
         # ── حفظ الهدف الجديد ─────────────────────────────────
         db.collection("appSettings").document("carbonTarget").set({
-            "target":          new_target,
-            "prevTarget":      current_target,
-            "avgCarbon":       avg_carbon,
-            "totalCarbon":     total_carbon,
-            "totalUsers":      total_users,
+            "target":           new_target,
+            "prevTarget":       current_target,
+            "avgCarbon":        avg_carbon,          # متوسط شهري لكل مستخدم
+            "monthlyCarbon":    monthly_carbon,      # إجمالي كربون الشهر
+            "totalUsers":       total_users,
             "performanceRatio": round(performance_ratio * 100, 1),
-            "reason":          reason,
-            "direction":       direction,
-            "season":          season_name,
-            "lastYearMonth":   last_year_month,
-            "lastYearAvg":     last_year_avg,
-            "updatedAt":       firestore.SERVER_TIMESTAMP,
-            "updatedBy":       "autoAgent",
+            "reason":           reason,
+            "direction":        direction,
+            "season":           season_name,
+            "month":            current_month,
+            "lastYearMonth":    last_year_month,
+            "lastYearAvg":      last_year_avg,
+            "updatedAt":        firestore.SERVER_TIMESTAMP,
+            "updatedBy":        "autoAgent",
         })
 
-        # ── حفظ سجل تاريخي لهذا الشهر ───────────────────────
-        current_month = datetime.now().strftime("%Y-%m")
+        # ── حفظ سجل تاريخي شهري ──────────────────────────────
         db.collection("appSettings").document(f"carbonTarget_{current_month}").set({
-            "target":    new_target,
-            "avgCarbon": avg_carbon,
-            "month":     current_month,
-            "season":    season_name,
-            "savedAt":   firestore.SERVER_TIMESTAMP,
+            "target":        new_target,
+            "avgCarbon":     avg_carbon,
+            "monthlyCarbon": monthly_carbon,
+            "month":         current_month,
+            "season":        season_name,
+            "savedAt":       firestore.SERVER_TIMESTAMP,
         })
 
         print(f"   ✅ Carbon target updated: {current_target} → {new_target} kg")
@@ -1718,6 +1734,7 @@ def _update_carbon_target(context: dict, season: dict) -> dict:
             "prevTarget":     current_target,
             "newTarget":      new_target,
             "avgCarbon":      avg_carbon,
+            "monthlyCarbon":  monthly_carbon,
             "direction":      direction,
             "reason":         reason,
             "lastYearAvg":    last_year_avg,
@@ -1727,7 +1744,6 @@ def _update_carbon_target(context: dict, season: dict) -> dict:
     except Exception as e:
         print(f"   ❌ Carbon target update error: {e}")
         return {"updated": False, "error": str(e)}
-
 
 # ============================================================
 # Step 1: تحليل أداء المهام
