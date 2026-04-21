@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:geolocator/geolocator.dart';
+
 import 'dart:math';
 import 'dart:async';
 import 'package:http/http.dart' as http;
@@ -19,6 +21,7 @@ import 'services/connection.dart';
 import 'services/title_header.dart';
 import 'complete_task.dart';
 import 'levels.dart';
+import 'services/location_service.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -394,6 +397,28 @@ class _taskPageState extends State<taskPage> {
         );
       },
     );
+  }
+
+  Future<GeoPoint?> getCurrentLocation() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      return null;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        return null;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      return null;
+    }
+
+    Position position = await Geolocator.getCurrentPosition();
+    return GeoPoint(position.latitude, position.longitude);
   }
 
   Future<void> _loadScheduledDaysForMonth(DateTime anyDayInMonth) async {
@@ -1662,25 +1687,33 @@ class _taskPageState extends State<taskPage> {
   // -------------------------------------------------------------
   // 1) اختيار مهمة إضافية عشوائية (مختلفة عن مهمة اليوم)
   // -------------------------------------------------------------
-  Future<Map<String, dynamic>?> _suggestBonusTask() async {
+  // ✅ 1) عدل دالة _suggestBonusTask لتقبل taskId للاستبعاد
+  Future<Map<String, dynamic>?> _suggestBonusTask({
+    String? excludeTaskId,
+  }) async {
     if (_uid == null) return null;
 
     try {
-      // ✅ جلب آخر موقع معروف من Firestore
-      GeoPoint? lastLocation;
+      GeoPoint? currentLocation;
       try {
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_uid)
-            .get();
-
-        if (userDoc.exists &&
-            userDoc.data()?.containsKey('lastLocation') == true) {
-          lastLocation = userDoc.data()!['lastLocation'] as GeoPoint?;
-          print('📍 Using last known location: $lastLocation');
-        }
+        currentLocation = await LocationService.getCurrentLocation();
       } catch (e) {
-        print('⚠️ Could not fetch location: $e');
+        print('⚠️ Could not get location: $e');
+      }
+
+      if (currentLocation == null) {
+        try {
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_uid)
+              .get();
+          if (userDoc.exists &&
+              userDoc.data()?.containsKey('lastLocation') == true) {
+            currentLocation = userDoc.data()!['lastLocation'] as GeoPoint?;
+          }
+        } catch (e) {
+          print('⚠️ Could not fetch location from Firestore: $e');
+        }
       }
 
       final callable = FirebaseFunctions.instance.httpsCallable(
@@ -1688,36 +1721,48 @@ class _taskPageState extends State<taskPage> {
         options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
       );
 
-      // ✅ إرسال الموقع إذا كان موجوداً
       final Map<String, dynamic> data = {
         'pressedAt': DateTime.now().toIso8601String(),
       };
 
-      if (lastLocation != null) {
+      if (currentLocation != null) {
         data['userLocation'] = {
-          'latitude': lastLocation.latitude,
-          'longitude': lastLocation.longitude,
+          'latitude': currentLocation.latitude,
+          'longitude': currentLocation.longitude,
         };
       }
 
-      final result = await callable.call(data);
+      if (excludeTaskId != null) {
+        data['excludeTaskId'] = excludeTaskId;
+      }
 
-      // ✅ النتيجة تحتوي على taskId فقط أو بيانات كاملة؟
-      // إذا كانت تحتوي على taskId فقط، نحتاج لجلب بيانات المهمة
+      final result = await callable.call(data);
       final Map<String, dynamic> response = Map<String, dynamic>.from(
         result.data as Map,
       );
 
       if (response.containsKey('taskId')) {
-        // جلب بيانات المهمة كاملة من Firestore
-        final taskDoc = await FirebaseFirestore.instance
-            .collection('tasks')
-            .doc(response['taskId'])
-            .get();
-
-        if (taskDoc.exists) {
-          return {'id': taskDoc.id, ...taskDoc.data()!};
+        if (excludeTaskId != null && response['taskId'] == excludeTaskId) {
+          return _suggestBonusTask(excludeTaskId: excludeTaskId);
         }
+
+        // ✅ استخدم البيانات من الأيجنت مباشرة بدل Firestore
+        // الأيجنت يرجع description مخصص — لا تستبدله ببيانات Firestore
+        return {
+          'id': response['taskId'],
+          'taskId': response['taskId'],
+          'title': response['title'] ?? '',
+          'description': response['description'] ?? '', // ← المخصص
+          'originalDescription': response['originalDescription'] ?? '',
+          'points': response['points'] ?? 0,
+          'validationStrategy': response['validationStrategy'] ?? 'غير محددة',
+          'category': response['category'] ?? '',
+          'calcMode': response['calcMode'] ?? '',
+          'ef_ref': response['ef_ref'] ?? '',
+          'status': 'pending',
+          'agentReasoning': response['agentReasoning'] ?? '',
+          'nearbyPlaces': response['nearbyPlaces'] ?? [],
+        };
       }
 
       return response;
@@ -2952,7 +2997,14 @@ class _taskPageState extends State<taskPage> {
                 setState(() => _suggestedBonusTask = null), // ← يرجع للزر
             onAlternative: () async {
               setState(() => _bonusLoading = true);
-              final next = await _suggestBonusTask();
+
+              // ✅ استخدم المهمة المقترحة الحالية
+              final currentTaskId =
+                  _suggestedBonusTask!['taskId'] ?? _suggestedBonusTask!['id'];
+              final next = await _suggestBonusTask(
+                excludeTaskId: currentTaskId,
+              );
+
               if (mounted && next != null) {
                 setState(() {
                   _suggestedBonusTask = next;
@@ -2960,15 +3012,24 @@ class _taskPageState extends State<taskPage> {
                 });
               } else if (mounted) {
                 setState(() => _bonusLoading = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'لا توجد مهام بديلة متاحة',
-                      style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+
+                // ✅ لو ما فيه بدائل، حاول بدون استبعاد
+                final anyTask = await _suggestBonusTask();
+                if (anyTask != null) {
+                  setState(() => _suggestedBonusTask = anyTask);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'لا توجد مهام بديلة متاحة',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: Colors.white,
+                        ),
+                      ),
+                      backgroundColor: AppColors.primary,
                     ),
-                    backgroundColor: AppColors.primary,
-                  ),
-                );
+                  );
+                }
               }
             },
             isLoading: _bonusLoading,
@@ -3030,7 +3091,7 @@ class _taskPageState extends State<taskPage> {
     final title = task['title'] ?? '(بدون عنوان)';
     final description = task['description'] ?? '';
     final points = task['points'] ?? 0;
-
+    final currentTaskId = task['taskId'] ?? task['id'];
     // ✅ إظهار معلومات الموقع إذا كانت موجودة
     final bool hasLocation =
         task['location'] != null ||

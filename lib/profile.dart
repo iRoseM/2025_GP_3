@@ -15,8 +15,101 @@ import '../services/app_colors.dart';
 import 'support_page.dart';
 import 'admin_faq_page.dart';
 
-class profilePage extends StatelessWidget {
+class profilePage extends StatefulWidget {
   const profilePage({super.key});
+
+  @override
+  State<profilePage> createState() => _profilePageState();
+}
+
+class _profilePageState extends State<profilePage> {
+  bool _autoAgentMode = false;
+  bool _isLoadingAgentMode = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAutoAgentMode();
+  }
+
+  Future<void> _loadAutoAgentMode() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        if (doc.exists) {
+          final data = doc.data();
+          setState(() {
+            _autoAgentMode = data?['autoAgentMode'] ?? false;
+            _isLoadingAgentMode = false;
+          });
+        } else {
+          setState(() {
+            _isLoadingAgentMode = false;
+          });
+        }
+      } else {
+        setState(() {
+          _isLoadingAgentMode = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading auto agent mode: $e');
+      setState(() {
+        _isLoadingAgentMode = false;
+      });
+    }
+  }
+
+  Future<void> _saveAutoAgentMode(bool value) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+              'autoAgentMode': value,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+
+        setState(() {
+          _autoAgentMode = value;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                value
+                    ? '✅ تم تفعيل وضع التحكم التلقائي للـ Agent'
+                    : '❌ تم إيقاف وضع التحكم التلقائي للـ Agent',
+                style: GoogleFonts.ibmPlexSansArabic(),
+              ),
+              backgroundColor: value ? Colors.green : Colors.grey,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error saving auto agent mode: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'حدث خطأ في حفظ الإعدادات',
+              style: GoogleFonts.ibmPlexSansArabic(),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,16 +141,12 @@ class profilePage extends StatelessWidget {
               extendBody: true,
               extendBodyBehindAppBar: true,
               backgroundColor: Colors.transparent,
-
-              // ✅ الهيدر الموحّد بدون عنوان داخله + زر رجوع
               appBar: const NameerAppBar(showTitleInBar: false, showBack: true),
-
               body: AnimatedBackgroundContainer(
                 child: Builder(
                   builder: (context) {
-                    // مسافة تحت الهيدر
                     final statusBar = MediaQuery.of(context).padding.top;
-                    const headerH = 20.0; // ارتفاع NameerAppBar الافتراضي
+                    const headerH = 20.0;
                     const gap = 12.0;
                     final topPadding = statusBar + headerH + gap;
 
@@ -68,7 +157,6 @@ class profilePage extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // ✅ العنوان تحت الهيدر مباشرة
                             Text(
                               'حسابي الشخصي',
                               style: GoogleFonts.ibmPlexSansArabic(
@@ -79,7 +167,6 @@ class profilePage extends StatelessWidget {
                             ),
                             const SizedBox(height: 16),
 
-                            // ---------- بطاقة معلومات المستخدم ----------
                             StreamBuilder<
                               DocumentSnapshot<Map<String, dynamic>>
                             >(
@@ -358,7 +445,6 @@ class profilePage extends StatelessWidget {
                                                 );
                                               }
 
-                                              // آخر مرة فتح فيها المستخدم صفحة الإشعارات
                                               final userData = userSnap.data!
                                                   .data()!;
                                               final lastOpened =
@@ -409,7 +495,6 @@ class profilePage extends StatelessWidget {
                                                     );
                                                   }
 
-                                                  // حساب عدد الإشعارات الجديدة
                                                   int newCount = 0;
                                                   for (var doc
                                                       in notifSnap.data!.docs) {
@@ -428,7 +513,6 @@ class profilePage extends StatelessWidget {
                                                     }
                                                   }
 
-                                                  // إذا فيه إشعارات جديدة -> نعرض "جديدة"
                                                   Widget trailing = newCount > 0
                                                       ? Container(
                                                           padding:
@@ -483,22 +567,8 @@ class profilePage extends StatelessWidget {
                                             },
                                           ),
 
-                                        _SettingTile(
-                                          title: 'اللغة',
-                                          icon: Icons.language,
-                                          trailing: Text(
-                                            'العربية',
-                                            style:
-                                                GoogleFonts.ibmPlexSansArabic(
-                                                  color: appColors.dark
-                                                      .withOpacity(.8),
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                          ),
-                                          onTap: () => _showSnack(
-                                            context,
-                                            'التطبيق حالياً يدعم اللغة العربية فقط، وسيتم إضافة لغات أخرى قريباً بإذن الله✨',
-                                          ),
+                                        _buildLanguageAndAgentTile(
+                                          isAdmin: data?['role'] == 'admin',
                                         ),
 
                                         _SettingTile(
@@ -531,7 +601,6 @@ class profilePage extends StatelessWidget {
                               },
                             ),
 
-                            const SizedBox(height: 16),
                             const SizedBox(height: 16),
 
                             _SettingsCard(
@@ -696,7 +765,119 @@ class profilePage extends StatelessWidget {
     );
   }
 
-  // ======== BottomSheets: Privacy & Support ========
+  // ✅ دالة لبناء خيار اللغة مع Toggle للـ Agent (يظهر فقط للمدير)
+
+  // ثم عدل دالة _buildLanguageAndAgentTile في نفس الملف
+  Widget _buildLanguageAndAgentTile({required bool isAdmin}) {
+    print('🔍 _buildLanguageAndAgentTile - isAdmin: $isAdmin');
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+        ),
+      ),
+      child: Column(
+        children: [
+          // خيار اللغة (يظهر للجميع)
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 2,
+            ),
+            leading: Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: appColors.light.withOpacity(.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.language, color: appColors.primary),
+            ),
+            title: Text(
+              'اللغة',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: appColors.dark,
+              ),
+            ),
+            trailing: Text(
+              'العربية',
+              style: GoogleFonts.ibmPlexSansArabic(
+                color: appColors.dark.withOpacity(.8),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            onTap: () => _showSnack(
+              context,
+              'التطبيق حالياً يدعم اللغة العربية فقط، وسيتم إضافة لغات أخرى قريباً بإذن الله✨',
+            ),
+          ),
+
+          // ✅ مفتاح تبديل وضع الـ Agent (يظهر فقط للمدير - Admin)
+          if (isAdmin) ...[
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 2,
+              ),
+              leading: Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: appColors.light.withOpacity(.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.admin_panel_settings,
+                  color: _autoAgentMode ? appColors.primary : Colors.grey,
+                  size: 24,
+                ),
+              ),
+              title: Text(
+                'التحكم التلقائي للـ Agent',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: appColors.dark,
+                ),
+              ),
+              subtitle: Text(
+                _autoAgentMode
+                    ? '🔒 الوضع التلقائي مفعل - الـ Agent يتحكم بالمهام والفئات'
+                    : 'تفعيل التحكم التلقائي لمدير النظام',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 11,
+                  color: _autoAgentMode ? appColors.primary : Colors.grey[600],
+                ),
+              ),
+              trailing: _isLoadingAgentMode
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Switch(
+                      value: _autoAgentMode,
+                      onChanged: (value) async {
+                        await _saveAutoAgentMode(value);
+                        // تحديث واجهة الإدارة إذا كانت مفتوحة
+                        if (mounted && Navigator.of(context).canPop()) {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                      activeColor: appColors.primary,
+                      activeTrackColor: appColors.primary.withOpacity(0.3),
+                    ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   void _showPrivacySheet(BuildContext context) {
     showModalBottomSheet(
@@ -776,29 +957,11 @@ class profilePage extends StatelessWidget {
     );
   }
 
-  // دالة مساعدة لفتح تطبيق الإيميل
   Future<void> _openSupportEmail() async {
     final Uri emailUri = Uri(
       scheme: 'mailto',
       path: 'appnameer@gmail.com',
-      queryParameters: <String, String>{
-        'subject': 'دعم تطبيق Nameer',
-        // تقدرِين تضيفين body جاهز إذا حبيتي
-        // 'body': 'السلام عليكم، لدي استفسار حول...'
-      },
-    );
-
-    if (!await launchUrl(emailUri)) {
-      // لو ما قدر يفتح تطبيق البريد
-      throw Exception('لا يمكن فتح تطبيق البريد');
-    }
-  }
-
-  Future<void> _openEmail() async {
-    final Uri emailUri = Uri(
-      scheme: 'mailto',
-      path: 'appnameer@gmail.com',
-      queryParameters: {'subject': 'دعم تطبيق Nameer'},
+      queryParameters: <String, String>{'subject': 'دعم تطبيق Nameer'},
     );
 
     if (!await launchUrl(emailUri)) {
@@ -873,11 +1036,10 @@ class profilePage extends StatelessWidget {
                         ),
                       ),
                       onPressed: () async {
-                        Navigator.pop(ctx); // إغلاق الـ bottom sheet أولاً
+                        Navigator.pop(ctx);
                         try {
                           await _openSupportEmail();
                         } catch (e) {
-                          // لو حبيتي، تعرضين سناك لو فشل فتح البريد
                           _showSnack(
                             context,
                             'تعذر فتح تطبيق البريد. تأكد من وجود تطبيق بريد على جهازك.',
@@ -908,7 +1070,6 @@ class profilePage extends StatelessWidget {
     );
   }
 
-  // عناصر مساعدة للـ BottomSheet
   static Widget _privacyBullet(String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -969,7 +1130,6 @@ class profilePage extends StatelessWidget {
         backgroundColor: slackMesseges.red,
         content: Text(
           msg,
-
           style: GoogleFonts.ibmPlexSansArabic(
             color: Colors.white,
             fontWeight: FontWeight.w700,
