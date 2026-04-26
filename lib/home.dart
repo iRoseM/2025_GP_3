@@ -1085,7 +1085,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                       // 🌍 EcoLand
                                       Container(
                                         width: double.infinity,
-                                        height: 500,
+                                        height: 450,
                                         decoration: BoxDecoration(
                                           color: Colors.white,
                                           borderRadius: BorderRadius.circular(16),
@@ -1101,12 +1101,18 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             final int xp = data['xp'] ?? 0;
                                             final currentLevel = getCurrentLevel(xp);
                                             final islandLevel = islandLevelFromId(currentLevel.id);
+                                            
+                                            // جديد — ديناميكي من Firebase
+                                            final taskCounts = <String, int>{};
+                                            final counts = data['taskCounts'] as Map<String, dynamic>? ?? {};
+                                            counts.forEach((k, v) { if (v is int) taskCounts[k] = v; });
 
                                             return EcoLandIsland(
                                               level: islandLevel,
                                               isReadOnly: false,
                                               allowPan: false,
                                               showFriends: false,
+                                              taskCounts: taskCounts,
                                             );
                                           },
                                         ),

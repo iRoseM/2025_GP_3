@@ -54,6 +54,7 @@ class EcoLandIsland extends StatefulWidget {
   final bool allowPan;
   final bool showFriends;
   final List<FriendIslandData>? friends;
+  final Map<String, int> taskCounts; // ← جديد
 
   const EcoLandIsland({
     super.key,
@@ -62,6 +63,7 @@ class EcoLandIsland extends StatefulWidget {
     this.allowPan = true,
     this.showFriends = false,
     this.friends,
+    this.taskCounts = const {}, // ← جديد
   });
 
   @override
@@ -171,9 +173,14 @@ class _EcoLandIslandState extends State<EcoLandIsland>
       for (final doc in docs) {
         if (!doc.exists) continue;
         final d = doc.data()!;
+        final int friendXp = (d['xp'] ?? 0) is int 
+            ? d['xp'] ?? 0 
+            : ((d['xp'] ?? 0) as num).toInt();
+        final friendLevel = getCurrentLevel(friendXp);
+
         raw.add({
           'name': d['username'] ?? 'صديق',
-          'levelId': d['currentLevel'] ?? 'seedling',
+          'levelId': friendLevel.id, // ← من XP مباشرة
           'lastActivity': d['lastActivityAt'],
         });
       }
@@ -224,6 +231,7 @@ if (!widget.allowPan) {
               width: islandW,
               isUser: true,
               name: '',
+              taskCounts: widget.taskCounts,
             ),
           ),
         ],
@@ -299,6 +307,7 @@ if (!widget.allowPan) {
                   width: _iw,
                   isUser: true,
                   name: '',
+                  taskCounts: widget.taskCounts, // ← جديد
                 ),
               ),
             ],
@@ -361,11 +370,9 @@ class _IslandWidget extends StatelessWidget {
   final double width;
   final bool isUser;
   final String name;
-  // final bool nameBelow;
-  // final double nameTopOffset;
-  // final Alignment nameAlign;
   final bool nameOnRight;
   final double nameSideOffset;
+  final Map<String, int> taskCounts; // ← جديد
 
 
   const _IslandWidget({
@@ -375,7 +382,89 @@ class _IslandWidget extends StatelessWidget {
     required this.name,
     this.nameOnRight = true,
     this.nameSideOffset = 8,
+    this.taskCounts = const {}, // ← جديد
   });
+  // فيقرز التاسكات — كلها يمين
+  static const _categoryPositions = {
+    // مواصلات — يمين فوق
+    'metro':     ( 0.57,  -0.05),
+    'bus':       ( 0.45,  0.45),
+    'cycle':     ( 0.35,  0.12),
+    'scooter':   ( 0.15,  -0.48),
+
+    // تدوير وارتكل — يمين أسفل
+    'article': ( 0.15,  0.40),
+    'recycling':   ( 0.22,  0.66),
+
+    // محلي — يمين وسط
+    'local':     ( 0.32,  -0.17),
+  };
+
+  List<Widget> _buildTaskCountElements(double iw, double ih) {
+    final cx = iw / 2;
+    final cy = ih * 0.38;
+    final results = <Widget>[];
+
+    _categoryPositions.forEach((category, pos) {
+      final count = taskCounts[category] ?? 0;
+      final tier = _getTier(count);
+      if (tier == 0) return;
+
+      final asset = _getAsset(category, tier);
+      if (asset.isEmpty) return;
+
+      // ── الفيقر الأول (tier 1, 2, 3) ──
+      if (tier < 4) {
+        final ew = iw * 0.17; // ← حجم العادي
+        final x = cx + pos.$1 * iw * 0.38 - ew/2;
+        final y = cy + pos.$2 * ih * 0.38 - ew/2;
+
+        results.add(Positioned(
+          left: x, top: y,
+          child: Image.asset('assets/img/$asset.png',
+            width: ew, height: ew, fit: BoxFit.contain),
+        ));
+
+        // ── الفيقر الثاني (tier 2, 3) ──
+        if (tier >= 2) {
+          final ew2 = iw * 0.15; // ← حجم الثاني
+          final dx2 = ew * 0.14;  // ← يمين/يسار من الأول
+          final dy2 = ew * 0.24;  // ← فوق/تحت من الأول
+          results.add(Positioned(
+            left: x + dx2, top: y + dy2,
+            child: Image.asset('assets/img/${_getAsset(category, 1)}.png',
+              width: ew2, height: ew2, fit: BoxFit.contain),
+          ));
+        }
+
+        // ── الفيقر الثالث (tier 3) ──
+        if (tier >= 3) {
+          final ew3 = iw * 0.17 ;
+          final dx3 = ew * -0.14;   // ← يمين/يسار من الأول
+          final dy3 = -ew * -0.14;  // ← فوق/تحت من الأول
+          results.add(Positioned(
+            left: x + dx3, top: y + dy3,
+            child: Image.asset('assets/img/${_getAsset(category, 1)}.png',
+              width: ew3, height: ew3, fit: BoxFit.contain),
+          ));
+        }
+      }
+
+      // ── الذهبي (tier 4) — مستقل كلياً ──
+      if (tier == 4) {
+        final ew4 = iw * 0.23;  // ← حجم الذهبي
+        final x4 = cx + pos.$1 * iw * 0.38 - ew4/2 + ew4 * 0.0;  // ← تحكمي بالأفقي
+        final y4 = cy + pos.$2 * ih * 0.38 - ew4/2 - ew4 * -0.1;  // ← تحكمي بالعمودي
+        results.add(Positioned(
+          left: x4, top: y4,
+          child: Image.asset('assets/img/$asset.png',
+            width: ew4, height: ew4, fit: BoxFit.contain),
+        ));
+      }
+    });
+
+    return results;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -396,21 +485,14 @@ class _IslandWidget extends StatelessWidget {
         else
           ..._buildFriendElements(width, h, level),
 
-        // أفاتار
-        // Positioned(
-        //   left: width * 0.44,
-        //   top:  h * 0.16,
-        //   child: Image.asset(
-        //     isUser ? 'assets/img/nameerStand.png' : 'assets/img/nameerHappy.png',
-        //     width: width * 0.18,
-        //     fit: BoxFit.contain,
-        //   ),
-        // ),
+        // فيقرز التاسكات
+        if (isUser)
+          ..._buildTaskCountElements(width, h),
 
         // اسم الصديق
         if (!isUser && name.isNotEmpty)
           Positioned(
-            top: -5, // فوق الجزيرة
+            top: -5,
             left: 0, right: 0,
             child: Center(
               child: Container(
@@ -430,7 +512,7 @@ class _IslandWidget extends StatelessWidget {
                   style: TextStyle(
                     fontSize: width * 0.07,
                     fontWeight: FontWeight.w600,
-                    color: const Color.fromARGB(255, 0, 0, 0), // نص أبيض
+                    color: const Color.fromARGB(255, 0, 0, 0),
                   ),
                 ),
               ),
@@ -439,33 +521,62 @@ class _IslandWidget extends StatelessWidget {
       ]),
     );
   }
+  int _getTier(int count) {
+    if (count >= 30) return 4; // ذهبي
+    if (count >= 20) return 3;
+    if (count >= 10) return 2;
+    if (count >= 3)  return 1;
+    return 0;
+  }
+
+  // اسم الصورة حسب الـ tier
+  String _getAsset(String category, int tier) {
+    final gold = tier == 4;
+    final suffix = gold ? '_gold' : '';
+    switch (category) {
+      case 'metro':     return 'metro$suffix';
+      case 'bus':       return 'bus$suffix';
+      case 'cycle':     return 'bicycle$suffix';
+      case 'scooter':   return 'scooter$suffix';
+      case 'recycling': return 'can$suffix';
+      case 'article':   return 'article$suffix';
+      case 'local':     return 'items$suffix';
+      default:          return '';
+    }
+  }
 
   List<Widget> _buildUserElements(double iw, double ih) {
     final cx = iw / 2;
     final cy = ih * 0.38;
 
-final els = [
-  // L0: بذرة
-  ('sprout',        0.00, -0.08, 0.15, 0),
+    // عناصر اللفل — كلها يسار
+    final els = [
+      // L1: شجيرتين يسار
+      ('bush',         -0.32,  0.05, 0.13, 1),
+      // ('bush',          0.24,  0.05, 0.12, 1),
 
-  // L1: شجيرتين جانبين
-  ('bush',         -0.28,  0.05, 0.13, 1),
-  ('bush',          0.26,  0.05, 0.13, 1),
+      // L2: أشجار يسار
+      ('tree',         -0.10, -0.28, 0.18, 2),
+      ('tree',         -0.40, -0.12, 0.17, 2),
+      ('bush',         -0.40,  0.30, 0.17, 2),
 
-  // L2: 3 أشجار مثلث
-  ('tree',          0.00, -0.28, 0.18, 2),
-  ('tree',         -0.32,  0.22, 0.17, 2),
-  ('tree',          0.30,  0.22, 0.17, 2),
+      // // L3: بركة وسط + زهور يسار
+      ('pond',         -0.05,  0.08, 0.24, 3),
+      ('flower_pink',  -0.22, -0.04, 0.07, 3),
+      ('flower_pink',   0.10, -0.13, 0.07, 3),
+      ('flower_purple', 0.00,  0.36, 0.07, 3),
+      ('flower_purple', 0.10,  0.20, 0.07, 3),
 
-  // L3: بركة في المنتصف + زهرتين
-  ('pond',          0.00,  0.08, 0.24, 3),
-  ('flower_pink',  -0.30, -0.15, 0.10, 3),
-  ('flower_purple', 0.28, -0.15, 0.10, 3),
+      // // L4: نخلة + طاحونة يسار
+      // ('palm',         -0.38,  -0.25, 0.22, 4),
+      // ('palm',          0.15,  -0.48, 0.17, 4),
+      // ('windmill',     -0.12, -0.32, 0.20, 4),
+      ('flower_purple',-0.25,  0.12, 0.07, 3),
+      ('flower_pink',-0.20, -0.12, 0.07, 3),
+      ('flower_purple',   0.06, -0.15, 0.07, 3),
+      ('flower_pink',   0.00, -0.15, 0.07, 3),
 
-  // L4: نخلة يسار + طاحونة يمين
-  ('palm',    0.20,  0.25, 0.24, 4),
-  ('windmill',      0.32, -0.26, 0.22, 4),
-];
+    ];
 
     return els.where((e) {
       if (e.$1 == 'sprout') return false; 
@@ -485,23 +596,28 @@ final els = [
     final cy = ih * 0.38;
 
     final els = [
-      ('sprout',        0.00, -0.20, 0.14, 0),
-      ('bush',          0.22,  0.08, 0.12, 1),
-      ('bush',         -0.20,  0.10, 0.11, 1),
-      ('tree',         -0.36, -0.20, 0.18, 2),
-      ('tree',          0.34, -0.18, 0.17, 2),
-      ('tree',          0.00,  0.36, 0.16, 2),
-      ('pond',         -0.13,  0.05, 0.22, 3),
-      ('flower_pink',   0.22,  0.20, 0.10, 3),
-      ('flower_orange',-0.24,  0.20, 0.09, 3),
-      ('palm',         -0.28,  0.16, 0.22, 4),
-      ('windmill',      0.30, -0.26, 0.20, 4),
+      ('bush',         -0.32,  0.05, 0.13, 1),
+      ('tree',         -0.10, -0.28, 0.18, 2),
+      ('tree',         -0.40, -0.12, 0.17, 2),
+      ('bush',         -0.40,  0.30, 0.17, 2),
+      ('pond',         -0.05,  0.08, 0.24, 3),
+      ('flower_pink',  -0.22, -0.04, 0.07, 3),
+      ('flower_pink',   0.10, -0.13, 0.07, 3),
+      ('flower_purple', 0.00,  0.36, 0.07, 3),
+      ('flower_purple', 0.10,  0.20, 0.07, 3),
+      ('flower_purple',-0.25,  0.12, 0.07, 3),
+      ('flower_pink',  -0.20, -0.12, 0.07, 3),
+      ('flower_purple', 0.06, -0.15, 0.07, 3),
+      ('flower_pink',   0.00, -0.15, 0.07, 3),
     ];
 
-    return els.where((e) => e.$5 <= lv.index).map((e) {
+    return els.where((e) {
+      if (e.$1 == 'sprout') return false;
+      return e.$5 <= lv.index;
+    }).map((e) {
       final ew = iw * e.$4;
-      final x  = cx + e.$2 * iw * 0.40 - ew/2;
-      final y  = cy + e.$3 * ih * 0.40 - ew/2;
+      final x  = cx + e.$2 * iw * 0.44 - ew/2;
+      final y  = cy + e.$3 * ih * 0.44 - ew/2;
       return Positioned(left:x, top:y,
         child: Image.asset('assets/img/${e.$1}.png',
           width:ew, height:ew, fit:BoxFit.contain));
@@ -703,11 +819,18 @@ class GlobalEcoLandPage extends StatelessWidget {
             final int xp = data['xp'] ?? 0;
             final currentLevel = getCurrentLevel(xp);
             final islandLevel = islandLevelFromId(currentLevel.id);
+            
+            final taskCounts = <String, int>{};
+            final counts = data['taskCounts'] as Map<String, dynamic>? ?? {};
+            counts.forEach((k, v) {
+              if (v is int) taskCounts[k] = v;
+            });
 
             return EcoLandIsland(
               level: islandLevel,
               allowPan: true,
               showFriends: true,
+              taskCounts: taskCounts, // ← جديد
             );
           },
         ),
