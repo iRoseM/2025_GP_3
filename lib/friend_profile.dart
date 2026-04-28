@@ -8,8 +8,6 @@ import '../services/app_colors.dart';
 import 'widgets/ecoland_island.dart';
 import 'services/xp_service.dart';
 
-/* ======================= صفحة بروفايل الصديق ======================= */
-
 class FriendProfilePage extends StatefulWidget {
   final String friendId;
   final String friendUsername;
@@ -37,45 +35,9 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
     _loadFriendData();
   }
 
-  // حساب المستوى من النقاط
-  int _calculateLevel(int points) {
-    if (points < 100) return 1;
-    if (points < 300) return 2;
-    if (points < 600) return 3;
-    if (points < 1000) return 4;
-    if (points < 1500) return 5;
-    return 6;
-  }
-
-  // النقاط المطلوبة للمستوى التالي
-  int _nextLevelPoints(int level) {
-    switch (level) {
-      case 1: return 100;
-      case 2: return 300;
-      case 3: return 600;
-      case 4: return 1000;
-      case 5: return 1500;
-      default: return 1500;
-    }
-  }
-
-  // نقاط بداية المستوى الحالي
-  int _currentLevelStartPoints(int level) {
-    switch (level) {
-      case 1: return 0;
-      case 2: return 100;
-      case 3: return 300;
-      case 4: return 600;
-      case 5: return 1000;
-      default: return 1000;
-    }
-  }
-
   Future<void> _loadFriendData() async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
-
-      // جلب بيانات الصديق
       final friendDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.friendId)
@@ -88,7 +50,6 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
 
       final data = friendDoc.data()!;
 
-      // التحقق هل أتابع هذا الشخص
       bool isFollowing = false;
       if (currentUser != null) {
         final myDoc = await FirebaseFirestore.instance
@@ -116,36 +77,25 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
 
     try {
       if (_isFollowing) {
-        // إلغاء المتابعة
         final confirm = await showDialog<bool>(
           context: context,
           barrierDismissible: false,
           builder: (ctx) => Directionality(
             textDirection: TextDirection.rtl,
             child: Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               insetPadding: const EdgeInsets.symmetric(horizontal: 24),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Image.asset(
-                      'assets/img/nameerThink.png',
-                      height: 120,
-                      fit: BoxFit.contain,
-                    ),
+                    Image.asset('assets/img/nameerThink.png', height: 120, fit: BoxFit.contain),
                     const SizedBox(height: 16),
                     Text(
                       'هل أنت متأكد أنك تريد إلغاء متابعة ${widget.friendUsername}؟',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: appColors.dark,
-                      ),
+                      style: GoogleFonts.ibmPlexSansArabic(fontSize: 18, fontWeight: FontWeight.w600, color: appColors.dark),
                     ),
                     const SizedBox(height: 24),
                     Row(
@@ -154,20 +104,11 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: appColors.primary),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: () => Navigator.of(ctx).pop(false),
-                            child: Text(
-                              'إلغاء',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                color: appColors.primary,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                              ),
-                            ),
+                            child: Text('إلغاء', style: GoogleFonts.ibmPlexSansArabic(color: appColors.primary, fontWeight: FontWeight.w700, fontSize: 16)),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -175,20 +116,11 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: appColors.primary,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: () => Navigator.of(ctx).pop(true),
-                            child: Text(
-                              'تأكيد',
-                              style: GoogleFonts.ibmPlexSansArabic(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                              ),
-                            ),
+                            child: Text('تأكيد', style: GoogleFonts.ibmPlexSansArabic(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
                           ),
                         ),
                       ],
@@ -200,13 +132,11 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
           ),
         );
         if (confirm != true) return;
-
         await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).update({
           'following': FieldValue.arrayRemove([widget.friendId]),
         });
         setState(() => _isFollowing = false);
       } else {
-        // متابعة
         await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).set({
           'following': FieldValue.arrayUnion([widget.friendId]),
         }, SetOptions(merge: true));
@@ -223,22 +153,17 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
     if (pfp != null && pfp is int && pfp >= 0 && pfp < 8) {
       avatarPath = 'assets/pfp/pfp${pfp + 1}.png';
     }
-
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [appColors.primary.withOpacity(0.2), appColors.mint.withOpacity(0.3)],
-        ),
+        gradient: LinearGradient(colors: [appColors.primary.withOpacity(0.2), appColors.mint.withOpacity(0.3)]),
         boxShadow: [BoxShadow(color: appColors.primary.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 4))],
       ),
       child: CircleAvatar(
         radius: radius,
         backgroundColor: Colors.transparent,
         backgroundImage: avatarPath != null ? AssetImage(avatarPath) : null,
-        child: avatarPath == null
-            ? Icon(Icons.person_rounded, color: appColors.primary, size: radius)
-            : null,
+        child: avatarPath == null ? Icon(Icons.person_rounded, color: appColors.primary, size: radius) : null,
       ),
     );
   }
@@ -260,20 +185,8 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
               const gap = 12.0;
               final topPadding = statusBar + headerH + gap;
 
-              if (_isLoading) {
-                return Center(
-                  child: CircularProgressIndicator(color: appColors.primary),
-                );
-              }
-
-              if (_friendData == null) {
-                return Center(
-                  child: Text(
-                    'تعذّر تحميل البيانات',
-                    style: GoogleFonts.ibmPlexSansArabic(color: appColors.dark),
-                  ),
-                );
-              }
+              if (_isLoading) return Center(child: CircularProgressIndicator(color: appColors.primary));
+              if (_friendData == null) return Center(child: Text('تعذّر تحميل البيانات', style: GoogleFonts.ibmPlexSansArabic(color: appColors.dark)));
 
               final int points = (_friendData!['points'] ?? 0) is int
                   ? _friendData!['points']
@@ -281,36 +194,26 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
               final int completedTasks = (_friendData!['completedTask'] ?? 0) is int
                   ? _friendData!['completedTask']
                   : ((_friendData!['completedTask'] ?? 0) as num).toInt();
-              final int level = _calculateLevel(points);
-              final int nextLevel = _nextLevelPoints(level);
-              final int startLevel = _currentLevelStartPoints(level);
-              final double progress = level >= 6
-                  ? 1.0
-                  : (points - startLevel) / (nextLevel - startLevel);
+              final int friendXp = (_friendData!['xp'] ?? 0) is int
+                  ? _friendData!['xp'] ?? 0
+                  : ((_friendData!['xp'] ?? 0) as num).toInt();
+
+              final LevelModel friendLevel = getCurrentLevel(friendXp);
+              final LevelModel? nextLevelModel = getNextLevel(friendXp);
+              final double progress = getLevelProgress(friendXp);
 
               return SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(16, topPadding, 16, 100),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── الهيدر: صورة + اسم + زر متابعة ──
-                    _buildProfileHeader(points, level, completedTasks),
-
+                    _buildProfileHeader(points, friendLevel, completedTasks),
                     const SizedBox(height: 16),
-
-                    // ── شريط التقدم للمستوى ──
-                    _buildLevelProgress(level, points, nextLevel, startLevel, progress),
-
+                    _buildLevelProgress(friendLevel, nextLevelModel, friendXp, progress),
                     const SizedBox(height: 16),
-
-                    // ── إحصائيات سريعة ──
-                    _buildStatsRow(points, completedTasks, level),
-
+                    _buildStatsRow(points, completedTasks, friendXp),
                     const SizedBox(height: 16),
-
-                    // ── EcoLand ──
                     _buildEcoLandSection(),
-
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -322,8 +225,7 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
     );
   }
 
-  // ── هيدر البروفايل ──
-  Widget _buildProfileHeader(int points, int level, int completedTasks) {
+  Widget _buildProfileHeader(int points, LevelModel friendLevel, int completedTasks) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -333,27 +235,17 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
       ),
       child: Row(
         children: [
-          // الأفاتار
           _buildAvatar(38),
           const SizedBox(width: 16),
-
-          // الاسم والمعلومات
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.friendUsername,
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: appColors.dark,
-                  ),
-                ),
+                Text(widget.friendUsername, style: GoogleFonts.ibmPlexSansArabic(fontSize: 20, fontWeight: FontWeight.w800, color: appColors.dark)),
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    _buildMiniChip('المستوى $level', Icons.stars_rounded, Colors.amber),
+                    _buildMiniChip('${friendLevel.icon} ${friendLevel.nameAr}', Icons.stars_rounded, Colors.amber),
                     const SizedBox(width: 8),
                     _buildMiniChip('$points نقطة', Icons.eco_rounded, appColors.primary),
                   ],
@@ -361,8 +253,6 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
               ],
             ),
           ),
-
-          // زر المتابعة
           _buildFollowButton(),
         ],
       ),
@@ -376,41 +266,25 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          gradient: _isFollowing
-              ? null
-              : LinearGradient(colors: [appColors.primary, appColors.tealSoft]),
+          gradient: _isFollowing ? null : LinearGradient(colors: [appColors.primary, appColors.tealSoft]),
           color: _isFollowing ? Colors.grey.shade100 : null,
           borderRadius: BorderRadius.circular(14),
           border: _isFollowing ? Border.all(color: Colors.grey.shade300) : null,
-          boxShadow: _isFollowing
-              ? null
-              : [BoxShadow(color: appColors.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))],
+          boxShadow: _isFollowing ? null : [BoxShadow(color: appColors.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              _isFollowing ? Icons.check_rounded : Icons.person_add_rounded,
-              size: 16,
-              color: _isFollowing ? Colors.grey.shade600 : Colors.white,
-            ),
+            Icon(_isFollowing ? Icons.check_rounded : Icons.person_add_rounded, size: 16, color: _isFollowing ? Colors.grey.shade600 : Colors.white),
             const SizedBox(width: 6),
-            Text(
-              _isFollowing ? 'متابَع' : 'متابعة',
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: _isFollowing ? Colors.grey.shade600 : Colors.white,
-              ),
-            ),
+            Text(_isFollowing ? 'متابَع' : 'متابعة', style: GoogleFonts.ibmPlexSansArabic(fontSize: 13, fontWeight: FontWeight.w700, color: _isFollowing ? Colors.grey.shade600 : Colors.white)),
           ],
         ),
       ),
     );
   }
 
-  // ── شريط تقدم المستوى ──
-  Widget _buildLevelProgress(int level, int points, int nextLevel, int startLevel, double progress) {
+  Widget _buildLevelProgress(LevelModel friendLevel, LevelModel? nextLevel, int xp, double progress) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -424,12 +298,9 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Text('تقدم المستوى', style: GoogleFonts.ibmPlexSansArabic(fontSize: 14, fontWeight: FontWeight.w700, color: appColors.dark)),
               Text(
-                'تقدم المستوى',
-                style: GoogleFonts.ibmPlexSansArabic(fontSize: 14, fontWeight: FontWeight.w700, color: appColors.dark),
-              ),
-              Text(
-                level >= 6 ? 'المستوى الأقصى 🏆' : 'المستوى $level ← ${level + 1}',
+                nextLevel == null ? 'المستوى الأقصى 🏆' : '${friendLevel.nameAr} ← ${nextLevel.nameAr}',
                 style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, fontWeight: FontWeight.w600, color: appColors.primary),
               ),
             ],
@@ -445,9 +316,9 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
             ),
           ),
           const SizedBox(height: 8),
-          if (level < 6)
+          if (nextLevel != null)
             Text(
-              '${points - startLevel} / ${nextLevel - startLevel} نقطة',
+              '${xp - friendLevel.requiredXp} / ${nextLevel.requiredXp - friendLevel.requiredXp} XP',
               style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, color: Colors.grey.shade600),
             ),
         ],
@@ -455,37 +326,24 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
     );
   }
 
-  // ── الإحصائيات السريعة ──
-  Widget _buildStatsRow(int points, int completedTasks, int level) {
-    final int xp = (_friendData!['xp'] ?? 0) is int
-        ? _friendData!['xp'] ?? 0
-        : ((_friendData!['xp'] ?? 0) as num).toInt();
-    final String currentLevelId = _friendData!['currentLevel'] ?? 'seedling';
-    final int friendXp = (_friendData!['xp'] ?? 0) is int
-        ? _friendData!['xp'] ?? 0
-        : ((_friendData!['xp'] ?? 0) as num).toInt();
-    final LevelModel friendLevel = getCurrentLevel(friendXp);
+  Widget _buildStatsRow(int points, int completedTasks, int xp) {
+    final LevelModel friendLevel = getCurrentLevel(xp);
 
     return Column(
       children: [
-        // الصف الأول
         Row(
           children: [
             Expanded(child: _buildStatCard('النقاط', '$points', Icons.stars_rounded, Colors.amber)),
             const SizedBox(width: 10),
             Expanded(child: _buildStatCard('المهام المكتملة', '$completedTasks', Icons.task_alt_rounded, Colors.green)),
             const SizedBox(width: 10),
-            Expanded(child: _buildStatCard('المستوى', '$level', Icons.flag_rounded, appColors.primary)),
+            Expanded(child: _buildStatCard('XP', '$xp', Icons.bolt_rounded, Colors.deepPurple)),
           ],
         ),
         const SizedBox(height: 10),
-        // الصف الثاني
         Row(
           children: [
-            Expanded(child: _buildStatCard('XP', '$xp', Icons.bolt_rounded, Colors.deepPurple)),
-            const SizedBox(width: 10),
             Expanded(
-              flex: 2,
               child: _buildStatCard('المرحلة', '${friendLevel.icon} ${friendLevel.nameAr}', Icons.eco_rounded, friendLevel.color),
             ),
           ],
@@ -510,22 +368,14 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
             child: Icon(icon, size: 20, color: color),
           ),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: GoogleFonts.ibmPlexSansArabic(fontSize: 18, fontWeight: FontWeight.w900, color: appColors.dark),
-          ),
+          Text(value, style: GoogleFonts.ibmPlexSansArabic(fontSize: 18, fontWeight: FontWeight.w900, color: appColors.dark)),
           const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, color: Colors.grey.shade600),
-            textAlign: TextAlign.center,
-          ),
+          Text(label, style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, color: Colors.grey.shade600), textAlign: TextAlign.center),
         ],
       ),
     );
   }
 
-  // ── قسم EcoLand ──
   Widget _buildEcoLandSection() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -537,7 +387,6 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // العنوان
           Row(
             children: [
               Container(
@@ -549,93 +398,55 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'EcoLand',
-                    style: GoogleFonts.ibmPlexSansArabic(fontSize: 17, fontWeight: FontWeight.w800, color: appColors.dark),
-                  ),
-                  Text(
-                    'أرض ${widget.friendUsername}',
-                    style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, color: Colors.grey.shade600),
-                  ),
+                  Text('EcoLand', style: GoogleFonts.ibmPlexSansArabic(fontSize: 17, fontWeight: FontWeight.w800, color: appColors.dark)),
+                  Text('أرض ${widget.friendUsername}', style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, color: Colors.grey.shade600)),
                 ],
               ),
               const Spacer(),
-              // شارة "للعرض فقط"
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: appColors.mint.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '👁 للعرض فقط',
-                  style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, fontWeight: FontWeight.w600, color: appColors.primary),
-                ),
+                decoration: BoxDecoration(color: appColors.mint.withOpacity(0.3), borderRadius: BorderRadius.circular(10)),
+                child: Text('👁 للعرض فقط', style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, fontWeight: FontWeight.w600, color: appColors.primary)),
               ),
             ],
           ),
           const SizedBox(height: 16),
-
-          // الـ IsoLand
-          // const SizedBox(
-          //   width: double.infinity,
-          //   height: 180,
-          //   child: IsoLand(
-          //     rows: 6,
-          //     cols: 6,
-          //     height: 160,
-          //     thickness: 14,
-          //     topColor: appColors.mint,
-          //     sideColor: appColors.tealSoft,
-          //     gridColor: appColors.sea,
-          //     gridOpacity: .08,
-          //   ),
-          // ),
 
           Builder(builder: (context) {
             final int friendXp = (_friendData!['xp'] ?? 0) is int
                 ? _friendData!['xp'] ?? 0
                 : ((_friendData!['xp'] ?? 0) as num).toInt();
             final currentLevel = getCurrentLevel(friendXp);
+            final islandLevel = islandLevelFromId(currentLevel.id);
 
-            IslandLevel islandLevel;
-            switch (currentLevel.id) {
-              case 'seedling':  islandLevel = IslandLevel.seedling;  break;
-              case 'sprout':    islandLevel = IslandLevel.sprout;    break;
-              case 'tree':      islandLevel = IslandLevel.tree;      break;
-              case 'guardian':  islandLevel = IslandLevel.guardian;  break;
-              case 'champion':  islandLevel = IslandLevel.champion;  break;
-              default:          islandLevel = IslandLevel.seedling;
-            }
+            final taskCounts = <String, int>{};
+            final counts = (_friendData!['taskCounts'] as Map<String, dynamic>?) ?? {};
+            counts.forEach((k, v) { if (v is int) taskCounts[k] = v; });
 
             return SizedBox(
               width: double.infinity,
-              height: 240,
+              height: 300,
               child: EcoLandIsland(
                 level: islandLevel,
                 isReadOnly: true,
+                allowPan: false,
+                showFriends: false,
+                taskCounts: taskCounts,
               ),
             );
           }),
 
           const SizedBox(height: 12),
-
-          // نص توضيحي
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: appColors.primary.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: BoxDecoration(color: appColors.primary.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
                 const Icon(Icons.info_outline, size: 16, color: appColors.primary),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    'أرض صديقك تنمو كلما أنجز مهام استدامة أكثر!',
-                    style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, color: appColors.dark.withOpacity(0.7)),
-                  ),
+                  child: Text('أرض صديقك تنمو كلما أنجز مهام استدامة أكثر!',
+                    style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, color: appColors.dark.withOpacity(0.7))),
                 ),
               ],
             ),
@@ -648,19 +459,13 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
   Widget _buildMiniChip(String text, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 13, color: color),
           const SizedBox(width: 4),
-          Text(
-            text,
-            style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, fontWeight: FontWeight.w600, color: appColors.dark),
-          ),
+          Text(text, style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, fontWeight: FontWeight.w600, color: appColors.dark)),
         ],
       ),
     );

@@ -13,6 +13,8 @@ import 'services/title_header.dart';
 import '../services/app_colors.dart';
 import 'friend_profile.dart';
 import 'widgets/ecoland_island.dart';
+import 'services/xp_service.dart';
+
 /* ======================= صفحة الأصدقاء ======================= */
 
 class communityPage extends StatefulWidget {
@@ -108,7 +110,7 @@ class _communityPageState extends State<communityPage> {
               'id': friendId,
               'username': data['username'] ?? '',
               'points': data['points'] ?? 0,
-              'level': _calculateLevel(data['points'] ?? 0),
+              'level': getCurrentLevel((data['xp'] ?? 0) as int).nameAr,
               'pfpIndex': data['pfpIndex'],
             });
           }
@@ -143,7 +145,7 @@ class _communityPageState extends State<communityPage> {
           'id': doc.id,
           'username': data['username'] ?? '',
           'points': data['points'] ?? 0,
-          'level': _calculateLevel(data['points'] ?? 0),
+          'level': getCurrentLevel((data['xp'] ?? 0) as int).nameAr,
           'pfpIndex': data['pfpIndex'],
         });
       }
@@ -155,16 +157,6 @@ class _communityPageState extends State<communityPage> {
     } catch (e) {
       debugPrint('خطأ في تحميل المتابِعين: $e');
     }
-  }
-
-  // حساب المستوى من النقاط
-  int _calculateLevel(int points) {
-    if (points < 100) return 1;
-    if (points < 300) return 2;
-    if (points < 600) return 3;
-    if (points < 1000) return 4;
-    if (points < 1500) return 5;
-    return 6;
   }
 
   // ✅ البحث عن صديق باسم المستخدم
@@ -228,7 +220,7 @@ class _communityPageState extends State<communityPage> {
           'id': foundUser.id,
           'username': userData['username'] ?? '',
           'points': userData['points'] ?? 0,
-          'level': _calculateLevel(userData['points'] ?? 0),
+          'level': getCurrentLevel((userData['xp'] ?? 0) as int).nameAr,
           'pfpIndex': userData['pfpIndex'],
           'completedTask': userData['completedTask'] ?? 0,
         };
@@ -1284,7 +1276,7 @@ class _communityPageState extends State<communityPage> {
                     children: [
                       _buildFriendStat(
                         icon: Icons.stars_rounded,
-                        value: 'المستوى ${friend['level']}',
+                        value: '${friend['level']}',
                         color: Colors.amber,
                       ),
                       const SizedBox(width: 14),
