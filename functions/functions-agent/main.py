@@ -2363,3 +2363,167 @@ def admin_recommendations_agent(request):
             500,
             {"Content-Type": "application/json"}
         )
+# ============================================================
+# model evaluations
+# ============================================================
+def build_ground_truth() -> dict:
+    """Ground Truth = سجل حقيقي لما أكمله المستخدم من userTasks"""
+    ground_truth = {}
+    for doc in db.collection("userTasks")\
+                  .where("status", "==", "completed").stream():
+        d   = doc.to_dict()
+        uid = d.get("userId")
+        tid = d.get("taskId")
+        if uid and tid:
+            if uid not in ground_truth:
+                ground_truth[uid] = []
+            ground_truth[uid].append(tid)
+    return ground_truth
+
+
+def compute_precision_recall(ground_truth: dict) -> dict:
+    """
+    Precision = كم توصية صحيحة من اللي اقترحها الأيجنت
+    Recall    = كم من المهام المفضلة اكتشفها الأيجنت
+    """
+    precisions = []
+    recalls    = []
+
+    for doc in db.collection("userTaskPreferences").stream():
+        uid       = doc.id
+        data      = doc.to_dict()
+        top_tasks = data.get("topTasks", [])
+        actual    = set(ground_truth.get(uid, []))
+
+        if not top_tasks or not actual:
+            continue
+
+        recommended = set(top_tasks[:5])
+
+        precision = len(recommended & actual) / len(recommended)
+        recall    = len(recommended & actual) / len(actual)
+
+        precisions.append(precision)
+        recalls.append(recall)
+
+    avg_precision = round(sum(precisions) / len(precisions), 2) if precisions else 0
+    avg_recall    = round(sum(recalls)    / len(recalls),    2) if recalls    else 0
+
+    f1 = round(
+        2 * avg_precision * avg_recall / (avg_precision + avg_recall), 2
+    ) if (avg_precision + avg_recall) > 0 else 0
+
+    return {
+        "precision": avg_precision,
+        "recall":    avg_recall,
+        "f1_score":  f1,
+    }
+
+
+def evaluate_agent_performance() -> dict:
+
+    # ✅ 1. Task Completion Rate
+    n_completed = sum(1 for _ in db.collection("userTasks")
+                      .where("status", "==", "completed").stream())
+    n_ignored   = sum(1 for _ in db.collection("userTasks")
+                      .where("ignored", "==", True).stream())
+    total = n_completed + n_ignored
+    completion_rate = round(n_completed / total * 100, 1) if total > 0 else 0
+
+    # ✅ 2. Precision@1
+    precision_scores = []
+    for doc in db.collection("userTaskPreferences").stream():
+        uid       = doc.id
+        top_tasks = doc.to_dict().get("topTasks", [])
+        if not top_tasks:
+            continue
+        first_task_id = top_tasks[0]
+        completed = list(
+            db.collection("userTasks")
+              .where("userId", "==", uid)
+              .where("taskId", "==", first_task_id)
+              .where("status", "==", "completed")
+              .limit(1)
+              .stream()
+        )
+        precision_scores.append(1 if completed else 0)
+
+    precision_at_1 = round(
+        sum(precision_scores) / len(precision_scores), 2
+    ) if precision_scores else round(completion_rate / 100, 2)
+
+    # ✅ 3. Wilson Score (Lower Bound) — Miller 2009
+    scores = []
+    for doc in db.collection("userTaskPreferences").stream():
+        for tid, stats in doc.to_dict().get("taskPreferences", {}).items():
+            s = stats.get("score")
+            if s is not None:
+                scores.append(s)
+    avg_wilson = round(sum(scores) / len(scores), 2) if scores else 0
+
+    # ✅ 4. Diversity — Ziegler et al. 2005
+    categories = {}
+    for doc in db.collection("userTasks").where("status", "==", "completed").stream():
+        cat = doc.to_dict().get("category") or "unknown"
+        if cat:
+            categories[cat] = categories.get(cat, 0) + 1
+    diversity        = len(categories)
+    diversity_detail = categories
+
+    # ✅ 5. Carbon Impact
+    total_carbon = sum(
+        (doc.to_dict().get("carbonSaved", 0) or 0)
+        for doc in db.collection("submissions")
+                      .where("status", "==", "approved").stream()
+    )
+
+    # ✅ 6. Carbon Target Performance
+    target_doc     = db.collection("appSettings").document("carbonTarget").get()
+    target_data    = target_doc.to_dict() if target_doc.exists else {}
+    perf_ratio     = target_data.get("performanceRatio", 0)
+    monthly_carbon = target_data.get("monthlyCarbon", 0)
+
+    # ✅ 7. Ground Truth — Precision / Recall / F1
+    ground_truth = build_ground_truth()
+    pr_metrics   = compute_precision_recall(ground_truth)
+
+    print(f"✅ Task Completion Rate: {completion_rate}%")
+    print(f"✅ Precision@1: {precision_at_1}")
+    print(f"✅ Wilson Score Avg: {avg_wilson}/10")
+    print(f"✅ Category Diversity: {diversity}")
+    print(f"✅ Total Carbon Saved: {total_carbon} kg")
+    print(f"✅ Precision: {pr_metrics['precision']}")
+    print(f"✅ Recall: {pr_metrics['recall']}")
+    print(f"✅ F1 Score: {pr_metrics['f1_score']}")
+
+    return {
+        # المعايير الأكاديمية
+        "task_completion_rate":  f"{completion_rate}%",
+        "precision_at_1":        precision_at_1,
+        "wilson_score_avg":      f"{avg_wilson}/10",
+        "category_diversity":    diversity,
+        "category_breakdown":    diversity_detail,
+
+        # Ground Truth Metrics
+        "precision":             pr_metrics["precision"],
+        "recall":                pr_metrics["recall"],
+        "f1_score":              pr_metrics["f1_score"],
+
+        # الأثر البيئي
+        "total_carbon_saved_kg": round(total_carbon, 2),
+        "monthly_carbon_kg":     round(monthly_carbon, 2),
+        "carbon_target_ratio":   f"{perf_ratio}%",
+
+        # إحصاءات عامة
+        "total_interactions":    total,
+        "n_completed":           n_completed,
+        "n_ignored":             n_ignored,
+        "ground_truth_users":    len(ground_truth),
+        "evaluated_at":          datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+
+@functions_framework.http
+def evaluate_agent(request):
+    result = evaluate_agent_performance()
+    return (json.dumps(result, ensure_ascii=False), 200, {"Content-Type": "application/json"})

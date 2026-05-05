@@ -253,31 +253,27 @@ exports.suggestBonusTask = onCall(async (request) => {
 /* ============================================================
  *  updateUserPreferences
  * ============================================================ */
-
-// ── Wilson Score (Miller, 2009) ──────────────────────────────
-// المرجع: Miller, E. (2009). How Not To Sort By Average Rating.
-// https://www.evanmiller.org/how-not-to-sort-by-average-rating.html
-// مبني على: Wilson, E. B. (1927). Journal of the American Statistical Association, 22, 209–212.
-//
-// الفكرة: نحسب الحد الأدنى لنسبة الإنجاز بثقة 95%
-// مثال: أكملها 2/2 = score 3.4 | أكملها 8/10 = score 4.9
-// ← الثانية أفضل لأن عندها بيانات أكثر وثقة أكبر
+// ── Wilson Score ──────────────────────────────
+// Idea: Calculate the lower bound of the completion rate with 95% confidence
+// Example: 2/2 completions → score 3.4 | 8/10 completions → score 4.9
+// The second is better because it has more data and higher statistical confidence
 function wilsonScore(completed, ignored) {
-  const n = completed + ignored; // إجمالي التفاعلات
+  const n = completed + ignored; // Total interactions (completions + ignores)
 
-  // لو ما في تفاعل → score محايد (1.0 × 10 = 10... نرجع 5 كقيمة وسط)
+  // If no interaction → neutral score (1.0 × 10 = 10... return 5 as middle value)
   if (n === 0) return 5.0;
 
-  const z = 1.96;          // 95% confidence interval (ثابت إحصائي)
-  const p = completed / n; // نسبة الإنجاز من المجموع
+  const z = 1.96;          // 95% confidence interval (z-score for α=0.05)
+  const p = completed / n; // Observed completion rate
 
-  // معادلة Wilson Score — الحد الأدنى لنطاق الثقة
+  // Wilson score formula — lower bound of the confidence interval
+  // This balances the observed completion rate against the uncertainty of small sample sizes
   const score = (
     (p + z*z/(2*n) - z * Math.sqrt((p*(1-p) + z*z/(4*n))/n)) /
     (1 + z*z/n)
-  ) * 10; // نحول النتيجة من نطاق [0,1] إلى [0,10]
+  ) * 10; // Scale from [0,1] range to [0,10] for easier interpretation
 
-  return Math.max(0.1, score); // الحد الأدنى 0.1 لتجنب الصفر
+  return Math.max(0.1, score); // Minimum 0.1 to avoid zero
 }
 
 exports.updateUserPreferences = onSchedule(
