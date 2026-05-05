@@ -199,16 +199,15 @@ def get_user_profile(user_id: str) -> dict:
         data = doc.to_dict()
 
         # المستوى
-        level_id = data.get("userLevelId", "beginner")
-        if level_id == "beginner":
-            level_label = "مبتدئ"
-            level_tone  = "تشجيعي — هذا مستخدم جديد يحتاج تحفيز وتشجيع لبدء رحلته"
-        elif level_id == "medium":
-            level_label = "متوسط"
-            level_tone  = "إيجابي — مستخدم نشيط يستحق الإشادة بتقدمه"
-        else:
-            level_label = "متقدم"
-            level_tone  = "احترافي — مستخدم ملتزم يقدّر التحدي والأهداف الكبيرة"
+        level_id = user_data.get("userLevelId", "seedling")
+        level_map = {
+            "seedling":  ("بذرة 🌱",           "تشجيعي — مستخدم جديد يحتاج تحفيز وتشجيع لبدء رحلته"),
+            "sprout":    ("نبتة 🌿",           "إيجابي — بدأ رحلته ويستحق التشجيع"),
+            "tree":      ("شجرة 🌳",           "إيجابي — مستخدم نشيط يستحق الإشادة بتقدمه"),
+            "guardian":  ("حارس البيئة 🌍",    "احترافي — مستخدم ملتزم يقدّر التحدي"),
+            "champion":  ("بطل الاستدامة 🏆",  "تحدي — مستخدم متقدم يقدّر الأهداف الكبيرة"),
+        }
+        level_label, level_tone = level_map.get(level_id, ("بذرة 🌱", "تشجيعي — مستخدم جديد"))
 
         # الجنس للمخاطبة
         gender = data.get("gender", "")
@@ -348,6 +347,24 @@ def get_nearby_places(lat: float, lng: float, context: dict, radius: float = 2.0
                 "source":   "bus_station",
                 "priority": 2
             })
+        # station_lat, station_lng = get_coords_from_station(station)
+        # if station_lat is None or station_lng is None:
+        #     continue
+        
+        # dist = calculate_distance(lat, lng, station_lat, station_lng)
+        # if dist <= radius:
+        #     station_name = station.get("name") or station.get("station_name") or "محطة باص"
+        #     nearby.append({
+        #         "id":       f"bus_{station.get('id', hash(str(station)))}",
+        #         "name":     station_name,
+        #         "address":  station.get("address") or station.get("location_description") or "",
+        #         "provider": "هيئة النقل العام",
+        #         "type":     "محطة باص",
+        #         "distance": round(dist, 2),
+        #         "category": "transport",
+        #         "source":   "bus_station",
+        #         "priority": 2
+        #     })
     
     # ============================================================
     # 3. محطات المترو من JSON
@@ -472,7 +489,45 @@ def get_user_task_history(user_id: str, context: dict, limit: int = 20) -> dict:
         "recently_completed": completed_ids[:5],
         "recently_ignored":   ignored_ids[:5]
     }
-
+# # ============================================================
+# # جلب الأخبار البيئية من Google News RSS
+# # ============================================================
+# def get_environmental_news(keywords: str = "بيئة") -> list:
+#     try:
+#         import re
+        
+#         # RSS عربي لا يحجب Cloud Functions
+#         urls = [
+#             "https://feeds.bbcarabic.com/bbcarabic/science/rss.xml",
+#             "https://www.aljazeera.net/rss/environment.xml",
+#         ]
+        
+#         news = []
+#         for url in urls:
+#             if len(news) >= 3:
+#                 break
+#             try:
+#                 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+#                 with urllib.request.urlopen(req, timeout=10) as resp:
+#                     content = resp.read().decode("utf-8")
+                
+#                 # استخراج العناوين
+#                 titles = re.findall(r"<title><!\[CDATA\[(.*?)\]\]></title>", content)
+#                 if not titles:
+#                     titles = re.findall(r"<title>(.*?)</title>", content)
+                
+#                 for title in titles[1:4]:
+#                     if title.strip():
+#                         news.append({"title": title.strip()})
+#             except:
+#                 continue
+        
+#         print(f"📰 Found {len(news)} news items")
+#         return news[:3]
+        
+#     except Exception as e:
+#         print(f"⚠️ News fetch failed: {e}")
+#         return []
 # ============================================================
 # الأيجنت الرئيسي
 # ============================================================
@@ -517,7 +572,16 @@ def run_task_agent(data: dict) -> dict:
     # ── Step 2: تفضيلات المستخدم ───────────────────────────
     print("📊 Step 2: Getting user preferences...")
     prefs = get_user_preferences(user_id, context)
-
+    # # ── Step 2.5: الطقس الحالي ──────────────────────────────
+    # print("🌤️ Step 2.5: Getting weather context...")
+    # weather = get_season_context()
+    # weather_hint = f"{weather.get('season', '')} {weather.get('emoji', '')} | {weather.get('temp', '')}°C | {weather.get('description', '')}"
+    # print(f"   {weather_hint}")
+    # # ── Step 2.5: الأخبار البيئية ───────────────────────────
+    # print("📰 Step 2.5: Getting environmental news...")
+    # news_items = get_environmental_news("بيئة الرياض تدوير")
+    # news_text = "\n".join([f"   • {n['title']}" for n in news_items]) if news_items else "لا توجد أخبار"
+    # print(f"   {len(news_items)} news fetched")
     # ── Step 3: الأماكن القريبة ─────────────────────────────
     nearby_result = {"count": 0, "places": [], "insight": "موقع غير متاح"}
     if user_location:
@@ -548,19 +612,15 @@ def run_task_agent(data: dict) -> dict:
     recycling_places = [p for p in nearby_places_all if p['category'] != 'transport']
     transport_places = [p for p in nearby_places_all if p['category'] == 'transport']
 
-    top_tasks_text = ""
-    if prefs.get("top_tasks"):
-        top_tasks_text = "\n".join([
-            f"   • {t['title']} (score: {t['score']}, completed: {t['completed']})"
-            for t in prefs["top_tasks"]
-        ])
+    top_tasks_text = "\n".join([
+        f"   • {t['title']} (score: {t['score']})"
+        for t in prefs["top_tasks"]
+    ])
 
-    ignored_text = ""
-    if prefs.get("ignored_tasks"):
-        ignored_text = "\n".join([
-            f"   • {t['title']} (ignored: {t['ignored']})"
-            for t in prefs["ignored_tasks"]
-        ])
+    ignored_text = "\n".join([
+        f"   • {t['title']} (viewCount: {t['viewCount']})"
+        for t in prefs["ignored_tasks"]
+    ])
 
     nearby_details = ""
     if nearby_result["count"] > 0:
@@ -644,11 +704,16 @@ def run_task_agent(data: dict) -> dict:
 {priority_rules}
 
 ✍️ قواعد كتابة الوصف (مهم جداً):
+- ⚠️ الوصف لازم يتطابق مع طبيعة المهمة المختارة تماماً
+- إذا المهمة عن التدوير → اذكر فقط أقرب حاوية تدوير (food/clothes/plastic/rvm) ولا تذكر محطات نقل
+- إذا المهمة عن النقل العام → اذكر فقط أقرب محطة باص أو مترو ولا تذكر حاويات
+- إذا المهمة عن القراءة أو التوعية → لا تذكر أي أماكن، اكتب وصف تحفيزي للقراءة فقط
+- إذا المهمة منزلية (ترشيد ماء/كهرباء) → لا تذكر أي أماكن، اكتب وصف عن الفائدة المنزلية
 - خاطب{suffix}ه دائماً بـ "{pronoun}" بأسلوب دافئ وودود
-- إذا المستوى "مبتدئ" → حفزه للبداية: "{pronoun} في بداية رحلتك..."
-- إذا المستوى "متوسط" → أشِد بتقدمه: "واصل{suffix} مسيرتك الرائعة..."
-- إذا المستوى "متقدم" → تحدّه: "بطل{suffix} البيئة، الآن تحدٍّ جديد..."
-- اذكر المكان القريب إن وجد مع المسافة ونوعه
+- إذا المستوى "بذرة 🌱" → حفزه للبداية: "{pronoun} في بداية رحلتك..."
+- إذا المستوى "شجرة 🌳" → أشِد بتقدمه: "واصل{suffix} مسيرتك الرائعة..."
+- إذا المستوى "بطل الاستدامة 🏆" → تحدّه: "بطل{suffix} البيئة، الآن تحدٍّ جديد..."
+- اذكر المكان القريب المرتبط بالمهمة فقط مع المسافة
 - إذا عنده streak أكثر من 1 → اذكره: "حافظ{suffix} على سلسلتك!"
 - 20-30 كلمة فقط، مختلف تماماً عن الوصف الأصلي للمهمة
 
@@ -780,7 +845,8 @@ def run_task_agent(data: dict) -> dict:
             "streak":   profile.get("streak", 0),
             "points":   profile.get("points", 0),
             "carbon":   profile.get("carbon_saved", 0),
-        }
+        },
+        # "newsItems": news_items,  # ← هنا
     }
 
 # ============================================================
@@ -1120,18 +1186,18 @@ def _get_yesterday_task_id(user_id: str) -> str | None:
 # بناء ملف المستخدم
 # ============================================================
 def _build_user_profile(user_data: dict, task_prefs: dict) -> dict:
-    level_id = user_data.get("userLevelId", "beginner")
     gender   = user_data.get("gender", "")
  
-    if level_id == "beginner":
-        level_label = "مبتدئ"
-        level_tone  = "تشجيعي — مستخدم جديد يحتاج تحفيز"
-    elif level_id == "medium":
-        level_label = "متوسط"
-        level_tone  = "إيجابي — مستخدم نشيط يستحق الإشادة"
-    else:
-        level_label = "متقدم"
-        level_tone  = "احترافي — مستخدم ملتزم يقدّر التحدي"
+    # المستوى
+    level_id = data.get("userLevelId", "seedling")
+    level_map = {
+        "seedling":  ("بذرة 🌱",           "تشجيعي — مستخدم جديد يحتاج تحفيز وتشجيع لبدء رحلته"),
+        "sprout":    ("نبتة 🌿",           "إيجابي — بدأ رحلته ويستحق التشجيع"),
+        "tree":      ("شجرة 🌳",           "إيجابي — مستخدم نشيط يستحق الإشادة بتقدمه"),
+        "guardian":  ("حارس البيئة 🌍",    "احترافي — مستخدم ملتزم يقدّر التحدي"),
+        "champion":  ("بطل الاستدامة 🏆",  "تحدي — مستخدم متقدم يقدّر الأهداف الكبيرة"),
+    }
+    level_label, level_tone = level_map.get(level_id, ("بذرة 🌱", "تشجيعي — مستخدم جديد"))
  
     pronoun = "أنتِ" if gender == "female" else "أنت"
     suffix  = "ي"   if gender == "female" else ""
@@ -2064,16 +2130,60 @@ def get_seasonal_patterns(context: dict) -> dict:
  
  
 # ============================================================
-# Step 5: الموسم الحالي
+# Step 5: الموسم الحالي + الطقس الفعلي
 # ============================================================
 def get_season_context() -> dict:
-    month = datetime.now().month
-    if month in [3, 4, 5]:   return {"season": "الربيع",  "emoji": "🌸"}
-    if month in [6, 7, 8]:   return {"season": "الصيف",   "emoji": "☀️"}
-    if month in [9, 10, 11]: return {"season": "الخريف",  "emoji": "🍂"}
-    return {"season": "الشتاء", "emoji": "❄️"}
- 
- 
+    weather_api_key = os.environ.get("WEATHER_API_KEY", "")
+    
+    if not weather_api_key:
+        # fallback للموسم الثابت
+        month = datetime.now().month
+        if month in [3, 4, 5]:   return {"season": "الربيع", "emoji": "🌸"}
+        if month in [6, 7, 8]:   return {"season": "الصيف",  "emoji": "☀️"}
+        if month in [9, 10, 11]: return {"season": "الخريف", "emoji": "🍂"}
+        return {"season": "الشتاء", "emoji": "❄️"}
+
+    try:
+        url = (
+            f"https://api.openweathermap.org/data/2.5/weather"
+            f"?lat=24.7136&lon=46.6753&appid={weather_api_key}"
+        )
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            weather = json.loads(resp.read().decode("utf-8"))
+
+        temp        = round(weather["main"]["temp"] - 273.15, 1)
+        description = weather["weather"][0]["description"]
+        humidity    = weather["main"]["humidity"]
+
+        # تحديد الموسم بناءً على الطقس الفعلي
+        if temp >= 35:
+            season, emoji = "الصيف الحار", "🌡️"
+        elif temp >= 25:
+            season, emoji = "الصيف", "☀️"
+        elif temp >= 15:
+            season, emoji = "الربيع", "🌸"
+        else:
+            season, emoji = "الشتاء", "❄️"
+
+        print(f"🌤️ Weather: {temp}°C | {description} | Humidity: {humidity}%")
+
+        return {
+            "season":      season,
+            "emoji":       emoji,
+            "temp":        temp,
+            "description": description,
+            "humidity":    humidity,
+            "source":      "openweathermap",
+        }
+
+    except Exception as e:
+        print(f"⚠️ Weather API failed: {e} — using fallback")
+        month = datetime.now().month
+        if month in [3, 4, 5]:   return {"season": "الربيع", "emoji": "🌸"}
+        if month in [6, 7, 8]:   return {"season": "الصيف",  "emoji": "☀️"}
+        if month in [9, 10, 11]: return {"season": "الخريف", "emoji": "🍂"}
+        return {"season": "الشتاء", "emoji": "❄️"}
 # ============================================================
 # Step 6: بناء الـ Prompt
 # ============================================================
@@ -2463,10 +2573,13 @@ def evaluate_agent_performance() -> dict:
 
     # ✅ 4. Diversity — Ziegler et al. 2005
     categories = {}
+    task_cache = {}
+    for doc in db.collection("tasks").stream():
+        task_cache[doc.id] = doc.to_dict().get("category", "unknown")
     for doc in db.collection("userTasks").where("status", "==", "completed").stream():
-        cat = doc.to_dict().get("category") or "unknown"
-        if cat:
-            categories[cat] = categories.get(cat, 0) + 1
+        task_id = doc.to_dict().get("taskId", "")
+        cat = task_cache.get(task_id, "unknown")
+        categories[cat] = categories.get(cat, 0) + 1
     diversity        = len(categories)
     diversity_detail = categories
 
