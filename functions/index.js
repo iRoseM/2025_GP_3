@@ -1,5 +1,5 @@
 const functions = require("firebase-functions/v1");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2/options");
 const admin = require("firebase-admin");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -18,6 +18,7 @@ setGlobalOptions({
 
 // ✅ مفاتيح الـ params
 const GEMINI_API_KEY = defineString("GEMINI_API_KEY");
+const GEMINI_PRODUCT_API_KEY = defineString("GEMINI_PRODUCT_API_KEY");
 const MAPS_API_KEY = defineString("MAPS_API_KEY");
 
 /** Helper: normalize safely */
@@ -90,7 +91,7 @@ ${articleText}
 `;
 
   try {
-    const apiKey = GEMINI_API_KEY.value();
+   const apiKey = GEMINI_API_KEY.value();
 
     if (!apiKey) {
       console.error("❌ GEMINI_API_KEY is missing in params!");
@@ -164,6 +165,111 @@ ${articleText}
     );
   }
 });
+
+/* ============================================================
+ * resolveProductName → Gemini product name resolver
+ * ============================================================ */
+exports.resolveProductName = onRequest(
+  {
+    region: "us-central1",
+    cors: true,
+  },
+  async (req, res) => {
+    try {
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed" });
+      }
+
+      const { productName, productType } = req.body || {};
+
+      if (!productName || productName.toString().trim().length === 0) {
+        return res.status(400).json({ error: "productName is required" });
+      }
+
+      const apiKey = GEMINI_PRODUCT_API_KEY.value();
+
+      if (!apiKey) {
+        console.error("❌ GEMINI_PRODUCT_API_KEY is missing in params!");
+        return res.status(500).json({
+          error: "GEMINI_PRODUCT_API_KEY_MISSING",
+        });
+      }
+
+      const prompt = `
+You are helping normalize a product name and estimate density for carbon calculation.
+
+User product name: "${productName}"
+Product type: "${productType || ""}"
+
+Return JSON only in this exact schema:
+{
+  "canonical_query": "short english product phrase",
+  "alternatives": ["alt 1", "alt 2"],
+  "category": "short category",
+  "density_kg_per_liter": 0.0,
+  "source": "short trusted source note",
+  "confidence": 0.0,
+  "trusted": true
+}
+
+Rules:
+- Translate Arabic to English when needed.
+- Infer the most likely common product/category.
+- If productType is liquid, return density in kg/L.
+- If productType is solid, density_kg_per_liter may be null.
+- Prefer a reasonable trusted estimate.
+- Output valid JSON only.
+- No markdown.
+`;
+
+      const url =
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+      const geminiRes = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: "application/json",
+          },
+        }),
+      });
+
+      const geminiData = await geminiRes.json();
+
+      if (!geminiRes.ok) {
+        console.error("❌ Gemini resolver API error:", geminiData);
+        return res.status(geminiRes.status).json(geminiData);
+      }
+
+      const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text) {
+        return res.status(500).json({ error: "Empty Gemini response" });
+      }
+
+      const cleanText = text
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+
+      const parsed = JSON.parse(cleanText);
+
+      return res.status(200).json(parsed);
+    } catch (e) {
+      console.error("❌ resolveProductName error:", e);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+);
 
 /* ============================================================
  * getMapsKey → ترجع Google Maps API key بشكل آمن
