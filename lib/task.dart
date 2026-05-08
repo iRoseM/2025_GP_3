@@ -3154,81 +3154,70 @@ class _taskPageState extends State<taskPage> {
           // زر الإكمال — مفعّل لليوم والماضي فقط
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
-              onPressed: (isCompleted || isSubmitted || !canPerform)
-                  ? null
-                  : () async {
-                      if (validation == "التحقق عبر اجراء اختبار قصير") {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ArticlePage(
-                              userTaskDocId: userTaskDocId,
-                              taskId: taskData['id'],
+            child: Material(
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: (isCompleted || isSubmitted || !canPerform)
+                    ? null
+                    : () async {
+                        if (validation == "التحقق عبر اجراء اختبار قصير") {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ArticlePage(
+                                userTaskDocId: userTaskDocId,
+                                taskId: taskData['id'],
+                              ),
                             ),
-                          ),
-                        );
-                      } else {
-                        final result = await showCompleteTaskSheet(
-                          context,
-                          taskData,
-                          selectedDay: sel,
-                          userTaskDocId: userTaskDocId,
-                        );
-                        if (result == true && mounted) {
-                          _attachUserTaskStreamFor(sel);
-                          setState(() {});
+                          );
+                        } else {
+                          final result = await showCompleteTaskSheet(
+                            context,
+                            taskData,
+                            selectedDay: sel,
+                            userTaskDocId: userTaskDocId,
+                          );
+                          if (result == true && mounted) {
+                            _attachUserTaskStreamFor(sel);
+                            setState(() {});
+                          }
                         }
-                      }
-                    },
-              style: ButtonStyle(
-                elevation: MaterialStateProperty.all(0),
-                shadowColor: MaterialStateProperty.all(Colors.transparent),
-                backgroundColor: MaterialStateProperty.all(Colors.transparent),
-                overlayColor: MaterialStateProperty.all(Colors.transparent),
-                shape: MaterialStateProperty.all(
-                  RoundedRectangleBorder(
+                      },
+                child: Ink(
+                  decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
+                    color: (isSubmitted || !canPerform)
+                        ? Colors.grey.shade300
+                        : (isCompleted ? AppColors.primary33 : null),
+                    gradient: (!isCompleted && !isSubmitted && canPerform)
+                        ? const LinearGradient(
+                            colors: [AppColors.primary, AppColors.mint],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          )
+                        : null,
                   ),
-                ),
-                padding: MaterialStateProperty.all(
-                  const EdgeInsets.symmetric(vertical: 14),
-                ),
-                splashFactory: NoSplash.splashFactory,
-              ),
-              child: Ink(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  color: (isSubmitted || !canPerform)
-                      ? Colors.grey.shade300
-                      : (isCompleted ? AppColors.primary33 : null),
-                  gradient: (!isCompleted && !isSubmitted && canPerform)
-                      ? const LinearGradient(
-                          colors: [AppColors.primary, AppColors.mint],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        )
-                      : null,
-                ),
-                child: Container(
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Text(
-                    isCompleted
-                        ? 'تم الإنجاز ✅'
-                        : (isSubmitted
-                              ? 'بانتظار المراجعة ⏳'
-                              : (canPerform
-                                    ? 'بدء المهمة'
-                                    : (sel.isBefore(today)
-                                          ? 'انتهى موعد المهمة '
-                                          : 'يومها لم يحن بعد'))),
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      color: (isCompleted || isSubmitted || !canPerform)
-                          ? AppColors.dark
-                          : Colors.white,
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Text(
+                      isCompleted
+                          ? 'تم الإنجاز ✅'
+                          : (isSubmitted
+                                ? 'بانتظار المراجعة ⏳'
+                                : (canPerform
+                                      ? 'بدء المهمة'
+                                      : (sel.isBefore(today)
+                                            ? 'انتهى موعد المهمة'
+                                            : 'يومها لم يحن بعد'))),
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: (isCompleted || isSubmitted || !canPerform)
+                            ? AppColors.dark
+                            : Colors.white,
+                      ),
                     ),
                   ),
                 ),
