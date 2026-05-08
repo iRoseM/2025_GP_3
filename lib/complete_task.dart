@@ -66,6 +66,21 @@ const _metroThresholds = _TransportThresholds(
   maxPeakSpeed: 130, // سرعة قصوى رسمية 120، نعطي هامش 10 إضافية
 );
 
+const _bicycleThresholds = _TransportThresholds(
+  maxAvgSpeed: 30,  // دراجة متوسط ~15-20، هامش حتى 30
+  maxPeakSpeed: 50, // قصوى ~45، هامش 5 إضافية
+);
+
+const _scooterThresholds = _TransportThresholds(
+  maxAvgSpeed: 35,  // سكوتر متوسط ~20-25، هامش حتى 35
+  maxPeakSpeed: 55,
+);
+
+const _walkThresholds = _TransportThresholds(
+  maxAvgSpeed: 10,  // مشي متوسط ~4-6، هامش حتى 10
+  maxPeakSpeed: 15,
+);
+
 const _busThresholds = _TransportThresholds(
   maxAvgSpeed: 55, // باص نقل متوسط ~15-35، نعطي هامش حتى 55
   maxPeakSpeed: 90, // سرعة قصوى باص ~80، نعطي هامش 10 إضافية
@@ -418,13 +433,45 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   //  تحديد الـ thresholds من عنوان المهمة
   // ─────────────────────────────────────────────
 
-  _TransportThresholds _getThresholdsForTask() {
-    final title = (widget.taskData['title'] ?? '').toString().toLowerCase();
-    if (title.contains('مترو') || title.contains('metro')) {
-      return _metroThresholds;
-    }
-    return _busThresholds; // باص كـ default لباقي المواصلات
-  }
+_TransportThresholds _getThresholdsForTask() {
+  final title = (widget.taskData['title'] ?? '').toString().toLowerCase();
+  if (title.contains('مترو') || title.contains('metro')) return _metroThresholds;
+  if (title.contains('باص') || title.contains('bus') || title.contains('حافلة')) return _busThresholds;
+  if (title.contains('دراجة') || title.contains('سيكل') || title.contains('cycle')) return _bicycleThresholds;
+  if (title.contains('سكوتر') || title.contains('scooter')) return _scooterThresholds;
+  if (title.contains('مشياً') || title.contains('مشيا') || title.contains('مشي')) return _walkThresholds;
+  return _busThresholds;
+}
+
+String _getTransportButtonLabel() {
+  final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
+  if (t.contains('مترو') || t.contains('metro')) return 'اختر محطات المترو';
+  if (t.contains('باص') || t.contains('bus') || t.contains('حافلة')) return 'اختر محطات الباص';
+  if (t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle')) return 'حدد مسار الدراجة';
+  if (t.contains('سكوتر') || t.contains('scooter')) return 'حدد مسار السكوتر';
+  if (t.contains('مشياً') || t.contains('مشيا') || t.contains('مشي')) return 'حدد مسار المشي';
+  return 'اختر المسار';
+}
+
+String _getArrivalLabel() {
+  final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
+  if (t.contains('مترو') || t.contains('metro')) return 'وصلت إلى محطة المترو';
+  if (t.contains('باص') || t.contains('bus') || t.contains('حافلة')) return 'وصلت إلى محطة الباص';
+  if (t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle')) return 'وصلت إلى وجهتي بالدراجة';
+  if (t.contains('سكوتر') || t.contains('scooter')) return 'وصلت إلى وجهتي بالسكوتر';
+  if (t.contains('مشياً') || t.contains('مشيا') || t.contains('مشي')) return 'وصلت إلى وجهتي مشياً';
+  return 'وصلت إلى نقطة الوصول';
+}
+
+IconData _getTransportIcon() {
+  final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
+  if (t.contains('مترو') || t.contains('metro')) return Icons.train_rounded;
+  if (t.contains('باص') || t.contains('bus') || t.contains('حافلة')) return Icons.directions_bus_rounded;
+  if (t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle')) return Icons.directions_bike_rounded;
+  if (t.contains('سكوتر') || t.contains('scooter')) return Icons.electric_scooter_rounded;
+  if (t.contains('مشياً') || t.contains('مشيا') || t.contains('مشي')) return Icons.directions_walk_rounded;
+  return Icons.map_outlined;
+}
 
   // ─────────────────────────────────────────────
   //  Transport Flow
@@ -432,10 +479,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   Future<void> _startFlowForTransportTask() async {
     final taskTitle = widget.taskData['title']?.toString() ?? '';
-    final stationType =
-        (taskTitle.contains('مترو') || taskTitle.contains('metro'))
-        ? 'metro'
-        : 'bus';
+  final String stationType;
+  if (taskTitle.contains('مترو') || taskTitle.contains('metro')) {
+    stationType = 'metro';
+  } else if (taskTitle.contains('باص') || taskTitle.contains('bus') || taskTitle.contains('حافلة')) {
+    stationType = 'bus';
+  } else if (taskTitle.contains('دراجة') || taskTitle.contains('سيكل') || taskTitle.contains('cycle')) {
+    stationType = 'bicycle';
+  } else if (taskTitle.contains('سكوتر') || taskTitle.contains('scooter')) {
+    stationType = 'scooter';
+  } else {
+    stationType = 'walk';
+  }
 
     final MapRoutePickResult? res =
         await Navigator.of(
@@ -520,11 +575,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        Icons.directions_transit_rounded,
-                        color: appColors.primary,
-                        size: 52,
-                      ),
+                      Icon(_getTransportIcon(), color: appColors.primary, size: 52),
+
                       const SizedBox(height: 12),
                       Text(
                         'تم التحقق من محطة البداية ✅',
@@ -1818,38 +1870,25 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       if (mounted) setState(() => _openingCamera = false);
     }
   }
+Future<void> _startTaskFlow() async {
+  final taskTitle = widget.taskData['title']?.toString() ?? '';
+  final taskType = _getLocationTaskType(taskTitle);
+  final t = taskTitle.toLowerCase();
 
-  Future<void> _startTaskFlow() async {
-    final taskTitle = widget.taskData['title']?.toString() ?? '';
-    final taskType = _getLocationTaskType(taskTitle);
+  final bool isAnyTransport =
+      taskType == TaskType.metro ||
+      taskType == TaskType.bus ||
+      t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle') ||
+      t.contains('سكوتر') || t.contains('scooter') ||
+      t.contains('مشياً') || t.contains('مشيا') || t.contains('مشي');
 
-    if (taskType == TaskType.metro || taskType == TaskType.bus) {
-      await _startFlowForTransportTask();
-      return;
-    }
-
-    if (taskType != null) {
-      if (mounted) setState(() => _isVerifying = true);
-      final locationResult = await LocationValidator.validate(taskType);
-      if (mounted) setState(() => _isVerifying = false);
-
-      if (locationResult.isValid) {
-        if (mounted) {
-          setState(() {
-            _verificationResult = TaskVerificationResult(
-              success: true,
-              verified: true,
-              verificationSource: 'location',
-            );
-          });
-        }
-        await _uploadAndComplete();
-        return;
-      }
-    }
-
-    _openCamera();
+  if (isAnyTransport) {
+    await _startFlowForTransportTask();
+    return;
   }
+
+  _openCamera();
+}
 
   Future<void> _switchCamera() async {
     if ((_cameras?.length ?? 0) < 2) {
@@ -2654,37 +2693,25 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   if (!_ready) const SizedBox(height: 16),
 
                   // ─── زر مهام غير مواصلات ───
-                  if (requiresPhotoExact && !isTransport && !_ready)
-                    _gradientButton(
-                      label:
-                          _getLocationTaskType(
-                                widget.taskData['title']?.toString() ?? '',
-                              ) !=
-                              null
-                          ? 'تحقق من المهمة'
-                          : 'ابدأ التصوير',
-                      icon:
-                          _getLocationTaskType(
-                                widget.taskData['title']?.toString() ?? '',
-                              ) !=
-                              null
-                          ? Icons.location_on
-                          : Icons.camera_alt,
-                      onTap: (_openingCamera || _isVerifying)
-                          ? null
-                          : () => _startTaskFlow(),
-                      loading: _openingCamera || _isVerifying,
-                    ),
+if (requiresPhotoExact && !isTransport && !_ready)
+  _gradientButton(
+    label: 'ابدأ التصوير',
+    icon: Icons.camera_alt,
+    onTap: (_openingCamera || _isVerifying)
+        ? null
+        : () => _startTaskFlow(),
+    loading: _openingCamera || _isVerifying,
+  ),
 
                   // ─── زر مهام المواصلات (يتغير حسب المرحلة) ───
                   if (requiresPhotoExact && isTransport && !_ready) ...[
-                    _gradientButton(
-                      label: _transportVerifyPhase == 'end'
-                          ? 'وصلت إلى محطة الوصول'
-                          : 'اختر محطات المسار',
-                      icon: _transportVerifyPhase == 'end'
-                          ? Icons.location_on
-                          : Icons.map_outlined,
+                   _gradientButton(
+  label: _transportVerifyPhase == 'end'
+      ? _getArrivalLabel()
+      : _getTransportButtonLabel(),
+  icon: _transportVerifyPhase == 'end'
+      ? Icons.location_on
+      : _getTransportIcon(),
                       onTap: (_openingCamera || _isVerifying)
                           ? null
                           : () => _transportVerifyPhase == 'end'
@@ -3344,67 +3371,94 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     );
   }
 
-  Widget _buildPhotoInstructions() {
-    final bullets = [
-      'تأكد من أن الإضاءة جيدة والعنصر واضح.',
-      'التقط صورة تُظهر قيامك بالمهمة (مثل العناصر المجمعة).',
-      'لا تستخدم صورًا من الإنترنت.',
-      'التقط من زاوية مناسبة وبدون فلاش إن أمكن.',
-    ];
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: appColors.mint.withOpacity(0.15),
-        border: Border.all(color: appColors.mint, width: 1.5),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.camera_alt_outlined,
-                color: appColors.primary,
-                size: 22,
+Widget _buildPhotoInstructions() {
+  final bullets = [
+    'تأكد من أن الإضاءة جيدة والعنصر واضح.',
+    'التقط صورة تُظهر قيامك بالمهمة (مثل حاوية اعادة التدوير).',
+    'لا تستخدم صورًا من الإنترنت.',
+    'التقط من زاوية مناسبة وبدون فلاش إن أمكن.',
+  ];
+
+  final isRecyclingTask = () {
+    final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
+    return t.contains('تدوير') || t.contains('حاوية') ||
+           t.contains('بلاستيك') || t.contains('ورق') ||
+           t.contains('recycl') || t.contains('rvm') ||
+           t.contains('ملابس') || t.contains('طعام');
+  }();
+
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: appColors.mint.withOpacity(0.15),
+      border: Border.all(color: appColors.mint, width: 1.5),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.camera_alt_outlined, color: appColors.primary, size: 22),
+            const SizedBox(width: 8),
+            Text(
+              'تعليمات التصوير',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: appColors.dark,
               ),
-              const SizedBox(width: 8),
-              Text(
-                'تعليمات التصوير',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: appColors.dark,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ...bullets.map(
-            (txt) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('•  ', style: TextStyle(height: 1.7)),
-                  Expanded(
-                    child: Text(
-                      txt,
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 13.8,
-                        height: 1.8,
-                        color: Colors.black87,
-                      ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ...bullets.map(
+          (txt) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('•  ', style: TextStyle(height: 1.7)),
+                Expanded(
+                  child: Text(
+                    txt,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 13.8,
+                      height: 1.8,
+                      color: Colors.black87,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // ── مثال الصورة لمهام الحاويات ──
+        if (isRecyclingTask) ...[
+          const SizedBox(height: 14),
+          Text(
+            'مثال على الصورة المطلوبة:',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: appColors.dark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.asset(
+              'assets/img/recycling_example.webp',
+              fit: BoxFit.cover,
+              width: double.infinity,
             ),
           ),
         ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
 
   Widget _counterButton({required IconData icon, required VoidCallback onTap}) {
     return InkWell(

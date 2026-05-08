@@ -55,7 +55,7 @@ class _levelsPageState extends State<levelsPage> {
         body: StreamBuilder<DocumentSnapshot>(
           stream: XpService.userStream(),
           builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+            if (!snapshot.hasData) {
               return Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -88,15 +88,23 @@ class _levelsPageState extends State<levelsPage> {
               );
             }
 
-            final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
-            final int xp = data['xp'] ?? 0;
-            final currentLevel = getCurrentLevel(xp);
-            final nextLevel = getNextLevel(xp);
-            final double progress = getLevelProgress(xp);
+            final data =
+                snapshot.data?.data() as Map<String, dynamic>? ?? {};
+
+            final int xpInLevel = data['xp'] ?? 0;
+
+            final String storedLevelId = data['currentLevel'] ?? 'seedling';
+            final currentLevel = kLevels.firstWhere(
+              (l) => l.id == storedLevelId,
+              orElse: () => kLevels.first,
+            );
+
+            final nextLevel = getNextLevelFromCurrent(currentLevel);
+            final double progress =
+                getLevelProgressFromZero(currentLevel, xpInLevel);
 
             return Stack(
               children: [
-                // خلفية
                 Container(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
@@ -116,7 +124,6 @@ class _levelsPageState extends State<levelsPage> {
                 SafeArea(
                   child: Column(
                     children: [
-                      // AppBar
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                         child: Row(
@@ -126,24 +133,19 @@ class _levelsPageState extends State<levelsPage> {
                               icon: Icons.arrow_back_ios_new_rounded,
                               onTap: () => Navigator.maybePop(context),
                             ),
-                            
                             const SizedBox(width: 36),
                           ],
                         ),
                       ),
 
                       const SizedBox(height: 14),
-
-                      // بانر الموسم
                       const _SeasonBanner(),
-
                       const SizedBox(height: 14),
 
-                      // بطاقة XP
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: _XpProgressCard(
-                          xp: xp,
+                          xpInLevel: xpInLevel,
                           currentLevel: currentLevel,
                           nextLevel: nextLevel,
                           progress: progress,
@@ -152,9 +154,11 @@ class _levelsPageState extends State<levelsPage> {
 
                       const SizedBox(height: 16),
 
-                      // Timeline
                       Expanded(
-                        child: _LevelsTimeline(userXp: xp),
+                        child: _LevelsTimeline(
+                          userLevelIndex: currentLevel.index,
+                          xpInLevel: xpInLevel,
+                        ),
                       ),
                     ],
                   ),
@@ -250,13 +254,13 @@ class _SeasonBanner extends StatelessWidget {
 // بطاقة XP
 // ─────────────────────────────────────────
 class _XpProgressCard extends StatelessWidget {
-  final int xp;
+  final int xpInLevel;
   final LevelModel currentLevel;
   final LevelModel? nextLevel;
   final double progress;
 
   const _XpProgressCard({
-    required this.xp,
+    required this.xpInLevel,
     required this.currentLevel,
     required this.nextLevel,
     required this.progress,
@@ -281,31 +285,26 @@ class _XpProgressCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              // أيقونة المرحلة
               Container(
-                width: 50,
-                height: 50,
+                width: 54,
+                height: 54,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      currentLevel.color.withOpacity(0.7),
-                      currentLevel.color,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: currentLevel.color.withOpacity(0.35),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
+                  color: currentLevel.color.withOpacity(0.1),
+                  border: Border.all(
+                    color: currentLevel.color.withOpacity(0.3),
+                    width: 2,
+                  ),
                 ),
-                child: Center(
-                  child: Text(currentLevel.icon,
-                      style: const TextStyle(fontSize: 24)),
+                child: ClipOval(
+                  child: Image.asset(
+                    currentLevel.figurePath,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Center(
+                      child: Text(currentLevel.icon,
+                          style: const TextStyle(fontSize: 24)),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -335,7 +334,7 @@ class _XpProgressCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '$xp',
+                    '$xpInLevel',
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 28,
                       fontWeight: FontWeight.w900,
@@ -361,8 +360,8 @@ class _XpProgressCard extends StatelessWidget {
 
           LayoutBuilder(
             builder: (context, constraints) {
-              final double dotPos =
-                  (constraints.maxWidth * progress).clamp(8.0, constraints.maxWidth - 8.0);
+              final double dotPos = (constraints.maxWidth * progress)
+                  .clamp(8.0, constraints.maxWidth - 8.0);
               return Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -397,7 +396,8 @@ class _XpProgressCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: currentLevel.color, width: 3),
+                        border: Border.all(
+                            color: currentLevel.color, width: 3),
                         boxShadow: [
                           BoxShadow(
                             color: currentLevel.color.withOpacity(0.3),
@@ -427,7 +427,7 @@ class _XpProgressCard extends StatelessWidget {
               ),
               if (nextLevel != null)
                 Text(
-                  'باقي ${nextLevel!.requiredXp - xp} XP للوصول لـ${nextLevel!.nameAr} ${nextLevel!.icon}',
+                  'باقي ${xpRemainingForNext(currentLevel, nextLevel!, xpInLevel)} XP للوصول لـ${nextLevel!.nameAr} ${nextLevel!.icon}',
                   style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 12, color: Colors.grey[500]),
                 )
@@ -449,15 +449,19 @@ class _XpProgressCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────
-// Timeline المستويات - الإصلاح الرئيسي هنا
+// Timeline المستويات
 // ─────────────────────────────────────────
 class _LevelsTimeline extends StatelessWidget {
-  final int userXp;
-  const _LevelsTimeline({required this.userXp});
+  final int userLevelIndex;
+  final int xpInLevel;
+
+  const _LevelsTimeline({
+    required this.userLevelIndex,
+    required this.xpInLevel,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // الأعلى xp في الأعلى
     final levels = kLevels.reversed.toList();
 
     return ListView.builder(
@@ -465,14 +469,13 @@ class _LevelsTimeline extends StatelessWidget {
       itemCount: levels.length,
       itemBuilder: (context, index) {
         final level = levels[index];
-        final bool isUnlocked = userXp >= level.requiredXp;
-        final bool isCurrent = getCurrentLevel(userXp).id == level.id;
+        final bool isUnlocked = userLevelIndex >= level.index;
+        final bool isCurrent = userLevelIndex == level.index;
         final bool isFirst = index == 0;
         final bool isLast = index == levels.length - 1;
 
         return Column(
           children: [
-            // خط فوق
             if (!isFirst)
               Center(
                 child: Container(
@@ -487,14 +490,13 @@ class _LevelsTimeline extends StatelessWidget {
                 ),
               ),
 
-            // صف المستوى
             _LevelRow(
               level: level,
               isUnlocked: isUnlocked,
               isCurrent: isCurrent,
+              xpInLevel: xpInLevel,
             ),
 
-            // خط تحت
             if (!isLast)
               Center(
                 child: Container(
@@ -516,17 +518,23 @@ class _LevelsTimeline extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────
-// صف مستوى واحد كامل
+// صف مستوى واحد
+// Layout:
+//   يمين  = الفيقر (الجائزة VIP) — مفتوح/مقفول
+//   وسط   = عقدة التايملاين
+//   يسار  = اسم المرحلة + أيقونتها — مفتوح/مقفول
 // ─────────────────────────────────────────
 class _LevelRow extends StatelessWidget {
   final LevelModel level;
   final bool isUnlocked;
   final bool isCurrent;
+  final int xpInLevel;
 
   const _LevelRow({
     required this.level,
     required this.isUnlocked,
     required this.isCurrent,
+    required this.xpInLevel,
   });
 
   @override
@@ -534,172 +542,52 @@ class _LevelRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // بطاقة يمين (Basic)
-        Expanded(child: _RewardCard(level: level, isUnlocked: isUnlocked, isVip: false)),
-        const SizedBox(width: 8),
-        // عقدة المستوى
-        _TimelineNode(level: level, isUnlocked: isUnlocked, isCurrent: isCurrent),
-        const SizedBox(width: 8),
-        // بطاقة يسار (VIP)
-        Expanded(child: _RewardCard(level: level, isUnlocked: isUnlocked, isVip: true)),
-      ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────
-// عقدة المستوى
-// ─────────────────────────────────────────
-class _TimelineNode extends StatelessWidget {
-  final LevelModel level;
-  final bool isUnlocked;
-  final bool isCurrent;
-
-  const _TimelineNode({
-    required this.level,
-    required this.isUnlocked,
-    required this.isCurrent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // ألوان حسب الحالة
-    final Color bgColor = isCurrent
-        ? level.color
-        : isUnlocked
-            ? Colors.white
-            : const Color(0xFFEEEEEE);
-
-    final Color borderColor = isCurrent
-        ? Colors.white
-        : isUnlocked
-            ? level.color
-            : const Color(0xFFBDBDBD);
-
-    final List<BoxShadow> shadows = isCurrent
-        ? [
-            BoxShadow(color: level.color.withOpacity(0.4), blurRadius: 16, spreadRadius: 2),
-            BoxShadow(color: level.color.withOpacity(0.15), blurRadius: 6, spreadRadius: 8),
-          ]
-        : isUnlocked
-            ? [BoxShadow(color: level.color.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 3))]
-            : [];
-
-    return Stack(
-      alignment: Alignment.topCenter,
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: 58,
-          height: 58,
-          decoration: BoxDecoration(
-            color: bgColor,
-            shape: BoxShape.circle,
-            border: Border.all(color: borderColor, width: isCurrent ? 3 : 2),
-            boxShadow: shadows,
-          ),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // الأيقونة: ملونة إذا مفتوح، رمادية إذا مقفول
-                ColorFiltered(
-                  colorFilter: isUnlocked
-                      ? const ColorFilter.mode(Colors.transparent, BlendMode.saturation)
-                      : const ColorFilter.matrix([
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0,      0,      0,      1, 0,
-                        ]),
-                  child: Text(
-                    level.icon,
-                    style: TextStyle(
-                      fontSize: 22,
-                      color: isUnlocked ? null : Colors.grey,
-                    ),
-                  ),
-                ),
-                Text(
-                  '${level.requiredXp}',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: isCurrent
-                        ? Colors.white70
-                        : isUnlocked
-                            ? level.color
-                            : const Color(0xFFBDBDBD),
-                  ),
-                ),
-              ],
-            ),
+        // ── يمين: الفيقر (جائزة VIP) ──
+        Expanded(
+          child: _FigureCard(
+            level: level,
+            isUnlocked: isUnlocked,
           ),
         ),
+        const SizedBox(width: 8),
 
-        // شارة "حالياً"
-        if (isCurrent)
-          Positioned(
-            top: -11,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: level.color,
-                borderRadius: BorderRadius.circular(99),
-                boxShadow: [
-                  BoxShadow(color: level.color.withOpacity(0.4), blurRadius: 6),
-                ],
-              ),
-              child: Text(
-                'حالياً',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          ),
+        // ── وسط: عقدة التايملاين ──
+        _TimelineNode(
+          level: level,
+          isUnlocked: isUnlocked,
+          isCurrent: isCurrent,
+        ),
+        const SizedBox(width: 8),
 
-        // أيقونة القفل للمقفولة
-        if (!isUnlocked)
-          Positioned(
-            bottom: 0,
-            right: 0,
-            child: Container(
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                color: const Color(0xFFBDBDBD),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 1.5),
-              ),
-              child: const Icon(Icons.lock_rounded, color: Colors.white, size: 10),
-            ),
+        // ── يسار: اسم المرحلة وأيقونتها ──
+        Expanded(
+          child: _LevelInfoCard(
+            level: level,
+            isUnlocked: isUnlocked,
+            isCurrent: isCurrent,
           ),
+        ),
       ],
     );
   }
 }
 
 // ─────────────────────────────────────────
-// بطاقة الجائزة - محسّنة للمقفولة
+// يمين — بطاقة الفيقر (الجائزة)
+// مفتوحة: صورة الفيقر بألوانها
+// مقفولة: صورة رمادية
 // ─────────────────────────────────────────
-class _RewardCard extends StatelessWidget {
+class _FigureCard extends StatelessWidget {
   final LevelModel level;
   final bool isUnlocked;
-  final bool isVip;
 
-  const _RewardCard({
+  const _FigureCard({
     required this.level,
     required this.isUnlocked,
-    required this.isVip,
   });
 
   @override
   Widget build(BuildContext context) {
-    // ═══ مقفول ═══
     if (!isUnlocked) {
       return Container(
         padding: const EdgeInsets.all(10),
@@ -711,25 +599,32 @@ class _RewardCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // أيقونة رمادية
             ColorFiltered(
               colorFilter: const ColorFilter.matrix([
                 0.2126, 0.7152, 0.0722, 0, 0,
                 0.2126, 0.7152, 0.0722, 0, 0,
                 0.2126, 0.7152, 0.0722, 0, 0,
-                0,      0,      0,      0.5, 0,
+                0, 0, 0, 0.4, 0,
               ]),
-              child: Text(
-                isVip ? '🏅' : level.icon,
-                style: const TextStyle(fontSize: 22),
+              child: Image.asset(
+                level.figurePath,
+                height: 48,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.lock_outline,
+                  size: 32,
+                  color: Color(0xFFBDBDBD),
+                ),
               ),
             ),
             const SizedBox(height: 5),
             Text(
-              isVip ? 'جائزة VIP' : level.nameAr,
+              level.figureName,
               textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 10,
+                fontSize: 9,
                 fontWeight: FontWeight.w600,
                 color: const Color(0xFFBDBDBD),
               ),
@@ -742,7 +637,7 @@ class _RewardCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(99),
               ),
               child: Text(
-                '${level.requiredXp} XP',
+                'مقفول 🔒',
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 9,
                   fontWeight: FontWeight.w600,
@@ -755,64 +650,13 @@ class _RewardCard extends StatelessWidget {
       );
     }
 
-    // ═══ VIP مفتوح ═══
-    if (isVip) {
-      return Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              const Color(0xFFFBBF24).withOpacity(0.18),
-              const Color(0xFFF59E0B).withOpacity(0.06),
-            ],
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-          ),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.45)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(level.icon, style: const TextStyle(fontSize: 22)),
-            const SizedBox(height: 5),
-            Text(
-              'جائزة ذهبية',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: const Color(0xFF92400E),
-              ),
-            ),
-            const SizedBox(height: 3),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEF3C7),
-                borderRadius: BorderRadius.circular(99),
-              ),
-              child: Text(
-                'VIP ✨',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFFB45309),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // ═══ Basic مفتوح ═══
+    // مفتوح
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: level.color.withOpacity(0.2)),
+        border: Border.all(color: level.color.withOpacity(0.25)),
         boxShadow: [
           BoxShadow(
             color: level.color.withOpacity(0.08),
@@ -824,13 +668,23 @@ class _RewardCard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(level.icon, style: const TextStyle(fontSize: 22)),
+          Image.asset(
+            level.figurePath,
+            height: 48,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => Text(
+              level.icon,
+              style: const TextStyle(fontSize: 32),
+            ),
+          ),
           const SizedBox(height: 5),
           Text(
-            level.nameAr,
+            level.figureName,
             textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 10,
+              fontSize: 9,
               fontWeight: FontWeight.w700,
               color: const Color(0xFF1a2e1a),
             ),
@@ -857,6 +711,252 @@ class _RewardCard extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────
+// يسار — بطاقة معلومات المرحلة
+// مفتوحة: ملونة
+// مقفولة: رمادية
+// ─────────────────────────────────────────
+class _LevelInfoCard extends StatelessWidget {
+  final LevelModel level;
+  final bool isUnlocked;
+  final bool isCurrent;
+
+  const _LevelInfoCard({
+    required this.level,
+    required this.isUnlocked,
+    required this.isCurrent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color textColor =
+        isUnlocked ? level.color : const Color(0xFFBDBDBD);
+    final Color bgColor = isUnlocked
+        ? level.color.withOpacity(0.06)
+        : const Color(0xFFF5F5F5);
+    final Color borderColor = isUnlocked
+        ? level.color.withOpacity(0.2)
+        : const Color(0xFFE0E0E0);
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
+        boxShadow: isUnlocked
+            ? [
+                BoxShadow(
+                  color: level.color.withOpacity(0.06),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // أيقونة المرحلة
+          ColorFiltered(
+            colorFilter: isUnlocked
+                ? const ColorFilter.mode(
+                    Colors.transparent, BlendMode.saturation)
+                : const ColorFilter.matrix([
+                    0.2126, 0.7152, 0.0722, 0, 0,
+                    0.2126, 0.7152, 0.0722, 0, 0,
+                    0.2126, 0.7152, 0.0722, 0, 0,
+                    0, 0, 0, 0.5, 0,
+                  ]),
+            child: Text(
+              level.icon,
+              style: const TextStyle(fontSize: 26),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            level.nameAr,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: isUnlocked
+                  ? level.color.withOpacity(0.1)
+                  : const Color(0xFFEEEEEE),
+              borderRadius: BorderRadius.circular(99),
+            ),
+            child: Text(
+              isUnlocked
+                  ? (isCurrent ? 'حالياً ' : 'مكتمل ✓')
+                  : '${level.requiredXp} XP',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: isUnlocked ? level.color : const Color(0xFFBDBDBD),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// عقدة التايملاين (وسط)
+// ─────────────────────────────────────────
+class _TimelineNode extends StatelessWidget {
+  final LevelModel level;
+  final bool isUnlocked;
+  final bool isCurrent;
+
+  const _TimelineNode({
+    required this.level,
+    required this.isUnlocked,
+    required this.isCurrent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bgColor = isCurrent
+        ? level.color
+        : isUnlocked
+            ? Colors.white
+            : const Color(0xFFEEEEEE);
+
+    final Color borderColor = isCurrent
+        ? Colors.white
+        : isUnlocked
+            ? level.color
+            : const Color(0xFFBDBDBD);
+
+    final List<BoxShadow> shadows = isCurrent
+        ? [
+            BoxShadow(
+                color: level.color.withOpacity(0.4),
+                blurRadius: 16,
+                spreadRadius: 2),
+            BoxShadow(
+                color: level.color.withOpacity(0.15),
+                blurRadius: 6,
+                spreadRadius: 8),
+          ]
+        : isUnlocked
+            ? [
+                BoxShadow(
+                    color: level.color.withOpacity(0.15),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3))
+              ]
+            : [];
+
+    return Stack(
+      alignment: Alignment.topCenter,
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            color: bgColor,
+            shape: BoxShape.circle,
+            border:
+                Border.all(color: borderColor, width: isCurrent ? 3 : 2),
+            boxShadow: shadows,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ColorFiltered(
+                  colorFilter: isUnlocked
+                      ? const ColorFilter.mode(
+                          Colors.transparent, BlendMode.saturation)
+                      : const ColorFilter.matrix([
+                          0.2126, 0.7152, 0.0722, 0, 0,
+                          0.2126, 0.7152, 0.0722, 0, 0,
+                          0.2126, 0.7152, 0.0722, 0, 0,
+                          0, 0, 0, 1, 0,
+                        ]),
+                  child: Text(
+                    level.icon,
+                    style: const TextStyle(fontSize: 22),
+                  ),
+                ),
+                Text(
+                  '${level.requiredXp}',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: isCurrent
+                        ? Colors.white70
+                        : isUnlocked
+                            ? level.color
+                            : const Color(0xFFBDBDBD),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        if (isCurrent)
+          Positioned(
+            top: -11,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: level.color,
+                borderRadius: BorderRadius.circular(99),
+                boxShadow: [
+                  BoxShadow(
+                      color: level.color.withOpacity(0.4), blurRadius: 6),
+                ],
+              ),
+              child: Text(
+                'حالياً',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ),
+
+        if (!isUnlocked)
+          Positioned(
+            bottom: 0,
+            right: 0,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: const Color(0xFFBDBDBD),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              child: const Icon(Icons.lock_rounded,
+                  color: Colors.white, size: 10),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// Skeleton
+// ─────────────────────────────────────────
 class _SkeletonBox extends StatefulWidget {
   final double height;
   final double borderRadius;
