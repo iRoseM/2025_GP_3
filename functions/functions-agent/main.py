@@ -1,626 +1,488 @@
+"""
+╔══════════════════════════════════════════════════════════════╗
+║          Nameer — Agent 1: Suggest Task Agent               ║
+║  يقترح مهمة واحدة للمستخدم بناءً على موقعه ووقته          ║
+║  Cloud Function Entry: suggest_task_agent                   ║
+╚══════════════════════════════════════════════════════════════╝
+
+Graph Nodes:
+  load_profile → load_preferences → get_nearby_places
+       → get_available_tasks → get_user_history
+       → call_llm → parse_result → [fallback?] → finalize
+"""
+
+import os
+import json
+import math
+import urllib.request
+from datetime import datetime, timezone
+from typing import TypedDict, Optional, Any
+
 import functions_framework
 import firebase_admin
 from firebase_admin import firestore
-import time
-import json
-import math
-import os
-import urllib.request
-from datetime import datetime, timezone
+from langgraph.graph import StateGraph, END
 
-# ============================================================
-# تهيئة Firebase
-# ============================================================
+# ─────────────────────────────────────────
+# Firebase Init
+# ─────────────────────────────────────────
 if not firebase_admin._apps:
     firebase_admin.initialize_app()
-
 db = firestore.client()
 
-# ============================================================
-# تحميل المحطات من ملفات JSON (تُحمّل مرة واحدة عند بدء التشغيل)
-# ============================================================
-BUS_STATIONS = []
-METRO_STATIONS = []
+# ─────────────────────────────────────────
+# Station Data (loaded once at startup)
+# ─────────────────────────────────────────
+BUS_STATIONS: list = []
+METRO_STATIONS: list = []
 
-def load_stations_from_json():
-    """تحميل محطات الباص والمترو من ملفات JSON"""
+
+def _load_stations():
     global BUS_STATIONS, METRO_STATIONS
-    
-    # المسار النسبي للملفات - عدل حسب موقع deployment
-    base_path = os.path.join(os.path.dirname(__file__), "..", "assets", "data")
-    
-    # تحميل محطات الباص
-    bus_path = os.path.join(base_path, "bus_stations.json")
-    if os.path.exists(bus_path):
+    base = os.path.join(os.path.dirname(__file__), "..", "assets", "data")
+    for fname, target in [("bus_stations.json", "BUS"), ("metro_stations.json", "METRO")]:
+        path = os.path.join(base, fname)
+        if not os.path.exists(path):
+            print(f"⚠️ {fname} not found")
+            continue
         try:
-            with open(bus_path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
-                if isinstance(data, list):
-                    BUS_STATIONS = data
-                elif isinstance(data, dict) and "stations" in data:
-                    BUS_STATIONS = data["stations"]
-                elif isinstance(data, dict) and "features" in data:
-                    BUS_STATIONS = data["features"]
-                print(f"🚌 Loaded {len(BUS_STATIONS)} bus stations")
+            stations = (
+                data if isinstance(data, list)
+                else data.get("stations") or data.get("features") or []
+            )
+            if target == "BUS":
+                BUS_STATIONS = stations
+                print(f"🚌 Loaded {len(stations)} bus stations")
+            else:
+                METRO_STATIONS = stations
+                print(f"🚇 Loaded {len(stations)} metro stations")
         except Exception as e:
-            print(f"⚠️ Failed to load bus_stations.json: {e}")
-    else:
-        print(f"⚠️ bus_stations.json not found at {bus_path}")
-    
-    # تحميل محطات المترو
-    metro_path = os.path.join(base_path, "metro_stations.json")
-    if os.path.exists(metro_path):
-        try:
-            with open(metro_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    METRO_STATIONS = data
-                elif isinstance(data, dict) and "stations" in data:
-                    METRO_STATIONS = data["stations"]
-                elif isinstance(data, dict) and "features" in data:
-                    METRO_STATIONS = data["features"]
-                print(f"🚇 Loaded {len(METRO_STATIONS)} metro stations")
-        except Exception as e:
-            print(f"⚠️ Failed to load metro_stations.json: {e}")
-    else:
-        print(f"⚠️ metro_stations.json not found at {metro_path}")
+            print(f"⚠️ Failed loading {fname}: {e}")
 
-# تحميل عند بدء التشغيل
-load_stations_from_json()
 
-def get_coords_from_station(station) -> tuple:
-    """استخراج الإحداثيات من station (تدعم صيغ JSON مختلفة)"""
-    if isinstance(station, dict):
-        # صيغة {lat, lng} أو {latitude, longitude}
-        lat = station.get("lat") or station.get("latitude")
-        lng = station.get("lng") or station.get("longitude") or station.get("lon")
-        
-        # صيغة GeoJSON Point
-        if not lat and station.get("geometry"):
-            geom = station.get("geometry", {})
-            if geom.get("type") == "Point":
-                coords = geom.get("coordinates", [])
-                if len(coords) >= 2:
-                    lng, lat = coords[0], coords[1]
-        
-        if lat and lng:
-            return float(lat), float(lng)
-    return None, None
+_load_stations()
 
-# ============================================================
-# حساب المسافة (Haversine)
-# ============================================================
-def calculate_distance(lat1, lon1, lat2, lon2):
+
+# ══════════════════════════════════════════
+# State — shared across all nodes
+# ══════════════════════════════════════════
+class SuggestTaskState(TypedDict):
+    # ── Input ──────────────────────────────
+    user_id: str
+    pressed_at: str
+    user_location: Optional[dict]        # {latitude, longitude}
+    exclude_task_id: Optional[str]
+    today_task_id: Optional[str]
+
+    # ── Time context ───────────────────────
+    hour: int
+    time_label: str
+    time_type: str                        # morning/afternoon/evening/night
+
+    # ── Loaded data ────────────────────────
+    profile: dict
+    preferences: dict
+    nearby_places: list
+    available_tasks: list
+    task_scores: dict
+    top_task_ids: list
+    ignored_ids: list
+    exclude_ids: list
+
+    # ── LLM ────────────────────────────────
+    prompt: str
+    llm_response: Optional[str]
+
+    # ── Result ─────────────────────────────
+    final_task: Optional[dict]
+    final_description: str
+    agent_reasoning: str
+    used_fallback: bool
+
+    # ── Final output (populated by node_finalize) ──
+    result: Optional[dict]
+
+    # ── Error ──────────────────────────────
+    error: Optional[str]
+
+
+# ══════════════════════════════════════════
+# Helpers
+# ══════════════════════════════════════════
+def _haversine(lat1, lon1, lat2, lon2) -> float:
     R = 6371
-    d_lat = math.radians(lat2 - lat1)
-    d_lon = math.radians(lon2 - lon1)
-    a = (math.sin(d_lat / 2) ** 2 +
-         math.cos(math.radians(lat1)) *
-         math.cos(math.radians(lat2)) *
-         math.sin(d_lon / 2) ** 2)
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-# ============================================================
-# استدعاء Gemini API
-# ============================================================
-def call_gemini(prompt: str, temperature: float = 0.4, max_tokens: int = 800):
+
+def _station_coords(station: dict):
+    lat = station.get("lat") or station.get("latitude")
+    lng = station.get("lng") or station.get("longitude") or station.get("lon")
+    if not lat and station.get("geometry", {}).get("type") == "Point":
+        coords = station["geometry"].get("coordinates", [])
+        if len(coords) >= 2:
+            lng, lat = coords[0], coords[1]
+    return (float(lat), float(lng)) if lat and lng else (None, None)
+
+
+def _classify_place(place_type: str) -> str:
+    t = place_type.lower()
+    if any(k in t for k in ["طعام", "عضوي"]):         return "food_recycling"
+    if any(k in t for k in ["ملابس", "منسوجات"]):     return "clothes_recycling"
+    if any(k in t for k in ["إلكتروني", "كهربائي"]): return "electronic_recycling"
+    if any(k in t for k in ["بلاستيك", "زجاج", "ورق"]): return "general_recycling"
+    if "rvm" in t:                                     return "rvm"
+    if any(k in t for k in ["باص", "مترو", "bus", "metro"]): return "transport"
+    return "recycling"
+
+
+def _call_gemini(prompt: str, temperature: float = 0.4, max_tokens: int = 800) -> Optional[str]:
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
-        print("❌ GEMINI_API_KEY is missing!")
+        print("❌ GEMINI_API_KEY missing")
         return None
-
     url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={api_key}"
-
     body = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": temperature,
-            "maxOutputTokens": max_tokens
-        }
-    }).encode("utf-8")
-
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}
+    }).encode()
     for attempt in range(3):
         try:
-            req = urllib.request.Request(
-                url,
-                data=body,
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
+            req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
             with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-                
-                # ✅ اطبع الخطأ الكامل من Gemini
+                result = json.loads(resp.read().decode())
                 if result.get("error"):
-                    print(f"❌ Gemini error response: {result['error']}")
+                    print(f"❌ Gemini error: {result['error']}")
                     return None
-                
-                text = (result
-                        .get("candidates", [{}])[0]
-                        .get("content", {})
-                        .get("parts", [{}])[0]
-                        .get("text", ""))
+                text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                 if text.strip():
-                    print(f"✅ Gemini success on attempt {attempt + 1}")
                     return text.strip()
-                else:
-                    print(f"⚠️ Gemini attempt {attempt + 1}: empty response")
-                    
         except urllib.error.HTTPError as e:
-            # ✅ اقرأ تفاصيل الخطأ من الـ response body
-            error_body = e.read().decode("utf-8")
-            print(f"⚠️ Gemini attempt {attempt + 1} HTTP {e.code}: {error_body}")
-            
+            print(f"⚠️ Gemini attempt {attempt+1} HTTP {e.code}: {e.read().decode()}")
         except Exception as e:
-            print(f"⚠️ Gemini attempt {attempt + 1} failed: {e}")
-
+            print(f"⚠️ Gemini attempt {attempt+1}: {e}")
     return None
 
-# ============================================================
-# استخراج JSON
-# ============================================================
-def extract_json(text: str):
+
+def _extract_json(text: str) -> Optional[dict]:
     try:
         clean = text.replace("```json", "").replace("```", "").strip()
-        first = clean.index("{")
-        last  = clean.rindex("}") + 1
+        first, last = clean.index("{"), clean.rindex("}") + 1
         return json.loads(clean[first:last])
     except Exception as e:
         print(f"⚠️ JSON extract failed: {e}")
         return None
 
-# ============================================================
-# تصنيف نوع المكان (محدث ليشمل النقل)
-# ============================================================
-def classify_place(place_type: str) -> str:
-    t = place_type.lower()
-    if "طعام" in t or "عضوي" in t:
-        return "food_recycling"
-    if "ملابس" in t or "منسوجات" in t:
-        return "clothes_recycling"
-    if "إلكتروني" in t or "كهربائي" in t:
-        return "electronic_recycling"
-    if "بلاستيك" in t or "زجاج" in t or "ورق" in t:
-        return "general_recycling"
-    if "rvm" in t:
-        return "rvm"
-    if "باص" in t or "مترو" in t or "bus" in t or "metro" in t:
-        return "transport"
-    return "recycling"
 
-# ============================================================
-# جلب بروفايل المستخدم الكامل
-# ============================================================
-def get_user_profile(user_id: str) -> dict:
+# ══════════════════════════════════════════
+# Node 1 — Set time context
+# ══════════════════════════════════════════
+def node_set_time_context(state: SuggestTaskState) -> dict:
+    print("⏰ Node 1: Setting time context...")
     try:
-        doc = db.collection("users").document(user_id).get()
+        dt = datetime.fromisoformat(state["pressed_at"].replace("Z", "+00:00"))
+        hour = dt.hour
+    except Exception:
+        hour = datetime.now().hour
+
+    if 5 <= hour < 12:
+        label, ttype = "الصباح — وقت النشاط والحركة", "morning"
+    elif 12 <= hour < 16:
+        label, ttype = "الظهيرة — وقت المهام السريعة", "afternoon"
+    elif 16 <= hour < 21:
+        label, ttype = "المساء — وقت ممتاز للتدوير", "evening"
+    else:
+        label, ttype = "الليل — وقت مناسب للتوعية", "night"
+
+    exclude = [i for i in [state.get("exclude_task_id"), state.get("today_task_id")] if i]
+    return {"hour": hour, "time_label": label, "time_type": ttype, "exclude_ids": exclude}
+
+
+# ══════════════════════════════════════════
+# Node 2 — Load user profile
+# ══════════════════════════════════════════
+def node_load_profile(state: SuggestTaskState) -> dict:
+    print("👤 Node 2: Loading user profile...")
+    try:
+        doc = db.collection("users").document(state["user_id"]).get()
         if not doc.exists:
-            return {}
+            return {"profile": {}}
         data = doc.to_dict()
 
-        # المستوى
-        level_id = data.get("userLevelId", "beginner")
-        if level_id == "beginner":
-            level_label = "مبتدئ"
-            level_tone  = "تشجيعي — هذا مستخدم جديد يحتاج تحفيز وتشجيع لبدء رحلته"
-        elif level_id == "medium":
-            level_label = "متوسط"
-            level_tone  = "إيجابي — مستخدم نشيط يستحق الإشادة بتقدمه"
-        else:
-            level_label = "متقدم"
-            level_tone  = "احترافي — مستخدم ملتزم يقدّر التحدي والأهداف الكبيرة"
-
-        # الجنس للمخاطبة
-        gender = data.get("gender", "")
-        if gender == "female":
-            pronoun = "أنتِ"
-            suffix  = "ي"
-        else:
-            pronoun = "أنت"
-            suffix  = ""
-
-        return {
-            "level_id":      level_id,
-            "level_label":   level_label,
-            "level_tone":    level_tone,
-            "pronoun":       pronoun,
-            "suffix":        suffix,
-            "gender":        gender,
-            "completed":     data.get("completedTask", 0),
-            "streak":        data.get("currentStreak", 0),
-            "points":        data.get("points", 0),
-            "carbon_saved":  round(data.get("totalCarbonSaved", 0), 2),
-            "username":      data.get("username", ""),
+        level_id = data.get("userLevelId", "seedling")
+        level_map = {
+            "seedling": ("بذرة 🌱",          "تشجيعي — مستخدم جديد"),
+            "sprout":   ("نبتة 🌿",          "إيجابي — بدأ رحلته"),
+            "tree":     ("شجرة 🌳",          "إيجابي — مستخدم نشيط"),
+            "guardian": ("حارس البيئة 🌍",   "احترافي — مستخدم ملتزم"),
+            "champion": ("بطل الاستدامة 🏆", "تحدي — مستخدم متقدم"),
         }
+        level_label, level_tone = level_map.get(level_id, ("بذرة 🌱", "تشجيعي"))
+        gender  = data.get("gender", "")
+        pronoun = "أنتِ" if gender == "female" else "أنت"
+        suffix  = "ي"   if gender == "female" else ""
+
+        profile = {
+            "level_id": level_id, "level_label": level_label, "level_tone": level_tone,
+            "pronoun": pronoun, "suffix": suffix, "gender": gender,
+            "completed": data.get("completedTask", 0),
+            "streak":    data.get("currentStreak", 0),
+            "points":    data.get("points", 0),
+            "carbon_saved": round(data.get("totalCarbonSaved", 0), 2),
+            "username": data.get("username", ""),
+        }
+        print(f"   Level: {level_id} | Gender: {gender} | Streak: {profile['streak']}")
+        return {"profile": profile}
     except Exception as e:
-        print(f"⚠️ get_user_profile error: {e}")
-        return {}
+        print(f"⚠️ load_profile error: {e}")
+        return {"profile": {}}
 
-# ============================================================
-# جلب تفضيلات المستخدم
-# ============================================================
-def get_user_preferences(user_id: str, context: dict) -> dict:
+
+# ══════════════════════════════════════════
+# Node 3 — Load preferences
+# ══════════════════════════════════════════
+def node_load_preferences(state: SuggestTaskState) -> dict:
+    print("📊 Node 3: Loading preferences...")
     try:
-        doc = db.collection("userTaskPreferences").document(user_id).get()
+        doc = db.collection("userTaskPreferences").document(state["user_id"]).get()
         if not doc.exists:
-            return {"found": False}
-
+            return {"preferences": {"found": False}, "task_scores": {}, "top_task_ids": [], "ignored_ids": []}
         data  = doc.to_dict()
         prefs = data.get("taskPreferences", {})
 
-        top_tasks     = []
-        ignored_tasks = []
-        task_scores   = {}
-
+        top_tasks, ignored_tasks, task_scores = [], [], {}
         for tid, stats in prefs.items():
-            score     = stats.get("score", 1)      # ← Wilson Score
-            view_count = stats.get("viewCount", 0) # ← من الأيجنت
+            score      = stats.get("score", 1)
+            view_count = stats.get("viewCount", 0)
             task_scores[tid] = score
-
-            entry = {
-                "task_id":   tid,
-                "title":     stats.get("title", ""),
-                "category":  stats.get("category", ""),
-                "score":     score,
-                "viewCount": view_count,
-                # ❌ حذفنا completed و ignored
-            }
-
+            entry = {"task_id": tid, "title": stats.get("title", ""), "category": stats.get("category", ""), "score": score, "viewCount": view_count}
             if score > 3:
                 top_tasks.append(entry)
-
-            # المتجاهلة: score منخفض + viewCount عالي
             if score < 2 and view_count > 3:
                 ignored_tasks.append(entry)
 
         top_tasks.sort(key=lambda x: x["score"], reverse=True)
         ignored_tasks.sort(key=lambda x: x["viewCount"], reverse=True)
 
-        context["task_scores"]  = task_scores
-        context["ignored_ids"]  = [t["task_id"] for t in ignored_tasks[:15]]
-        context["top_task_ids"] = [t["task_id"] for t in top_tasks[:5]]
-
         return {
-            "found":          True,
-            "top_tasks":      top_tasks[:5],
-            "ignored_tasks":  ignored_tasks[:3],
-            "top_task_title": data.get("topTaskTitle", ""),
+            "preferences": {
+                "found": True,
+                "top_tasks":      top_tasks[:5],
+                "ignored_tasks":  ignored_tasks[:3],
+                "top_task_title": data.get("topTaskTitle", ""),
+            },
+            "task_scores":   task_scores,
+            "top_task_ids":  [t["task_id"] for t in top_tasks[:5]],
+            "ignored_ids":   [t["task_id"] for t in ignored_tasks[:15]],
         }
     except Exception as e:
-        print(f"⚠️ get_user_preferences error: {e}")
-        return {"found": False, "error": str(e)}
+        print(f"⚠️ load_preferences error: {e}")
+        return {"preferences": {"found": False}, "task_scores": {}, "top_task_ids": [], "ignored_ids": []}
 
-# ============================================================
-# جلب الأماكن القريبة (حاويات + محطات باص + محطات مترو)
-# ============================================================
-def get_nearby_places(lat: float, lng: float, context: dict, radius: float = 2.0) -> dict:
-    nearby = []
-    
-    # ============================================================
-    # 1. الحاويات من facilities
-    # ============================================================
+
+# ══════════════════════════════════════════
+# Node 4 — Get nearby places
+# ══════════════════════════════════════════
+def node_get_nearby_places(state: SuggestTaskState) -> dict:
+    loc = state.get("user_location")
+    if not loc:
+        print("📍 Node 4: No location provided — skipping")
+        return {"nearby_places": []}
+
+    print("📍 Node 4: Getting nearby places...")
+    lat, lng = loc["latitude"], loc["longitude"]
+    radius   = 2.0
+    nearby   = []
+
+    # Firestore facilities
     try:
         for doc in db.collection("facilities").stream():
             d = doc.to_dict()
-            place_lat = d.get("lat")
-            place_lng = d.get("lng")
-            if place_lat is None or place_lng is None:
+            plat, plng = d.get("lat"), d.get("lng")
+            if plat is None or plng is None or d.get("status") == "متوقف":
                 continue
-            if d.get("status") == "متوقف":
-                continue
-            
-            dist = calculate_distance(lat, lng, place_lat, place_lng)
+            dist = _haversine(lat, lng, plat, plng)
             if dist <= radius:
-                place_type = d.get("type", "مكان")
+                ptype = d.get("type", "مكان")
                 nearby.append({
-                    "id":       doc.id,
-                    "name":     place_type,
-                    "address":  d.get("address", ""),
-                    "provider": d.get("provider", ""),
-                    "type":     place_type,
-                    "distance": round(dist, 2),
-                    "category": classify_place(place_type),
-                    "source":   "facility",
-                    "priority": 1
+                    "id": doc.id, "name": ptype, "address": d.get("address", ""),
+                    "provider": d.get("provider", ""), "type": ptype,
+                    "distance": round(dist, 2), "category": _classify_place(ptype),
+                    "source": "facility", "priority": 1
                 })
     except Exception as e:
         print(f"⚠️ facilities error: {e}")
-    
-    # ============================================================
-    # 2. محطات الباص من JSON
-    # ============================================================
+
+    # Bus stations
     for station in BUS_STATIONS:
-        station_lat, station_lng = get_coords_from_station(station)
-        if station_lat is None or station_lng is None:
+        slat, slng = _station_coords(station)
+        if slat is None:
             continue
-        
-        dist = calculate_distance(lat, lng, station_lat, station_lng)
+        dist = _haversine(lat, lng, slat, slng)
         if dist <= radius:
-            station_name = station.get("name") or station.get("station_name") or "محطة باص"
             nearby.append({
-                "id":       f"bus_{station.get('id', hash(str(station)))}",
-                "name":     station_name,
-                "address":  station.get("address") or station.get("location_description") or "",
-                "provider": "هيئة النقل العام",
-                "type":     "محطة باص",
-                "distance": round(dist, 2),
-                "category": "transport",
-                "source":   "bus_station",
-                "priority": 2
+                "id": f"bus_{station.get('id', id(station))}",
+                "name": station.get("name") or station.get("station_name") or "محطة باص",
+                "address": station.get("address") or "", "provider": "هيئة النقل العام",
+                "type": "محطة باص", "distance": round(dist, 2),
+                "category": "transport", "source": "bus_station", "priority": 2
             })
-    
-    # ============================================================
-    # 3. محطات المترو من JSON
-    # ============================================================
+
+    # Metro stations
     for station in METRO_STATIONS:
-        station_lat, station_lng = get_coords_from_station(station)
-        if station_lat is None or station_lng is None:
+        slat, slng = _station_coords(station)
+        if slat is None:
             continue
-        
-        dist = calculate_distance(lat, lng, station_lat, station_lng)
+        dist = _haversine(lat, lng, slat, slng)
         if dist <= radius:
-            station_name = station.get("name") or station.get("station_name") or "محطة مترو"
-            line_info = station.get("line") or station.get("metro_line") or ""
-            address = f"{station_name} ({line_info})" if line_info else station_name
-            
+            name     = station.get("name") or "محطة مترو"
+            line     = station.get("line") or station.get("metro_line") or ""
+            address  = f"{name} ({line})" if line else name
             nearby.append({
-                "id":       f"metro_{station.get('id', hash(str(station)))}",
-                "name":     station_name,
-                "address":  station.get("address") or address,
-                "provider": "هيئة النقل العام",
-                "type":     "محطة مترو",
-                "distance": round(dist, 2),
-                "category": "transport",
-                "source":   "metro_station",
-                "priority": 2
+                "id": f"metro_{station.get('id', id(station))}",
+                "name": name, "address": station.get("address") or address,
+                "provider": "هيئة النقل العام", "type": "محطة مترو",
+                "distance": round(dist, 2), "category": "transport",
+                "source": "metro_station", "priority": 2
             })
-    
-    # ============================================================
-    # ترتيب حسب المسافة ثم الأولوية
-    # ============================================================
+
     nearby.sort(key=lambda x: (x["distance"], -x["priority"]))
-    
-    context["nearby_places"] = nearby
-    print(f"📍 Found {len(nearby)} nearby places (facilities: {len([p for p in nearby if p['source']=='facility'])}, bus: {len([p for p in nearby if p['source']=='bus_station'])}, metro: {len([p for p in nearby if p['source']=='metro_station'])})")
-    
-    summary = []
-    for p in nearby[:5]:
-        summary.append(f"{p['type']} على بعد {p['distance']} كم")
-    
-    return {
-        "count":   len(nearby),
-        "places":  nearby[:5],
-        "insight": " | ".join(summary) if summary else "لا توجد أماكن قريبة → اقترح مهام منزلية"
-    }
+    print(f"   Found {len(nearby)} nearby places")
+    return {"nearby_places": nearby}
 
-# ============================================================
-# جلب المهام المتاحة
-# ============================================================
-def get_available_tasks(exclude_ids: list, context: dict) -> dict:
-    exclude       = set(exclude_ids or [])
-    ignored_ids   = set(context.get("ignored_ids", []))
-    task_scores   = context.get("task_scores", {})
-    current_month = datetime.now().strftime("%Y-%m")
 
-    tasks = []
+# ══════════════════════════════════════════
+# Node 5 — Get available tasks
+# ══════════════════════════════════════════
+def node_get_available_tasks(state: SuggestTaskState) -> dict:
+    print("📋 Node 5: Getting available tasks...")
+    exclude    = set(state.get("exclude_ids", []))
+    ignored    = set(state.get("ignored_ids", []))
+    scores     = state.get("task_scores", {})
+    cur_month  = datetime.now().strftime("%Y-%m")
+    tasks      = []
+
     try:
         for doc in db.collection("tasks").where("status", "==", "active").stream():
-            if doc.id in exclude or doc.id in ignored_ids:
+            if doc.id in exclude or doc.id in ignored:
                 continue
             t = doc.to_dict()
-            if t.get("visible_from", "") > current_month:
+            if t.get("visible_from", "") > cur_month:
                 continue
-            if t.get("expiry_month") and t["expiry_month"] < current_month:
+            if t.get("expiry_month") and t["expiry_month"] < cur_month:
                 continue
             tasks.append({
-                "id":               doc.id,
-                "title":            t.get("title", ""),
-                "description":      t.get("description", ""),
-                "category":         t.get("category", ""),
-                "points":           t.get("points", 0),
-                "preference_score": task_scores.get(doc.id, 1),
-                "validation":       t.get("validationStrategy", ""),
-                "calc_mode":        t.get("calcMode", ""),
-                "ef_ref":           t.get("ef_ref", "")
+                "id": doc.id, "title": t.get("title", ""),
+                "description": t.get("description", ""), "category": t.get("category", ""),
+                "points": t.get("points", 0), "preference_score": scores.get(doc.id, 1),
+                "validation": t.get("validationStrategy", ""),
+                "calc_mode":  t.get("calcMode", ""), "ef_ref": t.get("ef_ref", ""),
             })
     except Exception as e:
         print(f"⚠️ get_available_tasks error: {e}")
-        return {"count": 0, "tasks": [], "error": str(e)}
 
     tasks.sort(key=lambda x: x["preference_score"], reverse=True)
-    context["available_tasks"] = tasks
-    print(f"📋 Found {len(tasks)} available tasks")
-    return {"count": len(tasks), "tasks": tasks}
+    print(f"   Found {len(tasks)} tasks")
 
-# ============================================================
-# جلب تاريخ المستخدم
-# ============================================================
-def get_user_task_history(user_id: str, context: dict, limit: int = 20) -> dict:
-    completed_ids = []
-    ignored_ids   = []
+    if not tasks:
+        return {"available_tasks": [], "error": "NO_TASKS_AVAILABLE"}
+    return {"available_tasks": tasks}
+
+
+# ══════════════════════════════════════════
+# Node 6 — Get user history (update ignored)
+# ══════════════════════════════════════════
+def node_get_user_history(state: SuggestTaskState) -> dict:
+    print("📜 Node 6: Getting user history...")
+    completed_ids, extra_ignored = [], []
 
     try:
         for d in (db.collection("userTasks")
-                    .where("userId",  "==", user_id)
-                    .where("status",  "==", "completed")
-                    .order_by("completedAt", direction=firestore.Query.DESCENDING)
-                    .limit(limit)
-                    .stream()):
+                  .where("userId", "==", state["user_id"])
+                  .where("status", "==", "completed")
+                  .order_by("completedAt", direction=firestore.Query.DESCENDING)
+                  .limit(20).stream()):
             tid = d.to_dict().get("taskId")
             if tid:
                 completed_ids.append(tid)
 
         for d in (db.collection("userTasks")
-                    .where("userId",  "==", user_id)
-                    .where("ignored", "==", True)
-                    .order_by("ignoredAt", direction=firestore.Query.DESCENDING)
-                    .limit(limit)
-                    .stream()):
+                  .where("userId", "==", state["user_id"])
+                  .where("ignored", "==", True)
+                  .order_by("ignoredAt", direction=firestore.Query.DESCENDING)
+                  .limit(20).stream()):
             tid = d.to_dict().get("taskId")
             if tid:
-                ignored_ids.append(tid)
-
+                extra_ignored.append(tid)
     except Exception as e:
-        print(f"⚠️ get_user_task_history error: {e}")
+        print(f"⚠️ user history error: {e}")
 
-    existing = set(context.get("ignored_ids", []))
-    context["ignored_ids"] = list(existing | set(ignored_ids))
+    merged_ignored = list(set(state.get("ignored_ids", [])) | set(extra_ignored))
+    return {"ignored_ids": merged_ignored}
 
-    return {
-        "completed_count":    len(completed_ids),
-        "ignored_count":      len(ignored_ids),
-        "recently_completed": completed_ids[:5],
-        "recently_ignored":   ignored_ids[:5]
-    }
 
-# ============================================================
-# الأيجنت الرئيسي
-# ============================================================
-def run_task_agent(data: dict) -> dict:
-    user_id         = data.get("userId")
-    pressed_at      = data.get("pressedAt", datetime.now(timezone.utc).isoformat())
-    user_location   = data.get("userLocation")
-    exclude_task_id = data.get("excludeTaskId")
-    today_task_id   = data.get("todayTaskId")
+# ══════════════════════════════════════════
+# Node 7 — Build prompt
+# ══════════════════════════════════════════
+def node_build_prompt(state: SuggestTaskState) -> dict:
+    print("📝 Node 7: Building prompt...")
+    profile   = state["profile"]
+    prefs     = state["preferences"]
+    tasks     = state["available_tasks"]
+    nearby    = state["nearby_places"]
+    time_type = state["time_type"]
+    hour      = state["hour"]
 
-    if not user_id:
-        return {"error": "userId مطلوب"}
+    pronoun     = profile.get("pronoun", "أنت")
+    suffix      = profile.get("suffix", "")
+    level_label = profile.get("level_label", "بذرة 🌱")
+    level_tone  = profile.get("level_tone", "تشجيعي")
+    streak      = profile.get("streak", 0)
+    streak_text = f"لديه{'ا' if profile.get('gender') == 'female' else ''} {streak} يوم متتالي 🔥" if streak > 1 else ""
 
-    try:
-        dt   = datetime.fromisoformat(pressed_at.replace("Z", "+00:00"))
-        hour = dt.hour
-    except Exception:
-        hour = datetime.now().hour
+    recycling_places = [p for p in nearby if p["category"] != "transport"]
+    transport_places = [p for p in nearby if p["category"] == "transport"]
 
-    # تحديد نوع الوقت والأولوية
-    if 5 <= hour < 12:
-        time_label = "الصباح — وقت النشاط والحركة"
-        time_type = "morning"
-    elif 12 <= hour < 16:
-        time_label = "الظهيرة — وقت المهام السريعة"
-        time_type = "afternoon"
-    elif 16 <= hour < 21:
-        time_label = "المساء — وقت ممتاز للتدوير"
-        time_type = "evening"
-    else:
-        time_label = "الليل — وقت مناسب للتوعية"
-        time_type = "night"
+    top_tasks_text = "\n".join([f"   • {t['title']} (score: {t['score']})" for t in prefs.get("top_tasks", [])]) or "   لا توجد"
+    ignored_text   = "\n".join([f"   • {t['title']} (viewCount: {t['viewCount']})" for t in prefs.get("ignored_tasks", [])]) or ""
+    nearby_details = "\n".join([f"   • {p['type']} — بعد {p['distance']} كم — {p['address']} [نوع: {p['category']}]" for p in nearby[:5]]) or "   لا توجد"
+    task_list      = "\n".join([f"{i+1}. [{t['id']}] {t['title']} - {t['category']} [score: {t['preference_score']}]" for i, t in enumerate(tasks)])
 
-    exclude_ids = [i for i in [exclude_task_id, today_task_id] if i]
-    context     = {}
-
-    # ── Step 1: بروفايل المستخدم ────────────────────────────
-    print("👤 Step 1: Getting user profile...")
-    profile = get_user_profile(user_id)
-    print(f"   Level: {profile.get('level_id')} | Gender: {profile.get('gender')} | Streak: {profile.get('streak')}")
-
-    # ── Step 2: تفضيلات المستخدم ───────────────────────────
-    print("📊 Step 2: Getting user preferences...")
-    prefs = get_user_preferences(user_id, context)
-
-    # ── Step 3: الأماكن القريبة ─────────────────────────────
-    nearby_result = {"count": 0, "places": [], "insight": "موقع غير متاح"}
-    if user_location:
-        print("📍 Step 3: Getting nearby places...")
-        nearby_result = get_nearby_places(
-            user_location["latitude"],
-            user_location["longitude"],
-            context
-        )
-
-    # ── Step 4: المهام المتاحة ──────────────────────────────
-    print("📋 Step 4: Getting available tasks...")
-    tasks_result = get_available_tasks(exclude_ids, context)
-
-    if tasks_result["count"] == 0:
-        return {"error": "NO_TASKS_AVAILABLE"}
-
-    # ── Step 5: تاريخ المستخدم ──────────────────────────────
-    print("📜 Step 5: Getting user history...")
-    history = get_user_task_history(user_id, context)
-
-    # ── Step 6: بناء الـ Prompt ─────────────────────────────
-    available_tasks = context.get("available_tasks", [])
-    top_task_ids    = context.get("top_task_ids", [])
-    nearby_places_all = context.get("nearby_places", [])
-    
-    # فصل الأماكن حسب النوع
-    recycling_places = [p for p in nearby_places_all if p['category'] != 'transport']
-    transport_places = [p for p in nearby_places_all if p['category'] == 'transport']
-
-    top_tasks_text = ""
-    if prefs.get("top_tasks"):
-        top_tasks_text = "\n".join([
-            f"   • {t['title']} (score: {t['score']}, completed: {t['completed']})"
-            for t in prefs["top_tasks"]
-        ])
-
-    ignored_text = ""
-    if prefs.get("ignored_tasks"):
-        ignored_text = "\n".join([
-            f"   • {t['title']} (ignored: {t['ignored']})"
-            for t in prefs["ignored_tasks"]
-        ])
-
-    nearby_details = ""
-    if nearby_result["count"] > 0:
-        nearby_details = "\n".join([
-            f"   • {p['type']} — بعد {p['distance']} كم — {p['address']} [نوع: {p['category']}]"
-            for p in nearby_result["places"][:5]
-        ])
-
-    task_list_text = "\n".join([
-        f"{i+1}. [{t['id']}] {t['title']} - {t['category']} [score: {t['preference_score']}]"
-        for i, t in enumerate(available_tasks)
-    ])
-
-    # بيانات المستخدم للتخصيص
-    pronoun      = profile.get("pronoun", "أنت")
-    suffix       = profile.get("suffix", "")
-    level_label  = profile.get("level_label", "مبتدئ")
-    level_tone   = profile.get("level_tone", "تشجيعي")
-    streak       = profile.get("streak", 0)
-    points       = profile.get("points", 0)
-    carbon_saved = profile.get("carbon_saved", 0)
-    completed    = profile.get("completed", 0)
-
-    streak_text = f"لديه{suffix if profile.get('gender') == 'female' else ''} {streak} يوم متتالي 🔥" if streak > 1 else ""
-
-    # بناء قواعد الأولوية حسب الوقت
+    # Priority rules by time
     if time_type == "morning":
-        priority_rules = """🎯 قواعد الاختيار (بالأولوية - الصباح: أولوية للنقل المستدام):
-1. 🚌 الأولى: إذا يوجد محطة باص أو مترو قريبة → اختر مهمة النقل العام (استخدم الباص/المترو بدل السيارة)
-2. ♻️ الثانية: إذا يوجد مكان تدوير قريب (حاوية طعام/ملابس/بلاستيك/RVM) → اختر مهمة تدوير مناسبة
-3. ⭐ الثالثة: إذا لا يوجد أماكن → اختر من المفضلة (score > 5)
-4. 🚫 الرابعة: تجنب المتجاهلة تماماً
-⚠️ ملاحظة: الصباح وقت مثالي لتشجيع استخدام النقل العام"""
+        priority = """🎯 قواعد الاختيار (الصباح: أولوية للنقل المستدام):
+1. 🚌 إذا يوجد محطة باص/مترو قريبة → مهمة نقل عام
+2. ♻️ إذا يوجد مكان تدوير قريب → مهمة تدوير
+3. ⭐ بدون أماكن → من المفضلة (score > 5)
+4. 🚫 تجنب المتجاهلة"""
     elif time_type == "evening":
-        priority_rules = """🎯 قواعد الاختيار (بالأولوية - المساء: أولوية للتدوير):
-1. ♻️ الأولى: إذا يوجد مكان تدوير قريب (حاوية طعام/ملابس/بلاستيك/RVM) → اختر مهمة تدوير مناسبة
-2. 🚌 الثانية: إذا يوجد محطة باص أو مترو قريبة → اختر مهمة النقل العام
-3. ⭐ الثالثة: إذا لا يوجد أماكن → اختر من المفضلة (score > 5)
-4. 🚫 الرابعة: تجنب المتجاهلة تماماً
-⚠️ ملاحظة: المساء وقت مناسب للتخلص من النفايات بعد يوم طويل"""
+        priority = """🎯 قواعد الاختيار (المساء: أولوية للتدوير):
+1. ♻️ إذا يوجد مكان تدوير قريب → مهمة تدوير
+2. 🚌 إذا يوجد محطة باص/مترو → مهمة نقل عام
+3. ⭐ بدون أماكن → من المفضلة (score > 5)
+4. 🚫 تجنب المتجاهلة"""
     elif time_type == "afternoon":
-        priority_rules = """🎯 قواعد الاختيار (بالأولوية - الظهيرة: مهام سريعة):
-1. 🏆 الأولى: أقرب مكان من أي نوع (تدوير أو نقل) → اختر مهمة سريعة مناسبة
-2. ⭐ الثانية: إذا لا يوجد أماكن قريبة → اختر من المفضلة (score > 5)
-3. 🚫 الثالثة: تجنب المتجاهلة تماماً
-⚠️ ملاحظة: الظهيرة مناسبة للمهام التي لا تستغرق وقتاً طويلاً"""
-    else:  # night
-        priority_rules = """🎯 قواعد الاختيار (بالأولوية - الليل: توعية):
-1. 📚 الأولى: مهام توعوية وتعليمية (لا تحتاج حركة خارج المنزل)
-2. ♻️ الثانية: إذا كان هناك مكان تدوير قريب جداً (اقل من 1 كم) → يمكن اقتراحه
-3. ⭐ الثالثة: اختر من المفضلة (score > 5)
-4. 🚫 الرابعة: تجنب المتجاهلة تماماً
-⚠️ ملاحظة: الليل مناسب للقراءة والتعلم والتخطيط"""
+        priority = """🎯 قواعد الاختيار (الظهيرة: مهام سريعة):
+1. 🏆 أقرب مكان من أي نوع → مهمة سريعة مناسبة
+2. ⭐ بدون أماكن → من المفضلة (score > 5)
+3. 🚫 تجنب المتجاهلة"""
+    else:
+        priority = """🎯 قواعد الاختيار (الليل: توعية):
+1. 📚 مهام توعوية/تعليمية (لا تحتاج حركة)
+2. ♻️ مكان تدوير أقل من 1 كم → يمكن اقتراحه
+3. ⭐ من المفضلة (score > 5)
+4. 🚫 تجنب المتجاهلة"""
 
     prompt = f"""أنت مساعد بيئي ذكي ومحفز. اختر مهمة واحدة وصِغ وصفاً شخصياً يحفز المستخدم.
 
-⏰ الوقت: {time_label} (الساعة {hour})
+⏰ الوقت: {state['time_label']} (الساعة {hour})
 
 📍 الأماكن القريبة:
-{nearby_details if nearby_details else "لا توجد أماكن قريبة → اقترح مهام منزلية"}
+{nearby_details}
 
 📊 إحصاءات الأماكن:
 - أماكن التدوير: {len(recycling_places)}
@@ -629,224 +491,714 @@ def run_task_agent(data: dict) -> dict:
 👤 شخصية المستخدم:
 - المستوى: {level_label} ({level_tone})
 - الجنس: {profile.get('gender', 'غير محدد')} — خاطب{suffix}ه بـ "{pronoun}"
-- المهام المكتملة: {completed} مهمة
-- النقاط: {points} نقطة
-- الكربون الموفَّر: {carbon_saved} كغ
+- المهام المكتملة: {profile.get('completed', 0)}
+- النقاط: {profile.get('points', 0)}
+- الكربون الموفَّر: {profile.get('carbon_saved', 0)} كغ
 {f"- {streak_text}" if streak_text else ""}
 
 📊 تفضيلاته:
-{f"المفضلة:{chr(10)}{top_tasks_text}" if top_tasks_text else "لا توجد تفضيلات واضحة"}
+المفضلة:
+{top_tasks_text}
 {f"المتجاهلة:{chr(10)}{ignored_text}" if ignored_text else ""}
 
 📋 المهام المتاحة:
-{task_list_text}
+{task_list}
 
-{priority_rules}
+{priority}
 
-✍️ قواعد كتابة الوصف (مهم جداً):
-- خاطب{suffix}ه دائماً بـ "{pronoun}" بأسلوب دافئ وودود
-- إذا المستوى "مبتدئ" → حفزه للبداية: "{pronoun} في بداية رحلتك..."
-- إذا المستوى "متوسط" → أشِد بتقدمه: "واصل{suffix} مسيرتك الرائعة..."
-- إذا المستوى "متقدم" → تحدّه: "بطل{suffix} البيئة، الآن تحدٍّ جديد..."
-- اذكر المكان القريب إن وجد مع المسافة ونوعه
-- إذا عنده streak أكثر من 1 → اذكره: "حافظ{suffix} على سلسلتك!"
-- 20-30 كلمة فقط، مختلف تماماً عن الوصف الأصلي للمهمة
+✍️ قواعد الوصف:
+- يتطابق مع طبيعة المهمة المختارة
+- إذا مهمة تدوير → اذكر أقرب حاوية فقط
+- إذا مهمة نقل → اذكر أقرب محطة فقط
+- إذا مهمة منزلية → لا تذكر أماكن
+- خاطب{suffix}ه بـ "{pronoun}" بأسلوب دافئ
+- اذكر streak إذا > 1: "حافظ{suffix} على سلسلتك!"
+- 20-30 كلمة فقط
 
 أرجع JSON فقط:
 {{
-  "taskId": "معرف المهمة من القائمة",
-  "reasoning": "سبب الاختيار مع ذكر المكان القريب ونوعه والوقت",
-  "personalizedDescription": "وصف مخصص دافئ يراعي مستوى المستخدم وجنسه والوقت"
+  "taskId": "معرف المهمة",
+  "reasoning": "سبب الاختيار",
+  "personalizedDescription": "وصف مخصص دافئ"
 }}"""
 
-    # ── Step 7: استدعاء Gemini ──────────────────────────────
-    print("🤖 Step 7: Calling Gemini...")
-    gemini_response = call_gemini(prompt, temperature=0.5, max_tokens=600)
+    return {"prompt": prompt}
 
-    final_task        = None
-    final_description = ""
-    agent_reasoning   = ""
 
-    if gemini_response:
-        parsed = extract_json(gemini_response)
+# ══════════════════════════════════════════
+# Node 8 — Call LLM
+# ══════════════════════════════════════════
+def node_call_llm(state: SuggestTaskState) -> dict:
+    print("🤖 Node 8: Calling Gemini...")
+    response = _call_gemini(state["prompt"], temperature=0.5, max_tokens=600)
+    return {"llm_response": response}
+
+
+# ══════════════════════════════════════════
+# Node 9 — Parse LLM response
+# ══════════════════════════════════════════
+def node_parse_result(state: SuggestTaskState) -> dict:
+    print("🔍 Node 9: Parsing LLM response...")
+    tasks    = state["available_tasks"]
+    response = state.get("llm_response")
+
+    if response:
+        parsed = _extract_json(response)
         if parsed and parsed.get("taskId"):
-            task_id    = parsed["taskId"].replace("[", "").replace("]", "").strip()
-            final_task = next((t for t in available_tasks if t["id"] == task_id), None)
-            if final_task:
-                final_description = parsed.get("personalizedDescription", "")
-                agent_reasoning   = parsed.get("reasoning", "")
-                print(f"✅ Gemini selected: {final_task['title']}")
-            else:
-                print(f"⚠️ Task ID not found: {task_id}")
+            task_id   = parsed["taskId"].replace("[", "").replace("]", "").strip()
+            task      = next((t for t in tasks if t["id"] == task_id), None)
+            if task:
+                print(f"   ✅ LLM selected: {task['title']}")
+                return {
+                    "final_task":        task,
+                    "final_description": parsed.get("personalizedDescription", ""),
+                    "agent_reasoning":   parsed.get("reasoning", ""),
+                    "used_fallback":     False,
+                }
+            print(f"   ⚠️ Task ID not found: {task_id}")
 
-    # ── Fallback محسّن حسب الوقت والأماكن ────────────────────
-    if not final_task:
-        print("⚠️ Using fallback...")
-        ignored    = set(context.get("ignored_ids", []))
-        candidates = [t for t in available_tasks if t["id"] not in ignored]
-        
-        # فلترة حسب الوقت والأماكن
-        transport_tasks = [t for t in candidates if t.get("category") == "transport"]
-        recycling_tasks = [t for t in candidates if t.get("category") in ["recycling", "food_recycling", "clothes_recycling", "general_recycling"]]
-        awareness_tasks = [t for t in candidates if t.get("category") == "awareness"]
-        
-        selected_candidates = []
-        
-        if time_type == "morning" and transport_places:
-            selected_candidates = transport_tasks
-        elif time_type == "evening" and recycling_places:
-            selected_candidates = recycling_tasks
-        elif time_type == "afternoon" and (recycling_places or transport_places):
-            selected_candidates = candidates
-        elif time_type == "night":
-            selected_candidates = awareness_tasks or candidates
-        
-        if not selected_candidates:
-            selected_candidates = candidates
-        
-        # تطبيق التفضيلات
-        preferred = [t for t in selected_candidates if t["id"] in top_task_ids]
-        
-        if preferred:
-            final_task = preferred[0]
-        elif selected_candidates:
-            final_task = selected_candidates[0]
-        elif candidates:
-            final_task = candidates[0]
-        elif available_tasks:
-            final_task = available_tasks[0]
+    print("   ⚠️ LLM parse failed → will fallback")
+    return {"final_task": None, "used_fallback": True}
 
-        if final_task:
-            nearby_places = context.get("nearby_places", [])
-            suffix = profile.get("suffix", "")
-            
-            # بناء وصف مخصص حسب الوقت والمكان
-            if time_type == "morning" and transport_places:
-                nearest = transport_places[0]
-                final_description = f"🌅 صباح الخير {pronoun}! محطة {nearest['type']} قريبة منك ({nearest['distance']} كم). استغل{suffix} الفرصة وجرب{suffix} {final_task['title']} اليوم 🚌✨"
-            elif time_type == "evening" and recycling_places:
-                nearest = recycling_places[0]
-                final_description = f"🌙 مساء الخير {pronoun}! {nearest['type']} قريبة منك ({nearest['distance']} كم). وقت مثالي لـ {final_task['title']} ♻️💚"
-            elif nearby_places:
-                nearest = nearby_places[0]
-                final_description = f"📍 {nearest['type']} قريبة منك ({nearest['distance']} كم)! جرب{suffix} {final_task['title']} الآن ✨"
-            elif level_label == "مبتدئ":
-                final_description = f"🌱 {pronoun} في بداية رحلتك! {final_task['title']} خطوة رائعة للانطلاق 🚀"
-            elif level_label == "متوسط":
-                final_description = f"⭐ واصل{suffix} تقدمك! {final_task['title']} تضيف نقاطاً لرصيدك البيئي 💚"
-            else:
-                final_description = f"🏆 تحدٍّ جديد يا بطل{suffix} البيئة! {final_task['title']} تستحق{suffix} منك ✨"
-            
-            agent_reasoning = f"fallback: gemini لم يصل لقرار (الوقت: {time_type}, الأماكن: {len(nearby_places)})"
 
-    if not final_task:
+# ══════════════════════════════════════════
+# Node 10 — Fallback selection
+# ══════════════════════════════════════════
+def node_fallback(state: SuggestTaskState) -> dict:
+    print("⚠️ Node 10: Running fallback selection...")
+    tasks        = state["available_tasks"]
+    ignored      = set(state.get("ignored_ids", []))
+    top_ids      = state.get("top_task_ids", [])
+    time_type    = state["time_type"]
+    nearby       = state["nearby_places"]
+    profile      = state["profile"]
+    pronoun      = profile.get("pronoun", "أنت")
+    suffix       = profile.get("suffix", "")
+    level_label  = profile.get("level_label", "")
+
+    candidates       = [t for t in tasks if t["id"] not in ignored]
+    transport_tasks  = [t for t in candidates if t.get("category") == "transport"]
+    recycling_tasks  = [t for t in candidates if t.get("category") in ["recycling", "food_recycling", "clothes_recycling", "general_recycling"]]
+    awareness_tasks  = [t for t in candidates if t.get("category") == "awareness"]
+    recycling_places = [p for p in nearby if p["category"] != "transport"]
+    transport_places = [p for p in nearby if p["category"] == "transport"]
+
+    pool = (
+        transport_tasks if (time_type == "morning" and transport_places)
+        else recycling_tasks if (time_type == "evening" and recycling_places)
+        else awareness_tasks if time_type == "night"
+        else candidates
+    ) or candidates or tasks
+
+    preferred = [t for t in pool if t["id"] in top_ids]
+    task = (preferred or pool or tasks)[0] if (preferred or pool or tasks) else None
+
+    if not task:
         return {"error": "NO_SUITABLE_TASK_FOUND"}
 
-    # ── النتيجة ─────────────────────────────────────────────
-    task_scores   = context.get("task_scores", {})
-    nearby_places = context.get("nearby_places", [])
+    # Build fallback description
+    if time_type == "morning" and transport_places:
+        nearest = transport_places[0]
+        desc = f"🌅 صباح الخير {pronoun}! محطة {nearest['type']} قريبة ({nearest['distance']} كم). استغل{suffix} الفرصة وجرب{suffix} {task['title']} 🚌✨"
+    elif time_type == "evening" and recycling_places:
+        nearest = recycling_places[0]
+        desc = f"🌙 مساء الخير {pronoun}! {nearest['type']} قريبة ({nearest['distance']} كم). وقت مثالي لـ {task['title']} ♻️💚"
+    elif nearby:
+        nearest = nearby[0]
+        desc = f"📍 {nearest['type']} قريبة ({nearest['distance']} كم)! جرب{suffix} {task['title']} الآن ✨"
+    else:
+        desc = f"🌱 {pronoun} في بداية رحلتك! {task['title']} خطوة رائعة للانطلاق 🚀"
 
     return {
-        "id":                         final_task["id"],
-        "taskId":                     final_task["id"],
-        "title":                      final_task.get("title", ""),
-        "description":                final_description or final_task.get("description", ""),
-        "originalDescription":        final_task.get("description", ""),
-        "points":                     final_task.get("points", 0),
-        "category":                   final_task.get("category", ""),
-        "validationStrategy":         final_task.get("validation", ""),
-        "calcMode":                   final_task.get("calc_mode", ""),
-        "ef_ref":                     final_task.get("ef_ref", ""),
-        "status":                     "pending",
-        "agentReasoning":             agent_reasoning,
-        "nearbyPlacesCount":          len(nearby_places),
-        "nearbyPlaces":               nearby_places[:3],
-        "nearbyRecyclingPlaces":      len([p for p in nearby_places if p['category'] != 'transport']),
-        "nearbyTransportPlaces":      len([p for p in nearby_places if p['category'] == 'transport']),
-        "userLocationDetected":       user_location is not None,
-        "timeContext": {
-            "hour": hour,
-            "timeLabel": time_label,
-            "timeType": time_type
-        },
-        "preferenceScore":            task_scores.get(final_task["id"], 1),
-        "suggestedBasedOnLocation":   len(nearby_places) > 0,
-        "suggestedBasedOnPreference": (
-            final_task["id"] in top_task_ids or
-            task_scores.get(final_task["id"], 1) > 5
-        ),
-        "userProfile": {
-            "level":    profile.get("level_id", ""),
-            "streak":   profile.get("streak", 0),
-            "points":   profile.get("points", 0),
-            "carbon":   profile.get("carbon_saved", 0),
+        "final_task":        task,
+        "final_description": desc,
+        "agent_reasoning":   f"fallback: time={time_type}, places={len(nearby)}",
+        "used_fallback":     True,
+    }
+
+
+# ══════════════════════════════════════════
+# Node 11 — Finalize output
+# ══════════════════════════════════════════
+def node_finalize(state: SuggestTaskState) -> dict:
+    print("✅ Node 11: Finalizing output...")
+    task    = state.get("final_task")
+    nearby  = state.get("nearby_places", [])
+    scores  = state.get("task_scores", {})
+    top_ids = state.get("top_task_ids", [])
+
+    if not task:
+        return {"error": "NO_SUITABLE_TASK_FOUND"}
+
+    return {
+        "result": {
+            "id":                         task["id"],
+            "taskId":                     task["id"],
+            "title":                      task.get("title", ""),
+            "description":                state.get("final_description") or task.get("description", ""),
+            "originalDescription":        task.get("description", ""),
+            "points":                     task.get("points", 0),
+            "category":                   task.get("category", ""),
+            "validationStrategy":         task.get("validation", ""),
+            "calcMode":                   task.get("calc_mode", ""),
+            "ef_ref":                     task.get("ef_ref", ""),
+            "status":                     "pending",
+            "agentReasoning":             state.get("agent_reasoning", ""),
+            "usedFallback":               state.get("used_fallback", False),
+            "nearbyPlacesCount":          len(nearby),
+            "nearbyPlaces":               nearby[:3],
+            "nearbyRecyclingPlaces":      len([p for p in nearby if p["category"] != "transport"]),
+            "nearbyTransportPlaces":      len([p for p in nearby if p["category"] == "transport"]),
+            "userLocationDetected":       state.get("user_location") is not None,
+            "timeContext":                {"hour": state["hour"], "timeLabel": state["time_label"], "timeType": state["time_type"]},
+            "preferenceScore":            scores.get(task["id"], 1),
+            "suggestedBasedOnLocation":   len(nearby) > 0,
+            "suggestedBasedOnPreference": task["id"] in top_ids or scores.get(task["id"], 1) > 5,
+            "userProfile": {
+                "level":  state["profile"].get("level_id", ""),
+                "streak": state["profile"].get("streak", 0),
+                "points": state["profile"].get("points", 0),
+                "carbon": state["profile"].get("carbon_saved", 0),
+            },
         }
     }
 
-# ============================================================
+
+# ══════════════════════════════════════════
+# Conditional edges
+# ══════════════════════════════════════════
+def should_fallback(state: SuggestTaskState) -> str:
+    if state.get("error") == "NO_TASKS_AVAILABLE":
+        return "end_error"
+    return "fallback" if state.get("final_task") is None else "finalize"
+
+
+def after_parse(state: SuggestTaskState) -> str:
+    return "fallback" if state.get("used_fallback") else "finalize"
+
+
+# ══════════════════════════════════════════
+# Build the graph
+# ══════════════════════════════════════════
+def build_suggest_task_graph() -> Any:
+    g = StateGraph(SuggestTaskState)
+
+    g.add_node("set_time_context",    node_set_time_context)
+    g.add_node("load_profile",        node_load_profile)
+    g.add_node("load_preferences",    node_load_preferences)
+    g.add_node("get_nearby_places",   node_get_nearby_places)
+    g.add_node("get_available_tasks", node_get_available_tasks)
+    g.add_node("get_user_history",    node_get_user_history)
+    g.add_node("build_prompt",        node_build_prompt)
+    g.add_node("call_llm",            node_call_llm)
+    g.add_node("parse_result",        node_parse_result)
+    g.add_node("fallback",            node_fallback)
+    g.add_node("finalize",            node_finalize)
+
+    g.set_entry_point("set_time_context")
+    g.add_edge("set_time_context",    "load_profile")
+    g.add_edge("load_profile",        "load_preferences")
+    g.add_edge("load_preferences",    "get_nearby_places")
+    g.add_edge("get_nearby_places",   "get_available_tasks")
+
+    g.add_conditional_edges(
+        "get_available_tasks",
+        lambda s: "end_error" if s.get("error") == "NO_TASKS_AVAILABLE" else "get_user_history",
+        {"end_error": END, "get_user_history": "get_user_history"},
+    )
+
+    g.add_edge("get_user_history",    "build_prompt")
+    g.add_edge("build_prompt",        "call_llm")
+    g.add_edge("call_llm",            "parse_result")
+
+    g.add_conditional_edges(
+        "parse_result",
+        after_parse,
+        {"fallback": "fallback", "finalize": "finalize"},
+    )
+
+    g.add_edge("fallback",  "finalize")
+    g.add_edge("finalize",  END)
+
+    return g.compile()
+
+
+# ══════════════════════════════════════════
 # HTTP Entry Point
-# ============================================================
+# ══════════════════════════════════════════
+_suggest_task_graph = build_suggest_task_graph()
+
+
 @functions_framework.http
 def suggest_task_agent(request):
     if request.method == "OPTIONS":
-        return ("", 204, {
-            "Access-Control-Allow-Origin":  "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization"
-        })
-
+        return ("", 204, {"Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "POST, OPTIONS",
+                          "Access-Control-Allow-Headers": "Content-Type, Authorization"})
     if request.method != "POST":
-        return (json.dumps({"error": "POST only"}), 405,
-                {"Content-Type": "application/json"})
+        return (json.dumps({"error": "POST only"}), 405, {"Content-Type": "application/json"})
 
     try:
-        data   = request.get_json(silent=True) or {}
-        result = run_task_agent(data)
+        data = request.get_json(silent=True) or {}
+        if not data.get("userId"):
+            return (json.dumps({"error": "userId مطلوب"}), 400, {"Content-Type": "application/json"})
+
+        initial_state: SuggestTaskState = {
+            "user_id":         data.get("userId"),
+            "pressed_at":      data.get("pressedAt", datetime.now(timezone.utc).isoformat()),
+            "user_location":   data.get("userLocation"),
+            "exclude_task_id": data.get("excludeTaskId"),
+            "today_task_id":   data.get("todayTaskId"),
+            # populated by nodes
+            "hour": 0, "time_label": "", "time_type": "",
+            "profile": {}, "preferences": {}, "nearby_places": [],
+            "available_tasks": [], "task_scores": {}, "top_task_ids": [],
+            "ignored_ids": [], "exclude_ids": [],
+            "prompt": "", "llm_response": None,
+            "final_task": None, "final_description": "",
+            "agent_reasoning": "", "used_fallback": False,
+            "result": None, "error": None,
+        }
+
+        final_state = _suggest_task_graph.invoke(initial_state)
+        result = final_state.get("result") or final_state.get("error") or {"error": "UNKNOWN"}
         status = 200 if "error" not in result else 404
 
-        return (
-            json.dumps(result, ensure_ascii=False, default=str),
-            status,
-            {
-                "Content-Type":                "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
+        return (json.dumps(result, ensure_ascii=False, default=str), status,
+                {"Content-Type": "application/json; charset=utf-8",
+                 "Access-Control-Allow-Origin": "*"})
+
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return (
-            json.dumps({"error": str(e)}, ensure_ascii=False),
-            500,
-            {"Content-Type": "application/json"}
-        )
-###########################################################
+        import traceback; traceback.print_exc()
+        return (json.dumps({"error": str(e)}, ensure_ascii=False), 500,
+                {"Content-Type": "application/json"})
 
 
-import math
-from datetime import datetime, timezone, timedelta
- 
-# ============================================================
-# توليد المهام اليومية لجميع المستخدمين
-# ============================================================
-def run_daily_task_agent(data: dict) -> dict:
-    print("⏰ Daily Task Agent Starting...")
- 
-    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    current_month = datetime.now().strftime("%Y-%m")
- 
-    print(f"📅 Generating tasks for: {tomorrow}")
- 
-    # ── Step 1: جلب المهام المتاحة ──────────────────────────
-    print("📋 Step 1: Loading available tasks...")
-    available_tasks = _get_available_tasks(current_month)
-    if not available_tasks:
-        return {"error": "NO_TASKS_AVAILABLE", "created": 0}
- 
-    print(f"   ✅ Found {len(available_tasks)} available tasks")
- 
-    # ── Step 2: جلب جميع المستخدمين ────────────────────────
-    print("👥 Step 2: Loading users...")
+
+################################################################
+
+    firebase_admin.initialize_app()
+
+
+# ══════════════════════════════════════════
+# Helpers (shared)
+# ══════════════════════════════════════════
+# ══════════════════════════════════════════
+# Per-User State
+# ══════════════════════════════════════════
+class DailyTaskUserState(TypedDict):
+    # input
+    user_id: str
+    user_data: dict
+    available_tasks: list
+    tomorrow: str
+
+    # loaded
+    prefs_data: dict
+    top_task_ids: list
+    task_prefs: dict
+    ignored_ids: list   # set converted to list for LangGraph serialization
+    pending_ids: list   # set converted to list for LangGraph serialization
+    yesterday_id: Optional[str]
+
+    # computed
+    candidate_tasks: list
+    user_profile: dict
+
+    # LLM
+    prompt: str
+    llm_response: Optional[str]
+
+    # result
+    selected_task: Optional[dict]
+    personalized_desc: str
+    success: bool
+    error: Optional[str]
+
+
+# ══════════════════════════════════════════
+# Per-User Nodes
+# ══════════════════════════════════════════
+def u_load_prefs(state: DailyTaskUserState) -> dict:
+    uid = state["user_id"]
+    try:
+        doc = db.collection("userTaskPreferences").document(uid).get()
+        if doc.exists:
+            data = doc.to_dict()
+            prefs = data.get("taskPreferences", {})
+            top   = data.get("topTasks", [])
+            return {"prefs_data": data, "top_task_ids": top, "task_prefs": prefs}
+    except Exception as e:
+        print(f"   ⚠️ prefs error: {e}")
+    return {"prefs_data": {}, "top_task_ids": [], "task_prefs": {}}
+
+
+def u_load_ignored(state: DailyTaskUserState) -> dict:
+    uid = state["user_id"]
+    ids = set()
+    try:
+        for doc in (db.collection("userTasks")
+                    .where("userId", "==", uid).where("ignored", "==", True)
+                    .order_by("ignoredAt", direction=firestore.Query.DESCENDING)
+                    .limit(20).stream()):
+            tid = doc.to_dict().get("taskId")
+            if tid:
+                ids.add(tid)
+    except Exception as e:
+        print(f"   ⚠️ ignored error: {e}")
+    return {"ignored_ids": list(ids)}
+
+
+def u_load_pending(state: DailyTaskUserState) -> dict:
+    uid = state["user_id"]
+    ids = set()
+    try:
+        cutoff_ts = (datetime.now() - timedelta(days=7)).timestamp()
+        for doc in (db.collection("dailyTasks").document(uid)
+                    .collection("tasks").where("status", "==", "pending").stream()):
+            d = doc.to_dict()
+            created_at = d.get("createdAt")
+            try:
+                doc_ts = (
+                    created_at._seconds if hasattr(created_at, "_seconds")
+                    else created_at.timestamp() if hasattr(created_at, "timestamp")
+                    else None
+                )
+                if doc_ts and doc_ts >= cutoff_ts:
+                    tid = d.get("id")
+                    if tid:
+                        ids.add(tid)
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"   ⚠️ pending error: {e}")
+    return {"pending_ids": list(ids)}
+
+
+def u_load_yesterday(state: DailyTaskUserState) -> dict:
+    uid = state["user_id"]
+    try:
+        yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        doc = (db.collection("dailyTasks").document(uid)
+               .collection("tasks").document(yesterday_str).get())
+        if doc.exists:
+            tid = doc.to_dict().get("id")
+            print(f"   📅 Yesterday task: {doc.to_dict().get('title')} ({tid})")
+            return {"yesterday_id": tid}
+    except Exception as e:
+        print(f"   ⚠️ yesterday error: {e}")
+    return {"yesterday_id": None}
+
+
+def u_build_profile(state: DailyTaskUserState) -> dict:
+    data       = state["user_data"]
+    task_prefs = state["task_prefs"]
+    gender     = data.get("gender", "")
+
+    level_id   = data.get("userLevelId", "seedling")
+    level_map  = {
+        "seedling": ("بذرة 🌱",          "تشجيعي — مستخدم جديد"),
+        "sprout":   ("نبتة 🌿",          "إيجابي — بدأ رحلته"),
+        "tree":     ("شجرة 🌳",          "إيجابي — مستخدم نشيط"),
+        "guardian": ("حارس البيئة 🌍",   "احترافي — مستخدم ملتزم"),
+        "champion": ("بطل الاستدامة 🏆", "تحدي — مستخدم متقدم"),
+    }
+    level_label, level_tone = level_map.get(level_id, ("بذرة 🌱", "تشجيعي"))
+    pronoun = "أنتِ" if gender == "female" else "أنت"
+    suffix  = "ي"   if gender == "female" else ""
+
+    top_prefs = sorted(
+        [{"id": k, **v} for k, v in task_prefs.items() if v.get("score", 0) > 3],
+        key=lambda x: x.get("score", 0), reverse=True
+    )[:5]
+    ignored_prefs = [
+        {"id": k, **v} for k, v in task_prefs.items()
+        if v.get("ignored", 0) > v.get("completed", 0)
+    ]
+    high_view_low_score = [
+        k for k, v in task_prefs.items()
+        if v.get("viewCount", 0) > 5 and v.get("score", 1) < 2
+    ]
+    streak = data.get("currentStreak", 0)
+
+    # Compute candidate tasks
+    tasks_to_avoid = set(state["ignored_ids"]) | set(state["pending_ids"])
+    if state.get("yesterday_id"):
+        tasks_to_avoid.add(state["yesterday_id"])
+
+    candidates = [t for t in state["available_tasks"] if t["id"] not in tasks_to_avoid]
+    if not candidates:
+        candidates = state["available_tasks"]
+
+    profile = {
+        "level_id": level_id, "level_label": level_label, "level_tone": level_tone,
+        "pronoun": pronoun, "suffix": suffix, "gender": gender,
+        "completed": data.get("completedTask", 0),
+        "streak": streak, "points": data.get("points", 0),
+        "carbon_saved": round(data.get("totalCarbonSaved", 0), 2),
+        "top_prefs": top_prefs, "ignored_prefs": ignored_prefs[:3],
+        "high_view_low_score": high_view_low_score[:5],
+        "streak_text": f"لديك {streak} يوم متتالي 🔥" if streak > 1 else "",
+    }
+    return {"user_profile": profile, "candidate_tasks": candidates}
+
+
+def u_build_prompt(state: DailyTaskUserState) -> dict:
+    p          = state["user_profile"]
+    tasks      = state["candidate_tasks"]
+    task_prefs = state["task_prefs"]
+    pronoun    = p["pronoun"]
+    suffix     = p["suffix"]
+    level_label = p["level_label"]
+    level_tone  = p["level_tone"]
+    streak_text = p["streak_text"]
+
+    top_prefs_text = "\n".join([
+        f"   • [{t['id']}] {t.get('title','')} (score: {t.get('score',0):.1f})"
+        for t in p["top_prefs"]
+    ]) or "   لا توجد"
+    ignored_text = "\n".join([
+        f"   • [{t['id']}] {t.get('title','')}"
+        for t in p["ignored_prefs"]
+    ]) or "   لا توجد"
+    high_view_text = "\n".join([f"   • [{tid}]" for tid in p["high_view_low_score"]]) or "   لا توجد"
+    task_list = "\n".join([
+        f"{i+1}. [{t['id']}] {t['title']} - {t['category']} (score: {task_prefs.get(t['id'],{}).get('score',1):.1f})"
+        for i, t in enumerate(tasks)
+    ])
+
+    prompt = f"""أنت مساعد بيئي ذكي. اختر مهمة يومية واحدة مناسبة واكتب وصفاً شخصياً.
+
+👤 ملف المستخدم:
+- المستوى: {level_label} — {level_tone}
+- الجنس: {p['gender']} — خاطبه بـ "{pronoun}"
+- المهام المكتملة: {p['completed']}
+- النقاط: {p['points']}
+- الكربون الموفَّر: {p['carbon_saved']} كغ
+{f"- {streak_text}" if streak_text else ""}
+
+⭐ المهام المفضلة (score عالي):
+{top_prefs_text}
+
+🚫 المهام المتجاهلة (تجنبها):
+{ignored_text}
+
+👁️ معروضة كثيراً بدون إنجاز (تجنبها):
+{high_view_text}
+
+📋 المهام المتاحة:
+{task_list}
+
+🎯 قواعد الاختيار:
+1. من المفضلة (score > 3) إن وجدت
+2. تجنب المتجاهلة والمعروضة كثيراً
+3. لا تكرر نفس المهمة يومياً
+4. وزّع على تصنيفات مختلفة
+
+✍️ قواعد الوصف:
+- خاطب بـ "{pronoun}"، 15-20 كلمة
+- مختلف عن الوصف الأصلي
+{f'- اذكر الـ streak: "حافظ{suffix} على سلسلتك!"' if streak_text else ""}
+
+أرجع JSON فقط:
+{{
+  "taskId": "معرف المهمة",
+  "reasoning": "سبب الاختيار",
+  "personalizedDescription": "وصف شخصي دافئ"
+}}"""
+    return {"prompt": prompt}
+
+
+def u_call_llm(state: DailyTaskUserState) -> dict:
+    response = _call_gemini(state["prompt"])
+    return {"llm_response": response}
+
+
+def u_parse_result(state: DailyTaskUserState) -> dict:
+    tasks    = state["candidate_tasks"]
+    response = state.get("llm_response")
+    if response:
+        parsed = _extract_json(response)
+        if parsed and parsed.get("taskId"):
+            task_id = parsed["taskId"].replace("[", "").replace("]", "").strip()
+            task    = next((t for t in tasks if t["id"] == task_id), None)
+            if task:
+                return {"selected_task": task, "personalized_desc": parsed.get("personalizedDescription", "")}
+    return {"selected_task": None}
+
+
+def u_fallback_select(state: DailyTaskUserState) -> dict:
+    tasks     = state["candidate_tasks"]
+    top_ids   = state["top_task_ids"]
+    p         = state["user_profile"]
+
+    # Try top tasks first, then highest score, then random
+    for tid in top_ids:
+        task = next((t for t in tasks if t["id"] == tid), None)
+        if task:
+            return {"selected_task": task, "personalized_desc": _build_fallback_desc(task, p)}
+
+    scored = sorted(tasks, key=lambda t: state["task_prefs"].get(t["id"], {}).get("score", 1), reverse=True)
+    if scored:
+        task = scored[0]
+        return {"selected_task": task, "personalized_desc": _build_fallback_desc(task, p)}
+
+    if tasks:
+        task = random.choice(tasks)
+        return {"selected_task": task, "personalized_desc": _build_fallback_desc(task, p)}
+
+    return {"selected_task": None, "error": "NO_SUITABLE_TASK_FOUND"}
+
+
+def _build_fallback_desc(task: dict, profile: dict) -> str:
+    pronoun     = profile["pronoun"]
+    suffix      = profile["suffix"]
+    level_label = profile["level_label"]
+    streak_text = profile["streak_text"]
+    base = (
+        f"🌱 {pronoun} في بداية رحلتك البيئية! {task['title']} خطوة رائعة 🚀"
+        if "بذرة" in level_label else
+        f"⭐ واصل{suffix} تقدمك! {task['title']} تضيف نقاطاً 💚"
+        if "نبتة" in level_label or "شجرة" in level_label else
+        f"🏆 تحدٍّ جديد يا بطل{suffix} البيئة! {task['title']} ✨"
+    )
+    if streak_text:
+        base += f" حافظ{suffix} على سلسلتك 🔥"
+    return base
+
+
+def u_save_task(state: DailyTaskUserState) -> dict:
+    task = state.get("selected_task")
+    if not task:
+        return {"success": False, "error": state.get("error", "NO_TASK")}
+
+    desc = state.get("personalized_desc") or task.get("description", "")
+    try:
+        db.collection("dailyTasks").document(state["user_id"]) \
+          .collection("tasks").document(state["tomorrow"]).set({
+              **task,
+              "description": desc,
+              "createdAt":   firestore.SERVER_TIMESTAMP,
+              "status":      "pending",
+          })
+        print(f"   ✅ Saved: {task['title']}")
+        return {"success": True}
+    except Exception as e:
+        print(f"   ❌ Save error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def u_update_view_count(state: DailyTaskUserState) -> dict:
+    task = state.get("selected_task")
+    if not task:
+        return {}
+    try:
+        prefs_ref = db.collection("userTaskPreferences").document(state["user_id"])
+        if prefs_ref.get().exists:
+            prefs_ref.update({
+                f"taskPreferences.{task['id']}.viewCount":    firestore.Increment(1),
+                f"taskPreferences.{task['id']}.lastViewedAt": firestore.SERVER_TIMESTAMP,
+                f"taskPreferences.{task['id']}.title":        task.get("title", ""),
+                f"taskPreferences.{task['id']}.category":     task.get("category", ""),
+            })
+    except Exception as e:
+        print(f"   ⚠️ viewCount error: {e}")
+    return {}
+
+
+# ══════════════════════════════════════════
+# Conditional edges
+# ══════════════════════════════════════════
+def after_parse_user(state: DailyTaskUserState) -> str:
+    return "fallback" if state.get("selected_task") is None else "save_task"
+
+
+# ══════════════════════════════════════════
+# Build per-user graph
+# ══════════════════════════════════════════
+def build_per_user_graph() -> Any:
+    g = StateGraph(DailyTaskUserState)
+    g.add_node("load_prefs",         u_load_prefs)
+    g.add_node("load_ignored",       u_load_ignored)
+    g.add_node("load_pending",       u_load_pending)
+    g.add_node("load_yesterday",     u_load_yesterday)
+    g.add_node("build_user_profile", u_build_profile)
+    g.add_node("build_prompt",       u_build_prompt)
+    g.add_node("call_llm",           u_call_llm)
+    g.add_node("parse_result",       u_parse_result)
+    g.add_node("fallback",           u_fallback_select)
+    g.add_node("save_task",          u_save_task)
+    g.add_node("update_view_count",  u_update_view_count)
+
+    g.set_entry_point("load_prefs")
+    g.add_edge("load_prefs",         "load_ignored")
+    g.add_edge("load_ignored",       "load_pending")
+    g.add_edge("load_pending",       "load_yesterday")
+    g.add_edge("load_yesterday",     "build_user_profile")
+    g.add_edge("build_user_profile", "build_prompt")
+    g.add_edge("build_prompt",       "call_llm")
+    g.add_edge("call_llm",           "parse_result")
+    g.add_conditional_edges(
+        "parse_result",
+        after_parse_user,
+        {"fallback": "fallback", "save_task": "save_task"},
+    )
+    g.add_edge("fallback",           "save_task")
+    g.add_edge("save_task",          "update_view_count")
+    g.add_edge("update_view_count",  END)
+    return g.compile()
+
+
+# ══════════════════════════════════════════
+# Batch Orchestrator State
+# ══════════════════════════════════════════
+class BatchState(TypedDict):
+    tomorrow: str
+    current_month: str
+    available_tasks: list
+    users: list
+    tasks_created: int
+    total_users: int
+    error: Optional[str]
+
+
+def batch_load_tasks(state: BatchState) -> dict:
+    print("📋 Batch Node 1: Loading tasks...")
+    month  = state["current_month"]
+    tasks  = []
+    fallback = [
+        {"id": "fallback_1", "title": "وفر الطاقة",  "description": "افصل الأجهزة الكهربائية", "category": "الكهرباء",        "points": 10},
+        {"id": "fallback_2", "title": "دور المخلفات","description": "افصل البلاستيك عن الورق",  "category": "إعادة التدوير",   "points": 10},
+        {"id": "fallback_3", "title": "امشِ اليوم",  "description": "امشِ إذا المسافة قريبة",    "category": "النقل المستدام",  "points": 10},
+        {"id": "fallback_4", "title": "وفر الماء",   "description": "أغلق الصنبور أثناء تنظيف الأسنان", "category": "ترشيد الماء", "points": 10},
+    ]
+    try:
+        for doc in db.collection("tasks").where("status", "==", "active").stream():
+            t = doc.to_dict()
+            if t.get("visible_from", "") > month:
+                continue
+            if t.get("expiry_month") and t["expiry_month"] < month:
+                continue
+            tasks.append({
+                "id": doc.id, "title": t.get("title", ""),
+                "description": t.get("description", ""), "category": t.get("category", ""),
+                "points": t.get("points", 10),
+                "validationStrategy": t.get("validationStrategy", ""),
+                "calcMode": t.get("calcMode", ""),
+                "emissionFactorRef": t.get("emissionFactorRef", ""),
+            })
+    except Exception as e:
+        print(f"⚠️ load tasks error: {e}")
+
+    result_tasks = tasks if tasks else fallback
+    print(f"   Found {len(result_tasks)} tasks")
+    if not result_tasks:
+        return {"available_tasks": [], "error": "NO_TASKS_AVAILABLE"}
+    return {"available_tasks": result_tasks}
+
+
+def batch_load_users(state: BatchState) -> dict:
+    print("👥 Batch Node 2: Loading users...")
     users = []
     try:
         for doc in db.collection("users").stream():
@@ -855,1511 +1207,956 @@ def run_daily_task_agent(data: dict) -> dict:
                 continue
             users.append({"id": doc.id, **d})
     except Exception as e:
-        print(f"⚠️ Error loading users: {e}")
-        return {"error": str(e), "created": 0}
- 
-    print(f"   ✅ Found {len(users)} users")
- 
-    tasks_created = 0
- 
-    # ── Step 3: توليد مهمة لكل مستخدم ──────────────────────
-    for user in users:
-        user_id = user["id"]
-        print(f"\n👤 Processing user: {user_id}")
- 
+        print(f"⚠️ load users error: {e}")
+        return {"users": [], "total_users": 0, "error": str(e)}
+
+    print(f"   Found {len(users)} users")
+    return {"users": users, "total_users": len(users)}
+
+
+def batch_process_users(state: BatchState) -> dict:
+    print("⚙️ Batch Node 3: Processing all users...")
+    per_user_graph = build_per_user_graph()
+    tasks_created  = 0
+
+    for user in state["users"]:
+        uid = user["id"]
+        print(f"\n👤 Processing: {uid}")
         try:
-            result = _generate_task_for_user(
-                user_id=user_id,
-                user_data=user,
-                available_tasks=available_tasks,
-                tomorrow=tomorrow,
-            )
-            if result:
+            initial: DailyTaskUserState = {
+                "user_id": uid, "user_data": user,
+                "available_tasks": state["available_tasks"],
+                "tomorrow": state["tomorrow"],
+                "prefs_data": {}, "top_task_ids": [], "task_prefs": {},
+                "ignored_ids": [], "pending_ids": [], "yesterday_id": None,
+                "candidate_tasks": [], "user_profile": {},
+                "prompt": "", "llm_response": None,
+                "selected_task": None, "personalized_desc": "",
+                "success": False, "error": None,
+            }
+            final = per_user_graph.invoke(initial)
+            if final.get("success"):
                 tasks_created += 1
         except Exception as e:
-            print(f"   ❌ Failed for {user_id}: {e}")
+            print(f"   ❌ Failed for {uid}: {e}")
 
-        time.sleep(4)
- 
-    print(f"\n🎉 Daily tasks generated: {tasks_created}/{len(users)}")
-    return {"created": tasks_created, "total_users": len(users), "date": tomorrow}
- 
- 
-# ============================================================
-# جلب المهام المتاحة للشهر الحالي
-# ============================================================
-def _get_available_tasks(current_month: str) -> list:
-    tasks = []
-    fallback = [
-        {"id": "fallback_1", "title": "وفر الطاقة",  "description": "افصل الأجهزة الكهربائية غير المستخدمة", "category": "الكهرباء", "points": 10},
-        {"id": "fallback_2", "title": "دور المخلفات", "description": "افصل البلاستيك عن الورق",              "category": "إعادة التدوير", "points": 10},
-        {"id": "fallback_3", "title": "امشِ اليوم",   "description": "امشِ إذا كانت المسافة قريبة",          "category": "النقل المستدام", "points": 10},
-        {"id": "fallback_4", "title": "وفر الماء",    "description": "أغلق الصنبور أثناء تنظيف الأسنان",     "category": "ترشيد الماء",   "points": 10},
-    ]
-    try:
-        for doc in db.collection("tasks").where("status", "==", "active").stream():
-            t = doc.to_dict()
-            if t.get("visible_from", "") > current_month:
-                continue
-            if t.get("expiry_month") and t["expiry_month"] < current_month:
-                continue
-            tasks.append({
-                "id":                 doc.id,
-                "title":              t.get("title", ""),
-                "description":        t.get("description", ""),
-                "category":           t.get("category", ""),
-                "points":             t.get("points", 10),
-                "validationStrategy": t.get("validationStrategy", ""),
-                "calcMode":           t.get("calcMode", ""),
-                "emissionFactorRef":  t.get("emissionFactorRef", ""),
-            })
-    except Exception as e:
-        print(f"⚠️ Error loading tasks: {e}")
- 
-    return tasks if tasks else fallback
- 
- 
-# ============================================================
-# توليد مهمة ليوزر واحد
-# ============================================================
-def _generate_task_for_user(
-    user_id: str,
-    user_data: dict,
-    available_tasks: list,
-    tomorrow: str,
-) -> bool:
- 
-    # ── جلب بيانات التفضيلات من userTaskPreferences ─────────
-    prefs_data    = _get_user_preferences(user_id)
-    top_task_ids  = prefs_data.get("topTasks", [])
-    task_prefs    = prefs_data.get("taskPreferences", {})
- 
-    # ── جلب المهام المتجاهلة والمتروكة ───────────────────────
-    ignored_ids  = _get_ignored_task_ids(user_id)
-    pending_ids  = _get_pending_daily_task_ids(user_id)
-    yesterday_id = _get_yesterday_task_id(user_id)
- 
-    tasks_to_avoid = ignored_ids | pending_ids
-    if yesterday_id:
-        tasks_to_avoid.add(yesterday_id)
- 
-    print(f"   🚫 Tasks to avoid: {len(tasks_to_avoid)}")
- 
-    # ── تصفية المهام المتاحة ──────────────────────────────────
-    candidate_tasks = [
-        t for t in available_tasks
-        if t["id"] not in tasks_to_avoid
-    ]
-    if not candidate_tasks:
-        candidate_tasks = available_tasks  # fallback: جميع المهام
- 
-    # ── بناء ملف المستخدم ─────────────────────────────────────
-    user_profile = _build_user_profile(user_data, task_prefs)
- 
-    # ── بناء الـ Prompt ───────────────────────────────────────
-    prompt = _build_daily_task_prompt(
-        user_profile=user_profile,
-        candidate_tasks=candidate_tasks,
-        top_task_ids=top_task_ids,
-        task_prefs=task_prefs,
-        ignored_ids=ignored_ids,
-        pending_ids=pending_ids,
-        yesterday_id=yesterday_id,
+        time.sleep(4)  # rate limit
+
+    return {"tasks_created": tasks_created}
+
+
+def batch_check_tasks(state: BatchState) -> str:
+    if state.get("error") == "NO_TASKS_AVAILABLE":
+        return "end_error"
+    return "load_users"
+
+
+def build_batch_graph() -> Any:
+    g = StateGraph(BatchState)
+    g.add_node("load_tasks",      batch_load_tasks)
+    g.add_node("load_users",      batch_load_users)
+    g.add_node("process_users",   batch_process_users)
+
+    g.set_entry_point("load_tasks")
+    g.add_conditional_edges(
+        "load_tasks",
+        batch_check_tasks,
+        {"end_error": END, "load_users": "load_users"},
     )
- 
-    # ── استدعاء Gemini ────────────────────────────────────────
-    gemini_response = call_gemini(prompt, temperature=0.3, max_tokens=600)
- 
-    selected_task       = None
-    personalized_desc   = ""
- 
-    if gemini_response:
-        parsed = extract_json(gemini_response)
-        if parsed and parsed.get("taskId"):
-            task_id = parsed["taskId"].replace("[", "").replace("]", "").strip()
-            selected_task     = next((t for t in candidate_tasks if t["id"] == task_id), None)
-            personalized_desc = parsed.get("personalizedDescription", "")
-            if selected_task:
-                print(f"   ✅ Gemini selected: {selected_task['title']}")
-            else:
-                print(f"   ⚠️ Task ID not found: {task_id}")
- 
-    # ── Fallback ──────────────────────────────────────────────
-    if not selected_task:
-        print("   ⚠️ Using fallback selection...")
-        selected_task, personalized_desc = _fallback_select(
-            candidate_tasks=candidate_tasks,
-            top_task_ids=top_task_ids,
-            task_prefs=task_prefs,
-            user_profile=user_profile,
-        )
- 
-    if not selected_task:
-        print(f"   ❌ No task selected for {user_id}")
-        return False
- 
-    # ── حفظ في dailyTasks ────────────────────────────────────
-    task_doc = {
-        **selected_task,
-        "description": personalized_desc or selected_task["description"],
-        "createdAt":   firestore.SERVER_TIMESTAMP,
-        "status":      "pending",
-    }
- 
-    db.collection("dailyTasks") \
-      .document(user_id) \
-      .collection("tasks") \
-      .document(tomorrow) \
-      .set(task_doc)
- 
-    # ── تحديث viewCount في userTaskPreferences ───────────────
-    _update_view_count(user_id, selected_task)
- 
-    print(f"   ✅ Task saved: {selected_task['title']}")
-    return True
- 
- 
-# ============================================================
-# جلب بيانات userTaskPreferences
-# ============================================================
-def _get_user_preferences(user_id: str) -> dict:
-    try:
-        doc = db.collection("userTaskPreferences").document(user_id).get()
-        if doc.exists:
-            return doc.to_dict()
-    except Exception as e:
-        print(f"   ⚠️ Preferences error: {e}")
-    return {}
- 
- 
-# ============================================================
-# جلب المهام المتجاهلة
-# ============================================================
-def _get_ignored_task_ids(user_id: str) -> set:
-    ids = set()
-    try:
-        for doc in (
-            db.collection("userTasks")
-              .where("userId",  "==", user_id)
-              .where("ignored", "==", True)
-              .order_by("ignoredAt", direction=firestore.Query.DESCENDING)
-              .limit(20)
-              .stream()
-        ):
-            tid = doc.to_dict().get("taskId")
-            if tid:
-                ids.add(tid)
-    except Exception as e:
-        print(f"   ⚠️ Ignored tasks error: {e}")
-    return ids
- 
- 
-# ============================================================
-# جلب المهام المتروكة من dailyTasks (عُرضت ولم تكتمل)
-# ============================================================
-def _get_pending_daily_task_ids(user_id: str, days_back: int = 7) -> set:
-    ids = set()
-    try:
-        cutoff = datetime.now() - timedelta(days=days_back)
-        cutoff_ts = cutoff.timestamp()
- 
-        for doc in (
-            db.collection("dailyTasks")
-              .document(user_id)
-              .collection("tasks")
-              .where("status", "==", "pending")
-              .stream()
-        ):
-            d = doc.to_dict()
-            # تحقق من التاريخ يدوياً
-            created_at = d.get("createdAt")
-            try:
-                if hasattr(created_at, "_seconds"):
-                    doc_ts = created_at._seconds
-                elif hasattr(created_at, "timestamp"):
-                    doc_ts = created_at.timestamp()
-                else:
-                    continue
-                if doc_ts >= cutoff_ts:
-                    tid = d.get("id")
-                    if tid:
-                        ids.add(tid)
-                        print(f"   ⏳ Pending daily task: {d.get('title')} ({tid})")
-            except:
-                pass
-    except Exception as e:
-        print(f"   ⚠️ Pending tasks error: {e}")
-    return ids
- 
- 
-# ============================================================
-# جلب مهمة الأمس
-# ============================================================
-def _get_yesterday_task_id(user_id: str) -> str | None:
-    try:
-        yesterday     = datetime.now() - timedelta(days=1)
-        yesterday_str = yesterday.strftime("%Y-%m-%d")
- 
-        doc = (
-            db.collection("dailyTasks")
-              .document(user_id)
-              .collection("tasks")
-              .document(yesterday_str)
-              .get()
-        )
-        if doc.exists:
-            tid = doc.to_dict().get("id")
-            print(f"   📅 Yesterday's task avoided: {doc.to_dict().get('title')} ({tid})")
-            return tid
-    except Exception as e:
-        print(f"   ⚠️ Yesterday task error: {e}")
-    return None
- 
- 
-# ============================================================
-# بناء ملف المستخدم
-# ============================================================
-def _build_user_profile(user_data: dict, task_prefs: dict) -> dict:
-    level_id = user_data.get("userLevelId", "beginner")
-    gender   = user_data.get("gender", "")
- 
-    if level_id == "beginner":
-        level_label = "مبتدئ"
-        level_tone  = "تشجيعي — مستخدم جديد يحتاج تحفيز"
-    elif level_id == "medium":
-        level_label = "متوسط"
-        level_tone  = "إيجابي — مستخدم نشيط يستحق الإشادة"
-    else:
-        level_label = "متقدم"
-        level_tone  = "احترافي — مستخدم ملتزم يقدّر التحدي"
- 
-    pronoun = "أنتِ" if gender == "female" else "أنت"
-    suffix  = "ي"   if gender == "female" else ""
- 
-    # أفضل المهام من userTaskPreferences (score عالي)
-    top_prefs = sorted(
-        [{"id": k, **v} for k, v in task_prefs.items() if v.get("score", 0) > 3],
-        key=lambda x: x.get("score", 0), reverse=True
-    )[:5]
- 
-    # المهام المتجاهلة من userTaskPreferences
-    ignored_prefs = [
-        {"id": k, **v}
-        for k, v in task_prefs.items()
-        if v.get("ignored", 0) > v.get("completed", 0)
-    ]
- 
-    # المهام المعروضة كثيراً بدون إنجاز (viewCount عالي + score منخفض)
-    high_view_low_score = [
-        k for k, v in task_prefs.items()
-        if v.get("viewCount", 0) > 5 and v.get("score", 1) < 2
-    ]
- 
-    streak = user_data.get("currentStreak", 0)
- 
-    return {
-        "level_id":            level_id,
-        "level_label":         level_label,
-        "level_tone":          level_tone,
-        "pronoun":             pronoun,
-        "suffix":              suffix,
-        "gender":              gender,
-        "completed":           user_data.get("completedTask", 0),
-        "streak":              streak,
-        "points":              user_data.get("points", 0),
-        "carbon_saved":        round(user_data.get("totalCarbonSaved", 0), 2),
-        "top_prefs":           top_prefs,
-        "ignored_prefs":       ignored_prefs[:3],
-        "high_view_low_score": high_view_low_score[:5],
-        "streak_text":         f"لديك {streak} يوم متتالي 🔥" if streak > 1 else "",
-    }
- 
- 
-# ============================================================
-# بناء الـ Prompt
-# ============================================================
-def _build_daily_task_prompt(
-    user_profile:    dict,
-    candidate_tasks: list,
-    top_task_ids:    list,
-    task_prefs:      dict,
-    ignored_ids:     set,
-    pending_ids:     set,
-    yesterday_id:    str | None,
-) -> str:
- 
-    pronoun     = user_profile["pronoun"]
-    suffix      = user_profile["suffix"]
-    level_label = user_profile["level_label"]
-    level_tone  = user_profile["level_tone"]
-    streak_text = user_profile["streak_text"]
- 
-    # المفضلة من userTaskPreferences
-    top_prefs_text = "\n".join([
-        f"   • [{t['id']}] {t.get('title','')} (score: {t.get('score',0):.1f}, أُنجزت: {t.get('completed',0)})"
-        for t in user_profile["top_prefs"]
-    ]) or "   لا توجد"
- 
-    # المتجاهلة من userTaskPreferences
-    ignored_prefs_text = "\n".join([
-        f"   • [{t['id']}] {t.get('title','')} (تجاهل: {t.get('ignored',0)})"
-        for t in user_profile["ignored_prefs"]
-    ]) or "   لا توجد"
- 
-    # المعروضة كثيراً بدون إنجاز
-    high_view_text = "\n".join([
-        f"   • [{tid}]"
-        for tid in user_profile["high_view_low_score"]
-    ]) or "   لا توجد"
- 
-    # قائمة المهام المتاحة
-    task_list_text = "\n".join([
-        f"{i+1}. [{t['id']}] {t['title']} - {t['category']} "
-        f"(score: {task_prefs.get(t['id'], {}).get('score', 1):.1f})"
-        for i, t in enumerate(candidate_tasks)
-    ])
- 
-    return f"""أنت مساعد بيئي ذكي. اختر مهمة يومية واحدة مناسبة لهذا المستخدم واكتب لها وصفاً شخصياً.
- 
-👤 ملف المستخدم:
-- المستوى: {level_label} — {level_tone}
-- الجنس: {user_profile['gender']} — خاطبه بـ "{pronoun}"
-- المهام المكتملة: {user_profile['completed']}
-- النقاط: {user_profile['points']}
-- الكربون الموفَّر: {user_profile['carbon_saved']} كغ
-{f"- {streak_text}" if streak_text else ""}
- 
-📊 تحليل userTaskPreferences:
- 
-⭐ المهام المفضلة (score عالي من userTaskPreferences):
-{top_prefs_text}
- 
-🚫 المهام المتجاهلة (تجنبها):
-{ignored_prefs_text}
- 
-👁️ مهام تُعرض كثيراً بدون إنجاز (تجنبها أيضاً):
-{high_view_text}
- 
-📋 المهام المتاحة اليوم:
-{task_list_text}
- 
-🎯 قواعد الاختيار (بالأولوية):
-1. اختر من المهام المفضلة (score > 3 في userTaskPreferences) إن وجدت
-2. تجنب المهام المتجاهلة والمعروضة كثيراً بدون إنجاز
-3. لا تكرر نفس المهمة يوماً بعد يوم
-4. وزّع الاختيار على تصنيفات مختلفة
- 
-✍️ قواعد الوصف الشخصي:
-- خاطب المستخدم بـ "{pronoun}" دائماً
-- إذا المستوى "مبتدئ" → حفز للبداية: "{pronoun} في بداية رحلتك..."
-- إذا المستوى "متوسط" → أشِد بتقدمه: "واصل{suffix} مسيرتك..."
-- إذا المستوى "متقدم" → تحدّه: "بطل{suffix} البيئة، تحدٍّ جديد..."
-{f'- اذكر الـ streak: "حافظ{suffix} على سلسلتك!"' if streak_text else ""}
-- 15-20 كلمة فقط، مختلف عن الوصف الأصلي
- 
-أرجع JSON فقط:
-{{
-  "taskId": "معرف المهمة من القائمة",
-  "reasoning": "سبب الاختيار بإيجاز",
-  "personalizedDescription": "وصف شخصي دافئ يراعي مستوى المستخدم"
-}}"""
- 
- 
-# ============================================================
-# Fallback: اختيار المهمة بدون Gemini
-# ============================================================
-def _fallback_select(
-    candidate_tasks: list,
-    top_task_ids:    list,
-    task_prefs:      dict,
-    user_profile:    dict,
-) -> tuple:
-    """يرجع (task, description) أو (None, '')"""
- 
-    suffix      = user_profile["suffix"]
-    pronoun     = user_profile["pronoun"]
-    level_label = user_profile["level_label"]
- 
-    # 1. من topTasks في userTaskPreferences
-    for tid in top_task_ids:
-        task = next((t for t in candidate_tasks if t["id"] == tid), None)
-        if task:
-            print(f"   ✅ Fallback: selected from topTasks: {task['title']}")
-            return task, _build_fallback_desc(task, user_profile)
- 
-    # 2. الأعلى score في userTaskPreferences
-    scored = sorted(
-        candidate_tasks,
-        key=lambda t: task_prefs.get(t["id"], {}).get("score", 1),
-        reverse=True
+    g.add_conditional_edges(
+        "load_users",
+        lambda s: "end_error" if s.get("error") else "process_users",
+        {"end_error": END, "process_users": "process_users"},
     )
-    if scored:
-        task = scored[0]
-        print(f"   ✅ Fallback: selected by score: {task['title']}")
-        return task, _build_fallback_desc(task, user_profile)
- 
-    # 3. عشوائي
-    if candidate_tasks:
-        import random
-        task = random.choice(candidate_tasks)
-        print(f"   ✅ Fallback: random: {task['title']}")
-        return task, _build_fallback_desc(task, user_profile)
- 
-    return None, ""
- 
- 
-def _build_fallback_desc(task: dict, profile: dict) -> str:
-    pronoun     = profile["pronoun"]
-    suffix      = profile["suffix"]
-    level_label = profile["level_label"]
-    streak_text = profile["streak_text"]
- 
-    if level_label == "مبتدئ":
-        base = f"🌱 {pronoun} في بداية رحلتك البيئية! {task['title']} خطوة رائعة للانطلاق 🚀"
-    elif level_label == "متوسط":
-        base = f"⭐ واصل{suffix} تقدمك! {task['title']} تضيف نقاطاً لرصيدك البيئي 💚"
-    else:
-        base = f"🏆 تحدٍّ جديد يا بطل{suffix} البيئة! {task['title']} في انتظارك ✨"
- 
-    if streak_text:
-        base += f" حافظ{suffix} على سلسلتك 🔥"
- 
-    return base
- 
- 
-# ============================================================
-# تحديث viewCount في userTaskPreferences
-# ============================================================
-def _update_view_count(user_id: str, task: dict) -> None:
-    try:
-        prefs_ref = db.collection("userTaskPreferences").document(user_id)
-        prefs_doc = prefs_ref.get()
-        if prefs_doc.exists:
-            prefs_ref.update({
-                f"taskPreferences.{task['id']}.viewCount":    firestore.Increment(1),
-                f"taskPreferences.{task['id']}.lastViewedAt": firestore.SERVER_TIMESTAMP,
-                f"taskPreferences.{task['id']}.title":        task.get("title", ""),
-                f"taskPreferences.{task['id']}.category":     task.get("category", ""),
-            })
-            print(f"   👁️ Updated viewCount for: {task['title']}")
-    except Exception as e:
-        print(f"   ⚠️ viewCount update error: {e}")
- 
- 
-# ============================================================
-# HTTP Entry Point — أيجنت المهام اليومية
-# ============================================================
+    g.add_edge("process_users", END)
+    return g.compile()
+
+
+_batch_graph = build_batch_graph()
+
+
 @functions_framework.http
 def generate_daily_tasks_agent(request):
     if request.method == "OPTIONS":
-        return ("", 204, {
-            "Access-Control-Allow-Origin":  "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization"
-        })
- 
+        return ("", 204, {"Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "POST, OPTIONS",
+                          "Access-Control-Allow-Headers": "Content-Type, Authorization"})
     if request.method != "POST":
-        return (json.dumps({"error": "POST only"}), 405,
-                {"Content-Type": "application/json"})
- 
+        return (json.dumps({"error": "POST only"}), 405, {"Content-Type": "application/json"})
+
     try:
-        data   = request.get_json(silent=True) or {}
-        result = run_daily_task_agent(data)
-        status = 200 if "error" not in result else 500
- 
-        return (
-            json.dumps(result, ensure_ascii=False, default=str),
-            status,
-            {
-                "Content-Type":                "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return (
-            json.dumps({"error": str(e)}, ensure_ascii=False),
-            500,
-            {"Content-Type": "application/json"}
-        )
+        now      = datetime.now()
+        tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
-###########################################################
-# ============================================================
-# أيجنت الإدمن
-# ============================================================
-
-def run_admin_agent(data: dict) -> dict:
-    admin_id = data.get("adminId")
-    if not admin_id:
-        return {"error": "adminId مطلوب"}
- 
-    print("🔍 Admin Agent Starting...")
-    context = {}
- 
-    # ── Step 1: إحصائيات المهام ─────────────────────────────
-    print("📊 Step 1: Getting task analytics...")
-    get_admin_task_analytics(context)
- 
-    # ── Step 2: البلاغات ────────────────────────────────────
-    print("🚨 Step 2: Getting reports...")
-    get_admin_reports(context)
- 
-    # ── Step 3: بيانات المستخدمين ───────────────────────────
-    print("👥 Step 3: Getting user insights...")
-    get_admin_user_insights(context)
- 
-    # ── Step 4: الأنماط الموسمية ────────────────────────────
-    print("📅 Step 4: Analyzing seasonal patterns...")
-    get_seasonal_patterns(context)
- 
-    # ── Step 5: الموسم الحالي ───────────────────────────────
-    print("🌍 Step 5: Getting season context...")
-    season = get_season_context()
- 
-    # ── Step 6: بناء الـ Prompt واستدعاء Gemini ─────────────
-    print("🤖 Step 6: Building prompt and calling Gemini...")
-    prompt = build_admin_prompt(context, season)
-    gemini_response = call_gemini(prompt, temperature=0.7, max_tokens=2500)
- 
-    recommendations = []
-    if gemini_response:
-        parsed = extract_json(gemini_response)
-        if parsed:
-            if isinstance(parsed, list):
-                recommendations = parsed
-            elif parsed.get("recommendations"):
-                recommendations = parsed["recommendations"]
-        print(f"✅ Gemini generated {len(recommendations)} recommendations")
- 
-    # ── Fallback ────────────────────────────────────────────
-    if not recommendations:
-        print("⚠️ Using fallback recommendations...")
-        recommendations = build_fallback_recommendations(context, season)
- 
-    # ── Step 7: حفظ في Firestore ────────────────────────────
-    print("💾 Step 7: Saving to Firestore...")
-    current_month = datetime.now().strftime("%Y-%m")
-    try:
-        db.collection("adminRecommendations").document(current_month).set({
-            "month":           current_month,
-            "season":          season,
-            "recommendations": recommendations[:12],
-            "summary":         context.get("summary", {}),
-            "analytics":       context.get("analytics", {}),
-            "generatedAt":     firestore.SERVER_TIMESTAMP,
-        })
-        print("✅ Saved to Firestore")
-    except Exception as e:
-        print(f"⚠️ Save failed: {e}")
-
-    # ── Step 8: التطبيق التلقائي إذا autoAgentMode = true ───
-    print("🔄 Step 8: Checking autoAgentMode...")
-    auto_mode    = False
-    auto_results = {"applied": 0, "skipped": 0}
-    try:
-        admin_doc = db.collection("users").document(admin_id).get()
-        auto_mode = admin_doc.to_dict().get("autoAgentMode", False) if admin_doc.exists else False
-
-        if auto_mode:
-            print("🤖 Auto Agent Mode ON — تطبيق التوصيات تلقائياً...")
-            auto_results = _apply_recommendations_automatically(recommendations[:12])
-            print(f"✅ Auto-applied: {auto_results['applied']} | Skipped: {auto_results['skipped']}")
-        else:
-            print("👤 Auto Agent Mode OFF — التوصيات للمراجعة اليدوية فقط")
-    except Exception as e:
-        print(f"⚠️ autoAgentMode check failed: {e}")
-
-    # ── Step 9: تحديث هدف الكربون تلقائياً ─────────────────
-    print("🎯 Step 9: Updating carbon target...")
-    carbon_target_result = {"updated": False}
-    if auto_mode:
-        try:
-            carbon_target_result = _update_carbon_target(context, season)
-        except Exception as e:
-            print(f"⚠️ Carbon target update failed: {e}")
-    else:
-        print("   ⏭️ Skipped (autoAgentMode is OFF)")
- 
-    return {
-        "month":           current_month,
-        "season":          season,
-        "recommendations": recommendations[:12],
-        "summary":         context.get("summary", {}),
-        "autoApplied":     auto_results,
-        "carbonTarget":    carbon_target_result,
-    }
-
-
-# ============================================================
-# Step 8: التطبيق التلقائي للتوصيات
-# ============================================================
-def _apply_recommendations_automatically(recommendations: list) -> dict:
-    applied = 0
-    skipped = 0
-    now     = datetime.now()
-    next_month_dt = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
-    next_month    = next_month_dt.strftime("%Y-%m")
-
-    for rec in recommendations:
-        rec_type = rec.get("type", "")
-
-        try:
-            if rec_type == "add":
-                title = rec.get("title", "").strip()
-                if not title:
-                    print(f"   ⚠️ Skipped add: no title")
-                    skipped += 1
-                    continue
-
-                existing = db.collection("tasks") \
-                    .where("title", "==", title) \
-                    .limit(1) \
-                    .get()
-
-                if len(list(existing)) > 0:
-                    print(f"   ⚠️ Skipped add (duplicate): {title}")
-                    skipped += 1
-                    continue
-
-                validation = rec.get("validationStrategy") or \
-                             pick_validation_strategy(title, rec.get("userDescription", ""))
-
-                db.collection("tasks").add({
-                    "title":              title,
-                    "title_normalized":   title.strip().lower(),
-                    "description":        rec.get("userDescription") or rec.get("description", ""),
-                    "category":           rec.get("category", ""),
-                    "validationStrategy": validation,
-                    "points":             rec.get("points", 10),
-                    "status":             "active",
-                    "visible_from":       next_month,
-                    "calcMode":           "perItem",
-                    "autoGenerated":      True,
-                    "generatedAt":        firestore.SERVER_TIMESTAMP,
-                })
-                print(f"   ✅ Auto-added task: {title}")
-                applied += 1
-
-            elif rec_type == "modify":
-                task_id       = rec.get("taskId", "").strip()
-                improved_desc = rec.get("improvedDescription", "").strip()
-
-                if not task_id or not improved_desc:
-                    print(f"   ⚠️ Skipped modify: missing taskId or improvedDescription")
-                    skipped += 1
-                    continue
-
-                task_doc = db.collection("tasks").document(task_id).get()
-                if not task_doc.exists:
-                    print(f"   ⚠️ Skipped modify: task {task_id} not found")
-                    skipped += 1
-                    continue
-
-                db.collection("tasks").document(task_id).update({
-                    "description":    improved_desc,
-                    "autoModified":   True,
-                    "lastModifiedAt": firestore.SERVER_TIMESTAMP,
-                })
-                print(f"   ✅ Auto-modified task: {task_id}")
-                applied += 1
-
-            elif rec_type in ["review_reports", "delete"]:
-                print(f"   ⏭️ Skipped {rec_type} (requires human decision)")
-                skipped += 1
-
-            else:
-                skipped += 1
-
-        except Exception as e:
-            print(f"   ❌ Auto-apply error for {rec_type}: {e}")
-            skipped += 1
-
-    return {"applied": applied, "skipped": skipped}
-
-# ============================================================
-# Step 9: تحديث هدف الكربون تلقائياً
-# ============================================================
-def _update_carbon_target(context: dict, season: dict) -> dict:
-    try:
-        insights = context.get("user_insights", {})
-        seasonal = context.get("seasonal_patterns", {})
-
-        total_users  = max(insights.get("totalUsers", 1), 1)
-
-        # ── جلب كربون هذا الشهر فقط (تراكمي شهري) ──────────
-        now           = datetime.now()
-        current_month = now.strftime("%Y-%m")
-        month_start   = datetime(now.year, now.month, 1)
-        month_end     = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
-
-        monthly_carbon = 0.0
-        try:
-            from google.cloud.firestore_v1 import FieldFilter
-            for doc in db.collection("submissions")\
-                .where(filter=FieldFilter("status", "==", "approved"))\
-                .where(filter=FieldFilter("createdAt", ">=", month_start))\
-                .where(filter=FieldFilter("createdAt", "<", month_end))\
-                .stream():
-                monthly_carbon += doc.to_dict().get("carbonSaved", 0) or 0
-        except Exception as e:
-            print(f"   ⚠️ Could not fetch monthly carbon from submissions, using totalCarbon: {e}")
-            # fallback: استخدم الإجمالي من users
-            monthly_carbon = insights.get("totalCarbon", 0.0)
-
-        monthly_carbon = round(monthly_carbon, 2)
-        avg_carbon     = round(monthly_carbon / total_users, 2)
-
-        print(f"   📅 Monthly carbon ({current_month}): {monthly_carbon} kg | Avg per user: {avg_carbon} kg")
-
-        # ── جلب الهدف الحالي من Firestore ───────────────────
-        settings_doc   = db.collection("appSettings").document("carbonTarget").get()
-        current_target = 50.0
-
-        if settings_doc.exists:
-            current_target = float(settings_doc.to_dict().get("target", 50.0))
-
-        # ── جلب كربون نفس الشهر السنة الماضية ───────────────
-        last_year_month = seasonal.get("lastYearSameMonth", "")
-        last_year_avg   = 0.0
-
-        try:
-            last_year_doc = db.collection("appSettings").document(
-                f"carbonTarget_{last_year_month}"
-            ).get()
-            if last_year_doc.exists:
-                last_year_avg = float(last_year_doc.to_dict().get("avgCarbon", 0.0))
-                print(f"   📅 Last year same month avg: {last_year_avg} kg")
-        except Exception as e:
-            print(f"   ⚠️ Could not fetch last year data: {e}")
-
-        # ── حساب الهدف الجديد ────────────────────────────────
-        performance_ratio = avg_carbon / current_target if current_target > 0 else 0
-
-        new_target = current_target
-        reason     = ""
-        direction  = "unchanged"
-
-        if performance_ratio >= 0.8:
-            new_target = round(current_target * 1.20, 1)
-            reason     = (
-                f"متوسط الكربون الشهري ({avg_carbon} كجم/مستخدم) وصل {round(performance_ratio*100)}% "
-                f"من الهدف ({current_target} كجم) → رفع الهدف 20%"
-            )
-            direction = "up"
-
-        elif performance_ratio < 0.4:
-            new_target = round(current_target * 0.85, 1)
-            reason     = (
-                f"متوسط الكربون الشهري ({avg_carbon} كجم/مستخدم) فقط {round(performance_ratio*100)}% "
-                f"من الهدف ({current_target} كجم) → خفض الهدف 15%"
-            )
-            direction = "down"
-
-        else:
-            reason    = (
-                f"الأداء الشهري مقبول ({round(performance_ratio*100)}%) "
-                f"— الهدف يبقى {current_target} كجم"
-            )
-            direction = "unchanged"
-
-        # ── تأثير الموسم ─────────────────────────────────────
-        season_name = season.get("season", "")
-        if season_name == "الصيف" and direction == "unchanged":
-            new_target = round(current_target * 0.92, 1)
-            reason    += f" | موسم الصيف → تخفيض طفيف 8%"
-            direction  = "down"
-        elif season_name == "الربيع" and direction == "unchanged":
-            new_target = round(current_target * 1.05, 1)
-            reason    += f" | موسم الربيع → رفع طفيف 5%"
-            direction  = "up"
-
-        # ── مقارنة بالسنة الماضية ────────────────────────────
-        if last_year_avg > 0:
-            year_change_pct = ((avg_carbon - last_year_avg) / last_year_avg) * 100
-            if year_change_pct > 30:
-                bonus = round(current_target * 0.10, 1)
-                new_target = round(new_target + bonus, 1)
-                reason += (
-                    f" | أداء أفضل {round(year_change_pct)}% من {last_year_month} "
-                    f"→ إضافة {bonus} كجم للهدف"
-                )
-            elif year_change_pct < -30:
-                penalty = round(current_target * 0.08, 1)
-                new_target = round(new_target - penalty, 1)
-                reason += (
-                    f" | أداء أضعف {round(abs(year_change_pct))}% من {last_year_month} "
-                    f"→ خفض {penalty} كجم من الهدف"
-                )
-
-        # ── حد أدنى وأقصى ────────────────────────────────────
-        new_target = max(5.0, min(new_target, 500.0))
-
-        print(f"   📊 Monthly avg: {avg_carbon} kg | Current target: {current_target} | New target: {new_target}")
-        print(f"   💡 Reason: {reason}")
-        print(f"   📈 Direction: {direction}")
-
-        # ── حفظ الهدف الجديد ─────────────────────────────────
-        db.collection("appSettings").document("carbonTarget").set({
-            "target":           new_target,
-            "prevTarget":       current_target,
-            "avgCarbon":        avg_carbon,          # متوسط شهري لكل مستخدم
-            "monthlyCarbon":    monthly_carbon,      # إجمالي كربون الشهر
-            "totalUsers":       total_users,
-            "performanceRatio": round(performance_ratio * 100, 1),
-            "reason":           reason,
-            "direction":        direction,
-            "season":           season_name,
-            "month":            current_month,
-            "lastYearMonth":    last_year_month,
-            "lastYearAvg":      last_year_avg,
-            "updatedAt":        firestore.SERVER_TIMESTAMP,
-            "updatedBy":        "autoAgent",
-        })
-
-        # ── حفظ سجل تاريخي شهري ──────────────────────────────
-        db.collection("appSettings").document(f"carbonTarget_{current_month}").set({
-            "target":        new_target,
-            "avgCarbon":     avg_carbon,
-            "monthlyCarbon": monthly_carbon,
-            "month":         current_month,
-            "season":        season_name,
-            "savedAt":       firestore.SERVER_TIMESTAMP,
-        })
-
-        print(f"   ✅ Carbon target updated: {current_target} → {new_target} kg")
-
-        return {
-            "updated":        True,
-            "prevTarget":     current_target,
-            "newTarget":      new_target,
-            "avgCarbon":      avg_carbon,
-            "monthlyCarbon":  monthly_carbon,
-            "direction":      direction,
-            "reason":         reason,
-            "lastYearAvg":    last_year_avg,
-            "lastYearMonth":  last_year_month,
+        initial: BatchState = {
+            "tomorrow":        tomorrow,
+            "current_month":   now.strftime("%Y-%m"),
+            "available_tasks": [],
+            "users":           [],
+            "tasks_created":   0,
+            "total_users":     0,
+            "error":           None,
         }
 
-    except Exception as e:
-        print(f"   ❌ Carbon target update error: {e}")
-        return {"updated": False, "error": str(e)}
+        final  = _batch_graph.invoke(initial)
+        result = {
+            "created":      final.get("tasks_created", 0),
+            "total_users":  final.get("total_users", 0),
+            "date":         tomorrow,
+        }
+        if final.get("error"):
+            result["error"] = final["error"]
 
-# ============================================================
-# Step 1: تحليل أداء المهام
-# ============================================================
-def get_admin_task_analytics(context: dict) -> dict:
+        status = 200 if "error" not in result else 500
+        return (json.dumps(result, ensure_ascii=False, default=str), status,
+                {"Content-Type": "application/json; charset=utf-8",
+                 "Access-Control-Allow-Origin": "*"})
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return (json.dumps({"error": str(e)}, ensure_ascii=False), 500,
+                {"Content-Type": "application/json"})
+
+
+
+################################################################
+
+    firebase_admin.initialize_app()
+
+
+# ══════════════════════════════════════════
+# Helpers
+# ══════════════════════════════════════════
+# ══════════════════════════════════════════
+# State
+# ══════════════════════════════════════════
+class AdminAgentState(TypedDict):
+    admin_id: str
+    current_month: str
+
+    # Analytics
+    task_analytics: dict
+    reports: dict
+    user_insights: dict
+    seasonal_patterns: dict
+    season: dict
+
+    # LLM
+    prompt: str
+    llm_response: Optional[str]
+
+    # Recommendations
+    recommendations: list
+
+    # Auto-apply
+    auto_mode: bool
+    auto_results: dict
+    carbon_target_result: dict
+
+    # Summary
+    summary: dict
+    analytics: dict
+
+    error: Optional[str]
+
+
+# ══════════════════════════════════════════
+# Node 1 — Task analytics
+# ══════════════════════════════════════════
+def node_task_analytics(state: AdminAgentState) -> dict:
+    print("📊 Node 1: Task analytics...")
     active_tasks = []
     try:
         for doc in db.collection("tasks").where("status", "==", "active").stream():
             t = doc.to_dict()
-            active_tasks.append({
-                "id":          doc.id,
-                "title":       t.get("title", ""),
-                "description": t.get("description", ""),
-                "category":    t.get("category", ""),
-                "points":      t.get("points", 0),
-            })
+            active_tasks.append({"id": doc.id, "title": t.get("title",""), "description": t.get("description",""), "category": t.get("category",""), "points": t.get("points",0)})
     except Exception as e:
-        print(f"⚠️ active tasks error: {e}")
- 
-    completed_count = {}
-    ignored_count   = {}
+        print(f"⚠️ active tasks: {e}")
+
+    completed_count, ignored_count = {}, {}
     try:
-        for doc in db.collection("userTasks").where("status", "==", "completed").stream():
+        for doc in db.collection("userTasks").where("status","==","completed").stream():
             tid = doc.to_dict().get("taskId")
-            if tid:
-                completed_count[tid] = completed_count.get(tid, 0) + 1
- 
-        for doc in db.collection("userTasks").where("ignored", "==", True).stream():
+            if tid: completed_count[tid] = completed_count.get(tid,0) + 1
+        for doc in db.collection("userTasks").where("ignored","==",True).stream():
             tid = doc.to_dict().get("taskId")
-            if tid:
-                ignored_count[tid] = ignored_count.get(tid, 0) + 1
+            if tid: ignored_count[tid] = ignored_count.get(tid,0) + 1
     except Exception as e:
-        print(f"⚠️ task stats error: {e}")
- 
-    most_successful = sorted(
-        [{"id": k, "count": v,
-          "title":       next((t["title"]       for t in active_tasks if t["id"] == k), k),
-          "description": next((t["description"] for t in active_tasks if t["id"] == k), ""),
-          "category":    next((t["category"]    for t in active_tasks if t["id"] == k), "")}
-         for k, v in completed_count.items()],
-        key=lambda x: x["count"], reverse=True
-    )[:5]
- 
-    most_ignored = sorted(
-        [{"id": k, "count": v,
-          "title":       next((t["title"]       for t in active_tasks if t["id"] == k), k),
-          "description": next((t["description"] for t in active_tasks if t["id"] == k), ""),
-          "category":    next((t["category"]    for t in active_tasks if t["id"] == k), "")}
-         for k, v in ignored_count.items()],
-        key=lambda x: x["count"], reverse=True
-    )[:5]
- 
+        print(f"⚠️ task stats: {e}")
+
+    def enrich(count_dict, limit):
+        return sorted([{
+            "id": k, "count": v,
+            "title":       next((t["title"]       for t in active_tasks if t["id"]==k), k),
+            "description": next((t["description"] for t in active_tasks if t["id"]==k), ""),
+            "category":    next((t["category"]    for t in active_tasks if t["id"]==k), ""),
+        } for k,v in count_dict.items()], key=lambda x:x["count"], reverse=True)[:limit]
+
     completed_ids   = set(completed_count.keys())
     zero_completion = [t for t in active_tasks if t["id"] not in completed_ids]
- 
-    summary = {
+
+    analytics = {
         "totalActiveTasks":    len(active_tasks),
         "zeroCompletionTasks": len(zero_completion),
-        "mostSuccessful":      most_successful,
-        "mostIgnored":         most_ignored,
+        "mostSuccessful":      enrich(completed_count, 5),
+        "mostIgnored":         enrich(ignored_count,   5),
         "zeroTasks":           zero_completion[:5],
     }
- 
-    context["task_analytics"] = summary
-    context["summary"] = {
-        "totalTasks":          len(active_tasks),
-        "zeroCompletionTasks": len(zero_completion),
+    return {
+        "task_analytics": analytics,
+        "summary": {"totalTasks": len(active_tasks), "zeroCompletionTasks": len(zero_completion)},
+        "analytics": {"problematicTasks": [], "problematicFacilities": []},
     }
- 
-    print(f"   📋 Active: {len(active_tasks)} | Zero: {len(zero_completion)} | Ignored: {len(most_ignored)}")
-    return summary
- 
- 
-# ============================================================
-# Step 2: تحليل البلاغات
-# ============================================================
-def get_admin_reports(context: dict) -> dict:
-    task_reports      = []
-    container_reports = []
- 
+
+
+# ══════════════════════════════════════════
+# Node 2 — Reports
+# ══════════════════════════════════════════
+def node_get_reports(state: AdminAgentState) -> dict:
+    print("🚨 Node 2: Getting reports...")
+    task_reports, container_reports = [], []
     try:
-        for doc in db.collection("taskReports").where("decision", "==", "pending").stream():
+        for doc in db.collection("taskReports").where("decision","==","pending").stream():
             d = doc.to_dict()
-            task_reports.append({
-                "taskId": d.get("taskId", ""),
-                "reason": d.get("reason", ""),
-            })
-    except Exception as e:
-        print(f"⚠️ task reports error: {e}")
- 
-    try:
-        for doc in db.collection("facilityReports").where("status", "==", "pending").stream():
+            task_reports.append({"taskId": d.get("taskId",""), "reason": d.get("reason","")})
+        for doc in db.collection("facilityReports").where("status","==","pending").stream():
             d = doc.to_dict()
-            container_reports.append({
-                "facilityId": d.get("facilityID", ""),
-                "type":       d.get("type", ""),
-            })
+            container_reports.append({"facilityId": d.get("facilityID",""), "type": d.get("type","")})
     except Exception as e:
-        print(f"⚠️ facility reports error: {e}")
- 
-    task_report_count = {}
+        print(f"⚠️ reports: {e}")
+
+    # Aggregate
+    task_rc, facility_rc = {}, {}
     for r in task_reports:
         tid = r["taskId"]
         if tid:
-            if tid not in task_report_count:
-                task_report_count[tid] = {"count": 0, "reasons": []}
-            task_report_count[tid]["count"] += 1
-            if r["reason"]:
-                task_report_count[tid]["reasons"].append(r["reason"])
- 
-    facility_report_count = {}
+            task_rc.setdefault(tid, {"count":0,"reasons":[]})
+            task_rc[tid]["count"] += 1
+            if r["reason"]: task_rc[tid]["reasons"].append(r["reason"])
     for r in container_reports:
         fid = r["facilityId"]
         if fid:
-            if fid not in facility_report_count:
-                facility_report_count[fid] = {"count": 0, "types": []}
-            facility_report_count[fid]["count"] += 1
-            if r["type"]:
-                facility_report_count[fid]["types"].append(r["type"])
- 
+            facility_rc.setdefault(fid, {"count":0,"types":[]})
+            facility_rc[fid]["count"] += 1
+            if r["type"]: facility_rc[fid]["types"].append(r["type"])
+
     problematic_tasks = []
-    for tid, data in sorted(task_report_count.items(), key=lambda x: x[1]["count"], reverse=True)[:5]:
+    for tid, data in sorted(task_rc.items(), key=lambda x: x[1]["count"], reverse=True)[:5]:
         try:
             doc = db.collection("tasks").document(tid).get()
             if doc.exists:
                 t = doc.to_dict()
-                problematic_tasks.append({
-                    "taskId":      tid,
-                    "title":       t.get("title", ""),
-                    "description": t.get("description", ""),
-                    "reportCount": data["count"],
-                    "reasons":     list(set(data["reasons"]))[:3],
-                })
-        except:
-            pass
- 
+                problematic_tasks.append({"taskId": tid, "title": t.get("title",""), "description": t.get("description",""), "reportCount": data["count"], "reasons": list(set(data["reasons"]))[:3]})
+        except: pass
+
     problematic_facilities = []
-    for fid, data in sorted(facility_report_count.items(), key=lambda x: x[1]["count"], reverse=True)[:5]:
+    for fid, data in sorted(facility_rc.items(), key=lambda x: x[1]["count"], reverse=True)[:5]:
         try:
             doc = db.collection("facilities").document(fid).get()
             if doc.exists:
                 f = doc.to_dict()
                 types = data["types"]
                 type_count = {}
-                for t in types:
-                    type_count[t] = type_count.get(t, 0) + 1
+                for t in types: type_count[t] = type_count.get(t,0)+1
                 main_issue = max(type_count, key=type_count.get) if type_count else ""
-                problematic_facilities.append({
-                    "facilityId":  fid,
-                    "name":        f.get("type", "حاوية"),
-                    "address":     f.get("address", ""),
-                    "reportCount": data["count"],
-                    "mainIssue":   main_issue,
-                })
-        except:
-            pass
- 
+                problematic_facilities.append({"facilityId": fid, "name": f.get("type","حاوية"), "address": f.get("address",""), "reportCount": data["count"], "mainIssue": main_issue})
+        except: pass
+
     reports = {
         "pendingTaskReports":     len(task_reports),
         "pendingFacilityReports": len(container_reports),
         "problematicTasks":       problematic_tasks,
         "problematicFacilities":  problematic_facilities,
     }
- 
-    context["reports"] = reports
-    context["summary"]["pendingReports"] = len(task_reports) + len(container_reports)
-    context["analytics"] = {
-        "problematicTasks":      problematic_tasks,
-        "problematicFacilities": problematic_facilities,
-    }
- 
-    print(f"   🚨 Task reports: {len(task_reports)} | Facility reports: {len(container_reports)}")
-    return reports
- 
- 
-# ============================================================
-# Step 3: تحليل بيانات المستخدمين
-# ============================================================
-def get_admin_user_insights(context: dict) -> dict:
-    total_users  = 0
-    level_counts = {"beginner": 0, "medium": 0, "hard": 0}
-    total_points = 0
-    total_carbon = 0.0
- 
+
+    summary = state.get("summary", {})
+    summary["pendingReports"] = len(task_reports) + len(container_reports)
+    analytics = state.get("analytics", {})
+    analytics.update({"problematicTasks": problematic_tasks, "problematicFacilities": problematic_facilities})
+
+    return {"reports": reports, "summary": summary, "analytics": analytics}
+
+
+# ══════════════════════════════════════════
+# Node 3 — User insights
+# ══════════════════════════════════════════
+def node_user_insights(state: AdminAgentState) -> dict:
+    print("👥 Node 3: User insights...")
+    total_users, total_points, total_carbon = 0, 0, 0.0
+    level_counts = {"seedling":0,"sprout":0,"tree":0,"guardian":0,"champion":0}
+
     try:
         for doc in db.collection("users").stream():
             d = doc.to_dict()
-            if d.get("role") == "admin":
-                continue
+            if d.get("role") == "admin": continue
             total_users  += 1
-            level = d.get("userLevelId", "beginner")
-            if level in level_counts:
-                level_counts[level] += 1
-            total_points += d.get("points", 0)
-            total_carbon += d.get("totalCarbonSaved", 0)
+            level = d.get("userLevelId","seedling")
+            if level in level_counts: level_counts[level] += 1
+            total_points += d.get("points",0)
+            total_carbon += d.get("totalCarbonSaved",0)
     except Exception as e:
-        print(f"⚠️ user insights error: {e}")
- 
+        print(f"⚠️ user insights: {e}")
+
     insights = {
         "totalUsers":  total_users,
         "levelCounts": level_counts,
-        "avgPoints":   round(total_points / max(total_users, 1), 1),
+        "avgPoints":   round(total_points / max(total_users,1), 1),
         "totalCarbon": round(total_carbon, 2),
     }
- 
-    context["user_insights"] = insights
-    context["summary"]["totalUsers"] = total_users
-    print(f"   👥 Users: {total_users} | Carbon: {total_carbon:.2f} kg")
-    return insights
- 
- 
-# ============================================================
-# Step 4: الأنماط الموسمية (السنة الماضية)
-# ============================================================
-def get_seasonal_patterns(context: dict) -> dict:
-    from datetime import timedelta
- 
-    now          = datetime.now()
-    one_year_ago = now - timedelta(days=365)
-    monthly_category_stats = {}
- 
+    summary = state.get("summary", {})
+    summary["totalUsers"] = total_users
+    return {"user_insights": insights, "summary": summary}
+
+
+# ══════════════════════════════════════════
+# Node 4 — Seasonal patterns
+# ══════════════════════════════════════════
+def node_seasonal_patterns(state: AdminAgentState) -> dict:
+    print("📅 Node 4: Seasonal patterns...")
+    now, one_year_ago = datetime.now(), datetime.now() - timedelta(days=365)
+    monthly_stats = {}
+
     try:
-        for doc in db.collection("userTasks").where("status", "==", "completed").stream():
-            d            = doc.to_dict()
+        for doc in db.collection("userTasks").where("status","==","completed").stream():
+            d = doc.to_dict()
             completed_at = d.get("completedAt")
-            category     = d.get("category", "") or d.get("taskCategory", "")
- 
-            if not completed_at or not category:
-                continue
- 
+            category     = d.get("category","") or d.get("taskCategory","")
+            if not completed_at or not category: continue
             try:
-                if hasattr(completed_at, "todate"):
-                    dt = completed_at.todate()
-                elif hasattr(completed_at, "_seconds"):
-                    dt = datetime.fromtimestamp(completed_at._seconds)
-                elif hasattr(completed_at, "timestamp"):
-                    dt = datetime.fromtimestamp(completed_at.timestamp())
-                else:
-                    continue
-            except:
-                continue
- 
-            if dt < one_year_ago:
-                continue
- 
-            month_key = dt.strftime("%Y-%m")
-            if month_key not in monthly_category_stats:
-                monthly_category_stats[month_key] = {}
-            monthly_category_stats[month_key][category] = \
-                monthly_category_stats[month_key].get(category, 0) + 1
- 
+                dt = (
+                    datetime.fromtimestamp(completed_at._seconds)  if hasattr(completed_at, "_seconds")
+                    else datetime.fromtimestamp(completed_at.timestamp()) if hasattr(completed_at, "timestamp")
+                    else None
+                )
+                if not dt or dt < one_year_ago: continue
+                month_key = dt.strftime("%Y-%m")
+                monthly_stats.setdefault(month_key, {})
+                monthly_stats[month_key][category] = monthly_stats[month_key].get(category,0) + 1
+            except: pass
     except Exception as e:
-        print(f"⚠️ seasonal patterns error: {e}")
- 
-    last_year_same_month = f"{now.year - 1}-{now.month:02d}"
-    current_month_key    = now.strftime("%Y-%m")
- 
-    last_year_data = monthly_category_stats.get(last_year_same_month, {})
-    current_data   = monthly_category_stats.get(current_month_key, {})
- 
-    top_category_last_year = ""
-    top_category_count     = 0
-    if last_year_data:
-        top_category_last_year = max(last_year_data, key=last_year_data.get)
-        top_category_count     = last_year_data[top_category_last_year]
- 
+        print(f"⚠️ seasonal: {e}")
+
+    last_year_key  = f"{now.year-1}-{now.month:02d}"
+    current_key    = now.strftime("%Y-%m")
+    last_year_data = monthly_stats.get(last_year_key, {})
+    current_data   = monthly_stats.get(current_key, {})
+
+    top_category      = max(last_year_data, key=last_year_data.get) if last_year_data else ""
+    top_category_cnt  = last_year_data.get(top_category, 0)
+
     trends = []
-    all_categories = set(list(last_year_data.keys()) + list(current_data.keys()))
-    for category in all_categories:
-        last_year_count = last_year_data.get(category, 0)
-        current_count   = current_data.get(category, 0)
- 
-        if last_year_count == 0:
-            continue
- 
-        change_pct = ((current_count - last_year_count) / last_year_count) * 100
- 
-        if change_pct > 20:
-            trends.append({
-                "category": category,
-                "trend":    "ارتفاع",
-                "change":   f"+{change_pct:.0f}%",
-                "message":  f"نشاط '{category}' ارتفع {change_pct:.0f}% مقارنة بنفس الشهر العام الماضي",
-                "action":   "add"
-            })
-        elif change_pct < -20:
-            trends.append({
-                "category": category,
-                "trend":    "انخفاض",
-                "change":   f"{change_pct:.0f}%",
-                "message":  f"نشاط '{category}' انخفض {abs(change_pct):.0f}% مقارنة العام الماضي — يحتاج مهام تنشيطية",
-                "action":   "add_or_modify"
-            })
- 
-    monthly_totals = {
-        month: sum(cats.values())
-        for month, cats in monthly_category_stats.items()
-    }
-    peak_months = sorted(monthly_totals.items(), key=lambda x: x[1], reverse=True)[:3]
- 
+    for cat in set(list(last_year_data) + list(current_data)):
+        lyc = last_year_data.get(cat, 0)
+        cc  = current_data.get(cat, 0)
+        if lyc == 0: continue
+        pct = ((cc - lyc) / lyc) * 100
+        if pct > 20:
+            trends.append({"category": cat, "trend": "ارتفاع", "change": f"+{pct:.0f}%", "message": f"نشاط '{cat}' ارتفع {pct:.0f}%", "action": "add"})
+        elif pct < -20:
+            trends.append({"category": cat, "trend": "انخفاض", "change": f"{pct:.0f}%", "message": f"نشاط '{cat}' انخفض {abs(pct):.0f}%", "action": "add_or_modify"})
+
+    monthly_totals = {m: sum(cats.values()) for m, cats in monthly_stats.items()}
+    peak_months    = [m[0] for m in sorted(monthly_totals.items(), key=lambda x:x[1], reverse=True)[:3]]
+
     patterns = {
-        "lastYearSameMonth":      last_year_same_month,
-        "topCategoryLastYear":    top_category_last_year,
-        "topCategoryCount":       top_category_count,
+        "lastYearSameMonth":      last_year_key,
+        "topCategoryLastYear":    top_category,
+        "topCategoryCount":       top_category_cnt,
         "currentMonthVsLastYear": trends,
-        "peakMonths":             [m[0] for m in peak_months],
-        "suggestion": (
-            f"في {last_year_same_month}، كان '{top_category_last_year}' الأكثر نشاطاً "
-            f"({top_category_count} إنجاز) — اقترح مهام مشابهة هذا الشهر"
-            if top_category_last_year else ""
-        )
+        "peakMonths":             peak_months,
+        "suggestion": f"في {last_year_key}، كان '{top_category}' الأكثر نشاطاً ({top_category_cnt} إنجاز)" if top_category else "",
     }
- 
-    context["seasonal_patterns"] = patterns
-    print(f"   📅 Top last year ({last_year_same_month}): {top_category_last_year} ({top_category_count})")
-    print(f"   📈 Trends: {len(trends)} | Peak months: {[m[0] for m in peak_months]}")
-    return patterns
- 
- 
-# ============================================================
-# Step 5: الموسم الحالي
-# ============================================================
-def get_season_context() -> dict:
-    month = datetime.now().month
-    if month in [3, 4, 5]:   return {"season": "الربيع",  "emoji": "🌸"}
-    if month in [6, 7, 8]:   return {"season": "الصيف",   "emoji": "☀️"}
-    if month in [9, 10, 11]: return {"season": "الخريف",  "emoji": "🍂"}
-    return {"season": "الشتاء", "emoji": "❄️"}
- 
- 
-# ============================================================
-# Step 6: بناء الـ Prompt
-# ============================================================
-def build_admin_prompt(context: dict, season: dict) -> str:
-    analytics = context.get("task_analytics", {})
-    reports   = context.get("reports", {})
-    insights  = context.get("user_insights", {})
-    seasonal  = context.get("seasonal_patterns", {})
- 
-    successful_text = "\n".join([
-        f"   • [{t['id']}] {t['title']} — أُنجزت {t['count']} مرة\n"
-        f"     الوصف الحالي: {t.get('description','')[:80]}"
-        for t in analytics.get("mostSuccessful", [])
-    ]) or "   لا توجد بيانات"
- 
-    ignored_text = "\n".join([
-        f"   • [{t['id']}] {t['title']} — تم تجاهلها {t['count']} مرة\n"
-        f"     الوصف الحالي: {t.get('description','')[:80]}"
-        for t in analytics.get("mostIgnored", [])
-    ]) or "   لا توجد بيانات"
- 
-    zero_text = "\n".join([
-        f"   • [{t['id']}] {t['title']}\n"
-        f"     الوصف الحالي: {t.get('description','')[:80]}"
-        for t in analytics.get("zeroTasks", [])
-    ]) or "   لا توجد"
- 
-    task_reports_text = "\n".join([
-        f"   • [{t['taskId']}] {t['title']}: {t['reportCount']} بلاغ\n"
-        f"     الأسباب: {', '.join(t['reasons'][:2])}\n"
-        f"     الوصف الحالي: {t.get('description','')[:80]}"
-        for t in reports.get("problematicTasks", [])
-    ]) or "   لا توجد بلاغات متكررة"
- 
-    facility_reports_text = "\n".join([
-        f"   • {f['name']} ({f['address']}): {f['reportCount']} بلاغ — {f['mainIssue']}"
-        for f in reports.get("problematicFacilities", [])
-    ]) or "   لا توجد بلاغات متكررة"
- 
-    trends_text = "\n".join([
-        f"   • {t['message']}"
-        for t in seasonal.get("currentMonthVsLastYear", [])
-    ]) or "   لا توجد أنماط واضحة بعد"
- 
-    top_last_year       = seasonal.get("topCategoryLastYear", "")
-    last_year_month     = seasonal.get("lastYearSameMonth", "")
-    peak_months         = ", ".join(seasonal.get("peakMonths", []))
-    seasonal_suggestion = seasonal.get("suggestion", "")
- 
-    return f"""أنت مستشار بيئي ذكي ومتخصص في تحسين تجربة المستخدم. بناءً على البيانات التالية، قدم 5 توصيات عملية للإدمن.
- 
-🌍 الموسم الحالي: {season['season']} {season['emoji']}
- 
+    return {"seasonal_patterns": patterns}
+
+
+# ══════════════════════════════════════════
+# Node 5 — Weather / Season
+# ══════════════════════════════════════════
+def node_get_season(state: AdminAgentState) -> dict:
+    print("🌤️ Node 5: Getting season/weather...")
+    api_key = os.environ.get("WEATHER_API_KEY", "")
+    month   = datetime.now().month
+
+    def month_season():
+        if month in [3,4,5]:   return {"season":"الربيع","emoji":"🌸"}
+        if month in [6,7,8]:   return {"season":"الصيف","emoji":"☀️"}
+        if month in [9,10,11]: return {"season":"الخريف","emoji":"🍂"}
+        return {"season":"الشتاء","emoji":"❄️"}
+
+    if not api_key:
+        return {"season": month_season()}
+
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat=24.7136&lon=46.6753&appid={api_key}"
+        with urllib.request.urlopen(urllib.request.Request(url), timeout=10) as resp:
+            w    = json.loads(resp.read().decode())
+            temp = round(w["main"]["temp"] - 273.15, 1)
+            desc = w["weather"][0]["description"]
+            hum  = w["main"]["humidity"]
+            if temp >= 35:   season, emoji = "الصيف الحار", "🌡️"
+            elif temp >= 25: season, emoji = "الصيف", "☀️"
+            elif temp >= 15: season, emoji = "الربيع", "🌸"
+            else:            season, emoji = "الشتاء", "❄️"
+            return {"season": {"season":season,"emoji":emoji,"temp":temp,"description":desc,"humidity":hum}}
+    except Exception as e:
+        print(f"⚠️ Weather API: {e}")
+        return {"season": month_season()}
+
+
+# ══════════════════════════════════════════
+# Node 6 — Build prompt
+# ══════════════════════════════════════════
+def admin_node_build_prompt(state: AdminAgentState) -> dict:
+    print("📝 Node 6: Building admin prompt...")
+    analytics = state["task_analytics"]
+    reports   = state["reports"]
+    insights  = state["user_insights"]
+    seasonal  = state["seasonal_patterns"]
+    season    = state["season"]
+
+    def task_lines(task_list, extra=""):
+        return "\n".join([
+            f"   • [{t['id']}] {t['title']} — {t.get('count',0)} مرة\n     الوصف: {t.get('description','')[:80]}"
+            for t in task_list
+        ]) or "   لا توجد"
+
+    successful_text     = task_lines(analytics.get("mostSuccessful",[]))
+    ignored_text        = task_lines(analytics.get("mostIgnored",[]))
+    zero_text           = "\n".join([f"   • [{t['id']}] {t['title']}\n     الوصف: {t.get('description','')[:80]}" for t in analytics.get("zeroTasks",[])]) or "   لا توجد"
+    task_reports_text   = "\n".join([f"   • [{t['taskId']}] {t['title']}: {t['reportCount']} بلاغ\n     الأسباب: {', '.join(t['reasons'][:2])}\n     الوصف: {t.get('description','')[:80]}" for t in reports.get("problematicTasks",[])]) or "   لا توجد"
+    facility_text       = "\n".join([f"   • {f['name']} ({f['address']}): {f['reportCount']} بلاغ — {f['mainIssue']}" for f in reports.get("problematicFacilities",[])]) or "   لا توجد"
+    trends_text         = "\n".join([f"   • {t['message']}" for t in seasonal.get("currentMonthVsLastYear",[])]) or "   لا توجد"
+
+    prompt = f"""أنت مستشار بيئي ذكي. بناءً على البيانات التالية، قدم 5 توصيات عملية للإدمن.
+
+🌍 الموسم: {season['season']} {season.get('emoji','')}
+
 📊 أداء المهام:
-- إجمالي المهام النشطة: {analytics.get('totalActiveTasks', 0)}
-- مهام بدون إنجازات: {analytics.get('zeroCompletionTasks', 0)}
- 
-✅ المهام الأكثر نجاحاً:
+- إجمالي النشطة: {analytics.get('totalActiveTasks',0)}
+- بدون إنجازات: {analytics.get('zeroCompletionTasks',0)}
+
+✅ الأكثر نجاحاً:
 {successful_text}
- 
-🚫 المهام الأكثر تجاهلاً (تحتاج تحسين صياغة):
+
+🚫 الأكثر تجاهلاً:
 {ignored_text}
- 
-⚪ مهام بدون إنجازات (تحتاج إعادة صياغة كاملة):
+
+⚪ بدون إنجازات:
 {zero_text}
- 
-🚨 البلاغات المعلقة:
-- بلاغات مهام: {reports.get('pendingTaskReports', 0)}
-- بلاغات حاويات: {reports.get('pendingFacilityReports', 0)}
- 
+
+🚨 بلاغات معلقة:
+- مهام: {reports.get('pendingTaskReports',0)}
+- حاويات: {reports.get('pendingFacilityReports',0)}
+
 مهام بلاغات متكررة:
 {task_reports_text}
- 
+
 حاويات بلاغات متكررة:
-{facility_reports_text}
- 
+{facility_text}
+
 👥 المستخدمون:
-- الإجمالي: {insights.get('totalUsers', 0)}
-- مبتدئ: {insights.get('levelCounts', {}).get('beginner', 0)}
-- متوسط: {insights.get('levelCounts', {}).get('medium', 0)}
-- متقدم: {insights.get('levelCounts', {}).get('hard', 0)}
-- متوسط النقاط: {insights.get('avgPoints', 0)}
-- كربون موفَّر: {insights.get('totalCarbon', 0)} كغ
- 
-📅 الأنماط الموسمية (مقارنة بـ {last_year_month}):
-- أكثر تصنيف نشاطاً العام الماضي في هذا الشهر: {top_last_year or 'لا توجد بيانات'}
-- {seasonal_suggestion}
-- أشهر الذروة العام الماضي: {peak_months or 'لا توجد بيانات'}
- 
-التغيرات مقارنة العام الماضي:
+- الإجمالي: {insights.get('totalUsers',0)}
+- متوسط النقاط: {insights.get('avgPoints',0)}
+- كربون موفَّر: {insights.get('totalCarbon',0)} كغ
+
+📅 مقارنة بـ {seasonal.get('lastYearSameMonth','')}:
+- الأكثر نشاطاً العام الماضي: {seasonal.get('topCategoryLastYear','لا توجد بيانات')}
+- {seasonal.get('suggestion','')}
+- أشهر الذروة: {', '.join(seasonal.get('peakMonths',[]))}
+
+التغيرات:
 {trends_text}
- 
-🎯 قواعد التوصيات (بالأولوية):
-1. مهام بدون إنجازات → اقترح إعادة صياغة وصفها (modify) مع كتابة وصف جديد محفز
-2. مهام كثيرة التجاهل → اقترح تحسين صياغتها (modify) مع وصف أكثر جاذبية
-3. مهام/حاويات بلاغات متكررة → اقترح مراجعتها (review_reports)
-4. تصنيف كان نشطاً العام الماضي → اقترح مهام مشابهة (add)
-5. تصنيف انخفض نشاطه → اقترح مهام تنشيطية (add أو modify)
-6. الموسم الحالي → اقترح مهام جديدة مناسبة (add)
- 
-✍️ قواعد كتابة improvedDescription (للتوصيات من نوع modify):
-- مختلف تماماً عن الوصف الأصلي
-- محفز وشخصي — يخاطب المستخدم بـ "أنت"
-- يذكر الفائدة البيئية الفعلية
-- قصير: 15-20 كلمة فقط
-- يستخدم لغة دافئة وإيجابية
-- مثال جيد: "أنت تصنع فرقاً! ضع بقايا طعامك في الحاوية وحوّلها لسماد يغذي الأرض 🌱"
-- مثال سيء: "قم بوضع بقايا الطعام في الحاوية المخصصة للتخلص منها"
- 
-✍️ قواعد كتابة userDescription (للتوصيات من نوع add):
-- هذا وصف المهمة الجديدة كما سيراه المستخدم في التطبيق مباشرة
-- يشرح بوضوح ما يجب فعله
-- محفز وشخصي — يخاطب المستخدم بـ "أنت"
-- يذكر الفائدة البيئية الفعلية للمهمة
-- قصير: 15-25 كلمة فقط
- 
-🔍 قواعد اختيار validationStrategy (للتوصيات من نوع add فقط):
-- "التحقق عبر معالجة الصور" → للمهام التي يمكن إثباتها بصورة
-- "التحقق عبر اجراء اختبار قصير" → للمهام المعرفية والتوعوية
- 
-أرجع JSON فقط بهذا الشكل:
+
+🎯 قواعد التوصيات:
+1. بدون إنجازات → modify (وصف أكثر تحفيزاً)
+2. كثيرة التجاهل → modify (وصف أكثر جاذبية)
+3. بلاغات متكررة → review_reports
+4. تصنيف كان نشطاً العام الماضي → add
+5. تصنيف انخفض → add أو modify
+
+✍️ improvedDescription (modify): 15-20 كلمة، "أنت" خطاب مباشر، محفز، يذكر الفائدة البيئية
+✍️ userDescription (add): 15-25 كلمة، وصف المهمة الجديدة للمستخدم مباشرة
+
+أرجع JSON فقط:
 {{
   "recommendations": [
     {{
       "type": "add | modify | review_reports",
-      "category": "اسم التصنيف",
+      "category": "التصنيف",
       "title": "عنوان التوصية",
-      "description": "شرح المشكلة وسببها للإدمن",
+      "description": "شرح للإدمن",
       "suggestion": "الإجراء المقترح",
-      "basedOn": "سبب التوصية مع البيانات الفعلية",
-      "taskId": "معرف المهمة إن وجد",
-      "improvedDescription": "وصف محسن جاهز للنشر في التطبيق (للتوصيات من نوع modify فقط)",
-      "userDescription": "وصف المهمة الجديدة جاهز لليوزر مباشرة (للتوصيات من نوع add فقط)",
-      "validationStrategy": "التحقق عبر معالجة الصور أو التحقق عبر اجراء اختبار قصير (للتوصيات من نوع add فقط)",
-      "facilityId": "معرف الحاوية إن وجد",
-      "facilityName": "اسم الحاوية إن وجد",
-      "facilityAddress": "عنوان الحاوية إن وجد",
+      "basedOn": "سبب مع بيانات",
+      "taskId": "إن وجد",
+      "improvedDescription": "للـ modify فقط",
+      "userDescription": "للـ add فقط",
+      "validationStrategy": "للـ add فقط",
+      "facilityId": "إن وجد",
+      "facilityName": "إن وجد",
+      "facilityAddress": "إن وجد",
       "reportCount": 0
     }}
   ]
 }}"""
- 
- 
-# ============================================================
-# دالة مساعدة لتحديد validationStrategy تلقائياً
-# ============================================================
-def pick_validation_strategy(title: str, description: str = "") -> str:
-    text = (title + " " + description).lower()
- 
-    visual_keywords = [
-        "تدوير", "فرز", "حاوية", "نفايات", "قمامة", "مخلفات",
-        "مشي", "دراجة", "باص", "مترو", "نقل", "سيارة",
-        "زراعة", "نبات", "شجرة", "غرس",
-        "طعام", "سماد", "بقايا",
-        "كهرباء", "ماء", "صنبور", "إضاءة",
-        "تسوق", "أكياس", "بلاستيك", "ورق", "زجاج",
-        "recycl", "walk", "bus", "bike", "plant"
-    ]
- 
-    knowledge_keywords = [
-        "اقرأ", "تعلم", "اطلع", "توعية", "معلومات", "مقال",
-        "ارشادات", "نصائح", "وعي", "ثقافة", "معرفة",
-        "شاهد", "استمع", "بودكاست", "فيديو تعليمي",
-        "read", "learn", "awareness", "quiz", "article"
-    ]
- 
-    visual_score    = sum(1 for kw in visual_keywords    if kw in text)
-    knowledge_score = sum(1 for kw in knowledge_keywords if kw in text)
- 
-    if knowledge_score > visual_score:
-        return "التحقق عبر اجراء اختبار قصير"
-    return "التحقق عبر معالجة الصور"
- 
- 
-# ============================================================
-# Fallback توصيات
-# ============================================================
-def build_fallback_recommendations(context: dict, season: dict) -> list:
+    return {"prompt": prompt}
+
+
+# ══════════════════════════════════════════
+# Node 7 — Call LLM
+# ══════════════════════════════════════════
+def admin_node_call_llm(state: AdminAgentState) -> dict:
+    print("🤖 Node 7: Calling Gemini...")
+    response = _call_gemini(state["prompt"])
+    return {"llm_response": response}
+
+
+# ══════════════════════════════════════════
+# Node 8 — Parse recommendations
+# ══════════════════════════════════════════
+def node_parse_recommendations(state: AdminAgentState) -> dict:
+    print("🔍 Node 8: Parsing recommendations...")
+    response = state.get("llm_response")
+    if response:
+        parsed = _extract_json(response)
+        if parsed:
+            recs = parsed if isinstance(parsed, list) else parsed.get("recommendations", [])
+            if recs:
+                print(f"   ✅ Got {len(recs)} recommendations")
+                return {"recommendations": recs}
+    print("   ⚠️ Parse failed → fallback")
+    return {"recommendations": []}
+
+
+# ══════════════════════════════════════════
+# Node 9 — Fallback recommendations
+# ══════════════════════════════════════════
+def node_fallback_recommendations(state: AdminAgentState) -> dict:
+    print("⚠️ Node 9: Fallback recommendations...")
+    analytics = state["task_analytics"]
+    reports   = state["reports"]
+    seasonal  = state["seasonal_patterns"]
+    season    = state["season"]
     recs      = []
-    analytics = context.get("task_analytics", {})
-    reports   = context.get("reports", {})
-    seasonal  = context.get("seasonal_patterns", {})
- 
-    for task in analytics.get("zeroTasks", [])[:2]:
-        recs.append({
-            "type":                "modify",
-            "category":            task.get("category", "غير محدد"),
-            "title":               f"تحسين صياغة: {task['title']}",
-            "description":         f"مهمة '{task['title']}' لم يكملها أحد — الوصف الحالي غير محفز",
-            "suggestion":          "أعد صياغة الوصف ليكون أكثر جاذبية وتحفيزاً",
-            "basedOn":             "صفر إنجازات — الوصف الحالي لا يحفز المستخدم",
-            "taskId":              task.get("id", ""),
-            "improvedDescription": f"🌱 أنت تستطيع إحداث فرق! {task['title']} خطوة بسيطة نحو بيئة أنظف ✨",
-        })
- 
-    for task in analytics.get("mostIgnored", [])[:2]:
-        recs.append({
-            "type":                "modify",
-            "category":            task.get("category", "غير محدد"),
-            "title":               f"تحسين صياغة: {task['title']}",
-            "description":         f"مهمة '{task['title']}' تم تجاهلها {task['count']} مرة — الوصف لا يجذب المستخدم",
-            "suggestion":          "أعد صياغة الوصف بأسلوب أكثر تحفيزاً وشخصية",
-            "basedOn":             f"تجاهل {task['count']} مرة — يحتاج وصفاً أكثر جاذبية",
-            "taskId":              task.get("id", ""),
-            "improvedDescription": f"💚 {task['title']} — خطوة صغيرة منك، أثر كبير على بيئتك. جربها الآن! 🌍",
-        })
- 
-    for f in reports.get("problematicFacilities", [])[:2]:
-        recs.append({
-            "type":            "review_reports",
-            "category":        "إعادة التدوير",
-            "title":           f"مراجعة حاوية: {f['name']}",
-            "description":     f"{f['reportCount']} بلاغ معلق",
-            "suggestion":      f"معاينة الحاوية وحل مشكلة: {f['mainIssue']}",
-            "basedOn":         "بلاغات متكررة",
-            "facilityId":      f.get("facilityId", ""),
-            "facilityName":    f.get("name", ""),
-            "facilityAddress": f.get("address", ""),
-            "reportCount":     f.get("reportCount", 0),
-        })
- 
-    top_category = seasonal.get("topCategoryLastYear", "")
-    if top_category:
-        task_title       = f"مهام {top_category} الموسمية"
-        task_description = f"مهام بيئية في تصنيف {top_category}"
-        recs.append({
-            "type":               "add",
-            "category":           top_category,
-            "title":              task_title,
-            "description":        seasonal.get("suggestion", ""),
-            "suggestion":         f"أضف مهام في تصنيف '{top_category}'",
-            "basedOn":            f"نمط موسمي من {seasonal.get('lastYearSameMonth', '')}",
-            "userDescription":    f"🌱 أنت تستطيع المساهمة في بيئة أنظف! جرب مهمة {top_category} اليوم ✨",
-            "validationStrategy": pick_validation_strategy(task_title, task_description),
-        })
+
+    for task in analytics.get("zeroTasks",[])[:2]:
+        recs.append({"type":"modify","category":task.get("category","غير محدد"),"title":f"تحسين: {task['title']}","description":f"'{task['title']}' بدون إنجازات","suggestion":"أعد صياغة الوصف","basedOn":"صفر إنجازات","taskId":task.get("id",""),"improvedDescription":f"🌱 أنت تستطيع إحداث فرق! {task['title']} خطوة بسيطة نحو بيئة أنظف ✨"})
+    for task in analytics.get("mostIgnored",[])[:2]:
+        recs.append({"type":"modify","category":task.get("category","غير محدد"),"title":f"تحسين: {task['title']}","description":f"'{task['title']}' تجاهل {task['count']} مرة","suggestion":"أعد صياغة الوصف","basedOn":f"تجاهل {task['count']} مرة","taskId":task.get("id",""),"improvedDescription":f"💚 {task['title']} — خطوة صغيرة منك، أثر كبير 🌍"})
+    for f in reports.get("problematicFacilities",[])[:2]:
+        recs.append({"type":"review_reports","category":"إعادة التدوير","title":f"مراجعة: {f['name']}","description":f"{f['reportCount']} بلاغ","suggestion":f"معاينة الحاوية: {f['mainIssue']}","basedOn":"بلاغات متكررة","facilityId":f.get("facilityId",""),"facilityName":f.get("name",""),"facilityAddress":f.get("address",""),"reportCount":f.get("reportCount",0)})
+
+    top_cat = seasonal.get("topCategoryLastYear","")
+    if top_cat:
+        title = f"مهام {top_cat} الموسمية"
+        recs.append({"type":"add","category":top_cat,"title":title,"description":seasonal.get("suggestion",""),"suggestion":f"أضف مهام في '{top_cat}'","basedOn":f"نمط من {seasonal.get('lastYearSameMonth','')}","userDescription":f"🌱 أنت تستطيع المساهمة! جرب مهمة {top_cat} اليوم ✨","validationStrategy":_pick_validation_strategy(title)})
     else:
-        task_title       = f"مهمة موسم {season['season']}"
-        task_description = f"مهمة بيئية مناسبة لفصل {season['season']}"
-        recs.append({
-            "type":               "add",
-            "category":           "إعادة التدوير",
-            "title":              task_title,
-            "description":        task_description,
-            "suggestion":         "أضف مهمة تدوير مناسبة للموسم",
-            "basedOn":            f"فصل {season['season']}",
-            "userDescription":    f"🌿 استغل أجواء {season['season']} الجميلة وابدأ بخطوة بيئية بسيطة ✨",
-            "validationStrategy": pick_validation_strategy(task_title, task_description),
+        title = f"مهمة موسم {season['season']}"
+        recs.append({"type":"add","category":"إعادة التدوير","title":title,"description":title,"suggestion":"أضف مهمة للموسم","basedOn":f"فصل {season['season']}","userDescription":f"🌿 استغل أجواء {season['season']} وابدأ بخطوة بيئية ✨","validationStrategy":_pick_validation_strategy(title)})
+
+    return {"recommendations": recs}
+
+
+# ══════════════════════════════════════════
+# Node 10 — Save to Firestore
+# ══════════════════════════════════════════
+def node_save_to_firestore(state: AdminAgentState) -> dict:
+    print("💾 Node 10: Saving to Firestore...")
+    try:
+        db.collection("adminRecommendations").document(state["current_month"]).set({
+            "month":           state["current_month"],
+            "season":          state["season"],
+            "recommendations": state["recommendations"][:12],
+            "summary":         state.get("summary", {}),
+            "analytics":       state.get("analytics", {}),
+            "generatedAt":     firestore.SERVER_TIMESTAMP,
         })
- 
-    return recs
- 
- 
-# ============================================================
-# HTTP Entry Point — أيجنت الإدمن
-# ============================================================
+        print("   ✅ Saved")
+    except Exception as e:
+        print(f"   ⚠️ Save failed: {e}")
+
+    # Check auto mode
+    auto_mode = False
+    try:
+        doc = db.collection("users").document(state["admin_id"]).get()
+        auto_mode = doc.to_dict().get("autoAgentMode", False) if doc.exists else False
+    except Exception as e:
+        print(f"   ⚠️ autoMode check: {e}")
+
+    return {"auto_mode": auto_mode}
+
+
+# ══════════════════════════════════════════
+# Node 11 — Apply recommendations (auto)
+# ══════════════════════════════════════════
+def node_apply_auto(state: AdminAgentState) -> dict:
+    if not state.get("auto_mode"):
+        print("   ⏭️ Node 11: Auto mode OFF — skipping")
+        return {"auto_results": {"applied": 0, "skipped": 0}}
+
+    print("🤖 Node 11: Auto-applying recommendations...")
+    now           = datetime.now()
+    next_month_dt = datetime(now.year, now.month+1, 1) if now.month < 12 else datetime(now.year+1,1,1)
+    next_month    = next_month_dt.strftime("%Y-%m")
+    applied, skipped = 0, 0
+
+    for rec in state["recommendations"][:12]:
+        rec_type = rec.get("type","")
+        try:
+            if rec_type == "add":
+                title = rec.get("title","").strip()
+                if not title: skipped += 1; continue
+
+                existing = list(db.collection("tasks").where("title","==",title).limit(1).get())
+                if existing: skipped += 1; continue
+
+                validation = rec.get("validationStrategy") or _pick_validation_strategy(title, rec.get("userDescription",""))
+                db.collection("tasks").add({
+                    "title":              title,
+                    "title_normalized":   title.strip().lower(),
+                    "description":        rec.get("userDescription") or rec.get("description",""),
+                    "category":           rec.get("category",""),
+                    "validationStrategy": validation,
+                    "points":             rec.get("points",10),
+                    "status":             "active",
+                    "visible_from":       next_month,
+                    "calcMode":           "perItem",
+                    "autoGenerated":      True,
+                    "generatedAt":        firestore.SERVER_TIMESTAMP,
+                })
+                applied += 1
+
+            elif rec_type == "modify":
+                task_id  = rec.get("taskId","").strip()
+                improved = rec.get("improvedDescription","").strip()
+                if not task_id or not improved: skipped += 1; continue
+
+                doc = db.collection("tasks").document(task_id).get()
+                if not doc.exists: skipped += 1; continue
+
+                db.collection("tasks").document(task_id).update({
+                    "description":    improved,
+                    "autoModified":   True,
+                    "lastModifiedAt": firestore.SERVER_TIMESTAMP,
+                })
+                applied += 1
+
+            elif rec_type in ["review_reports","delete"]:
+                skipped += 1
+            else:
+                skipped += 1
+        except Exception as e:
+            print(f"   ❌ Auto-apply error: {e}")
+            skipped += 1
+
+    print(f"   ✅ Applied: {applied} | Skipped: {skipped}")
+    return {"auto_results": {"applied": applied, "skipped": skipped}}
+
+
+# ══════════════════════════════════════════
+# Node 12 — Update carbon target
+# ══════════════════════════════════════════
+def node_update_carbon_target(state: AdminAgentState) -> dict:
+    if not state.get("auto_mode"):
+        print("   ⏭️ Node 12: Auto mode OFF — skipping carbon target")
+        return {"carbon_target_result": {"updated": False}}
+
+    print("🎯 Node 12: Updating carbon target...")
+    try:
+        insights      = state.get("user_insights", {})
+        seasonal      = state.get("seasonal_patterns", {})
+        total_users   = max(insights.get("totalUsers",1), 1)
+        now           = datetime.now()
+        current_month = now.strftime("%Y-%m")
+        month_start   = datetime(now.year, now.month, 1)
+        month_end     = datetime(now.year, now.month+1, 1) if now.month < 12 else datetime(now.year+1,1,1)
+
+        monthly_carbon = 0.0
+        try:
+            from google.cloud.firestore_v1 import FieldFilter
+            for doc in (db.collection("submissions")
+                        .where(filter=FieldFilter("status","==","approved"))
+                        .where(filter=FieldFilter("createdAt",">=",month_start))
+                        .where(filter=FieldFilter("createdAt","<",month_end)).stream()):
+                monthly_carbon += doc.to_dict().get("carbonSaved",0) or 0
+        except:
+            monthly_carbon = insights.get("totalCarbon",0.0)
+
+        monthly_carbon = round(monthly_carbon, 2)
+        avg_carbon     = round(monthly_carbon / total_users, 2)
+
+        settings_doc   = db.collection("appSettings").document("carbonTarget").get()
+        current_target = float(settings_doc.to_dict().get("target",50.0)) if settings_doc.exists else 50.0
+
+        performance_ratio = avg_carbon / current_target if current_target > 0 else 0
+        new_target, direction, reason = current_target, "unchanged", ""
+
+        if performance_ratio >= 0.8:
+            new_target = round(current_target * 1.20, 1)
+            reason     = f"متوسط {avg_carbon} كجم ({round(performance_ratio*100)}% من الهدف) → رفع 20%"
+            direction  = "up"
+        elif performance_ratio < 0.4:
+            new_target = round(current_target * 0.85, 1)
+            reason     = f"متوسط {avg_carbon} كجم ({round(performance_ratio*100)}% من الهدف) → خفض 15%"
+            direction  = "down"
+        else:
+            reason    = f"أداء مقبول ({round(performance_ratio*100)}%) — الهدف يبقى {current_target}"
+            direction = "unchanged"
+
+        season_name = state["season"].get("season","")
+        if season_name == "الصيف" and direction == "unchanged":
+            new_target = round(current_target * 0.92, 1); reason += " | صيف → خفض 8%"; direction="down"
+        elif season_name == "الربيع" and direction == "unchanged":
+            new_target = round(current_target * 1.05, 1); reason += " | ربيع → رفع 5%"; direction="up"
+
+        last_year_avg  = 0.0
+        last_year_month = seasonal.get("lastYearSameMonth","")
+        try:
+            doc = db.collection("appSettings").document(f"carbonTarget_{last_year_month}").get()
+            if doc.exists: last_year_avg = float(doc.to_dict().get("avgCarbon",0.0))
+        except: pass
+
+        if last_year_avg > 0:
+            pct = ((avg_carbon - last_year_avg) / last_year_avg) * 100
+            if pct > 30:
+                bonus = round(current_target * 0.10, 1); new_target = round(new_target+bonus,1); reason += f" | أفضل {round(pct)}% → +{bonus}"
+            elif pct < -30:
+                penalty = round(current_target * 0.08, 1); new_target = round(new_target-penalty,1); reason += f" | أضعف {round(abs(pct))}% → -{penalty}"
+
+        new_target = max(5.0, min(new_target, 500.0))
+
+        db.collection("appSettings").document("carbonTarget").set({
+            "target": new_target, "prevTarget": current_target,
+            "avgCarbon": avg_carbon, "monthlyCarbon": monthly_carbon,
+            "totalUsers": total_users, "performanceRatio": round(performance_ratio*100,1),
+            "reason": reason, "direction": direction,
+            "season": season_name, "month": current_month,
+            "lastYearMonth": last_year_month, "lastYearAvg": last_year_avg,
+            "updatedAt": firestore.SERVER_TIMESTAMP, "updatedBy": "autoAgent",
+        })
+        db.collection("appSettings").document(f"carbonTarget_{current_month}").set({
+            "target": new_target, "avgCarbon": avg_carbon,
+            "monthlyCarbon": monthly_carbon, "month": current_month,
+            "season": season_name, "savedAt": firestore.SERVER_TIMESTAMP,
+        })
+
+        print(f"   ✅ Carbon target: {current_target} → {new_target}")
+        return {"carbon_target_result": {"updated":True,"prevTarget":current_target,"newTarget":new_target,"avgCarbon":avg_carbon,"direction":direction,"reason":reason}}
+
+    except Exception as e:
+        print(f"   ❌ Carbon target error: {e}")
+        return {"carbon_target_result": {"updated":False,"error":str(e)}}
+
+
+# ══════════════════════════════════════════
+# Conditional edges
+# ══════════════════════════════════════════
+def after_parse_recs(state: AdminAgentState) -> str:
+    return "fallback" if not state.get("recommendations") else "save_to_firestore"
+
+
+# ══════════════════════════════════════════
+# Build graph
+# ══════════════════════════════════════════
+def build_admin_graph() -> Any:
+    g = StateGraph(AdminAgentState)
+
+    g.add_node("task_analytics",       node_task_analytics)
+    g.add_node("get_reports",          node_get_reports)
+    g.add_node("user_insights",        node_user_insights)
+    g.add_node("seasonal_patterns",    node_seasonal_patterns)
+    g.add_node("get_season",           node_get_season)
+    g.add_node("build_prompt",         admin_node_build_prompt)
+    g.add_node("call_llm",             admin_node_call_llm)
+    g.add_node("parse_recommendations",node_parse_recommendations)
+    g.add_node("fallback",             node_fallback_recommendations)
+    g.add_node("save_to_firestore",    node_save_to_firestore)
+    g.add_node("apply_auto",           node_apply_auto)
+    g.add_node("update_carbon_target", node_update_carbon_target)
+
+    g.set_entry_point("task_analytics")
+    g.add_edge("task_analytics",    "get_reports")
+    g.add_edge("get_reports",       "user_insights")
+    g.add_edge("user_insights",     "seasonal_patterns")
+    g.add_edge("seasonal_patterns", "get_season")
+    g.add_edge("get_season",        "build_prompt")
+    g.add_edge("build_prompt",      "call_llm")
+    g.add_edge("call_llm",          "parse_recommendations")
+
+    g.add_conditional_edges(
+        "parse_recommendations",
+        after_parse_recs,
+        {"fallback": "fallback", "save_to_firestore": "save_to_firestore"},
+    )
+    g.add_edge("fallback",              "save_to_firestore")
+    g.add_edge("save_to_firestore",     "apply_auto")
+    g.add_edge("apply_auto",            "update_carbon_target")
+    g.add_edge("update_carbon_target",  END)
+
+    return g.compile()
+
+
+_admin_graph = build_admin_graph()
+
+
 @functions_framework.http
 def admin_recommendations_agent(request):
     if request.method == "OPTIONS":
-        return ("", 204, {
-            "Access-Control-Allow-Origin":  "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization"
-        })
- 
+        return ("", 204, {"Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "POST, OPTIONS",
+                          "Access-Control-Allow-Headers": "Content-Type, Authorization"})
     if request.method != "POST":
-        return (json.dumps({"error": "POST only"}), 405,
-                {"Content-Type": "application/json"})
- 
+        return (json.dumps({"error": "POST only"}), 405, {"Content-Type": "application/json"})
+
     try:
-        data   = request.get_json(silent=True) or {}
-        result = run_admin_agent(data)
-        status = 200 if "error" not in result else 400
- 
-        return (
-            json.dumps(result, ensure_ascii=False, default=str),
-            status,
-            {
-                "Content-Type":                "application/json; charset=utf-8",
-                "Access-Control-Allow-Origin": "*"
-            }
-        )
+        data     = request.get_json(silent=True) or {}
+        admin_id = data.get("adminId")
+        if not admin_id:
+            return (json.dumps({"error": "adminId مطلوب"}), 400, {"Content-Type": "application/json"})
+
+        initial: AdminAgentState = {
+            "admin_id":      admin_id,
+            "current_month": datetime.now().strftime("%Y-%m"),
+            "task_analytics": {}, "reports": {}, "user_insights": {},
+            "seasonal_patterns": {}, "season": {},
+            "prompt": "", "llm_response": None,
+            "recommendations": [],
+            "auto_mode": False, "auto_results": {}, "carbon_target_result": {},
+            "summary": {}, "analytics": {}, "error": None,
+        }
+
+        final  = _admin_graph.invoke(initial)
+        result = {
+            "month":           final.get("current_month"),
+            "season":          final.get("season"),
+            "recommendations": final.get("recommendations",[])[:12],
+            "summary":         final.get("summary",{}),
+            "autoApplied":     final.get("auto_results",{}),
+            "carbonTarget":    final.get("carbon_target_result",{}),
+        }
+
+        return (json.dumps(result, ensure_ascii=False, default=str), 200,
+                {"Content-Type": "application/json; charset=utf-8",
+                 "Access-Control-Allow-Origin": "*"})
+
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return (
-            json.dumps({"error": str(e)}, ensure_ascii=False),
-            500,
-            {"Content-Type": "application/json"}
-        )
+        import traceback; traceback.print_exc()
+        return (json.dumps({"error": str(e)}, ensure_ascii=False), 500,
+                {"Content-Type": "application/json"})
+
+
+
+################################################################
+
+    firebase_admin.initialize_app()
+
+
+def build_ground_truth() -> dict:
+    """Ground Truth = المهام التي أكملها المستخدم فعلاً"""
+    ground_truth = {}
+    for doc in db.collection("userTasks").where("status","==","completed").stream():
+        d   = doc.to_dict()
+        uid = d.get("userId")
+        tid = d.get("taskId")
+        if uid and tid:
+            ground_truth.setdefault(uid, []).append(tid)
+    return ground_truth
+
+
+def compute_precision_recall(ground_truth: dict) -> dict:
+    precisions, recalls = [], []
+    for doc in db.collection("userTaskPreferences").stream():
+        uid       = doc.id
+        top_tasks = doc.to_dict().get("topTasks", [])
+        actual    = set(ground_truth.get(uid, []))
+        if not top_tasks or not actual:
+            continue
+        recommended = set(top_tasks[:5])
+        precisions.append(len(recommended & actual) / len(recommended))
+        recalls.append(len(recommended & actual) / len(actual))
+
+    avg_p = round(sum(precisions)/len(precisions), 2) if precisions else 0
+    avg_r = round(sum(recalls)/len(recalls),    2) if recalls    else 0
+    f1    = round(2*avg_p*avg_r/(avg_p+avg_r),  2) if (avg_p+avg_r) > 0 else 0
+    return {"precision": avg_p, "recall": avg_r, "f1_score": f1}
+
+
+def evaluate_agent_performance() -> dict:
+    # 1. Completion rate
+    n_completed = sum(1 for _ in db.collection("userTasks").where("status","==","completed").stream())
+    n_ignored   = sum(1 for _ in db.collection("userTasks").where("ignored","==",True).stream())
+    total       = n_completed + n_ignored
+    completion_rate = round(n_completed/total*100,1) if total > 0 else 0
+
+    # 2. Precision@1
+    precision_scores = []
+    for doc in db.collection("userTaskPreferences").stream():
+        uid       = doc.id
+        top_tasks = doc.to_dict().get("topTasks",[])
+        if not top_tasks: continue
+        completed = list(db.collection("userTasks")
+                         .where("userId","==",uid)
+                         .where("taskId","==",top_tasks[0])
+                         .where("status","==","completed")
+                         .limit(1).stream())
+        precision_scores.append(1 if completed else 0)
+    precision_at_1 = round(sum(precision_scores)/len(precision_scores),2) if precision_scores else round(completion_rate/100,2)
+
+    # 3. Wilson Score avg
+    scores = []
+    for doc in db.collection("userTaskPreferences").stream():
+        for tid, stats in doc.to_dict().get("taskPreferences",{}).items():
+            s = stats.get("score")
+            if s is not None: scores.append(s)
+    avg_wilson = round(sum(scores)/len(scores),2) if scores else 0
+
+    # 4. Diversity
+    categories, task_cache = {}, {}
+    for doc in db.collection("tasks").stream():
+        task_cache[doc.id] = doc.to_dict().get("category","unknown")
+    for doc in db.collection("userTasks").where("status","==","completed").stream():
+        cat = task_cache.get(doc.to_dict().get("taskId",""),"unknown")
+        categories[cat] = categories.get(cat,0) + 1
+
+    # 5. Carbon
+    total_carbon = sum(
+        (doc.to_dict().get("carbonSaved",0) or 0)
+        for doc in db.collection("submissions").where("status","==","approved").stream()
+    )
+
+    # 6. Carbon target ratio
+    target_doc     = db.collection("appSettings").document("carbonTarget").get()
+    target_data    = target_doc.to_dict() if target_doc.exists else {}
+    perf_ratio     = target_data.get("performanceRatio",0)
+    monthly_carbon = target_data.get("monthlyCarbon",0)
+
+    # 7. Ground truth P/R/F1
+    ground_truth = build_ground_truth()
+    pr_metrics   = compute_precision_recall(ground_truth)
+
+    return {
+        "task_completion_rate":  f"{completion_rate}%",
+        "precision_at_1":        precision_at_1,
+        "wilson_score_avg":      f"{avg_wilson}/10",
+        "category_diversity":    len(categories),
+        "category_breakdown":    categories,
+        "precision":             pr_metrics["precision"],
+        "recall":                pr_metrics["recall"],
+        "f1_score":              pr_metrics["f1_score"],
+        "total_carbon_saved_kg": round(total_carbon,2),
+        "monthly_carbon_kg":     round(monthly_carbon,2),
+        "carbon_target_ratio":   f"{perf_ratio}%",
+        "total_interactions":    total,
+        "n_completed":           n_completed,
+        "n_ignored":             n_ignored,
+        "ground_truth_users":    len(ground_truth),
+        "evaluated_at":          datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+
+
+@functions_framework.http
+def evaluate_agent(request):
+    try:
+        result = evaluate_agent_performance()
+        return (json.dumps(result, ensure_ascii=False), 200, {"Content-Type": "application/json"})
+    except Exception as e:
+        return (json.dumps({"error": str(e)}, ensure_ascii=False), 500, {"Content-Type": "application/json"})

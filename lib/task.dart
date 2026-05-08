@@ -460,6 +460,52 @@ class _taskPageState extends State<taskPage> {
     });
   }
 
+  Future<Map<String, String>?> _getScheduledInfoForDay(DateTime day) async {
+    if (_uid == null) return null;
+
+    final startOfDay = DateTime(day.year, day.month, day.day);
+    final endOfDay = startOfDay
+        .add(const Duration(days: 1))
+        .subtract(const Duration(seconds: 1));
+
+    try {
+      // ✅ نخلي scheduledTasks هو المصدر الأساسي
+      // ونستخدم query فيها userId عشان تناسب Firestore rules
+      final existing = await FirebaseFirestore.instance
+          .collection('scheduledTasks')
+          .where('userId', isEqualTo: _uid)
+          .where('status', isEqualTo: 'scheduled')
+          .where(
+            'scheduledFor',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+          )
+          .where(
+            'scheduledFor',
+            isLessThanOrEqualTo: Timestamp.fromDate(endOfDay),
+          )
+          .limit(1)
+          .get();
+
+      if (existing.docs.isNotEmpty) {
+        final doc = existing.docs.first;
+        final data = doc.data();
+
+        return {
+          'docId': doc.id,
+          'taskTitle': (data['taskTitle'] ?? 'مهمة مجدولة').toString(),
+        };
+      }
+
+      return null;
+    } on FirebaseException catch (e) {
+      debugPrint('❌ _getScheduledInfoForDay permission/query error: ${e.code}');
+      return null;
+    } catch (e) {
+      debugPrint('❌ _getScheduledInfoForDay error: $e');
+      return null;
+    }
+  }
+
   Stream<QuerySnapshot<Map<String, dynamic>>> _activeTasksStream() {
     final now = DateTime.now();
     final nowKey = "${now.year}-${now.month.toString().padLeft(2, '0')}";
@@ -615,6 +661,159 @@ class _taskPageState extends State<taskPage> {
         SnackBar(
           content: Text(
             'صار خطأ أثناء الجدولة: $e',
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  Future<void> _cancelScheduledTask({
+    required DateTime selectedDay,
+    required String scheduledDocId,
+  }) async {
+    if (_uid == null) return;
+
+    final startOfDay = DateTime(
+      selectedDay.year,
+      selectedDay.month,
+      selectedDay.day,
+    );
+
+    final utKey = '${_uid!}_${_yyyyMMdd(selectedDay)}';
+    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(utKey);
+
+    try {
+      // ✅ بدل الحذف، نغير حالة الجدولة إلى cancelled
+      await FirebaseFirestore.instance
+          .collection('scheduledTasks')
+          .doc(scheduledDocId)
+          .update({
+            'status': 'cancelled',
+            'cancelledAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      // ✅ نجيب مهمة عادية بديلة لهذا اليوم
+      final monthKey =
+          "${startOfDay.year}-${startOfDay.month.toString().padLeft(2, '0')}";
+
+      final tasksSnap = await FirebaseFirestore.instance
+          .collection('tasks')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      final validTasks = tasksSnap.docs.where((doc) {
+        final data = doc.data();
+
+        dynamic vf = data['visible_from'];
+        dynamic em = data['expiry_month'];
+        String? visibleFrom;
+        String? expiryMonth;
+
+        if (vf is Timestamp) {
+          final d = vf.toDate();
+          visibleFrom = "${d.year}-${d.month.toString().padLeft(2, '0')}";
+        } else if (vf is String) {
+          visibleFrom = vf;
+        }
+
+        if (em is Timestamp) {
+          final d = em.toDate();
+          expiryMonth = "${d.year}-${d.month.toString().padLeft(2, '0')}";
+        } else if (em is String) {
+          expiryMonth = em;
+        }
+
+        final isVisible =
+            (visibleFrom == null) || (visibleFrom.compareTo(monthKey) <= 0);
+        final notExpired =
+            (expiryMonth == null) || (expiryMonth.compareTo(monthKey) >= 0);
+
+        return isVisible && notExpired;
+      }).toList();
+
+      if (validTasks.isNotEmpty) {
+        final picked = validTasks[Random().nextInt(validTasks.length)];
+        final pickedData = picked.data();
+
+        final endOfDay = startOfDay
+            .add(const Duration(days: 1))
+            .subtract(const Duration(seconds: 1));
+
+        // ✅ بدل حذف userTasks، نحدثها ونخليها مهمة عادية
+        await utRef.set({
+          'userId': _uid,
+          'taskId': picked.id,
+          'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
+          'taskDescription': pickedData['description'] ?? '',
+          'taskPoints': pickedData['points'] ?? 0,
+          'taskValidation':
+              pickedData['validationStrategy'] ??
+              pickedData['validation'] ??
+              pickedData['taskValidation'] ??
+              'غير محددة',
+
+          'selectedAt': Timestamp.fromDate(startOfDay),
+          'windowStart': Timestamp.fromDate(startOfDay),
+          'windowEnd': Timestamp.fromDate(endOfDay),
+
+          'status': 'pending',
+          'completedAt': null,
+
+          // ✅ أهم شيء: صارت مو مجدولة
+          'isScheduled': false,
+          'scheduledDocId': null,
+
+          'ignored': false,
+          'ignoredAt': null,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: false));
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _scheduledDays.remove(_dateOnly(selectedDay));
+        _scheduleMode = false;
+      });
+
+      _attachUserTaskStreamFor(_dayStart(selectedDay));
+      await _loadScheduledDaysForMonth(_focusedDay);
+
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(
+            'تم إلغاء الجدولة',
+            style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w800),
+          ),
+          content: Text(
+            'تم إلغاء المهمة المجدولة لهذا اليوم.',
+            style: GoogleFonts.ibmPlexSansArabic(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'تم',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'حدث خطأ أثناء إلغاء الجدولة: $e',
             style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
           backgroundColor: Colors.redAccent,
@@ -1974,8 +2173,21 @@ class _taskPageState extends State<taskPage> {
                         // 🟢 زر الجدولة (ينتقل لليسار)
                         InkWell(
                           borderRadius: BorderRadius.circular(999),
-                          onTap: () =>
-                              setState(() => _scheduleMode = !_scheduleMode),
+                          onTap: () {
+                            setState(() {
+                              _scheduleMode = !_scheduleMode;
+
+                              // إذا دخلنا وضع الجدولة، نفك تحديد اليوم الحالي
+                              // عشان حتى اليوم اللي كان محدد قبل مثل 9 يقدر ينضغط
+                              if (_scheduleMode) {
+                                _selectedDay = null;
+                              } else {
+                                _selectedDay = _dayStart(DateTime.now());
+                                _focusedDay = _selectedDay!;
+                                _attachUserTaskStreamFor(_selectedDay!);
+                              }
+                            });
+                          },
 
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -2392,11 +2604,12 @@ class _taskPageState extends State<taskPage> {
 
               final today = _dayStart(DateTime.now());
               final d = _dayStart(day);
-
-              // بداية الشهر القادم = “الشهر الجاي ما انفتح”
               final nextMonthStart = DateTime(today.year, today.month + 1, 1);
 
-              // وضع الجدولة: فقط الأيام القادمة داخل الشهر الحالي
+              // ✅ اسمحي بالضغط على اليوم إذا كان عليه جدولة، حتى لو كان اليوم الحالي
+              if (_isScheduledDay(d)) return true;
+
+              // ✅ غير كذا، الجدولة فقط للأيام القادمة داخل الشهر الحالي
               return d.isAfter(today) && d.isBefore(nextMonthStart);
             },
 
@@ -2437,118 +2650,218 @@ class _taskPageState extends State<taskPage> {
               final sel = _dayStart(selected);
               final today = _dayStart(DateTime.now());
 
-              // 2) لو وضع الجدولة شغال واختار يوم مستقبلي
-              if (_scheduleMode && sel.isAfter(today)) {
-                // ✅ 1) نفحص هل فيه جدولة مسبقاً لهذا اليوم
-                final startOfDay = DateTime(sel.year, sel.month, sel.day);
-                final endOfDay = startOfDay
-                    .add(const Duration(days: 1))
-                    .subtract(const Duration(seconds: 1));
+              print('📅 selected day: $sel');
+              print('📅 today: $today');
+              print('📅 scheduleMode: $_scheduleMode');
+              print('📅 isScheduledDay: ${_isScheduledDay(sel)}');
+              print('📅 isAfterToday: ${sel.isAfter(today)}');
+              print(
+                '📅 isBeforeNextMonth: ${sel.isBefore(DateTime(today.year, today.month + 1, 1))}',
+              );
 
-                final existing = await FirebaseFirestore.instance
-                    .collection('scheduledTasks')
-                    .where('userId', isEqualTo: _uid)
-                    .where('status', isEqualTo: 'scheduled')
-                    .where(
-                      'scheduledFor',
-                      isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
-                    )
-                    .where(
-                      'scheduledFor',
-                      isLessThanOrEqualTo: Timestamp.fromDate(endOfDay),
-                    )
-                    .limit(1)
-                    .get();
+              // ✅ وضع الجدولة
+              if (_scheduleMode) {
+                final scheduledInfo = await _getScheduledInfoForDay(sel);
+                print('📅 scheduledInfo: $scheduledInfo');
+                if (scheduledInfo != null) {
+                  final scheduledDocId = scheduledInfo['docId']!;
+                  final scheduledTaskTitle = scheduledInfo['taskTitle']!;
 
-                // ✅ 2) إذا ما فيه جدولة → افتح اختيار المهمة مباشرة بدون رسالة
-                if (existing.docs.isEmpty) {
-                  _openScheduleTaskPicker(sel);
-                  return;
-                }
-
-                // ✅ 3) إذا فيه جدولة → اعرض رسالة الاستبدال
-                final proceed = await showDialog<bool>(
-                  context: context,
-                  builder: (_) => Dialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 18,
+                  final action = await showDialog<String>(
+                    context: context,
+                    builder: (_) => Dialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'تنبيه',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.dark,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 18,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'مهمة مجدولة',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.dark,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'يوجد بالفعل مهمة مجدولة لهذا اليوم.\n'
-                            'المتابعة ستؤدي إلى استبدال المهمة الحالية. هل ترغب بالاستمرار؟',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 14.5,
-                              height: 1.6,
-                              color: Colors.grey.shade800,
+                            const SizedBox(height: 10),
+                            Text(
+                              'لديك مهمة مجدولة لهذا اليوم:\n$scheduledTaskTitle\n\nالرجاء اختيار الإجراء المناسب:',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 14.5,
+                                height: 1.6,
+                                color: Colors.grey.shade800,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 18),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: Text(
-                                  'إلغاء',
+                            const SizedBox(height: 18),
+
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () =>
+                                    Navigator.pop(context, 'change'),
+                                icon: const Icon(
+                                  Icons.edit_calendar,
+                                  color: Colors.white,
+                                ),
+                                label: Text(
+                                  'تغيير المهمة',
                                   style: GoogleFonts.ibmPlexSansArabic(
-                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 11,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () =>
+                                    Navigator.pop(context, 'cancelSchedule'),
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.redAccent,
+                                ),
+                                label: Text(
+                                  'إلغاء الجدولة',
+                                  style: GoogleFonts.ibmPlexSansArabic(
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.redAccent,
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                    color: Colors.redAccent,
+                                    width: 1.3,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 11,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 8),
+
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(context, 'close'),
+                                child: Text(
+                                  'رجوع',
+                                  style: GoogleFonts.ibmPlexSansArabic(
                                     fontWeight: FontWeight.w700,
                                     color: Colors.grey.shade700,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 10,
-                                  ),
-                                  elevation: 0,
-                                ),
-                                child: Text(
-                                  'المتابعة',
-                                  style: GoogleFonts.ibmPlexSansArabic(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+
+                  if (action == 'change') {
+                    _openScheduleTaskPicker(sel);
+                  } else if (action == 'cancelSchedule') {
+                    final confirmCancel = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: Text(
+                          'تأكيد إلغاء الجدولة',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        content: Text(
+                          'هل أنت متأكد من إلغاء المهمة المجدولة لهذا اليوم؟',
+                          style: GoogleFonts.ibmPlexSansArabic(),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: Text(
+                              'لا',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.grey.shade700,
                               ),
-                            ],
+                            ),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.redAccent,
+                              elevation: 0,
+                            ),
+                            child: Text(
+                              'نعم',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                );
+                    );
 
-                if (proceed == true) {
-                  _openScheduleTaskPicker(sel);
+                    if (confirmCancel == true) {
+                      await _cancelScheduledTask(
+                        selectedDay: sel,
+                        scheduledDocId: scheduledDocId,
+                      );
+                    }
+                  }
+
+                  return;
                 }
+
+                final nextMonthStart = DateTime(today.year, today.month + 1, 1);
+
+                if (sel.isAfter(today) && sel.isBefore(nextMonthStart)) {
+                  _openScheduleTaskPicker(sel);
+                } else {
+                  if (!mounted) return;
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'يمكنك جدولة الأيام القادمة فقط',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          color: Colors.white,
+                        ),
+                      ),
+                      backgroundColor: AppColors.primary,
+                    ),
+                  );
+                }
+
+                // ✅ مهم جدًا: هذا داخل وضع الجدولة فقط
                 return;
               }
 
