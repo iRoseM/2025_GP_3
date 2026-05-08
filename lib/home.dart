@@ -1113,6 +1113,8 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                               allowPan: false,
                                               showFriends: false,
                                               taskCounts: taskCounts,
+                                              useCustomBackground: false,  // ✅ خلفية بيضاء
+
                                             );
                                           },
                                         ),
@@ -2731,13 +2733,6 @@ Future<void> ensureUserCarbonFields() async {
 
   if (!data.containsKey('points')) updates['points'] = 0;
   if (!data.containsKey('totalCarbonSaved')) updates['totalCarbonSaved'] = 0;
-
-  if (!data.containsKey('totalXp')) updates['totalXp'] = data['xp'] ?? 0;
-
-    if (updates.isNotEmpty) {
-    await ref.set(updates, SetOptions(merge: true));
-  }
-
   // if (!data.containsKey('lastCarbonUpdateAt')) {
   //   updates['lastCarbonUpdateAt'] = null;
   // }
@@ -4737,8 +4732,6 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
           'id': doc.id,
           'username': username,
           'xp': (data['xp'] ?? 0) is num ? (data['xp'] ?? 0) as int : 0,
-          'totalXp': (data['totalXp'] ?? 0) is num ? (data['totalXp'] ?? 0) as int : 0, // ← هنا
-
             'completedTasks': (data['completedTask'] ?? 0) is num  // ← أضيفي هذا
       ? (data['completedTask'] ?? 0) as int : 0,
           'points': points is num ? points.toInt() : 0,
@@ -4746,9 +4739,8 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
           'isCurrentUser': doc.id == currentUserId,
         });
       }
-      
 
-usersData.sort((a, b) => (b['totalXp'] as int).compareTo(a['totalXp'] as int));
+      usersData.sort((a, b) => (b['xp'] as int).compareTo(a['xp'] as int));
 
       for (int i = 0; i < usersData.length; i++) {
         usersData[i]['rank'] = i + 1;
@@ -5195,7 +5187,6 @@ Future<List<Map<String, dynamic>>> _fetchFullLeaderboard() async {
         'id': doc.id,
         'username': username,
         'xp': (data['xp'] ?? 0) is num ? (data['xp'] ?? 0) as int : 0, // ← أضفناه
-        'totalXp': (data['totalXp'] ?? 0) is num ? (data['totalXp'] ?? 0) as int : 0, // ← هنا
         'points': points is num ? points.toInt() : 0,
         'pfpIndex': pfpIndex,
         'isCurrentUser': doc.id == currentUserId,
@@ -5203,7 +5194,7 @@ Future<List<Map<String, dynamic>>> _fetchFullLeaderboard() async {
     }
 
     // ← رتّب بناءً على XP
-usersData.sort((a, b) => (b['totalXp'] as int).compareTo(a['totalXp'] as int));
+    usersData.sort((a, b) => (b['xp'] as int).compareTo(a['xp'] as int));
 
     for (int i = 0; i < usersData.length; i++) {
       usersData[i]['rank'] = i + 1;
@@ -5304,7 +5295,7 @@ usersData.sort((a, b) => (b['totalXp'] as int).compareTo(a['totalXp'] as int));
                           completedTasks: user['completedTasks'] ?? 0,
                           points: user['points'],
                           pfpIndex: user['pfpIndex'],
-                          xp: user['totalXp'] ?? 0,
+                          xp: user['xp'] ?? 0,
                           rank: user['rank'],
                         );
                       },

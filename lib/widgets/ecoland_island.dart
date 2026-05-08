@@ -54,8 +54,9 @@ class EcoLandIsland extends StatefulWidget {
   final bool allowPan;
   final bool showFriends;
   final List<FriendIslandData>? friends;
-  final Map<String, int> taskCounts;
+  final Map<String, int> taskCounts; // ← جديد
   final bool useCustomBackground;  // ✅ جديد
+
 
   const EcoLandIsland({
     super.key,
@@ -64,8 +65,9 @@ class EcoLandIsland extends StatefulWidget {
     this.allowPan = true,
     this.showFriends = false,
     this.friends,
-    this.taskCounts = const {},
+    this.taskCounts = const {}, // ← جديد
     this.useCustomBackground = false,  // ✅ إفتراضي false
+
   });
 
   @override
@@ -84,10 +86,7 @@ class _EcoLandIslandState extends State<EcoLandIsland>
 
   @override
   void initState() {
-    
     super.initState();
-    
-    XpService.syncMissingFigures();
     _waveCtrl = AnimationController(
       vsync: this, duration: const Duration(seconds: 3))..repeat();
 
@@ -210,143 +209,134 @@ class _EcoLandIslandState extends State<EcoLandIsland>
 Widget build(BuildContext context) {
   final friends = (widget.friends ?? _friends).take(6).toList();
 
+  // ✅ قرر الخلفية حسب useCustomBackground
   Widget getBackground() {
     if (!widget.useCustomBackground) {
-      return Container(color: Colors.white);
+      // للـ homePage: خلفية بيضاء أو شفافة
+      return Container(color: Colors.white); // أو Colors.transparent
     } else {
+      // للـ GlobalEcoLandPage: صورتك الثابتة
       return Image.asset(
-        'assets/images/ecoland_bg.png',
+        'assets/img/EcoLandBackground.png',
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Container(color: const Color(0xFF87CEEB)),
       );
     }
   }
 
-  // ✅ جلب الفيقرات من Firebase
-  return StreamBuilder<QuerySnapshot>(
-    stream: XpService.figuresStream(),
-    builder: (context, figuresSnapshot) {
-      List<Map<String, dynamic>> figures = [];
-      
-      if (figuresSnapshot.hasData && figuresSnapshot.data != null) {
-        figures = figuresSnapshot.data!.docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          return {
-            'levelId': data['levelId'] ?? '',
-            'name': data['name'] ?? '',
-            'imagePath': data['imagePath'] ?? '',
-          };
-        }).toList();
-      }
+  // وضع القراءة فقط (isReadOnly) بدون تفاعل
+  if (!widget.allowPan) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final W = constraints.maxWidth;
+        final H = constraints.maxHeight;
+        final islandW = W * 1.4;
+        final islandH = islandW * 0.70;
 
-      // وضع القراءة فقط (isReadOnly) بدون تفاعل
-      if (!widget.allowPan) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final W = constraints.maxWidth;
-            final H = constraints.maxHeight;
-            final islandW = W * 1.4;
-            final islandH = islandW * 0.70;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // ✅ خلفية الصورة في وضع القراءة فقط
+            Positioned.fill(child: getBackground()),  // ✅ هنا
 
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                Positioned.fill(child: getBackground()),
-                Positioned(
-                  left: (W - islandW) / 2,
-                  top: (H - islandH) / 2,
-                  child: _IslandWidget(
-                    level: widget.level,
-                    width: islandW,
-                    isUser: true,
-                    name: '',
-                    taskCounts: widget.taskCounts,
-                    unlockedFigures: figures,
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      }
-
-      // الوضع العادي (Global EcoLand مع InteractiveViewer)
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned.fill(
-            child: Image.asset(
-              'assets/img/EcoLandBackground.png',
-              fit: BoxFit.cover,
-            ),
-          ),
-          InteractiveViewer(
-            transformationController: _transformCtrl,
-            constrained: false,
-            boundaryMargin: const EdgeInsets.symmetric(horizontal: 1300, vertical: 700),
-            clipBehavior: Clip.none,
-            minScale: 0.55,
-            maxScale: 1.8,
-            panEnabled: true,
-            scaleEnabled: false,
-            child: SizedBox(
-              width: _canvasW,
-              height: _canvasH,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  for (int i = 0; i < friends.length; i++)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: _BridgePainter(
-                            from: const Offset(_ux, _uy + 10),
-                            to: _friendCenters[i],
-                          ),
-                        ),
-                      ),
-                    ),
-                  for (int i = 0; i < friends.length; i++)
-                    Positioned(
-                      left: _friendCenters[i].dx - (_fw / 2),
-                      top: _friendCenters[i].dy - (_fh / 2) + 18,
-                      child: _IslandWidget(
-                        level: friends[i].level,
-                        width: _fw,
-                        isUser: false,
-                        name: friends[i].name,
-                        nameOnRight: _friendCenters[i].dx > _ux,
-                      ),
-                    ),
-                  Positioned(
-                    left: _ux - (_iw / 2),
-                    top: _uy - (_ih / 2) - 40,
-                    child: _IslandWidget(
-                      level: widget.level,
-                      width: _iw,
-                      isUser: true,
-                      name: '',
-                      taskCounts: widget.taskCounts,
-                      unlockedFigures: figures,
-                    ),
-                  ),
-                ],
+            Positioned(
+              left: (W - islandW) / 2,
+              top: (H - islandH) / 2,
+              child: _IslandWidget(
+                level: widget.level,
+                width: islandW,
+                isUser: true,
+                name: '',
+                taskCounts: widget.taskCounts,
               ),
             ),
+          ],
+        );
+      },
+    );
+  }
+
+  // الوضع العادي (Global EcoLand مع InteractiveViewer)
+  return Stack(
+    fit: StackFit.expand,
+    children: [
+      // ✅ 1) الخلفية صورة ثابتة (بدلاً من AnimatedBuilder)
+      Positioned.fill(child: getBackground()),  // ✅ وهنا
+
+
+      // 2) الجزر والجسور (نفس الكود بدون تغيير)
+      InteractiveViewer(
+        transformationController: _transformCtrl,
+        constrained: false,
+        boundaryMargin: const EdgeInsets.symmetric(horizontal: 1300, vertical: 700),
+        clipBehavior: Clip.none,
+        minScale: 0.55,
+        maxScale: 1.8,
+        panEnabled: true,
+        scaleEnabled: false,
+        child: SizedBox(
+          width: _canvasW,
+          height: _canvasH,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // الجسور
+              for (int i = 0; i < friends.length; i++)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _BridgePainter(
+                        from: const Offset(_ux, _uy + 10),
+                        to: _friendCenters[i],
+                      ),
+                    ),
+                  ),
+                ),
+              // جزر الأصدقاء
+              for (int i = 0; i < friends.length; i++)
+                Positioned(
+                  left: _friendCenters[i].dx - (_fw / 2),
+                  top: _friendCenters[i].dy - (_fh / 2) + 18,
+                  child: _IslandWidget(
+                    level: friends[i].level,
+                    width: _fw,
+                    isUser: false,
+                    name: friends[i].name,
+                    nameOnRight: _friendCenters[i].dx > _ux,
+                  ),
+                ),
+              // جزيرة المستخدم
+              Positioned(
+                left: _ux - (_iw / 2),
+                top: _uy - (_ih / 2) - 40,
+                child: _IslandWidget(
+                  level: widget.level,
+                  width: _iw,
+                  isUser: true,
+                  name: '',
+                  taskCounts: widget.taskCounts,
+                ),
+              ),
+            ],
           ),
-          Positioned(
-            right: 16,
-            top: 20,
-            child: Column(
-              children: [
-                const SizedBox(height: 8),
-                _CtrlBtn('⌂', () => _resetView()),
-              ],
-            ),
-          ),
-        ],
-      );
-    },
+        ),
+      ),
+
+      // 3) أزرار التحكم (نفس الكود بدون تغيير)
+      Positioned(
+        right: 16,
+        top: 20,
+        child: Column(
+          children: [
+            // _CtrlBtn('+', () => _zoomBy(1.2)), // اخترت إخفاء + و -
+            // const SizedBox(height: 8),
+            // _CtrlBtn('−', () => _zoomBy(1 / 1.2)),
+            const SizedBox(height: 8),
+            _CtrlBtn('⌂', () => _resetView()),
+          ],
+        ),
+      ),
+    ],
   );
 }
 
@@ -389,21 +379,20 @@ class _IslandWidget extends StatelessWidget {
   final String name;
   final bool nameOnRight;
   final double nameSideOffset;
-  final List<Map<String, dynamic>> unlockedFigures;
   final Map<String, int> taskCounts; // ← جديد
-  
+  final bool useCustomBackground;
 
 
-const _IslandWidget({
-  required this.level,
-  required this.width,
-  required this.isUser,
-  required this.name,
-  this.nameOnRight = true,
-  this.nameSideOffset = 8,
-  this.taskCounts = const {},
-  this.unlockedFigures = const [], // ✅ أضف هذا السطر
-});
+  const _IslandWidget({
+    required this.level,
+    required this.width,
+    required this.isUser,
+    required this.name,
+    this.nameOnRight = true,
+    this.nameSideOffset = 8,
+    this.taskCounts = const {}, // ← جديد
+    this.useCustomBackground = false, 
+  });
   // فيقرز التاسكات — كلها يمين
   static const _categoryPositions = {
     // مواصلات — يمين فوق
@@ -565,139 +554,51 @@ const _IslandWidget({
     }
   }
 
-List<Widget> _buildUserElements(double iw, double ih) {
-  final cx = iw / 2;
-  final cy = ih * 0.38;
+  List<Widget> _buildUserElements(double iw, double ih) {
+    final cx = iw / 2;
+    final cy = ih * 0.38;
 
-  final List<Widget> allElements = [];
+    // عناصر اللفل — كلها يسار
+    final els = [
+      // L1: شجيرتين يسار
+      ('bush',         -0.32,  0.05, 0.13, 1),
+      // ('bush',          0.24,  0.05, 0.12, 1),
 
-  // ====================================================
-  // العناصر الثابتة أول
-  // ====================================================
-  final fixedElements = [
-    ('bush',         -0.32,  0.05, 0.13, 1),
-    ('tree',         -0.10, -0.28, 0.18, 2),
-    ('tree',         -0.40, -0.12, 0.17, 2),
-    ('bush',         -0.40,  0.30, 0.17, 2),
-    ('pond',         -0.05,  0.08, 0.24, 3),
-    ('flower_pink',  -0.22, -0.04, 0.07, 3),
-    ('flower_pink',   0.10, -0.13, 0.07, 3),
-    ('flower_purple', 0.00,  0.36, 0.07, 3),
-    ('flower_purple', 0.10,  0.20, 0.07, 3),
-    ('flower_purple',-0.25,  0.12, 0.07, 3),
-    ('flower_pink',  -0.20, -0.12, 0.07, 3),
-    ('flower_purple', 0.06, -0.15, 0.07, 3),
-    ('flower_pink',   0.00, -0.15, 0.07, 3),
-  ];
+      // L2: أشجار يسار
+      ('tree',         -0.10, -0.28, 0.18, 2),
+      ('tree',         -0.40, -0.12, 0.17, 2),
+      ('bush',         -0.40,  0.30, 0.17, 2),
 
-  for (final e in fixedElements) {
-    final imgName = e.$1;
-    final xOffset = e.$2;
-    final yOffset = e.$3;
-    final sizePercent = e.$4;
-    final requiredLevel = e.$5;
+      // // L3: بركة وسط + زهور يسار
+      ('pond',         -0.05,  0.08, 0.24, 3),
+      ('flower_pink',  -0.22, -0.04, 0.07, 3),
+      ('flower_pink',   0.10, -0.13, 0.07, 3),
+      ('flower_purple', 0.00,  0.36, 0.07, 3),
+      ('flower_purple', 0.10,  0.20, 0.07, 3),
 
-    if (requiredLevel <= level.index) {
-      final ew = iw * sizePercent;
+      // // L4: نخلة + طاحونة يسار
+      // ('palm',         -0.38,  -0.25, 0.22, 4),
+      // ('palm',          0.15,  -0.48, 0.17, 4),
+      // ('windmill',     -0.12, -0.32, 0.20, 4),
+      ('flower_purple',-0.25,  0.12, 0.07, 3),
+      ('flower_pink',-0.20, -0.12, 0.07, 3),
+      ('flower_purple',   0.06, -0.15, 0.07, 3),
+      ('flower_pink',   0.00, -0.15, 0.07, 3),
 
-      final x =
-          cx + xOffset * iw * 0.44 - ew / 2;
+    ];
 
-      final y =
-          cy + yOffset * ih * 0.44 - ew / 2;
-
-      allElements.add(
-        Positioned(
-          left: x,
-          top: y,
-          child: Image.asset(
-            'assets/img/$imgName.png',
-            width: ew,
-            height: ew,
-            fit: BoxFit.contain,
-          ),
-        ),
-      );
-    }
+    return els.where((e) {
+      if (e.$1 == 'sprout') return false; 
+      return e.$5 <= level.index;
+    }).map((e) {
+      final ew = iw * e.$4;
+      final x  = cx + e.$2 * iw * 0.44 - ew/2;
+      final y  = cy + e.$3 * ih * 0.44 - ew/2;
+      return Positioned(left:x, top:y,
+        child: Image.asset('assets/img/${e.$1}.png',
+          width:ew, height:ew, fit:BoxFit.contain));
+    }).toList();
   }
-
-  // ====================================================
-  // مواقع الفيقرز
-  // ====================================================
-  final Map<String, dynamic> figurePositions = {
-    'seedling': (-0.25, -0.35, 0.18),
-    'sprout': (-0.08, -0.28, 0.20),
-    'tree': (0.08, 0.00, 0.24),
-    'guardian': (-0.30, -0.05, 0.22),
-    'champion': (0.30, -0.30, 0.22),
-  };
-
-  // ====================================================
-  // الفيقرز المفتوحة
-  // ====================================================
-  for (final figure in unlockedFigures) {
-    final levelId =
-        figure['levelId']?.toString() ?? '';
-
-    final imagePath =
-        figure['imagePath']?.toString() ?? '';
-
-    debugPrint('FIGURE: $figure');
-
-    final pos = figurePositions[levelId];
-
-    if (pos == null) continue;
-
-    final xOffset = pos.$1;
-    final yOffset = pos.$2;
-    final sizePercent = pos.$3;
-
-    final ew = iw * sizePercent;
-
-    final x =
-        cx + xOffset * iw * 0.44 - ew / 2;
-
-    final y =
-        cy + yOffset * ih * 0.44 - ew / 2;
-
-    allElements.add(
-      Positioned(
-        left: x,
-        top: y,
-        child: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15),
-                blurRadius: 8,
-              ),
-            ],
-          ),
-          child: Image.asset(
-            imagePath,
-            width: ew,
-            height: ew,
-            fit: BoxFit.contain,
-
-            errorBuilder: (_, __, ___) {
-              return Container(
-                width: ew,
-                height: ew,
-                color: Colors.red,
-                child: const Icon(
-                  Icons.error,
-                  color: Colors.white,
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  return allElements;
-}
 
   List<Widget> _buildFriendElements(double iw, double ih, IslandLevel lv) {
     final cx = iw / 2;
@@ -873,35 +774,19 @@ class _CtrlBtn extends StatelessWidget {
   const _CtrlBtn(this.label, this.onTap);
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.12),
-              blurRadius: 4,
-            ),
-          ],
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF2E7D32),
-            ),
-          ),
-        ),
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width:32, height:32,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [BoxShadow(
+          color: Colors.black.withOpacity(0.12), blurRadius:4)],
       ),
-    );
-  }
+      child: Center(child: Text(label,
+        style: const TextStyle(fontSize:16, fontWeight:FontWeight.w600,
+          color: Color(0xFF2E7D32))))));
 }
 
 // ════════════════════════════════════════════════════════
@@ -955,6 +840,8 @@ class GlobalEcoLandPage extends StatelessWidget {
               allowPan: true,
               showFriends: true,
               taskCounts: taskCounts, // ← جديد
+              useCustomBackground: true,  // ✅ خلفية الصورة
+
             );
           },
         ),
