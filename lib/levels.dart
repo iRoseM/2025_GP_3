@@ -55,7 +55,7 @@ class _levelsPageState extends State<levelsPage> {
         body: StreamBuilder<DocumentSnapshot>(
           stream: XpService.userStream(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
+          if (!snapshot.hasData) {
               return Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -64,8 +64,26 @@ class _levelsPageState extends State<levelsPage> {
                     colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
                   ),
                 ),
-                child: const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 24),
+                        _SkeletonBox(height: 180, borderRadius: 20),
+                        const SizedBox(height: 16),
+                        _SkeletonBox(height: 60, borderRadius: 12),
+                        const SizedBox(height: 16),
+                        ...List.generate(
+                          3,
+                          (i) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _SkeletonBox(height: 80, borderRadius: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               );
             }
@@ -834,6 +852,51 @@ class _RewardCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SkeletonBox extends StatefulWidget {
+  final double height;
+  final double borderRadius;
+  const _SkeletonBox({required this.height, required this.borderRadius});
+
+  @override
+  State<_SkeletonBox> createState() => _SkeletonBoxState();
+}
+
+class _SkeletonBoxState extends State<_SkeletonBox>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _anim = Tween(begin: 0.3, end: 0.7).animate(_ctrl);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => Container(
+        height: widget.height,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(_anim.value),
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+        ),
       ),
     );
   }

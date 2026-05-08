@@ -282,15 +282,27 @@ class _mapPageState extends State<mapPage> {
     }
     setState(() => _isLoadingFacilities = true);
     try {
-      final qs = await FirebaseFirestore.instance
+      // ✅ أول 20 تظهر فوراً
+      final firstBatch = await FirebaseFirestore.instance
           .collection('facilities')
+          .limit(20)
           .get();
+      
+      final restBatch = firstBatch.docs.isNotEmpty
+          ? await FirebaseFirestore.instance
+              .collection('facilities')
+              .startAfterDocument(firstBatch.docs.last)
+              .get()
+          : null;
+
+      // ندمج الـ docs
+      final qsDocs = [...firstBatch.docs, ...?restBatch?.docs];
 
       final markers = <Marker>{};
       final mapFacilities = <String, Facility>{};
       LatLngBounds? bounds;
 
-      for (final d in qs.docs) {
+      for (final d in qsDocs) {
         final m = d.data();
 
         final double? lat = (m['lat'] as num?)?.toDouble();

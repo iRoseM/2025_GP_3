@@ -41,6 +41,10 @@ class _LaunchDeciderState extends State<LaunchDecider> {
           return;
         }
 
+// ✅ I-42: تحقق من وضع الصيانة قبل التوجيه
+        final isMaintenance = await _checkMaintenance();
+        if (isMaintenance) return; // الـ dialog اتعرض داخل _checkMaintenance
+
         final role = await _getUserRole(user.uid);
         _go(role == 'admin' ? _Target.adminHome : _Target.userHome);
       } catch (_) {
@@ -96,4 +100,73 @@ class _LaunchDeciderState extends State<LaunchDecider> {
   Widget build(BuildContext context) {
     return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
+  Future<bool> _checkMaintenance() async {
+  try {
+    final doc = await FirebaseFirestore.instance
+        .collection('config')
+        .doc('maintenance')
+        .get();
+
+    if (!doc.exists) return false;
+
+    final data = doc.data();
+    final isActive = data?['isActive'] == true;
+    if (!isActive) return false;
+
+    final message = (data?['message'] ?? 'التطبيق تحت الصيانة حالياً').toString();
+    final expectedEnd = (data?['expectedEnd'] ?? 'قريباً').toString();
+
+    if (!mounted) return true;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Dialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset('assets/img/nameerThink.png', height: 100),
+                const SizedBox(height: 16),
+                Text(
+                  'التطبيق تحت الصيانة 🔧',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'الوقت المتوقع للعودة: $expectedEnd',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[500],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return true;
+  } catch (_) {
+    return false; // لو فيه خطأ في جلب البيانات نكمل طبيعي
+  }
+}
 }

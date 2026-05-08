@@ -1297,6 +1297,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       else if (e.toString().contains('network') ||
           e.toString().contains('اتصال'))
         errorMessage = 'مشكلة في الاتصال بالإنترنت. تحقق من اتصالك.';
+      else if (e is TimeoutException)  // ← أضيفي هذا
+        errorMessage = 'انتهت مهلة رفع الصورة. تحقق من اتصالك وحاول مرة أخرى.';
 
       _showInlineError(errorMessage);
       if (mounted) setState(() => _isUploading = false);
@@ -1584,10 +1586,20 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
       final basePath = 'submissions/$uid/${dayKey}_${widget.userTaskDocId}';
       final name = DateTime.now().millisecondsSinceEpoch.toString();
       final storageRef = FirebaseStorage.instance.ref('$basePath/$name.jpg');
-      await storageRef.putFile(
-        file,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
+      // For performance, we set a timeout on the upload and download operations.
+      await storageRef
+          .putFile(file, SettableMetadata(contentType: 'image/jpeg'))
+          .timeout(
+            const Duration(seconds: 60),
+            onTimeout: () => throw TimeoutException(
+                'انتهت مهلة رفع الصورة، يرجى المحاولة مرة أخرى'),
+          );
+      downloadUrl = await storageRef
+          .getDownloadURL()
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw TimeoutException('انتهت مهلة جلب رابط الصورة'),
+          );
       downloadUrl = await storageRef.getDownloadURL();
       storagePath = storageRef.fullPath;
     }

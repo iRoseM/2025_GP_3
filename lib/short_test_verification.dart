@@ -6,6 +6,7 @@ import 'task.dart';
 import 'services/title_header.dart';
 import 'services/background_container.dart';
 import '../services/app_colors.dart';
+import 'dart:async';
 
 class ShortTestVerificationPage extends StatefulWidget {
   final String userTaskDocId;
@@ -287,7 +288,13 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
           .doc(widget.userTaskDocId);
 
       // 🟢 جلب بيانات المهمة لأخذ taskPoints من قاعدة البيانات
-      final taskSnap = await docRef.get();
+      // For perrfoemance, we add a timeout here in case the network is bad, so we don't wait indefinitely.
+      // If it times out, we throw an error that will be caught in the catch block below, and show a generic error message to the user.
+      final taskSnap = await docRef.get()
+      .timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('انتهت مهلة جلب بيانات المهمة'),
+      );
       final int taskPoints = taskSnap.data()?['taskPoints'] ?? 0;
 
       // 🟢 تحديث مهمة المستخدم
@@ -295,7 +302,10 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
         "taskValidation": "التحقق عبر اجراء اختبار قصير",
         "status": "completed",
         "completedAt": FieldValue.serverTimestamp(),
-      });
+      }).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('انتهت مهلة تحديث المهمة'),
+      );
 
       // 🟢 تحديث بيانات المستخدم
       final user = FirebaseAuth.instance.currentUser;
@@ -317,20 +327,28 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
 
       Navigator.pop(context);
       Navigator.pop(context);
-    } catch (e) {
-      debugPrint("❌ ERROR IN SUBMIT: $e");
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "حدث خطأ غير متوقع. حاول مرة أخرى.",
-            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+      } on TimeoutException {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "انتهت مهلة الاتصال. تحقق من اتصالك وحاول مرة أخرى.",
+              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+            ),
+            backgroundColor: slackMesseges.red,
           ),
-          backgroundColor: slackMesseges.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => sending = false);
-    }
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "حدث خطأ غير متوقع. حاول مرة أخرى.",
+              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+            ),
+            backgroundColor: slackMesseges.red,
+          ),
+        );
+      } finally {
+        if (mounted) setState(() => sending = false);
+      }
   }
 }

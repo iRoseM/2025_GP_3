@@ -321,7 +321,13 @@ class TaskVerificationService {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 60));
+          .timeout(
+            const Duration(seconds: 60),
+            onTimeout: () => http.Response(
+              '{"success":false,"error":"انتهت مهلة الاتصال بالخادم"}',
+              408,
+            ),
+          );
       _log('📡 status: ${response.statusCode}');
       _log('📡 body: ${response.body}');
 

@@ -74,6 +74,13 @@ class _communityPageState extends State<communityPage> {
       ]);
 
       setState(() => _isLoading = false);
+    } on FirebaseException catch (e) {
+      setState(() => _isLoading = false);
+      if (e.code == 'permission-denied') {
+        _showAccessDeniedDialog();
+      } else {
+        _showSnackBar('حدث خطأ في تحميل البيانات', isError: true);
+      }
     } catch (e) {
       debugPrint('خطأ في تحميل البيانات: $e');
       setState(() => _isLoading = false);
@@ -114,6 +121,11 @@ class _communityPageState extends State<communityPage> {
               'pfpIndex': data['pfpIndex'],
             });
           }
+        } on FirebaseException catch (e) {
+          if (e.code == 'permission-denied') {
+            debugPrint('🔒 Access denied: $friendId');
+            // تخطى هذا الصديق بصمت
+          }
         } catch (e) {
           debugPrint('خطأ في جلب بيانات الصديق: $e');
         }
@@ -123,6 +135,10 @@ class _communityPageState extends State<communityPage> {
         (a, b) => (b['points'] as int).compareTo(a['points'] as int),
       );
       _followingList = following;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        _showAccessDeniedDialog();
+      }
     } catch (e) {
       debugPrint('خطأ في تحميل المتابَعين: $e');
     }
@@ -154,6 +170,10 @@ class _communityPageState extends State<communityPage> {
         (a, b) => (b['points'] as int).compareTo(a['points'] as int),
       );
       _followersList = followers;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        _showAccessDeniedDialog();
+      }
     } catch (e) {
       debugPrint('خطأ في تحميل المتابِعين: $e');
     }
@@ -396,6 +416,62 @@ class _communityPageState extends State<communityPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+  void _showAccessDeniedDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Dialog(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset('assets/img/nameerThink.png', height: 100),
+                const SizedBox(height: 16),
+                Text(
+                  'غير مصرح لك بالوصول',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: appColors.dark),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'لا يمكنك الوصول إلى هذه البيانات',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 13, color: Colors.grey),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: appColors.primary,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      minimumSize: const Size(double.infinity, 44),
+                    ),
+                    child: Text('حسناً',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
