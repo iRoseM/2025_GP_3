@@ -413,7 +413,7 @@ class _ArticlePageState extends State<ArticlePage> {
       );
 
       _showSnack(
-        "تعذَّر إنشاء الاختبار القصير بسبب مشكلة في الاتصال. تأكد من اتصالك بالإنترنت ثم حاول مرة أخرى بعد قليل.",
+        "تعذَّر إنشاء الاختبار القصير بسبب مشكلة في الاتصال. يرجى التحقق من الاتصال بالإنترنت ثم المحاولة مرة أخرى بعد قليل.",
         background: slackMesseges.red,
       );
     } catch (e) {
@@ -424,7 +424,7 @@ class _ArticlePageState extends State<ArticlePage> {
       print('⚠️ generateShortTestVerification UNKNOWN ERROR: $e');
 
       _showSnack(
-        "حدث خلل مؤقت أثناء إنشاء الاختبار القصير. تحقق من اتصالك بالإنترنت ثم حاول مرة أخرى بعد قليل.",
+        "حدث خلل مؤقت أثناء إنشاء الاختبار القصير. يرجى التحقق من الاتصال بالإنترنت ثم المحاولة مرة أخرى بعد قليل.",
         background: slackMesseges.red,
       );
     }

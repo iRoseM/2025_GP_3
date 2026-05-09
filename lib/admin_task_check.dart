@@ -573,7 +573,7 @@ class _AdminTaskCheckPageState extends State<AdminTaskCheckPage> {
                                     Text(
                                       _isAdmin
                                           ? 'لا توجد طلبات قيد الانتظار.'
-                                          : 'لا توجد طلباتك قيد الانتظار.',
+                                          : 'لا توجد طلبات قيد الانتظار خاصة بالحساب.',
                                       style: GoogleFonts.ibmPlexSansArabic(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,

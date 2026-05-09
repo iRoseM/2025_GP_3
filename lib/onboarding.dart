@@ -23,7 +23,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       image: 'assets/img/onboarding1.png',
       title: 'أهلاً بك في نمير',
       subtitle:
-          'غيّر عاداتك اليومية، واجمّع النقاط لبناء مستقبلٍ أخضر مع السعودية!',
+          'غيّر عاداتك اليومية، واجمع النقاط لبناء مستقبلٍ أخضر مع السعودية!',
     ),
     _OnbPageData(
       image: 'assets/img/onboarding2.png',

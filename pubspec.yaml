@@ -93,6 +93,14 @@ flutter:
     - assets/img/nameerSad.png
     - assets/data/bus_stations.json
     - assets/data/metro_stations.json
+    - assets/img/recycling_example.webp
+    - assets/img/EcoLandBackground.png
+    - assets/img/فيقر نبتة.png
+    - assets/img/فيقر بذرة.png
+    - assets/img/فيقر بطل.png
+    - assets/img/فيقر حارس.png
+    - assets/img/فيقر شجرة.png
+
 
 flutter_native_splash:
   color: "#FAFCFB"

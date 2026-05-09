@@ -207,7 +207,7 @@ class _AdminFaqPageState extends State<AdminFaqPage> {
             style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w800),
           ),
           content: Text(
-            'هل أنت متأكد؟ سيتم حذف السؤال نهائيًا.',
+            'هل تريد تأكيد حذف السؤال؟ سيتم حذف السؤال نهائيًا.',
             textAlign: TextAlign.right,
             style: GoogleFonts.ibmPlexSansArabic(height: 1.5),
           ),

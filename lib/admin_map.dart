@@ -516,7 +516,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
           SnackBar(
             backgroundColor: slackMesseges.red,
             content: Text(
-              'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
+              'تعذّر تحديد الموقع الحالي. يرجى التحقق من إذن الموقع وGPS',
               style: GoogleFonts.ibmPlexSansArabic(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -2388,7 +2388,7 @@ class _AdminMapPageState extends State<AdminMapPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'هل أنت متأكد من حذف "$name"؟',
+                  'هل تريد تأكيد حذف "$name"؟',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.black87),
                 ),
@@ -2771,7 +2771,7 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'سيتم نقلك للخريطة لتحديد الموقع',
+                    'سيتم فتح الخريطة لتحديد الموقع',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 16),
@@ -2798,7 +2798,7 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                   _LocationOptionButton(
                     icon: Icons.my_location,
                     label: 'استخدام موقعي الحالي',
-                    description: 'سيتم وضع Pin على موقعك الحالي',
+                    description: 'سيتم وضع علامة على موقعك الحالي',
                     onTap: () {
                       if (_formKey.currentState!.validate()) {
                         widget.onSelectOption(

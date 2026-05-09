@@ -55,6 +55,8 @@ class EcoLandIsland extends StatefulWidget {
   final bool showFriends;
   final List<FriendIslandData>? friends;
   final Map<String, int> taskCounts; // ← جديد
+  final bool useCustomBackground;  // ✅ جديد
+
 
   const EcoLandIsland({
     super.key,
@@ -64,6 +66,8 @@ class EcoLandIsland extends StatefulWidget {
     this.showFriends = false,
     this.friends,
     this.taskCounts = const {}, // ← جديد
+    this.useCustomBackground = false,  // ✅ إفتراضي false
+
   });
 
   @override
@@ -205,61 +209,66 @@ class _EcoLandIslandState extends State<EcoLandIsland>
 Widget build(BuildContext context) {
   final friends = (widget.friends ?? _friends).take(6).toList();
 
-if (!widget.allowPan) {
-  return LayoutBuilder(
-    builder: (context, constraints) {
-      final W = constraints.maxWidth;
-      final H = constraints.maxHeight;
-
-      final islandW = W * 1.4;
-      final islandH = islandW * 0.70;
-
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          AnimatedBuilder(
-            animation: _waveCtrl,
-            builder: (_, __) => CustomPaint(
-              painter: _BgPainter(wave: _waveCtrl.value, white: true),
-            ),
-          ),
-          Positioned(
-            left: (W - islandW) / 2,
-            top: (H - islandH) / 2,
-            child: _IslandWidget(
-              level: widget.level,
-              width: islandW,
-              isUser: true,
-              name: '',
-              taskCounts: widget.taskCounts,
-            ),
-          ),
-        ],
+  // ✅ قرر الخلفية حسب useCustomBackground
+  Widget getBackground() {
+    if (!widget.useCustomBackground) {
+      // للـ homePage: خلفية بيضاء أو شفافة
+      return Container(color: Colors.white); // أو Colors.transparent
+    } else {
+      // للـ GlobalEcoLandPage: صورتك الثابتة
+      return Image.asset(
+        'assets/img/EcoLandBackground.png',
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(color: const Color(0xFF87CEEB)),
       );
-    },
-  );
-}
+    }
+  }
 
-  // Global EcoLand
+  // وضع القراءة فقط (isReadOnly) بدون تفاعل
+  if (!widget.allowPan) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final W = constraints.maxWidth;
+        final H = constraints.maxHeight;
+        final islandW = W * 1.4;
+        final islandH = islandW * 0.70;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // ✅ خلفية الصورة في وضع القراءة فقط
+            Positioned.fill(child: getBackground()),  // ✅ هنا
+
+            Positioned(
+              left: (W - islandW) / 2,
+              top: (H - islandH) / 2,
+              child: _IslandWidget(
+                level: widget.level,
+                width: islandW,
+                isUser: true,
+                name: '',
+                taskCounts: widget.taskCounts,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // الوضع العادي (Global EcoLand مع InteractiveViewer)
   return Stack(
     fit: StackFit.expand,
     children: [
-      // 1) الخلفية ثابتة كخلفية صفحة
-      AnimatedBuilder(
-        animation: _waveCtrl,
-        builder: (_, __) => CustomPaint(
-          painter: _BgPainter(wave: _waveCtrl.value),
-        ),
-      ),
+      // ✅ 1) الخلفية صورة ثابتة (بدلاً من AnimatedBuilder)
+      Positioned.fill(child: getBackground()),  // ✅ وهنا
 
-      // 2) فقط الجزر والجسور داخل InteractiveViewer
+
+      // 2) الجزر والجسور (نفس الكود بدون تغيير)
       InteractiveViewer(
         transformationController: _transformCtrl,
         constrained: false,
-        boundaryMargin: const EdgeInsets.symmetric(
-          horizontal: 1300,
-          vertical: 700,
-        ),
+        boundaryMargin: const EdgeInsets.symmetric(horizontal: 1300, vertical: 700),
         clipBehavior: Clip.none,
         minScale: 0.55,
         maxScale: 1.8,
@@ -283,7 +292,6 @@ if (!widget.allowPan) {
                     ),
                   ),
                 ),
-
               // جزر الأصدقاء
               for (int i = 0; i < friends.length; i++)
                 Positioned(
@@ -297,7 +305,6 @@ if (!widget.allowPan) {
                     nameOnRight: _friendCenters[i].dx > _ux,
                   ),
                 ),
-
               // جزيرة المستخدم
               Positioned(
                 left: _ux - (_iw / 2),
@@ -307,7 +314,7 @@ if (!widget.allowPan) {
                   width: _iw,
                   isUser: true,
                   name: '',
-                  taskCounts: widget.taskCounts, // ← جديد
+                  taskCounts: widget.taskCounts,
                 ),
               ),
             ],
@@ -315,17 +322,17 @@ if (!widget.allowPan) {
         ),
       ),
 
-      // 3) أزرار التحكم ثابتة فوق الصفحة
+      // 3) أزرار التحكم (نفس الكود بدون تغيير)
       Positioned(
         right: 16,
         top: 20,
         child: Column(
           children: [
-            // _CtrlBtn('+', () => setState(() => _zoomBy(1.2))),
+            // _CtrlBtn('+', () => _zoomBy(1.2)), // اخترت إخفاء + و -
             // const SizedBox(height: 8),
-            // _CtrlBtn('−', () => setState(() => _zoomBy(1 / 1.2))),
+            // _CtrlBtn('−', () => _zoomBy(1 / 1.2)),
             const SizedBox(height: 8),
-            _CtrlBtn('⌂', () => setState(_resetView)),
+            _CtrlBtn('⌂', () => _resetView()),
           ],
         ),
       ),
@@ -373,6 +380,7 @@ class _IslandWidget extends StatelessWidget {
   final bool nameOnRight;
   final double nameSideOffset;
   final Map<String, int> taskCounts; // ← جديد
+  final bool useCustomBackground;
 
 
   const _IslandWidget({
@@ -383,6 +391,7 @@ class _IslandWidget extends StatelessWidget {
     this.nameOnRight = true,
     this.nameSideOffset = 8,
     this.taskCounts = const {}, // ← جديد
+    this.useCustomBackground = false, 
   });
   // فيقرز التاسكات — كلها يمين
   static const _categoryPositions = {
@@ -831,6 +840,8 @@ class GlobalEcoLandPage extends StatelessWidget {
               allowPan: true,
               showFriends: true,
               taskCounts: taskCounts, // ← جديد
+              useCustomBackground: true,  // ✅ خلفية الصورة
+
             );
           },
         ),

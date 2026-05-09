@@ -51,7 +51,7 @@ class _Station {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-/// [stationType] = 'metro' | 'bus'
+/// [stationType] = 'metro' | 'bus' | 'bicycle' | 'scooter' | 'walk'
 class MapPickRoutePage extends StatefulWidget {
   final String stationType;
   final LatLng? initialStart;
@@ -73,20 +73,30 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
 
   GoogleMapController? _mapController;
 
-  // المحطات المحمّلة من JSON
+  // المحطات المحمّلة من JSON (مترو/باص فقط)
   List<_Station> _stations = [];
   bool _loadingStations = true;
 
-  // المحطتان المختارتان
+  // المحطتان المختارتان (مترو/باص)
   _Station? _startStation;
   _Station? _endStation;
+
+  // نقطتا المسار الحر (دراجة/سكوتر/مشي)
+  LatLng? _startPoint;
+  LatLng? _endPoint;
 
   // موقع المستخدم الحالي
   LatLng _userLocation = _riyadhCenter;
   bool _gotGps = false;
 
-  // حالة الاختيار: 0 = ننتظر البداية, 1 = ننتظر النهاية
+  // حالة الاختيار: 0 = ننتظر البداية, 1 = ننتظر النهاية, 2 = اكتمل
   int _pickStep = 0;
+
+  // هل هذا النوع يستخدم خريطة حرة (بدون محطات)؟
+  bool get _isFree =>
+      widget.stationType == 'bicycle' ||
+      widget.stationType == 'scooter' ||
+      widget.stationType == 'walk';
 
   @override
   void initState() {
@@ -101,9 +111,15 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     super.dispose();
   }
 
-  // ─── Load stations from assets ────────────────────────────────────────────
+  // ─── Load stations ────────────────────────────────────────────────────────
 
   Future<void> _loadStations() async {
+    // الأنواع الحرة لا تحتاج محطات
+    if (_isFree) {
+      if (mounted) setState(() => _loadingStations = false);
+      return;
+    }
+
     final path = widget.stationType == 'metro'
         ? 'assets/data/metro_stations.json'
         : 'assets/data/bus_stations.json';
@@ -115,7 +131,12 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
           .map((e) => _Station.fromJson(e as Map<String, dynamic>))
           .toList();
 
-      if (mounted) setState(() { _stations = list; _loadingStations = false; });
+      if (mounted) {
+        setState(() {
+          _stations = list;
+          _loadingStations = false;
+        });
+      }
     } catch (e) {
       debugPrint('❌ Error loading stations: $e');
       if (mounted) setState(() => _loadingStations = false);
@@ -137,7 +158,12 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
           desiredAccuracy: LocationAccuracy.high,
         );
         final here = LatLng(pos.latitude, pos.longitude);
-        if (mounted) setState(() { _userLocation = here; _gotGps = true; });
+        if (mounted) {
+          setState(() {
+            _userLocation = here;
+            _gotGps = true;
+          });
+        }
         _mapController?.animateCamera(
           CameraUpdate.newCameraPosition(
             CameraPosition(target: here, zoom: 13.0),
@@ -165,25 +191,51 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
 
   double _deg2rad(double d) => d * math.pi / 180.0;
 
-  void _fitBoth() {
-    if (_startStation == null || _endStation == null || _mapController == null) return;
-    final a = _startStation!.position;
-    final b = _endStation!.position;
-    final sw = LatLng(math.min(a.latitude, b.latitude), math.min(a.longitude, b.longitude));
-    final ne = LatLng(math.max(a.latitude, b.latitude), math.max(a.longitude, b.longitude));
-    _mapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(LatLngBounds(southwest: sw, northeast: ne), 80),
+  void _fitCamera(LatLng a, LatLng b) {
+    if (_mapController == null) return;
+    final sw = LatLng(
+      math.min(a.latitude, b.latitude),
+      math.min(a.longitude, b.longitude),
     );
+    final ne = LatLng(
+      math.max(a.latitude, b.latitude),
+      math.max(a.longitude, b.longitude),
+    );
+    _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(southwest: sw, northeast: ne),
+        80,
+      ),
+    );
+  }
+
+  // ─── Free mode tap ────────────────────────────────────────────────────────
+
+  void _onMapTapFree(LatLng tapped) {
+    if (_pickStep == 0) {
+      setState(() {
+        _startPoint = tapped;
+        _pickStep = 1;
+      });
+    } else if (_pickStep == 1) {
+      setState(() {
+        _endPoint = tapped;
+        _pickStep = 2;
+      });
+      Future.delayed(
+        const Duration(milliseconds: 200),
+        () => _fitCamera(_startPoint!, _endPoint!),
+      );
+    }
   }
 
   // ─── Station tap ──────────────────────────────────────────────────────────
 
   void _onStationTap(_Station station) {
     if (_pickStep == 0) {
-      // اختيار البداية
       setState(() {
         _startStation = station;
-        _endStation = null; // reset النهاية عند تغيير البداية
+        _endStation = null;
         _pickStep = 1;
       });
       _mapController?.animateCamera(
@@ -192,7 +244,6 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         ),
       );
     } else {
-      // اختيار النهاية
       if (station.id == _startStation?.id) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -209,7 +260,10 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         _endStation = station;
         _pickStep = 2;
       });
-      Future.delayed(const Duration(milliseconds: 200), _fitBoth);
+      Future.delayed(
+        const Duration(milliseconds: 200),
+        () => _fitCamera(_startStation!.position, _endStation!.position),
+      );
     }
   }
 
@@ -218,11 +272,33 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
   Set<Marker> _buildMarkers() {
     final markers = <Marker>{};
 
+    if (_isFree) {
+      if (_startPoint != null) {
+        markers.add(Marker(
+          markerId: const MarkerId('free_start'),
+          position: _startPoint!,
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueGreen),
+          infoWindow: const InfoWindow(title: 'نقطة البداية'),
+        ));
+      }
+      if (_endPoint != null) {
+        markers.add(Marker(
+          markerId: const MarkerId('free_end'),
+          position: _endPoint!,
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueAzure),
+          infoWindow: const InfoWindow(title: 'نقطة الوصول'),
+        ));
+      }
+      return markers;
+    }
+
+    // مترو / باص
     for (final station in _stations) {
       final isStart = station.id == _startStation?.id;
       final isEnd = station.id == _endStation?.id;
 
-      // لون الـ pin حسب الحالة
       double hue;
       if (isStart) {
         hue = BitmapDescriptor.hueGreen;
@@ -260,21 +336,52 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
 
   @override
   Widget build(BuildContext context) {
-    final hasBoth = _startStation != null && _endStation != null;
-    final km = hasBoth
-        ? _haversineKm(_startStation!.position, _endStation!.position)
+    final bool hasBoth = _isFree
+        ? (_startPoint != null && _endPoint != null)
+        : (_startStation != null && _endStation != null);
+
+    final double? km = hasBoth
+        ? (_isFree
+            ? _haversineKm(_startPoint!, _endPoint!)
+            : _haversineKm(
+                _startStation!.position, _endStation!.position))
         : null;
 
-    final isMetro = widget.stationType == 'metro';
-    final typeColor = isMetro ? const Color(0xFF7B2FBE) : const Color(0xFFF4A340);
-    final typeLabel = isMetro ? 'مترو' : 'باص';
+    final Color typeColor;
+    final String typeLabel;
+
+    switch (widget.stationType) {
+      case 'metro':
+        typeColor = const Color(0xFF7B2FBE);
+        typeLabel = 'مترو';
+        break;
+      case 'bus':
+        typeColor = const Color(0xFFF4A340);
+        typeLabel = 'باص';
+        break;
+      case 'bicycle':
+        typeColor = const Color(0xFF4BAA98);
+        typeLabel = 'دراجة';
+        break;
+      case 'scooter':
+        typeColor = const Color(0xFF4BAA98);
+        typeLabel = 'سكوتر';
+        break;
+      case 'walk':
+        typeColor = const Color(0xFF4BAA98);
+        typeLabel = 'مشي';
+        break;
+      default:
+        typeColor = const Color(0xFF4BAA98);
+        typeLabel = 'مسارك';
+    }
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         body: Stack(
           children: [
-            // ─── الخريطة ────────────────────────────────────────────────────
+            // ─── الخريطة ──────────────────────────────────────────────────
             GoogleMap(
               initialCameraPosition: CameraPosition(
                 target: _userLocation,
@@ -288,6 +395,7 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
                   ));
                 }
               },
+              onTap: _isFree ? _onMapTapFree : null,
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
@@ -296,13 +404,18 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
                   ? {
                       Polyline(
                         polylineId: const PolylineId('route'),
-                        points: [
-                          _startStation!.position,
-                          _endStation!.position,
-                        ],
+                        points: _isFree
+                            ? [_startPoint!, _endPoint!]
+                            : [
+                                _startStation!.position,
+                                _endStation!.position,
+                              ],
                         color: typeColor,
                         width: 4,
-                        patterns: [PatternItem.dash(20), PatternItem.gap(10)],
+                        patterns: [
+                          PatternItem.dash(20),
+                          PatternItem.gap(10),
+                        ],
                       ),
                     }
                   : {},
@@ -345,27 +458,44 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
               ),
             ),
 
-            // ─── Step indicator + selected stations card ──────────────────
+            // ─── Step Card ────────────────────────────────────────────────
             Positioned(
               top: MediaQuery.of(context).padding.top + 64,
               left: 12,
               right: 12,
-              child: _StepCard(
-                step: _pickStep,
-                typeLabel: typeLabel,
-                typeColor: typeColor,
-                startStation: _startStation,
-                endStation: _endStation,
-                onResetStart: () => setState(() {
-                  _startStation = null;
-                  _endStation = null;
-                  _pickStep = 0;
-                }),
-                onResetEnd: () => setState(() {
-                  _endStation = null;
-                  _pickStep = 1;
-                }),
-              ),
+              child: _isFree
+                  ? _FreeStepCard(
+                      step: _pickStep,
+                      typeLabel: typeLabel,
+                      typeColor: typeColor,
+                      startPoint: _startPoint,
+                      endPoint: _endPoint,
+                      onResetStart: () => setState(() {
+                        _startPoint = null;
+                        _endPoint = null;
+                        _pickStep = 0;
+                      }),
+                      onResetEnd: () => setState(() {
+                        _endPoint = null;
+                        _pickStep = 1;
+                      }),
+                    )
+                  : _StepCard(
+                      step: _pickStep,
+                      typeLabel: typeLabel,
+                      typeColor: typeColor,
+                      startStation: _startStation,
+                      endStation: _endStation,
+                      onResetStart: () => setState(() {
+                        _startStation = null;
+                        _endStation = null;
+                        _pickStep = 0;
+                      }),
+                      onResetEnd: () => setState(() {
+                        _endStation = null;
+                        _pickStep = 1;
+                      }),
+                    ),
             ),
 
             // ─── Distance hint ────────────────────────────────────────────
@@ -375,7 +505,7 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
                 left: 16,
                 right: 16,
                 child: _HintCard(
-                  text: 'المسافة بين المحطتين: ${km!.toStringAsFixed(2)} كم',
+                  text: 'المسافة: ${km!.toStringAsFixed(2)} كم',
                   color: typeColor,
                 ),
               ),
@@ -391,16 +521,28 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
                 label: hasBoth
                     ? 'اعتماد المسار'
                     : _pickStep == 0
-                        ? 'اضغط على محطة البداية'
-                        : 'اضغط على محطة النهاية',
+                        ? (_isFree
+                            ? 'اضغط على الخريطة لتحديد نقطة البداية'
+                            : 'اضغط على محطة البداية')
+                        : (_isFree
+                            ? 'اضغط على الخريطة لتحديد نقطة الوصول'
+                            : 'اضغط على محطة النهاية'),
                 onTap: hasBoth
                     ? () => Navigator.pop(
                           context,
                           MapRoutePickResult(
-                            start: _startStation!.position,
-                            end: _endStation!.position,
-                            startName: _startStation!.nameAr,
-                            endName: _endStation!.nameAr,
+                            start: _isFree
+                                ? _startPoint!
+                                : _startStation!.position,
+                            end: _isFree
+                                ? _endPoint!
+                                : _endStation!.position,
+                            startName: _isFree
+                                ? 'نقطة البداية'
+                                : _startStation!.nameAr,
+                            endName: _isFree
+                                ? 'نقطة الوصول'
+                                : _endStation!.nameAr,
                             distanceKm: km!,
                           ),
                         )
@@ -440,6 +582,138 @@ class _MapButton extends StatelessWidget {
   }
 }
 
+// ─── Free Step Card (دراجة / سكوتر / مشي) ────────────────────────────────────
+
+class _FreeStepCard extends StatelessWidget {
+  final int step;
+  final String typeLabel;
+  final Color typeColor;
+  final LatLng? startPoint;
+  final LatLng? endPoint;
+  final VoidCallback onResetStart;
+  final VoidCallback onResetEnd;
+
+  const _FreeStepCard({
+    required this.step,
+    required this.typeLabel,
+    required this.typeColor,
+    required this.startPoint,
+    required this.endPoint,
+    required this.onResetStart,
+    required this.onResetEnd,
+  });
+
+  IconData get _icon {
+    switch (typeLabel) {
+      case 'دراجة':
+        return Icons.directions_bike_rounded;
+      case 'سكوتر':
+        return Icons.electric_scooter_rounded;
+      case 'مشي':
+        return Icons.directions_walk_rounded;
+      default:
+        return Icons.route_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(_icon, color: typeColor, size: 20),
+                const SizedBox(width: 6),
+                Text(
+                  'حدد مسار $typeLabel',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: const Color(0xFF3C3C3B),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _StepDot(
+                  number: '1',
+                  label: 'البداية',
+                  done: startPoint != null,
+                  active: step == 0,
+                  color: Colors.green,
+                ),
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                    color: startPoint != null
+                        ? Colors.green
+                        : Colors.grey.shade300,
+                  ),
+                ),
+                _StepDot(
+                  number: '2',
+                  label: 'الوصول',
+                  done: endPoint != null,
+                  active: step == 1,
+                  color: Colors.blue,
+                ),
+              ],
+            ),
+            if (startPoint != null) ...[
+              const SizedBox(height: 10),
+              _SelectedChip(
+                label:
+                    'البداية (${startPoint!.latitude.toStringAsFixed(4)}, ${startPoint!.longitude.toStringAsFixed(4)})',
+                icon: Icons.radio_button_checked,
+                color: Colors.green,
+                onClear: onResetStart,
+              ),
+            ],
+            if (endPoint != null) ...[
+              const SizedBox(height: 6),
+              _SelectedChip(
+                label:
+                    'الوصول (${endPoint!.latitude.toStringAsFixed(4)}, ${endPoint!.longitude.toStringAsFixed(4)})',
+                icon: Icons.location_on_rounded,
+                color: Colors.blue,
+                onClear: onResetEnd,
+              ),
+            ],
+            if (startPoint == null || endPoint == null) ...[
+              const SizedBox(height: 8),
+              Text(
+                step == 0
+                    ? '🟢 اضغط على الخريطة لتحديد نقطة البداية'
+                    : '🔵 اضغط على الخريطة لتحديد نقطة الوصول',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 12.5,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Station Step Card (مترو / باص) ──────────────────────────────────────────
+
 class _StepCard extends StatelessWidget {
   final int step;
   final String typeLabel;
@@ -474,7 +748,6 @@ class _StepCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ─── العنوان
             Row(
               children: [
                 Icon(
@@ -496,8 +769,6 @@ class _StepCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-
-            // ─── Step indicator
             Row(
               children: [
                 _StepDot(
@@ -525,8 +796,6 @@ class _StepCard extends StatelessWidget {
                 ),
               ],
             ),
-
-            // ─── محطة البداية المختارة
             if (startStation != null) ...[
               const SizedBox(height: 10),
               _SelectedChip(
@@ -536,8 +805,6 @@ class _StepCard extends StatelessWidget {
                 onClear: onResetStart,
               ),
             ],
-
-            // ─── محطة النهاية المختارة
             if (endStation != null) ...[
               const SizedBox(height: 6),
               _SelectedChip(
@@ -547,8 +814,6 @@ class _StepCard extends StatelessWidget {
                 onClear: onResetEnd,
               ),
             ],
-
-            // ─── تعليمة
             if (startStation == null || endStation == null) ...[
               const SizedBox(height: 8),
               Text(
@@ -567,6 +832,8 @@ class _StepCard extends StatelessWidget {
     );
   }
 }
+
+// ─── Shared Widgets ───────────────────────────────────────────────────────────
 
 class _StepDot extends StatelessWidget {
   final String number;

@@ -66,6 +66,21 @@ const _metroThresholds = _TransportThresholds(
   maxPeakSpeed: 130, // سرعة قصوى رسمية 120، نعطي هامش 10 إضافية
 );
 
+const _bicycleThresholds = _TransportThresholds(
+  maxAvgSpeed: 30, // دراجة متوسط ~15-20، هامش حتى 30
+  maxPeakSpeed: 50, // قصوى ~45، هامش 5 إضافية
+);
+
+const _scooterThresholds = _TransportThresholds(
+  maxAvgSpeed: 35, // سكوتر متوسط ~20-25، هامش حتى 35
+  maxPeakSpeed: 55,
+);
+
+const _walkThresholds = _TransportThresholds(
+  maxAvgSpeed: 10, // مشي متوسط ~4-6، هامش حتى 10
+  maxPeakSpeed: 15,
+);
+
 const _busThresholds = _TransportThresholds(
   maxAvgSpeed: 55, // باص نقل متوسط ~15-35، نعطي هامش حتى 55
   maxPeakSpeed: 90, // سرعة قصوى باص ~80، نعطي هامش 10 إضافية
@@ -420,10 +435,65 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   _TransportThresholds _getThresholdsForTask() {
     final title = (widget.taskData['title'] ?? '').toString().toLowerCase();
-    if (title.contains('مترو') || title.contains('metro')) {
+    if (title.contains('مترو') || title.contains('metro'))
       return _metroThresholds;
-    }
-    return _busThresholds; // باص كـ default لباقي المواصلات
+    if (title.contains('باص') ||
+        title.contains('bus') ||
+        title.contains('حافلة'))
+      return _busThresholds;
+    if (title.contains('دراجة') ||
+        title.contains('سيكل') ||
+        title.contains('cycle'))
+      return _bicycleThresholds;
+    if (title.contains('سكوتر') || title.contains('scooter'))
+      return _scooterThresholds;
+    if (title.contains('مشياً') ||
+        title.contains('مشيا') ||
+        title.contains('مشي'))
+      return _walkThresholds;
+    return _busThresholds;
+  }
+
+  String _getTransportButtonLabel() {
+    final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
+    if (t.contains('مترو') || t.contains('metro')) return 'اختر محطات المترو';
+    if (t.contains('باص') || t.contains('bus') || t.contains('حافلة'))
+      return 'اختر محطات الباص';
+    if (t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle'))
+      return 'حدد مسار الدراجة';
+    if (t.contains('سكوتر') || t.contains('scooter')) return 'حدد مسار السكوتر';
+    if (t.contains('مشياً') || t.contains('مشيا') || t.contains('مشي'))
+      return 'حدد مسار المشي';
+    return 'اختر المسار';
+  }
+
+  String _getArrivalLabel() {
+    final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
+    if (t.contains('مترو') || t.contains('metro'))
+      return 'وصلت إلى محطة المترو';
+    if (t.contains('باص') || t.contains('bus') || t.contains('حافلة'))
+      return 'وصلت إلى محطة الباص';
+    if (t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle'))
+      return 'وصلت إلى وجهتي بالدراجة';
+    if (t.contains('سكوتر') || t.contains('scooter'))
+      return 'وصلت إلى وجهتي بالسكوتر';
+    if (t.contains('مشياً') || t.contains('مشيا') || t.contains('مشي'))
+      return 'وصلت إلى وجهتي مشياً';
+    return 'وصلت إلى نقطة الوصول';
+  }
+
+  IconData _getTransportIcon() {
+    final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
+    if (t.contains('مترو') || t.contains('metro')) return Icons.train_rounded;
+    if (t.contains('باص') || t.contains('bus') || t.contains('حافلة'))
+      return Icons.directions_bus_rounded;
+    if (t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle'))
+      return Icons.directions_bike_rounded;
+    if (t.contains('سكوتر') || t.contains('scooter'))
+      return Icons.electric_scooter_rounded;
+    if (t.contains('مشياً') || t.contains('مشيا') || t.contains('مشي'))
+      return Icons.directions_walk_rounded;
+    return Icons.map_outlined;
   }
 
   // ─────────────────────────────────────────────
@@ -432,10 +502,22 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   Future<void> _startFlowForTransportTask() async {
     final taskTitle = widget.taskData['title']?.toString() ?? '';
-    final stationType =
-        (taskTitle.contains('مترو') || taskTitle.contains('metro'))
-        ? 'metro'
-        : 'bus';
+    final String stationType;
+    if (taskTitle.contains('مترو') || taskTitle.contains('metro')) {
+      stationType = 'metro';
+    } else if (taskTitle.contains('باص') ||
+        taskTitle.contains('bus') ||
+        taskTitle.contains('حافلة')) {
+      stationType = 'bus';
+    } else if (taskTitle.contains('دراجة') ||
+        taskTitle.contains('سيكل') ||
+        taskTitle.contains('cycle')) {
+      stationType = 'bicycle';
+    } else if (taskTitle.contains('سكوتر') || taskTitle.contains('scooter')) {
+      stationType = 'scooter';
+    } else {
+      stationType = 'walk';
+    }
 
     final MapRoutePickResult? res =
         await Navigator.of(
@@ -520,11 +602,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        Icons.directions_transit_rounded,
+                      Icon(
+                        _getTransportIcon(),
                         color: appColors.primary,
                         size: 52,
                       ),
+
                       const SizedBox(height: 12),
                       Text(
                         'تم التحقق من محطة البداية ✅',
@@ -804,7 +887,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'أنت بعيد عن المحطة',
+                  'الموقع الحالي بعيد عن المحطة',
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -917,7 +1000,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'أحسنتِ! تم تسجيل إنجازك بنجاح\nوتمت إضافة نقاطك مباشرة',
+                    'تم تسجيل إنجاز المهمة بنجاح\nوتمت إضافة النقاط مباشرة',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.ibmPlexSansArabic(
                       fontSize: 16,
@@ -1291,15 +1374,16 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
       String errorMessage = 'حدث خطأ أثناء إكمال المهمة';
       if (e.toString().contains('403'))
-        errorMessage = 'خطأ في صلاحيات التطبيق. حاول مرة أخرى.';
+        errorMessage = 'خطأ في صلاحيات التطبيق. يرجى المحاولة مرة أخرى.';
       else if (e.toString().contains('Too many attempts'))
-        errorMessage = 'محاولات كثيرة جداً. انتظر قليلاً وحاول مرة أخرى.';
+        errorMessage =
+            'محاولات كثيرة جداً. يرجى الانتظار قليلاً ثم المحاولة مرة أخرى.';
       else if (e.toString().contains('network') ||
           e.toString().contains('اتصال'))
-        errorMessage = 'مشكلة في الاتصال بالإنترنت. تحقق من اتصالك.';
-      else if (e is TimeoutException)  // ← أضيفي هذا
-        errorMessage = 'انتهت مهلة رفع الصورة. تحقق من اتصالك وحاول مرة أخرى.';
-
+        errorMessage = 'مشكلة في الاتصال بالإنترنت. يرجى التحقق من الاتصال.';
+      else if (e is TimeoutException) // ← أضيفي هذا
+        errorMessage =
+            'انتهت مهلة رفع الصورة. يرجى التحقق من الاتصال ثم المحاولة مرة أخرى.';
       _showInlineError(errorMessage);
       if (mounted) setState(() => _isUploading = false);
     } finally {
@@ -1592,14 +1676,13 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           .timeout(
             const Duration(seconds: 60),
             onTimeout: () => throw TimeoutException(
-                'انتهت مهلة رفع الصورة، يرجى المحاولة مرة أخرى'),
+              'انتهت مهلة رفع الصورة، يرجى المحاولة مرة أخرى',
+            ),
           );
-      downloadUrl = await storageRef
-          .getDownloadURL()
-          .timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => throw TimeoutException('انتهت مهلة جلب رابط الصورة'),
-          );
+      downloadUrl = await storageRef.getDownloadURL().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('انتهت مهلة جلب رابط الصورة'),
+      );
       downloadUrl = await storageRef.getDownloadURL();
       storagePath = storageRef.fullPath;
     }
@@ -1822,30 +1905,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   Future<void> _startTaskFlow() async {
     final taskTitle = widget.taskData['title']?.toString() ?? '';
     final taskType = _getLocationTaskType(taskTitle);
+    final t = taskTitle.toLowerCase();
 
-    if (taskType == TaskType.metro || taskType == TaskType.bus) {
+    final bool isAnyTransport =
+        taskType == TaskType.metro ||
+        taskType == TaskType.bus ||
+        t.contains('دراجة') ||
+        t.contains('سيكل') ||
+        t.contains('cycle') ||
+        t.contains('سكوتر') ||
+        t.contains('scooter') ||
+        t.contains('مشياً') ||
+        t.contains('مشيا') ||
+        t.contains('مشي');
+
+    if (isAnyTransport) {
       await _startFlowForTransportTask();
       return;
-    }
-
-    if (taskType != null) {
-      if (mounted) setState(() => _isVerifying = true);
-      final locationResult = await LocationValidator.validate(taskType);
-      if (mounted) setState(() => _isVerifying = false);
-
-      if (locationResult.isValid) {
-        if (mounted) {
-          setState(() {
-            _verificationResult = TaskVerificationResult(
-              success: true,
-              verified: true,
-              verificationSource: 'location',
-            );
-          });
-        }
-        await _uploadAndComplete();
-        return;
-      }
     }
 
     _openCamera();
@@ -1995,6 +2071,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
     String tempUnit = _selectedMeasureUnit ?? 'kg';
     String? tempProductType = _selectedProductType;
+    bool showFieldErrors = false;
     _itemCountCtrl.text = (_itemCount ?? 1).toString();
 
     final result = await showGeneralDialog<Map<String, dynamic>>(
@@ -2012,6 +2089,21 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             opacity: anim.value,
             child: StatefulBuilder(
               builder: (context, setLocalState) {
+                OutlineInputBorder normalBorder() => OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF67CDB3),
+                    width: 1.4,
+                  ),
+                );
+
+                OutlineInputBorder errorBorder() => OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Colors.redAccent,
+                    width: 2,
+                  ),
+                );
                 return Center(
                   child: Material(
                     color: Colors.white,
@@ -2071,16 +2163,22 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 value: tempProductType,
                                 decoration: InputDecoration(
                                   labelText: 'نوع المنتج',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                                  border: normalBorder(),
+                                  enabledBorder:
+                                      showFieldErrors && tempProductType == null
+                                      ? errorBorder()
+                                      : normalBorder(),
+                                  focusedBorder:
+                                      showFieldErrors && tempProductType == null
+                                      ? errorBorder()
+                                      : normalBorder(),
                                   contentPadding: const EdgeInsets.symmetric(
                                     vertical: 12,
                                     horizontal: 12,
                                   ),
                                 ),
                                 hint: Text(
-                                  'أدخل نوع المنتج',
+                                  'اختار نوع المنتج',
                                   style: GoogleFonts.ibmPlexSansArabic(
                                     fontSize: 16,
                                     color: Colors.grey.shade600,
@@ -2111,14 +2209,25 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 decoration: InputDecoration(
                                   labelText: 'ما هو المنتج؟',
                                   hintText: 'مثال: ماء، عصير، لبن',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                                  border: normalBorder(),
+                                  enabledBorder:
+                                      showFieldErrors &&
+                                          productNameCtrl.text.trim().isEmpty
+                                      ? errorBorder()
+                                      : normalBorder(),
+                                  focusedBorder:
+                                      showFieldErrors &&
+                                          productNameCtrl.text.trim().isEmpty
+                                      ? errorBorder()
+                                      : normalBorder(),
                                   contentPadding: const EdgeInsets.symmetric(
                                     vertical: 12,
                                     horizontal: 12,
                                   ),
                                 ),
+                                onChanged: (_) {
+                                  if (showFieldErrors) setLocalState(() {});
+                                },
                               ),
                               const SizedBox(height: 12),
                               // عدد المنتجات
@@ -2219,14 +2328,33 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                       ? 'وزن القطعة'
                                       : 'حجم العبوة',
                                   hintText: 'مثال: 1 أو 500',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                                  border: normalBorder(),
+                                  enabledBorder:
+                                      showFieldErrors &&
+                                          ((double.tryParse(
+                                                    measureCtrl.text.trim(),
+                                                  ) ??
+                                                  0) <=
+                                              0)
+                                      ? errorBorder()
+                                      : normalBorder(),
+                                  focusedBorder:
+                                      showFieldErrors &&
+                                          ((double.tryParse(
+                                                    measureCtrl.text.trim(),
+                                                  ) ??
+                                                  0) <=
+                                              0)
+                                      ? errorBorder()
+                                      : normalBorder(),
                                   contentPadding: const EdgeInsets.symmetric(
                                     vertical: 12,
                                     horizontal: 12,
                                   ),
                                 ),
+                                onChanged: (_) {
+                                  if (showFieldErrors) setLocalState(() {});
+                                },
                               ),
 
                               const SizedBox(height: 12),
@@ -2286,10 +2414,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                               const SizedBox(height: 10),
                               Text(
                                 tempProductType == null
-                                    ? 'اختار نوع المنتج أولاً'
+                                    ? 'يرجى اختيار نوع المنتج أولاً'
                                     : tempProductType == 'solid'
-                                    ? 'أدخل الوزن كما هو مكتوب على العبوة'
-                                    : 'أدخل الحجم كما هو مكتوب على العبوة',
+                                    ? 'يرجى إدخال الوزن كما هو مكتوب على العبوة'
+                                    : 'يرجى إدخال الحجم كما هو مكتوب على العبوة',
                                 style: GoogleFonts.ibmPlexSansArabic(
                                   fontSize: 12.5,
                                   color: Colors.black54,
@@ -2331,36 +2459,27 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   Expanded(
                                     child: ElevatedButton(
                                       onPressed: () {
-                                        if (tempProductType == null) {
-                                          _showInlineError(
-                                            'اختار نوع المنتج أولاً.',
-                                          );
-                                          return;
-                                        }
-
                                         final count = int.tryParse(
                                           _itemCountCtrl.text.trim(),
                                         );
                                         final measure = double.tryParse(
                                           measureCtrl.text.trim(),
                                         );
-
-                                        if (count == null || count <= 0) {
-                                          _showInlineError(
-                                            'أدخل عددًا صحيحًا.',
-                                          );
-                                          return;
-                                        }
-
-                                        if (measure == null || measure <= 0) {
-                                          _showInlineError('أدخل قيمة صحيحة.');
-                                          return;
-                                        }
-
                                         final productName = productNameCtrl.text
                                             .trim();
-                                        if (productName.isEmpty) {
-                                          _showInlineError('أدخل اسم المنتج.');
+
+                                        final hasError =
+                                            tempProductType == null ||
+                                            productName.isEmpty ||
+                                            count == null ||
+                                            count <= 0 ||
+                                            measure == null ||
+                                            measure <= 0;
+
+                                        if (hasError) {
+                                          setLocalState(() {
+                                            showFieldErrors = true;
+                                          });
                                           return;
                                         }
 
@@ -2656,20 +2775,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   // ─── زر مهام غير مواصلات ───
                   if (requiresPhotoExact && !isTransport && !_ready)
                     _gradientButton(
-                      label:
-                          _getLocationTaskType(
-                                widget.taskData['title']?.toString() ?? '',
-                              ) !=
-                              null
-                          ? 'تحقق من المهمة'
-                          : 'ابدأ التصوير',
-                      icon:
-                          _getLocationTaskType(
-                                widget.taskData['title']?.toString() ?? '',
-                              ) !=
-                              null
-                          ? Icons.location_on
-                          : Icons.camera_alt,
+                      label: 'ابدأ التصوير',
+                      icon: Icons.camera_alt,
                       onTap: (_openingCamera || _isVerifying)
                           ? null
                           : () => _startTaskFlow(),
@@ -2680,11 +2787,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   if (requiresPhotoExact && isTransport && !_ready) ...[
                     _gradientButton(
                       label: _transportVerifyPhase == 'end'
-                          ? 'وصلت إلى محطة الوصول'
-                          : 'اختر محطات المسار',
+                          ? _getArrivalLabel()
+                          : _getTransportButtonLabel(),
                       icon: _transportVerifyPhase == 'end'
                           ? Icons.location_on
-                          : Icons.map_outlined,
+                          : _getTransportIcon(),
                       onTap: (_openingCamera || _isVerifying)
                           ? null
                           : () => _transportVerifyPhase == 'end'
@@ -3347,10 +3454,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   Widget _buildPhotoInstructions() {
     final bullets = [
       'تأكد من أن الإضاءة جيدة والعنصر واضح.',
-      'التقط صورة تُظهر قيامك بالمهمة (مثل العناصر المجمعة).',
+      'التقط صورة تُظهر قيامك بالمهمة (مثل حاوية اعادة التدوير).',
       'لا تستخدم صورًا من الإنترنت.',
       'التقط من زاوية مناسبة وبدون فلاش إن أمكن.',
     ];
+
+    final isRecyclingTask = () {
+      final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
+      return t.contains('تدوير') ||
+          t.contains('حاوية') ||
+          t.contains('بلاستيك') ||
+          t.contains('ورق') ||
+          t.contains('recycl') ||
+          t.contains('rvm') ||
+          t.contains('ملابس') ||
+          t.contains('طعام');
+    }();
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -3401,6 +3521,28 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
               ),
             ),
           ),
+
+          // ── مثال الصورة لمهام الحاويات ──
+          if (isRecyclingTask) ...[
+            const SizedBox(height: 14),
+            Text(
+              'مثال على الصورة المطلوبة:',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: appColors.dark,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.asset(
+                'assets/img/recycling_example.webp',
+                fit: BoxFit.cover,
+                width: double.infinity,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -3566,7 +3708,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 onPressed: () {
                                   final raw = _asInt(_itemCountCtrl.text);
                                   if (raw == null || raw <= 0) {
-                                    _showInlineError('أدخل عددًا صحيحًا.');
+                                    _showInlineError('يرجى إدخال عدد صحيح.');
                                     return;
                                   }
                                   final safe = clamp(raw);

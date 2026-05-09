@@ -74,13 +74,6 @@ class _communityPageState extends State<communityPage> {
       ]);
 
       setState(() => _isLoading = false);
-    } on FirebaseException catch (e) {
-      setState(() => _isLoading = false);
-      if (e.code == 'permission-denied') {
-        _showAccessDeniedDialog();
-      } else {
-        _showSnackBar('حدث خطأ في تحميل البيانات', isError: true);
-      }
     } catch (e) {
       debugPrint('خطأ في تحميل البيانات: $e');
       setState(() => _isLoading = false);
@@ -121,11 +114,6 @@ class _communityPageState extends State<communityPage> {
               'pfpIndex': data['pfpIndex'],
             });
           }
-        } on FirebaseException catch (e) {
-          if (e.code == 'permission-denied') {
-            debugPrint('🔒 Access denied: $friendId');
-            // تخطى هذا الصديق بصمت
-          }
         } catch (e) {
           debugPrint('خطأ في جلب بيانات الصديق: $e');
         }
@@ -135,10 +123,6 @@ class _communityPageState extends State<communityPage> {
         (a, b) => (b['points'] as int).compareTo(a['points'] as int),
       );
       _followingList = following;
-    } on FirebaseException catch (e) {
-      if (e.code == 'permission-denied') {
-        _showAccessDeniedDialog();
-      }
     } catch (e) {
       debugPrint('خطأ في تحميل المتابَعين: $e');
     }
@@ -170,10 +154,6 @@ class _communityPageState extends State<communityPage> {
         (a, b) => (b['points'] as int).compareTo(a['points'] as int),
       );
       _followersList = followers;
-    } on FirebaseException catch (e) {
-      if (e.code == 'permission-denied') {
-        _showAccessDeniedDialog();
-      }
     } catch (e) {
       debugPrint('خطأ في تحميل المتابِعين: $e');
     }
@@ -227,7 +207,7 @@ class _communityPageState extends State<communityPage> {
       // التحقق من أنه ليس المستخدم نفسه
       if (foundUser.id == currentUser.uid) {
         setState(() {
-          _searchError = 'لا يمكنك إضافة نفسك كصديق';
+          _searchError = 'لا يمكن إضافة الحساب الحالي كصديق';
           _isSearching = false;
         });
         return;
@@ -267,7 +247,7 @@ class _communityPageState extends State<communityPage> {
     final isAlreadyFriend = _followingList.any((f) => f['id'] == friend['id']);
 
     if (isAlreadyFriend) {
-      _showSnackBar('أنت تتابع هذا الصديق بالفعل', isError: true);
+      _showSnackBar('هذا الصديق متابَع بالفعل', isError: true);
       return;
     }
 
@@ -291,7 +271,7 @@ class _communityPageState extends State<communityPage> {
     }
   }
 
-// ✅ إلغاء متابعة صديق
+  // ✅ إلغاء متابعة صديق
   Future<void> _unfollowFriend(String friendId, String friendName) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
@@ -320,7 +300,7 @@ class _communityPageState extends State<communityPage> {
                 const SizedBox(height: 16),
                 // ✅ النص
                 Text(
-                  'هل أنت متأكد أنك تريد إلغاء متابعة $friendName؟',
+                  'هل تريد تأكيد إلغاء المتابعة $friendName؟',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontSize: 18,
@@ -419,62 +399,6 @@ class _communityPageState extends State<communityPage> {
       ),
     );
   }
-  void _showAccessDeniedDialog() {
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Dialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset('assets/img/nameerThink.png', height: 100),
-                const SizedBox(height: 16),
-                Text(
-                  'غير مصرح لك بالوصول',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: appColors.dark),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'لا يمكنك الوصول إلى هذه البيانات',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 13, color: Colors.grey),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: appColors.primary,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      minimumSize: const Size(double.infinity, 44),
-                    ),
-                    child: Text('حسناً',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   // ✅ تبويب الأصدقاء = index رقم 4
   final int _currentIndex = 4;
@@ -557,7 +481,9 @@ class _communityPageState extends State<communityPage> {
                     GestureDetector(
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const GlobalEcoLandPage()),
+                        MaterialPageRoute(
+                          builder: (_) => const GlobalEcoLandPage(),
+                        ),
                       ),
                       child: Container(
                         width: double.infinity,
@@ -583,9 +509,11 @@ class _communityPageState extends State<communityPage> {
                           children: [
                             // دوائر زخرفية
                             Positioned(
-                              right: -10, top: -10,
+                              right: -10,
+                              top: -10,
                               child: Container(
-                                width: 70, height: 70,
+                                width: 70,
+                                height: 70,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: Colors.white.withOpacity(0.10),
@@ -593,9 +521,11 @@ class _communityPageState extends State<communityPage> {
                               ),
                             ),
                             Positioned(
-                              left: 20, bottom: -15,
+                              left: 20,
+                              bottom: -15,
                               child: Container(
-                                width: 50, height: 50,
+                                width: 50,
+                                height: 50,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: Colors.white.withOpacity(0.08),
@@ -607,7 +537,11 @@ class _communityPageState extends State<communityPage> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Icon(Icons.public_rounded, color: Colors.white, size: 20),
+                                  const Icon(
+                                    Icons.public_rounded,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                   const SizedBox(width: 8),
                                   Text(
                                     'واحة الأصدقاء',
@@ -1269,7 +1203,7 @@ class _communityPageState extends State<communityPage> {
     );
   }
 
-// ✅ بطاقة الصديق (من أتابعهم)
+  // ✅ بطاقة الصديق (من أتابعهم)
   Widget _buildFriendCard(
     Map<String, dynamic> friend,
     int rank, {
@@ -1372,7 +1306,8 @@ class _communityPageState extends State<communityPage> {
               Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: () => _unfollowFriend(friend['id'], friend['username']),
+                  onTap: () =>
+                      _unfollowFriend(friend['id'], friend['username']),
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
                     padding: const EdgeInsets.all(8),

@@ -219,7 +219,7 @@ class _SupportPageState extends State<SupportPage> {
                             await _openSupportEmail();
                           } catch (_) {
                             _showSnack(
-                              'تعذر فتح تطبيق البريد. تأكد من وجود تطبيق بريد على جهازك.',
+                              'تعذر فتح تطبيق البريد. يرجى التحقق من وجود تطبيق البريد على الجهاز.',
                             );
                           }
                         },
@@ -526,7 +526,7 @@ class _HintCard extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'إذا لم تجد جواب سؤالك في الأسئلة الشائعة، اضغط "تواصل معنا" وارسل لنا التفاصيل.',
+              'إذا لم تجد جواب سؤالك في الأسئلة الشائعة، يمكنك الضغط على "تواصل معنا" وإرسال التفاصيل.',
               style: GoogleFonts.ibmPlexSansArabic(
                 height: 1.6,
                 fontWeight: FontWeight.w600,
