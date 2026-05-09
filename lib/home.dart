@@ -1107,13 +1107,21 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                             final counts = data['taskCounts'] as Map<String, dynamic>? ?? {};
                                             counts.forEach((k, v) { if (v is int) taskCounts[k] = v; });
 
-                                            return EcoLandIsland(
-                                              level: islandLevel,
-                                              isReadOnly: false,
-                                              allowPan: false,
-                                              showFriends: false,
-                                              taskCounts: taskCounts,
-                                            );
+                                          return EcoLandIsland(
+                                            level: IslandLevel.champion,
+                                            isReadOnly: false,
+                                            allowPan: false,
+                                            showFriends: false,
+                                            taskCounts: const {
+                                              'metro':     30,
+                                              'bus':       30,
+                                              'cycle':     30,
+                                              'scooter':   30,
+                                              'recycling': 30,
+                                              'article':   30,
+                                              'local':     30,
+                                            },
+                                          );
                                           },
                                         ),
                                       ),
