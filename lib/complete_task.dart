@@ -2071,6 +2071,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
     String tempUnit = _selectedMeasureUnit ?? 'kg';
     String? tempProductType = _selectedProductType;
+    bool showFieldErrors = false;
     _itemCountCtrl.text = (_itemCount ?? 1).toString();
 
     final result = await showGeneralDialog<Map<String, dynamic>>(
@@ -2088,6 +2089,21 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             opacity: anim.value,
             child: StatefulBuilder(
               builder: (context, setLocalState) {
+                OutlineInputBorder normalBorder() => OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF67CDB3),
+                    width: 1.4,
+                  ),
+                );
+
+                OutlineInputBorder errorBorder() => OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Colors.redAccent,
+                    width: 2,
+                  ),
+                );
                 return Center(
                   child: Material(
                     color: Colors.white,
@@ -2147,9 +2163,15 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 value: tempProductType,
                                 decoration: InputDecoration(
                                   labelText: 'نوع المنتج',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                                  border: normalBorder(),
+                                  enabledBorder:
+                                      showFieldErrors && tempProductType == null
+                                      ? errorBorder()
+                                      : normalBorder(),
+                                  focusedBorder:
+                                      showFieldErrors && tempProductType == null
+                                      ? errorBorder()
+                                      : normalBorder(),
                                   contentPadding: const EdgeInsets.symmetric(
                                     vertical: 12,
                                     horizontal: 12,
@@ -2187,14 +2209,25 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                 decoration: InputDecoration(
                                   labelText: 'ما هو المنتج؟',
                                   hintText: 'مثال: ماء، عصير، لبن',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                                  border: normalBorder(),
+                                  enabledBorder:
+                                      showFieldErrors &&
+                                          productNameCtrl.text.trim().isEmpty
+                                      ? errorBorder()
+                                      : normalBorder(),
+                                  focusedBorder:
+                                      showFieldErrors &&
+                                          productNameCtrl.text.trim().isEmpty
+                                      ? errorBorder()
+                                      : normalBorder(),
                                   contentPadding: const EdgeInsets.symmetric(
                                     vertical: 12,
                                     horizontal: 12,
                                   ),
                                 ),
+                                onChanged: (_) {
+                                  if (showFieldErrors) setLocalState(() {});
+                                },
                               ),
                               const SizedBox(height: 12),
                               // عدد المنتجات
@@ -2295,14 +2328,33 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                       ? 'وزن القطعة'
                                       : 'حجم العبوة',
                                   hintText: 'مثال: 1 أو 500',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                                  border: normalBorder(),
+                                  enabledBorder:
+                                      showFieldErrors &&
+                                          ((double.tryParse(
+                                                    measureCtrl.text.trim(),
+                                                  ) ??
+                                                  0) <=
+                                              0)
+                                      ? errorBorder()
+                                      : normalBorder(),
+                                  focusedBorder:
+                                      showFieldErrors &&
+                                          ((double.tryParse(
+                                                    measureCtrl.text.trim(),
+                                                  ) ??
+                                                  0) <=
+                                              0)
+                                      ? errorBorder()
+                                      : normalBorder(),
                                   contentPadding: const EdgeInsets.symmetric(
                                     vertical: 12,
                                     horizontal: 12,
                                   ),
                                 ),
+                                onChanged: (_) {
+                                  if (showFieldErrors) setLocalState(() {});
+                                },
                               ),
 
                               const SizedBox(height: 12),
@@ -2407,40 +2459,27 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   Expanded(
                                     child: ElevatedButton(
                                       onPressed: () {
-                                        if (tempProductType == null) {
-                                          _showInlineError(
-                                            'يرجى اختيار نوع المنتج أولاً.',
-                                          );
-                                          return;
-                                        }
-
                                         final count = int.tryParse(
                                           _itemCountCtrl.text.trim(),
                                         );
                                         final measure = double.tryParse(
                                           measureCtrl.text.trim(),
                                         );
-
-                                        if (count == null || count <= 0) {
-                                          _showInlineError(
-                                            'يرجى إدخال عدد صحيح.',
-                                          );
-                                          return;
-                                        }
-
-                                        if (measure == null || measure <= 0) {
-                                          _showInlineError(
-                                            'يرجى إدخال قيمة صحيحة.',
-                                          );
-                                          return;
-                                        }
-
                                         final productName = productNameCtrl.text
                                             .trim();
-                                        if (productName.isEmpty) {
-                                          _showInlineError(
-                                            'يرجى إدخال اسم المنتج.',
-                                          );
+
+                                        final hasError =
+                                            tempProductType == null ||
+                                            productName.isEmpty ||
+                                            count == null ||
+                                            count <= 0 ||
+                                            measure == null ||
+                                            measure <= 0;
+
+                                        if (hasError) {
+                                          setLocalState(() {
+                                            showFieldErrors = true;
+                                          });
                                           return;
                                         }
 
