@@ -632,7 +632,7 @@ class _TaskReportCardState extends State<_TaskReportCard> {
             SnackBar(
               backgroundColor: slackMesseges.red,
               content: Text(
-                'حدث خطأ أثناء تحديث حالة البلاغ، حاول مرة أخرى.',
+                'حدث خطأ أثناء تحديث حالة البلاغ. يرجى المحاولة مرة أخرى.',
                 style: GoogleFonts.ibmPlexSansArabic(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -763,7 +763,7 @@ class _TaskReportCardState extends State<_TaskReportCard> {
             style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w800),
           ),
           content: Text(
-            'هل أنت متأكد من إرجاع هذا البلاغ لقيد المراجعة؟',
+            'هل تريد تأكيد إرجاع هذا البلاغ لقيد المراجعة؟',
             style: GoogleFonts.ibmPlexSansArabic(),
           ),
           actions: [

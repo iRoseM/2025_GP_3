@@ -287,12 +287,12 @@ class _mapPageState extends State<mapPage> {
           .collection('facilities')
           .limit(20)
           .get();
-      
+
       final restBatch = firstBatch.docs.isNotEmpty
           ? await FirebaseFirestore.instance
-              .collection('facilities')
-              .startAfterDocument(firstBatch.docs.last)
-              .get()
+                .collection('facilities')
+                .startAfterDocument(firstBatch.docs.last)
+                .get()
           : null;
 
       // ندمج الـ docs
@@ -477,7 +477,7 @@ class _mapPageState extends State<mapPage> {
         SnackBar(
           backgroundColor: slackMesseges.red,
           content: Text(
-            'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
+            'تعذّر تحديد الموقع الحالي. يرجى التحقق من إذن الموقع وGPS',
             style: GoogleFonts.ibmPlexSansArabic(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -507,7 +507,7 @@ class _mapPageState extends State<mapPage> {
         SnackBar(
           backgroundColor: slackMesseges.red,
           content: Text(
-            'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
+            'تعذّر تحديد الموقع الحالي. يرجى التحقق من إذن الموقع وGPS',
             style: GoogleFonts.ibmPlexSansArabic(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -573,7 +573,7 @@ class _mapPageState extends State<mapPage> {
           SnackBar(
             backgroundColor: slackMesseges.red,
             content: Text(
-              'تعذّر تحديد موقعك. تأكد من الإذن وGPS',
+              'تعذّر تحديد الموقع الحالي. يرجى التحقق من إذن الموقع وGPS',
               style: GoogleFonts.ibmPlexSansArabic(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -1406,7 +1406,7 @@ class _mapPageState extends State<mapPage> {
                           },
                           validator: (v) {
                             if (v == null || v.trim().isEmpty) {
-                              return 'اختر نوع البلاغ';
+                              return 'يرجى اختيار نوع البلاغ';
                             }
                             return null;
                           },
@@ -1611,7 +1611,7 @@ class _mapPageState extends State<mapPage> {
         SnackBar(
           backgroundColor: slackMesseges.red,
           content: Text(
-            'تعذّر إرسال البلاغ، حاول لاحقًا',
+            'تعذّر إرسال البلاغ، يرجى المحاولة لاحقًا',
             style: GoogleFonts.ibmPlexSansArabic(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -1727,7 +1727,7 @@ class _mapPageState extends State<mapPage> {
                               ],
                             ),
                             child: const Text(
-                              'اختار الحاوية ثم اضغط على "الإبلاغ عن مشكلة"',
+                              'يرجى اختيار الحاوية ثم الضغط على "الإبلاغ عن مشكلة"',
                               textAlign: TextAlign.center,
                               style: TextStyle(fontWeight: FontWeight.w800),
                             ),

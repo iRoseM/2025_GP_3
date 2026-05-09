@@ -281,9 +281,9 @@ class _RegisterPageState extends State<RegisterPage>
     }
 
     if (_googleUid == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('حدث خطأ، أعد المحاولة')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('حدث خطأ، يرجى إعادة المحاولة')),
+      );
       return;
     }
 
@@ -305,7 +305,7 @@ class _RegisterPageState extends State<RegisterPage>
     if (age == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('أدخل عمر صحيح')));
+      ).showSnackBar(const SnackBar(content: Text('يرجى إدخال عمر صحيح')));
       return;
     }
 
@@ -352,7 +352,7 @@ class _RegisterPageState extends State<RegisterPage>
           SnackBar(
             backgroundColor: slackMesseges.red,
             content: Text(
-              '❌ اسم المستخدم محجوز، جرّب اسمًا آخر',
+              '❌ اسم المستخدم محجوز، يرجى اختيار اسم آخر',
               style: GoogleFonts.ibmPlexSansArabic(
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
@@ -425,7 +425,7 @@ class _RegisterPageState extends State<RegisterPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'أدخل البريد أولًا',
+            'يرجى إدخال البريد أولًا',
             style: GoogleFonts.ibmPlexSansArabic(
               fontWeight: FontWeight.w700,
               color: Colors.white,
@@ -443,7 +443,7 @@ class _RegisterPageState extends State<RegisterPage>
         SnackBar(
           backgroundColor: slackMesseges.primary,
           content: Text(
-            '✅ تم إرسال رابط إعادة التعيين إلى بريدك',
+            '✅ تم إرسال رابط إعادة التعيين إلى بريدك الإلكتروني',
             style: GoogleFonts.ibmPlexSansArabic(
               fontWeight: FontWeight.w700,
               color: Colors.white,
@@ -456,8 +456,7 @@ class _RegisterPageState extends State<RegisterPage>
 
       switch (e.code) {
         case 'invalid-email':
-          msg =
-              'البريد الإلكتروني الذي أدخلته غير صالح. تأكد من كتابته بشكل صحيح.';
+          msg = 'البريد الإلكتروني غير صالح. يرجى التحقق من كتابته بشكل صحيح.';
           break;
         case 'user-not-found':
           msg = 'لا يوجد حساب مسجّل بهذا البريد الإلكتروني.';
@@ -471,7 +470,8 @@ class _RegisterPageState extends State<RegisterPage>
               'تم إجراء محاولات كثيرة خلال فترة قصيرة، الرجاء الانتظار قليلًا ثم المحاولة مجددًا.';
           break;
         default:
-          msg = 'حدث خطأ غير متوقع أثناء إرسال الرابط. حاول مرة أخرى لاحقًا.';
+          msg =
+              'حدث خطأ غير متوقع أثناء إرسال الرابط. يرجى المحاولة مرة أخرى لاحقًا.';
       }
 
       if (!mounted) return;
@@ -695,7 +695,7 @@ class _RegisterPageState extends State<RegisterPage>
               content: Directionality(
                 textDirection: TextDirection.rtl,
                 child: Text(
-                  'تم إرسال رسالة التحقق إلى بريدك، يرجى التحقق قبل تسجيل الدخول.',
+                  'تم إرسال رسالة التحقق إلى بريدك الإلكتروني، يرجى التحقق قبل تسجيل الدخول.',
                   textAlign: TextAlign.right,
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontWeight: FontWeight.w700,
@@ -761,7 +761,7 @@ class _RegisterPageState extends State<RegisterPage>
           msg = 'بيانات الدخول غير صحيحة';
           break;
         case 'network-request-failed':
-          msg = 'تعذّر الاتصال — تأكد من الإنترنت';
+          msg = 'تعذّر الاتصال — يرجى التحقق من الإنترنت';
           break;
       }
 
@@ -941,7 +941,7 @@ class _RegisterPageState extends State<RegisterPage>
                                       ),
                                       validator: (v) {
                                         if (v == null || v.trim().isEmpty) {
-                                          return 'أدخل البريد الإلكتروني';
+                                          return 'يرجى إدخال البريد الإلكتروني';
                                         }
                                         final emailReg = RegExp(
                                           r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
@@ -1004,7 +1004,7 @@ class _RegisterPageState extends State<RegisterPage>
                                         ),
                                         validator: (v) {
                                           if (v == null || v.isEmpty) {
-                                            return 'أدخل كلمة المرور';
+                                            return 'يرجى إدخال كلمة المرور';
                                           }
 
                                           final hasUpper = RegExp(
@@ -1062,7 +1062,7 @@ class _RegisterPageState extends State<RegisterPage>
                                               .trim()
                                               .toLowerCase();
                                           if (val.isEmpty)
-                                            return 'أدخل اسم المستخدم';
+                                            return 'يرجى إدخال اسم المستخدم';
                                           if (val.length < 3)
                                             return 'اسم المستخدم لازم يكون 3 أحرف على الأقل';
                                           if (val.length > 24)
@@ -1123,12 +1123,13 @@ class _RegisterPageState extends State<RegisterPage>
                                                     return null;
                                                   if (v == null ||
                                                       v.trim().isEmpty)
-                                                    return 'أدخل العمر';
+                                                    return 'يرجى إدخال العمر';
                                                   final n = int.tryParse(
                                                     v.trim(),
                                                   );
                                                   if (n == null)
-                                                    return 'أدخل رقمًا صحيحًا';
+                                                    return 'يرجى إدخال رقم صحيح';
+                                                  ;
                                                   if (n < 7 || n > 120)
                                                     return 'العمر غير مناسب';
                                                   return null;
@@ -1724,7 +1725,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     if (v.isEmpty) {
       setState(() {
         _usernameStatus = _FieldStatus.invalid;
-        _usernameError = 'أدخل اسم المستخدم';
+        _usernameError = 'يرجى إدخال اسم المستخدم';
       });
       return;
     }
@@ -1788,7 +1789,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     setState(() {
       if (raw.isEmpty) {
         _emailStatus = _FieldStatus.invalid;
-        _emailError = 'أدخل البريد الإلكتروني';
+        _emailError = 'يرجى إدخال البريد الإلكتروني';
       } else if (!emailReg.hasMatch(raw)) {
         _emailStatus = _FieldStatus.invalid;
         _emailError = 'بريد إلكتروني غير صالح';
@@ -1807,7 +1808,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     setState(() {
       if (raw.isEmpty) {
         _emailStatus = _FieldStatus.invalid;
-        _emailError = 'أدخل البريد الإلكتروني';
+        _emailError = 'يرجى إدخال البريد الإلكتروني';
       } else if (!emailReg.hasMatch(raw)) {
         _emailStatus = _FieldStatus.invalid;
         _emailError = 'بريد إلكتروني غير صالح';
@@ -1829,7 +1830,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     if (v.isEmpty) {
       setState(() {
         _passStatus = _FieldStatus.invalid;
-        _passError = 'أدخل كلمة المرور';
+        _passError = 'يرجى إدخال كلمة المرور';
       });
       return;
     }
@@ -1867,7 +1868,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     if (v.isEmpty) {
       setState(() {
         _confirmStatus = _FieldStatus.invalid;
-        _confirmError = 'أدخل تأكيد كلمة المرور';
+        _confirmError = 'يرجى إدخال تأكيد كلمة المرور';
       });
       return;
     }
@@ -2004,7 +2005,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
             _touchedUser = true;
             _usernameStatus = _FieldStatus.invalid;
             _usernameError = err.contains('USERNAME_TAKEN')
-                ? 'اسم المستخدم محجوز، جرّب اسمًا آخر'
+                ? 'اسم المستخدم محجوز، يرجى اختيار اسم آخر'
                 : 'اسم المستخدم غير صالح';
           });
           FocusScope.of(context).requestFocus(_fnUser);
@@ -2064,7 +2065,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'تعذّر الاتصال — تأكد من الإنترنت',
+              'تعذّر الاتصال — يرجى التحقق من الإنترنت',
               style: GoogleFonts.ibmPlexSansArabic(
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
@@ -2258,7 +2259,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                               .toLowerCase();
 
                                           if (val.isEmpty) {
-                                            return 'أدخل اسم المستخدم';
+                                            return 'يرجى إدخال اسم المستخدم';
                                           }
 
                                           if (val.length < 3) {
@@ -2341,7 +2342,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                         ),
                                         validator: (v) {
                                           if (v == null || v.trim().isEmpty)
-                                            return 'أدخل البريد الإلكتروني';
+                                            return 'يرجى إدخال البريد الإلكتروني';
                                           final emailReg = RegExp(
                                             r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
                                           );
@@ -2430,7 +2431,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                         ),
                                         validator: (v) {
                                           if (v == null || v.isEmpty)
-                                            return 'أدخل كلمة المرور';
+                                            return 'يرجى إدخال كلمة المرور';
                                           if (v.length < 8)
                                             return 'كلمة المرور غير صحيحة';
                                           return null;
@@ -2519,7 +2520,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                         ),
                                         validator: (v) {
                                           if (v == null || v.isEmpty) {
-                                            return 'أدخل تأكيد كلمة المرور';
+                                            return 'يرجى إدخال تأكيد كلمة المرور';
                                           }
                                           if (v != _passCtrl.text) {
                                             return 'كلمتا المرور غير متطابقتين';
@@ -2565,13 +2566,14 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                               validator: (v) {
                                                 if (v == null ||
                                                     v.trim().isEmpty) {
-                                                  return 'أدخل العمر';
+                                                  return 'يرجى إدخال العمر';
                                                 }
                                                 final n = int.tryParse(
                                                   v.trim(),
                                                 );
                                                 if (n == null) {
-                                                  return 'أدخل رقمًا صحيحًا';
+                                                  return 'يرجى إدخال رقم صحيح';
+                                                  ;
                                                 }
                                                 if (n < 7 || n > 120) {
                                                   return 'الحد الأدنى للعمر 7 سنوات';
@@ -2791,10 +2793,10 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
       String msg = 'تعذّر الإرسال (${e.code})';
       switch (e.code) {
         case 'current-user-null':
-          msg = 'لا يوجد مستخدم مسجّل — سجّل دخول ثم حاول';
+          msg = 'لا يوجد مستخدم مسجّل — يرجى تسجيل الدخول ثم المحاولة';
           break;
         case 'network-request-failed':
-          msg = 'تحقق من اتصال الإنترنت';
+          msg = 'يرجى التحقق من اتصال الإنترنت';
           break;
         case 'too-many-requests':
           msg =
@@ -2990,7 +2992,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'أرسلنا رسالة إلى:\n${widget.email}\nافتح بريدك واضغط رابط التحقق لإكمال إنشاء الحساب.',
+                          'تم إرسال رسالة إلى:\n${widget.email}\nيرجى فتح البريد والضغط على رابط التحقق لإكمال إنشاء الحساب.',
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 16),

@@ -671,7 +671,7 @@ class _AdminCategoryPageState extends State<AdminCategoryPage> {
             ),
           ),
           content: Text(
-            'هل أنت متأكد من إخفاء هذه الفئة؟\n'
+            'هل تريد تأكيد إخفاء هذه الفئة؟\n'
             'لن يتم إخفاؤها فورًا من المستخدمين، بل سيتم تطبيق الإخفاء مع بداية الشهر القادم ($nextMonthKey).\n\n'
             '⚠️ ملاحظة: جميع المهام المرتبطة بهذه الفئة سيتم إخفاؤها تلقائيًا معها في نفس التاريخ.',
             style: GoogleFonts.ibmPlexSansArabic(

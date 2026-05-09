@@ -113,7 +113,7 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
         SnackBar(
           backgroundColor: slackMesseges.red,
           content: Text(
-            'اختر مهمة أولًا',
+            'يرجى اختيار مهمة أولًا',
             style: GoogleFonts.ibmPlexSansArabic(
               fontWeight: FontWeight.w700,
               color: Colors.white,
@@ -527,7 +527,7 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
                                     },
                                     validator: (v) {
                                       if (v == null || v.isEmpty)
-                                        return 'اختر مهمة';
+                                        return 'يرجى اختيار مهمة';
                                       return null;
                                     },
                                   );
@@ -545,7 +545,7 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
                             minLines: 4,
                             maxLines: 8,
                             decoration: InputDecoration(
-                              hintText: 'اكتب تفاصيل البلاغ…',
+                              hintText: 'إدخال تفاصيل البلاغ…',
                               hintStyle: GoogleFonts.ibmPlexSansArabic(
                                 color: Colors.grey[600],
                               ),
@@ -566,9 +566,9 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
                             ),
                             validator: (v) {
                               final t = (v ?? '').trim();
-                              if (t.isEmpty) return 'اكتب وصف البلاغ';
+                              if (t.isEmpty) return 'يرجى إدخال وصف البلاغ';
                               if (t.length < 8) {
-                                return 'اكتب تفاصيل أكثر (على الأقل 8 أحرف)';
+                                return 'يرجى إدخال تفاصيل أكثر (على الأقل 8 أحرف)';
                               }
                               return null;
                             },

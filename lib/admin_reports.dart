@@ -574,7 +574,7 @@ class _ReportCardState extends State<_ReportCard> {
             SnackBar(
               backgroundColor: slackMesseges.red,
               content: Text(
-                'حدث خطأ أثناء تحديث حالة البلاغ، حاول مرة أخرى.',
+                'حدث خطأ أثناء تحديث حالة البلاغ. يرجى المحاولة مرة أخرى.',
                 style: GoogleFonts.ibmPlexSansArabic(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -694,9 +694,7 @@ class _ReportCardState extends State<_ReportCard> {
         textDirection: TextDirection.rtl,
         child: AlertDialog(
           title: const Text('إرجاع لقيد المراجعة'),
-          content: const Text(
-            'هل أنت متأكد من إرجاع هذا التقرير لقيد المراجعة؟',
-          ),
+          content: const Text('هل تريد تأكيد إرجاع هذا التقرير لقيد المراجعة؟'),
           contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
           actionsPadding: const EdgeInsets.symmetric(
             horizontal: 16,

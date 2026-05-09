@@ -272,7 +272,7 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "إجابة خاطئة — عاودي قراءة المقال وحاولي مرة أخرى",
+            "إجابة خاطئة — يرجى إعادة قراءة المقال ثم المحاولة مرة أخرى",
             style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
           backgroundColor: slackMesseges.red,
@@ -290,22 +290,23 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
       // 🟢 جلب بيانات المهمة لأخذ taskPoints من قاعدة البيانات
       // For perrfoemance, we add a timeout here in case the network is bad, so we don't wait indefinitely.
       // If it times out, we throw an error that will be caught in the catch block below, and show a generic error message to the user.
-      final taskSnap = await docRef.get()
-      .timeout(
+      final taskSnap = await docRef.get().timeout(
         const Duration(seconds: 10),
         onTimeout: () => throw TimeoutException('انتهت مهلة جلب بيانات المهمة'),
       );
       final int taskPoints = taskSnap.data()?['taskPoints'] ?? 0;
 
       // 🟢 تحديث مهمة المستخدم
-      await docRef.update({
-        "taskValidation": "التحقق عبر اجراء اختبار قصير",
-        "status": "completed",
-        "completedAt": FieldValue.serverTimestamp(),
-      }).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw TimeoutException('انتهت مهلة تحديث المهمة'),
-      );
+      await docRef
+          .update({
+            "taskValidation": "التحقق عبر اجراء اختبار قصير",
+            "status": "completed",
+            "completedAt": FieldValue.serverTimestamp(),
+          })
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw TimeoutException('انتهت مهلة تحديث المهمة'),
+          );
 
       // 🟢 تحديث بيانات المستخدم
       final user = FirebaseAuth.instance.currentUser;
@@ -327,28 +328,28 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
 
       Navigator.pop(context);
       Navigator.pop(context);
-      } on TimeoutException {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "انتهت مهلة الاتصال. تحقق من اتصالك وحاول مرة أخرى.",
-              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-            ),
-            backgroundColor: slackMesseges.red,
+    } on TimeoutException {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "انتهت مهلة الاتصال. يرجى التحقق من الاتصال ثم المحاولة مرة أخرى.",
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "حدث خطأ غير متوقع. حاول مرة أخرى.",
-              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-            ),
-            backgroundColor: slackMesseges.red,
+          backgroundColor: slackMesseges.red,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.",
+            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
           ),
-        );
-      } finally {
-        if (mounted) setState(() => sending = false);
-      }
+          backgroundColor: slackMesseges.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
   }
 }

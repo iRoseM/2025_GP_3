@@ -841,7 +841,7 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                                                       height: 8,
                                                                     ),
                                                                     Text(
-                                                                      'هل أنت متأكد من حذف "$rewardName"؟',
+                                                                      'هل تريد تأكيد حذف "$rewardName"؟',
                                                                       textAlign:
                                                                           TextAlign
                                                                               .center,

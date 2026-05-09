@@ -83,19 +83,29 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
           builder: (ctx) => Directionality(
             textDirection: TextDirection.rtl,
             child: Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               insetPadding: const EdgeInsets.symmetric(horizontal: 24),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Image.asset('assets/img/nameerThink.png', height: 120, fit: BoxFit.contain),
+                    Image.asset(
+                      'assets/img/nameerThink.png',
+                      height: 120,
+                      fit: BoxFit.contain,
+                    ),
                     const SizedBox(height: 16),
                     Text(
-                      'هل أنت متأكد أنك تريد إلغاء متابعة ${widget.friendUsername}؟',
+                      'هل تريد تأكيد إلغاء متابعة ${widget.friendUsername}؟',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.ibmPlexSansArabic(fontSize: 18, fontWeight: FontWeight.w600, color: appColors.dark),
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: appColors.dark,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     Row(
@@ -104,11 +114,20 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: appColors.primary),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: () => Navigator.of(ctx).pop(false),
-                            child: Text('إلغاء', style: GoogleFonts.ibmPlexSansArabic(color: appColors.primary, fontWeight: FontWeight.w700, fontSize: 16)),
+                            child: Text(
+                              'إلغاء',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                color: appColors.primary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -116,11 +135,20 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: appColors.primary,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                             onPressed: () => Navigator.of(ctx).pop(true),
-                            child: Text('تأكيد', style: GoogleFonts.ibmPlexSansArabic(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
+                            child: Text(
+                              'تأكيد',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -132,14 +160,20 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
           ),
         );
         if (confirm != true) return;
-        await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).update({
-          'following': FieldValue.arrayRemove([widget.friendId]),
-        });
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .update({
+              'following': FieldValue.arrayRemove([widget.friendId]),
+            });
         setState(() => _isFollowing = false);
       } else {
-        await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).set({
-          'following': FieldValue.arrayUnion([widget.friendId]),
-        }, SetOptions(merge: true));
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .set({
+              'following': FieldValue.arrayUnion([widget.friendId]),
+            }, SetOptions(merge: true));
         setState(() => _isFollowing = true);
       }
     } catch (e) {
@@ -156,14 +190,27 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(colors: [appColors.primary.withOpacity(0.2), appColors.mint.withOpacity(0.3)]),
-        boxShadow: [BoxShadow(color: appColors.primary.withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 4))],
+        gradient: LinearGradient(
+          colors: [
+            appColors.primary.withOpacity(0.2),
+            appColors.mint.withOpacity(0.3),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: appColors.primary.withOpacity(0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: CircleAvatar(
         radius: radius,
         backgroundColor: Colors.transparent,
         backgroundImage: avatarPath != null ? AssetImage(avatarPath) : null,
-        child: avatarPath == null ? Icon(Icons.person_rounded, color: appColors.primary, size: radius) : null,
+        child: avatarPath == null
+            ? Icon(Icons.person_rounded, color: appColors.primary, size: radius)
+            : null,
       ),
     );
   }
@@ -176,7 +223,11 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
         extendBody: true,
         extendBodyBehindAppBar: true,
         backgroundColor: Colors.transparent,
-        appBar: const NameerAppBar(showTitleInBar: false, showBack: true, height: 80),
+        appBar: const NameerAppBar(
+          showTitleInBar: false,
+          showBack: true,
+          height: 80,
+        ),
         body: AnimatedBackgroundContainer(
           child: Builder(
             builder: (context) {
@@ -185,13 +236,23 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
               const gap = 12.0;
               final topPadding = statusBar + headerH + gap;
 
-              if (_isLoading) return Center(child: CircularProgressIndicator(color: appColors.primary));
-              if (_friendData == null) return Center(child: Text('تعذّر تحميل البيانات', style: GoogleFonts.ibmPlexSansArabic(color: appColors.dark)));
+              if (_isLoading)
+                return Center(
+                  child: CircularProgressIndicator(color: appColors.primary),
+                );
+              if (_friendData == null)
+                return Center(
+                  child: Text(
+                    'تعذّر تحميل البيانات',
+                    style: GoogleFonts.ibmPlexSansArabic(color: appColors.dark),
+                  ),
+                );
 
               final int points = (_friendData!['points'] ?? 0) is int
                   ? _friendData!['points']
                   : ((_friendData!['points'] ?? 0) as num).toInt();
-              final int completedTasks = (_friendData!['completedTask'] ?? 0) is int
+              final int completedTasks =
+                  (_friendData!['completedTask'] ?? 0) is int
                   ? _friendData!['completedTask']
                   : ((_friendData!['completedTask'] ?? 0) as num).toInt();
               final int friendXp = (_friendData!['xp'] ?? 0) is int
@@ -209,7 +270,12 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
                   children: [
                     _buildProfileHeader(points, friendLevel, completedTasks),
                     const SizedBox(height: 16),
-                    _buildLevelProgress(friendLevel, nextLevelModel, friendXp, progress),
+                    _buildLevelProgress(
+                      friendLevel,
+                      nextLevelModel,
+                      friendXp,
+                      progress,
+                    ),
                     const SizedBox(height: 16),
                     _buildStatsRow(points, completedTasks, friendXp),
                     const SizedBox(height: 16),
@@ -225,13 +291,23 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
     );
   }
 
-  Widget _buildProfileHeader(int points, LevelModel friendLevel, int completedTasks) {
+  Widget _buildProfileHeader(
+    int points,
+    LevelModel friendLevel,
+    int completedTasks,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 14, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -241,13 +317,28 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.friendUsername, style: GoogleFonts.ibmPlexSansArabic(fontSize: 20, fontWeight: FontWeight.w800, color: appColors.dark)),
+                Text(
+                  widget.friendUsername,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: appColors.dark,
+                  ),
+                ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    _buildMiniChip('${friendLevel.icon} ${friendLevel.nameAr}', Icons.stars_rounded, Colors.amber),
+                    _buildMiniChip(
+                      '${friendLevel.icon} ${friendLevel.nameAr}',
+                      Icons.stars_rounded,
+                      Colors.amber,
+                    ),
                     const SizedBox(width: 8),
-                    _buildMiniChip('$points نقطة', Icons.eco_rounded, appColors.primary),
+                    _buildMiniChip(
+                      '$points نقطة',
+                      Icons.eco_rounded,
+                      appColors.primary,
+                    ),
                   ],
                 ),
               ],
@@ -266,31 +357,63 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          gradient: _isFollowing ? null : LinearGradient(colors: [appColors.primary, appColors.tealSoft]),
+          gradient: _isFollowing
+              ? null
+              : LinearGradient(colors: [appColors.primary, appColors.tealSoft]),
           color: _isFollowing ? Colors.grey.shade100 : null,
           borderRadius: BorderRadius.circular(14),
           border: _isFollowing ? Border.all(color: Colors.grey.shade300) : null,
-          boxShadow: _isFollowing ? null : [BoxShadow(color: appColors.primary.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))],
+          boxShadow: _isFollowing
+              ? null
+              : [
+                  BoxShadow(
+                    color: appColors.primary.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(_isFollowing ? Icons.check_rounded : Icons.person_add_rounded, size: 16, color: _isFollowing ? Colors.grey.shade600 : Colors.white),
+            Icon(
+              _isFollowing ? Icons.check_rounded : Icons.person_add_rounded,
+              size: 16,
+              color: _isFollowing ? Colors.grey.shade600 : Colors.white,
+            ),
             const SizedBox(width: 6),
-            Text(_isFollowing ? 'متابَع' : 'متابعة', style: GoogleFonts.ibmPlexSansArabic(fontSize: 13, fontWeight: FontWeight.w700, color: _isFollowing ? Colors.grey.shade600 : Colors.white)),
+            Text(
+              _isFollowing ? 'متابَع' : 'متابعة',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: _isFollowing ? Colors.grey.shade600 : Colors.white,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLevelProgress(LevelModel friendLevel, LevelModel? nextLevel, int xp, double progress) {
+  Widget _buildLevelProgress(
+    LevelModel friendLevel,
+    LevelModel? nextLevel,
+    int xp,
+    double progress,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -298,10 +421,23 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('تقدم المستوى', style: GoogleFonts.ibmPlexSansArabic(fontSize: 14, fontWeight: FontWeight.w700, color: appColors.dark)),
               Text(
-                nextLevel == null ? 'المستوى الأقصى 🏆' : '${friendLevel.nameAr} ← ${nextLevel.nameAr}',
-                style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, fontWeight: FontWeight.w600, color: appColors.primary),
+                'تقدم المستوى',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: appColors.dark,
+                ),
+              ),
+              Text(
+                nextLevel == null
+                    ? 'المستوى الأقصى 🏆'
+                    : '${friendLevel.nameAr} ← ${nextLevel.nameAr}',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: appColors.primary,
+                ),
               ),
             ],
           ),
@@ -319,7 +455,10 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
           if (nextLevel != null)
             Text(
               '${xp - friendLevel.requiredXp} / ${nextLevel.requiredXp - friendLevel.requiredXp} XP',
-              style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, color: Colors.grey.shade600),
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 11,
+                color: Colors.grey.shade600,
+              ),
             ),
         ],
       ),
@@ -333,18 +472,44 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
       children: [
         Row(
           children: [
-            Expanded(child: _buildStatCard('النقاط', '$points', Icons.stars_rounded, Colors.amber)),
+            Expanded(
+              child: _buildStatCard(
+                'النقاط',
+                '$points',
+                Icons.stars_rounded,
+                Colors.amber,
+              ),
+            ),
             const SizedBox(width: 10),
-            Expanded(child: _buildStatCard('المهام المكتملة', '$completedTasks', Icons.task_alt_rounded, Colors.green)),
+            Expanded(
+              child: _buildStatCard(
+                'المهام المكتملة',
+                '$completedTasks',
+                Icons.task_alt_rounded,
+                Colors.green,
+              ),
+            ),
             const SizedBox(width: 10),
-            Expanded(child: _buildStatCard('XP', '$xp', Icons.bolt_rounded, Colors.deepPurple)),
+            Expanded(
+              child: _buildStatCard(
+                'XP',
+                '$xp',
+                Icons.bolt_rounded,
+                Colors.deepPurple,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
-              child: _buildStatCard('المرحلة', '${friendLevel.icon} ${friendLevel.nameAr}', Icons.eco_rounded, friendLevel.color),
+              child: _buildStatCard(
+                'المرحلة',
+                '${friendLevel.icon} ${friendLevel.nameAr}',
+                Icons.eco_rounded,
+                friendLevel.color,
+              ),
             ),
           ],
         ),
@@ -352,25 +517,53 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withOpacity(0.12), shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
             child: Icon(icon, size: 20, color: color),
           ),
           const SizedBox(height: 8),
-          Text(value, style: GoogleFonts.ibmPlexSansArabic(fontSize: 18, fontWeight: FontWeight.w900, color: appColors.dark)),
+          Text(
+            value,
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: appColors.dark,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(label, style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, color: Colors.grey.shade600), textAlign: TextAlign.center),
+          Text(
+            label,
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -382,7 +575,13 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -391,62 +590,112 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: appColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.landscape_rounded, color: appColors.primary, size: 20),
+                decoration: BoxDecoration(
+                  color: appColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.landscape_rounded,
+                  color: appColors.primary,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('EcoLand', style: GoogleFonts.ibmPlexSansArabic(fontSize: 17, fontWeight: FontWeight.w800, color: appColors.dark)),
-                  Text('أرض ${widget.friendUsername}', style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, color: Colors.grey.shade600)),
+                  Text(
+                    'EcoLand',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: appColors.dark,
+                    ),
+                  ),
+                  Text(
+                    'أرض ${widget.friendUsername}',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
                 ],
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: appColors.mint.withOpacity(0.3), borderRadius: BorderRadius.circular(10)),
-                child: Text('👁 للعرض فقط', style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, fontWeight: FontWeight.w600, color: appColors.primary)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: appColors.mint.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '👁 للعرض فقط',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: appColors.primary,
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 16),
 
-          Builder(builder: (context) {
-            final int friendXp = (_friendData!['xp'] ?? 0) is int
-                ? _friendData!['xp'] ?? 0
-                : ((_friendData!['xp'] ?? 0) as num).toInt();
-            final currentLevel = getCurrentLevel(friendXp);
-            final islandLevel = islandLevelFromId(currentLevel.id);
+          Builder(
+            builder: (context) {
+              final int friendXp = (_friendData!['xp'] ?? 0) is int
+                  ? _friendData!['xp'] ?? 0
+                  : ((_friendData!['xp'] ?? 0) as num).toInt();
+              final currentLevel = getCurrentLevel(friendXp);
+              final islandLevel = islandLevelFromId(currentLevel.id);
 
-            final taskCounts = <String, int>{};
-            final counts = (_friendData!['taskCounts'] as Map<String, dynamic>?) ?? {};
-            counts.forEach((k, v) { if (v is int) taskCounts[k] = v; });
+              final taskCounts = <String, int>{};
+              final counts =
+                  (_friendData!['taskCounts'] as Map<String, dynamic>?) ?? {};
+              counts.forEach((k, v) {
+                if (v is int) taskCounts[k] = v;
+              });
 
-            return SizedBox(
-              width: double.infinity,
-              height: 300,
-              child: EcoLandIsland(
-                level: islandLevel,
-                isReadOnly: true,
-                allowPan: false,
-                showFriends: false,
-                taskCounts: taskCounts,
-              ),
-            );
-          }),
+              return SizedBox(
+                width: double.infinity,
+                height: 300,
+                child: EcoLandIsland(
+                  level: islandLevel,
+                  isReadOnly: true,
+                  allowPan: false,
+                  showFriends: false,
+                  taskCounts: taskCounts,
+                ),
+              );
+            },
+          ),
 
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: appColors.primary.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: appColors.primary.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, size: 16, color: appColors.primary),
+                const Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: appColors.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('أرض صديقك تنمو كلما أنجز مهام استدامة أكثر!',
-                    style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, color: appColors.dark.withOpacity(0.7))),
+                  child: Text(
+                    'أرض صديقك تنمو كلما أنجز مهام استدامة أكثر!',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 12,
+                      color: appColors.dark.withOpacity(0.7),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -459,13 +708,23 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
   Widget _buildMiniChip(String text, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 13, color: color),
           const SizedBox(width: 4),
-          Text(text, style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, fontWeight: FontWeight.w600, color: appColors.dark)),
+          Text(
+            text,
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: appColors.dark,
+            ),
+          ),
         ],
       ),
     );

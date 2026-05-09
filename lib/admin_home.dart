@@ -2599,7 +2599,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
                 ),
-                hintText: 'أدخل قيمة بالكيلوجرام',
+                hintText: 'إدخال قيمة بالكيلوجرام',
                 hintStyle: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 12.5,
                   color: Colors.grey[500],
@@ -4726,7 +4726,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
                               Icon(Icons.copy, size: 12, color: Colors.orange),
                               const SizedBox(width: 4),
                               Text(
-                                'انسخ الوصف',
+                                'نسخ الوصف',
                                 style: GoogleFonts.ibmPlexSansArabic(
                                   fontSize: 10,
                                   color: Colors.orange,
@@ -5428,7 +5428,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'تأكد من اتصال الإنترنت وحاول مرة أخرى',
+            'يرجى التحقق من اتصال الإنترنت ثم إعادة المحاولة',
             style: GoogleFonts.ibmPlexSansArabic(
               fontSize: 14,
               color: Colors.grey[600],

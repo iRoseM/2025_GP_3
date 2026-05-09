@@ -765,7 +765,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
             ),
           ),
           content: Text(
-            'هل أنت متأكد من إخفاء هذه المهمة؟ سيتم تطبيق الإخفاء في الشهر القادم ($nextMonthKey)',
+            'هل تريد تأكيد إخفاء هذه المهمة؟ سيتم تطبيق الإخفاء في الشهر القادم ($nextMonthKey)',
             style: GoogleFonts.ibmPlexSansArabic(color: Colors.black87),
           ),
           actions: [
@@ -900,7 +900,7 @@ class _AdminTasksPageState extends State<AdminTasksPage> {
             ),
           ),
           content: Text(
-            'هل ترغب بإعادة إظهار هذه المهمة لتُعاد نشرها الشهر القادم؟',
+            'هل تريد تأكيد إعادة إظهار هذه المهمة لتُعاد نشرها الشهر القادم؟',
             style: GoogleFonts.ibmPlexSansArabic(fontSize: 14),
           ),
           actions: [
@@ -2036,7 +2036,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'هل أنت متأكد من العودة دون حفظ التغييرات؟',
+                      'هل تريد تأكيد العودة دون حفظ التغييرات؟',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 15,
@@ -2694,7 +2694,7 @@ class _AddCategoryPageState extends State<AddCategoryPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'هل أنت متأكد من العودة دون حفظ التغييرات؟',
+                      'هل تريد تأكيد العودة دون حفظ التغييرات؟',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 15,

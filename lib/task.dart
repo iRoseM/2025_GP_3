@@ -1843,7 +1843,7 @@ class _taskPageState extends State<taskPage> {
         'userId': _uid,
         'taskId': newsTaskId,
         'taskTitle': 'قراءة خبر بيئي',
-        'taskDescription': 'اقرئي هذا الخبر البيئي ثم أجيبي على الاختبار.',
+        'taskDescription': 'قراءة هذا الخبر البيئي ثم الإجابة على الاختبار.',
         'taskPoints': 10,
         'taskValidation': 'التحقق عبر اجراء اختبار قصير',
         'articleId': news['docId'],
@@ -2321,7 +2321,7 @@ class _taskPageState extends State<taskPage> {
                                   ? 'صلاحيات غير كافية لقراءة مهامك. تأكدي أنك مسجّلة دخولًا وأن قواعد Firestore تسمح لصاحب الوثيقة بالقراءة.'
                                   : (_precheckError!.contains('unavailable') ||
                                         _precheckError!.contains('network'))
-                                  ? 'مشكلة اتصال مؤقتة. تحقّقي من الإنترنت ثم جرّبي التحديث.'
+                                  ? 'مشكلة اتصال مؤقتة. يرجى التحقق من الإنترنت ثم تجربة التحديث.'
                                   : 'خطأ: $_precheckError',
                             );
                           }
@@ -2798,7 +2798,7 @@ class _taskPageState extends State<taskPage> {
                           ),
                         ),
                         content: Text(
-                          'هل أنت متأكد من إلغاء المهمة المجدولة لهذا اليوم؟',
+                          'هل تريد تأكيد إلغاء المهمة المجدولة لهذا اليوم؟',
                           style: GoogleFonts.ibmPlexSansArabic(),
                         ),
                         actions: [
@@ -3076,9 +3076,7 @@ class _taskPageState extends State<taskPage> {
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text('تأكيد التحديث'),
-                      content: const Text(
-                        'هل أنت متأكد من رغبتك في تغيير هذه المهمة؟',
-                      ),
+                      content: const Text('هل تريد تأكيد تغيير هذه المهمة؟'),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
@@ -3273,7 +3271,7 @@ class _taskPageState extends State<taskPage> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'أحسنت! أكملتِ المهمة الإضافية اليوم 🌱',
+                      'تم إكمال المهمة الإضافية اليوم 🌱',
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontWeight: FontWeight.w700,
                         color: AppColors.dark,

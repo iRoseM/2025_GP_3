@@ -169,7 +169,8 @@ class _RewardsPageState extends State<RewardsPage> {
     } catch (e) {
       final scaffoldContext = context;
 
-      String message = 'تعذر تنفيذ الاستبدال مؤقتًا، حاول مرة أخرى بعد لحظات ';
+      String message =
+          'تعذر تنفيذ الاستبدال مؤقتًا، يرجى المحاولة مرة أخرى بعد لحظات ';
       if (e.toString().contains('رصيدك لا يكفي')) {
         message = 'رصيدك الحالي لا يكفي لاستبدال هذه المكافأة ';
       } else if (e.toString().contains('المستخدم غير موجود')) {
@@ -584,7 +585,7 @@ class _RewardsPageState extends State<RewardsPage> {
                                                             0,
                                                           ),
                                                       content: const Text(
-                                                        ' الكود صالح لمدة 10 دقائق فقط بعد الاستبدال\nتأكد انك جاهز لاستخدامه قبل المتابعة',
+                                                        'الكود صالح لمدة 10 دقائق فقط بعد الاستبدال\nيرجى التأكد من الجاهزية لاستخدامه قبل المتابعة',
                                                         textAlign:
                                                             TextAlign.center,
                                                       ),

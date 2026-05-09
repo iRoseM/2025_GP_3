@@ -207,7 +207,7 @@ class _communityPageState extends State<communityPage> {
       // التحقق من أنه ليس المستخدم نفسه
       if (foundUser.id == currentUser.uid) {
         setState(() {
-          _searchError = 'لا يمكنك إضافة نفسك كصديق';
+          _searchError = 'لا يمكن إضافة الحساب الحالي كصديق';
           _isSearching = false;
         });
         return;
@@ -247,7 +247,7 @@ class _communityPageState extends State<communityPage> {
     final isAlreadyFriend = _followingList.any((f) => f['id'] == friend['id']);
 
     if (isAlreadyFriend) {
-      _showSnackBar('أنت تتابع هذا الصديق بالفعل', isError: true);
+      _showSnackBar('هذا الصديق متابَع بالفعل', isError: true);
       return;
     }
 
@@ -271,7 +271,7 @@ class _communityPageState extends State<communityPage> {
     }
   }
 
-// ✅ إلغاء متابعة صديق
+  // ✅ إلغاء متابعة صديق
   Future<void> _unfollowFriend(String friendId, String friendName) async {
     final currentUser = _auth.currentUser;
     if (currentUser == null) return;
@@ -300,7 +300,7 @@ class _communityPageState extends State<communityPage> {
                 const SizedBox(height: 16),
                 // ✅ النص
                 Text(
-                  'هل أنت متأكد أنك تريد إلغاء متابعة $friendName؟',
+                  'هل تريد تأكيد إلغاء المتابعة $friendName؟',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontSize: 18,
@@ -481,7 +481,9 @@ class _communityPageState extends State<communityPage> {
                     GestureDetector(
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const GlobalEcoLandPage()),
+                        MaterialPageRoute(
+                          builder: (_) => const GlobalEcoLandPage(),
+                        ),
                       ),
                       child: Container(
                         width: double.infinity,
@@ -507,9 +509,11 @@ class _communityPageState extends State<communityPage> {
                           children: [
                             // دوائر زخرفية
                             Positioned(
-                              right: -10, top: -10,
+                              right: -10,
+                              top: -10,
                               child: Container(
-                                width: 70, height: 70,
+                                width: 70,
+                                height: 70,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: Colors.white.withOpacity(0.10),
@@ -517,9 +521,11 @@ class _communityPageState extends State<communityPage> {
                               ),
                             ),
                             Positioned(
-                              left: 20, bottom: -15,
+                              left: 20,
+                              bottom: -15,
                               child: Container(
-                                width: 50, height: 50,
+                                width: 50,
+                                height: 50,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: Colors.white.withOpacity(0.08),
@@ -531,7 +537,11 @@ class _communityPageState extends State<communityPage> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Icon(Icons.public_rounded, color: Colors.white, size: 20),
+                                  const Icon(
+                                    Icons.public_rounded,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                   const SizedBox(width: 8),
                                   Text(
                                     'واحة الأصدقاء',
@@ -1193,7 +1203,7 @@ class _communityPageState extends State<communityPage> {
     );
   }
 
-// ✅ بطاقة الصديق (من أتابعهم)
+  // ✅ بطاقة الصديق (من أتابعهم)
   Widget _buildFriendCard(
     Map<String, dynamic> friend,
     int rank, {
@@ -1296,7 +1306,8 @@ class _communityPageState extends State<communityPage> {
               Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: () => _unfollowFriend(friend['id'], friend['username']),
+                  onTap: () =>
+                      _unfollowFriend(friend['id'], friend['username']),
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
                     padding: const EdgeInsets.all(8),

@@ -637,7 +637,7 @@ class _profilePageState extends State<profilePage> {
                                                 ),
                                                 const SizedBox(height: 16),
                                                 Text(
-                                                  'هل أنت متأكد أنك تريد تسجيل الخروج؟',
+                                                  'هل تريد تأكيد تسجيل الخروج؟',
                                                   textAlign: TextAlign.center,
                                                   style:
                                                       GoogleFonts.ibmPlexSansArabic(
@@ -930,7 +930,7 @@ class _profilePageState extends State<profilePage> {
                   'كلمات المرور تُخزَّن بشكل مُشفّر وفق أفضل الممارسات.',
                 ),
                 _privacyBullet(
-                  'تستطيع ضبط صلاحيات الوصول للموقع والكاميرا والإشعارات.',
+                  'يمكنك ضبط صلاحيات الوصول للموقع والكاميرا والإشعارات.',
                 ),
                 const SizedBox(height: 16),
                 Align(
@@ -1042,7 +1042,7 @@ class _profilePageState extends State<profilePage> {
                         } catch (e) {
                           _showSnack(
                             context,
-                            'تعذر فتح تطبيق البريد. تأكد من وجود تطبيق بريد على جهازك.',
+                            'تعذر فتح تطبيق البريد. يرجى التحقق من وجود تطبيق البريد على الجهاز.',
                           );
                         }
                       },
@@ -1437,11 +1437,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
     } on FirebaseAuthException catch (e) {
       var msg = 'تعذّر حفظ التغييرات (${e.code})';
       if (e.code == 'requires-recent-login') {
-        msg = 'لأسباب أمان، سجّل دخولك مجددًا ثم حاول.';
+        msg = 'لأسباب أمان، يرجى تسجيل الدخول مجددًا ثم المحاولة.';
       } else if (e.code == 'wrong-password') {
         msg = 'كلمة المرور الحالية غير صحيحة.';
       } else if (e.code == 'network-request-failed') {
-        msg = 'تعذّر الاتصال — تأكد من الإنترنت.';
+        msg = 'تعذّر الاتصال — يرجى التحقق من الإنترنت.';
       }
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1699,7 +1699,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                                 validator: (v) {
                                   final n = int.tryParse(v ?? '');
                                   if (n == null || n < 7 || n > 120) {
-                                    return 'أدخل عمرًا منطقيًا';
+                                    return 'يرجى إدخال عمر منطقي';
                                   }
                                   return null;
                                 },
@@ -1791,7 +1791,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         ),
                         validator: (v) {
                           if (_changePassword && (v == null || v.isEmpty)) {
-                            return 'أدخل كلمة المرور الحالية';
+                            return 'يرجى إدخال كلمة المرور الحالية';
                           }
                           return null;
                         },
@@ -1816,7 +1816,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         validator: (v) {
                           if (_changePassword) {
                             if (v == null || v.isEmpty) {
-                              return 'أدخل كلمة المرور الجديدة';
+                              return 'يرجى إدخال كلمة المرور الجديدة';
                             }
                             if (v.length < 8) {
                               return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
@@ -1849,7 +1849,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         validator: (v) {
                           if (_changePassword) {
                             if (v == null || v.isEmpty) {
-                              return 'أعد إدخال كلمة المرور';
+                              return 'يرجى إعادة إدخال كلمة المرور';
                             }
                             if (v != _newPassCtrl.text) {
                               return 'كلمتا المرور غير متطابقتين';
