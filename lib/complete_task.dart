@@ -2104,6 +2104,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                     width: 2,
                   ),
                 );
+                Widget fieldErrorText(String message) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6, right: 8),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        message,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 12.5,
+                          color: Colors.redAccent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
                 return Center(
                   child: Material(
                     color: Colors.white,
@@ -2202,6 +2219,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   });
                                 },
                               ),
+                              if (showFieldErrors && tempProductType == null)
+                                fieldErrorText('يرجى اختيار نوع المنتج'),
                               const SizedBox(height: 12),
                               TextField(
                                 controller: productNameCtrl,
@@ -2229,6 +2248,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   if (showFieldErrors) setLocalState(() {});
                                 },
                               ),
+                              if (showFieldErrors &&
+                                  productNameCtrl.text.trim().isEmpty)
+                                fieldErrorText('يرجى إدخال اسم المنتج'),
                               const SizedBox(height: 12),
                               // عدد المنتجات
                               Container(
@@ -2356,7 +2378,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   if (showFieldErrors) setLocalState(() {});
                                 },
                               ),
-
+                              if (showFieldErrors &&
+                                  ((double.tryParse(measureCtrl.text.trim()) ??
+                                          0) <=
+                                      0))
+                                fieldErrorText('يرجى إدخال الكمية'),
                               const SizedBox(height: 12),
 
                               DropdownButtonFormField<String>(

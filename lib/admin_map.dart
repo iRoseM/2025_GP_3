@@ -2011,8 +2011,10 @@ class _AdminMapPageState extends State<AdminMapPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    textDirection: TextDirection.ltr,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // مربع الحالة في اليسار
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -2033,6 +2035,9 @@ class _AdminMapPageState extends State<AdminMapPage> {
                         ),
                       ),
 
+                      const SizedBox(width: 8),
+
+                      // الكلام في اليمين
                       Expanded(
                         child: Text(
                           type,
@@ -2168,6 +2173,75 @@ class _AdminMapPageState extends State<AdminMapPage> {
                       bool isActive,
                       String option,
                     ) async {
+                      if (option == 'حفظ مباشر') {
+                        final normalized = _normalizeType(type);
+
+                        await FirebaseFirestore.instance
+                            .collection('facilities')
+                            .doc(markerId.value)
+                            .set({
+                              'address': name.trim().isEmpty
+                                  ? 'عنوان غير محدد'
+                                  : name.trim(),
+                              'type': normalized,
+                              'lat': position.latitude,
+                              'lng': position.longitude,
+                              'provider': provider.trim().isEmpty
+                                  ? 'غير محدد'
+                                  : provider.trim(),
+                              'status': isActive ? 'نشط' : 'متوقف',
+                            }, SetOptions(merge: true));
+
+                        final updatedMarker = Marker(
+                          markerId: markerId,
+                          position: position,
+                          infoWindow: InfoWindow(
+                            title: name.trim().isNotEmpty
+                                ? name.trim()
+                                : normalized,
+                            snippet:
+                                '$normalized${provider.trim().isNotEmpty ? ' • ${provider.trim()}' : ''}${name.trim().isNotEmpty ? ' • ${name.trim()}' : ''}',
+                            onTap: () => _showMarkerSheet(markerId, position),
+                          ),
+                          icon: _iconForType(normalized),
+                          consumeTapEvents: true,
+                          onTap: () => _showMarkerSheet(markerId, position),
+                        );
+
+                        setState(() {
+                          _statusById[markerId.value] = isActive
+                              ? 'نشط'
+                              : 'متوقف';
+
+                          _markers.removeWhere((m) => m.markerId == markerId);
+                          _allMarkers.removeWhere(
+                            (m) => m.markerId == markerId,
+                          );
+
+                          _allMarkers.add(updatedMarker);
+                        });
+
+                        _applyCurrentFilters();
+
+                        if (mounted) {
+                          Navigator.pop(context);
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: appColors.primary,
+                              content: Text(
+                                'تم حفظ التعديلات بنجاح',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+
+                        return;
+                      }
                       if (option == 'تحديد يدوي' || option == 'موقعي الحالي') {
                         Navigator.pop(context);
                         _lastAddedName = name;
@@ -2763,6 +2837,40 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                     onChanged: (v) => setState(() => _isActive = v),
                     contentPadding: EdgeInsets.zero,
                   ),
+                  if (widget.fixedPosition != null) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: appColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () {
+                          if (_formKey.currentState!.validate()) {
+                            widget.onSelectOption(
+                              _nameCtrl.text.trim(),
+                              _type,
+                              _providerCtrl.text.trim(),
+                              _isActive,
+                              'حفظ مباشر',
+                            );
+                          }
+                        },
+                        child: const Text(
+                          'حفظ التعديلات',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 16),
                   const Text(

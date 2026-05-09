@@ -1235,67 +1235,67 @@ exports.generateDailyTasks = onSchedule(
 );
 
 
-// exports.sendImmediateTomorrowReminderOnScheduledTaskWrite = functions
-//   .region("us-central1")
-//   .firestore.document("scheduledTasks/{scheduledTaskId}")
-//   .onWrite(async (change, context) => {
-//     if (!change.after.exists) return null;
+exports.sendImmediateTomorrowReminderOnScheduledTaskWrite = functions
+  .region("us-central1")
+  .firestore.document("scheduledTasks/{scheduledTaskId}")
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return null;
 
-//     const docId = context.params.scheduledTaskId;
-//     const afterData = change.after.data() || {};
-//     const beforeData = change.before.exists ? (change.before.data() || {}) : null;
+    const docId = context.params.scheduledTaskId;
+    const afterData = change.after.data() || {};
+    const beforeData = change.before.exists ? (change.before.data() || {}) : null;
 
-//     const userId = afterData.userId;
-//     if (!userId) return null;
+    const userId = afterData.userId;
+    if (!userId) return null;
 
-//     const ts = afterData.scheduledFor;
-//     if (!ts || typeof ts.toDate !== "function") return null;
+    const ts = afterData.scheduledFor;
+    if (!ts || typeof ts.toDate !== "function") return null;
 
-//     if ((afterData.status || "").toLowerCase() !== "scheduled") return null;
+    if ((afterData.status || "").toLowerCase() !== "scheduled") return null;
 
-//     const isCreate = !change.before.exists;
-//     const scheduledForChanged =
-//       !beforeData || !beforeData.scheduledFor || beforeData.scheduledFor.toMillis?.() !== ts.toMillis?.();
-//     const statusChanged =
-//       !beforeData || (beforeData.status || "").toLowerCase() !== (afterData.status || "").toLowerCase();
+    const isCreate = !change.before.exists;
+    const scheduledForChanged =
+      !beforeData || !beforeData.scheduledFor || beforeData.scheduledFor.toMillis?.() !== ts.toMillis?.();
+    const statusChanged =
+      !beforeData || (beforeData.status || "").toLowerCase() !== (afterData.status || "").toLowerCase();
 
-//     if (!isCreate && !scheduledForChanged && !statusChanged) return null;
+    if (!isCreate && !scheduledForChanged && !statusChanged) return null;
 
-//     const nowRiyadh = DateTime.now().setZone("Asia/Riyadh");
-//     const startTomorrow = nowRiyadh.plus({ days: 1 }).startOf("day");
-//     const endTomorrow = nowRiyadh.plus({ days: 1 }).endOf("day");
+    const nowRiyadh = DateTime.now().setZone("Asia/Riyadh");
+    const startTomorrow = nowRiyadh.plus({ days: 1 }).startOf("day");
+    const endTomorrow = nowRiyadh.plus({ days: 1 }).endOf("day");
 
-//     const scheduledForRiyadh = DateTime.fromJSDate(ts.toDate()).setZone("Asia/Riyadh");
+    const scheduledForRiyadh = DateTime.fromJSDate(ts.toDate()).setZone("Asia/Riyadh");
 
-//     const isTomorrow =
-//       scheduledForRiyadh >= startTomorrow && scheduledForRiyadh <= endTomorrow;
+    const isTomorrow =
+      scheduledForRiyadh >= startTomorrow && scheduledForRiyadh <= endTomorrow;
 
-//     if (!isTomorrow) return null;
+    if (!isTomorrow) return null;
 
-//     const ymd = startTomorrow.toFormat("yyyyLLdd");
+    const ymd = startTomorrow.toFormat("yyyyLLdd");
 
-//     const taskTitle = afterData.taskTitle || "مهمة";
+    const taskTitle = afterData.taskTitle || "مهمة";
 
-//     const notifId = `rem1d_sched_${docId}_${ymd}`;
-//     const notifRef = db.collection("notifications").doc(notifId);
+    const notifId = `rem1d_sched_${docId}_${ymd}`;
+    const notifRef = db.collection("notifications").doc(notifId);
 
-//     const exists = await notifRef.get();
-//     if (exists.exists) return null;
+    const exists = await notifRef.get();
+    if (exists.exists) return null;
 
-//     await notifRef.set({
-//       type: "scheduled_task_one_day_reminder",
-//       userId,
-//       scheduledTaskId: docId,
-//       taskId: afterData.taskId || null,
-//       taskTitle,
-//       title: "تذكير ⏳",
-//       body: `لا تنسى مهمتك "${taskTitle}"، بكره موعدها 🌿`,
-//       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-//       seen: false,
-//     });
+    await notifRef.set({
+      type: "scheduled_task_one_day_reminder",
+      userId,
+      scheduledTaskId: docId,
+      taskId: afterData.taskId || null,
+      taskTitle,
+      title: "تذكير ⏳",
+      body: `لا تنسى مهمتك "${taskTitle}"، بكره موعدها 🌿`,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      seen: false,
+    });
 
-//     return null;
-//   });
+    return null;
+  });
 
 // // ============================================================
 // // ✅ 1. دالة توليد المهام اليومية [v2]
