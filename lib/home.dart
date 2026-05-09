@@ -1113,8 +1113,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                               allowPan: false,
                                               showFriends: false,
                                               taskCounts: taskCounts,
-                                              useCustomBackground: false,  // ✅ خلفية بيضاء
-
                                             );
                                           },
                                         ),

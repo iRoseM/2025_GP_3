@@ -9,7 +9,7 @@ import '../admin_home.dart';
 import '../onboarding.dart'; 
 import '../main.dart'; 
 
-enum _Target { onboarding, register, verifyEmail, adminHome, userHome }
+enum _Target { onboarding, register, verifyEmail, adminHome, userHome, maintenance }
 
 class LaunchDecider extends StatefulWidget {
   const LaunchDecider({super.key});
@@ -25,10 +25,14 @@ class _LaunchDeciderState extends State<LaunchDecider> {
   void initState() {
     super.initState();
 
-    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
+_authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
       if (!mounted) return;
 
       try {
+        // ✅ I-42: تحقق من الصيانة أول شي — قبل أي توجيه
+        final isMaintenance = await _checkMaintenance();
+        if (isMaintenance) return;
+
         if (user == null) {
           final seen = await _seenOnboarding();
           _go(seen ? _Target.register : _Target.onboarding);
@@ -40,10 +44,6 @@ class _LaunchDeciderState extends State<LaunchDecider> {
           _go(_Target.verifyEmail);
           return;
         }
-
-// ✅ I-42: تحقق من وضع الصيانة قبل التوجيه
-        final isMaintenance = await _checkMaintenance();
-        if (isMaintenance) return; // الـ dialog اتعرض داخل _checkMaintenance
 
         final role = await _getUserRole(user.uid);
         _go(role == 'admin' ? _Target.adminHome : _Target.userHome);
@@ -77,12 +77,13 @@ class _LaunchDeciderState extends State<LaunchDecider> {
 
       final email = FirebaseAuth.instance.currentUser?.email ?? '';
       final page = switch (t) {
-        _Target.onboarding => const OnboardingScreen(),
-        _Target.register => const RegisterPage(),
-        _Target.verifyEmail => VerifyEmailPage(email: email),
-        _Target.adminHome => const AdminHomePage(),
-        _Target.userHome => const homePage(),
-      };
+              _Target.onboarding => const OnboardingScreen(),
+              _Target.register => const RegisterPage(),
+              _Target.verifyEmail => VerifyEmailPage(email: email),
+              _Target.adminHome => const AdminHomePage(),
+              _Target.userHome => const homePage(),
+              _Target.maintenance => const MaintenancePage(),
+              };
 
       Navigator.of(
         context,
@@ -113,60 +114,89 @@ class _LaunchDeciderState extends State<LaunchDecider> {
     final isActive = data?['isActive'] == true;
     if (!isActive) return false;
 
-    final message = (data?['message'] ?? 'التطبيق تحت الصيانة حالياً').toString();
-    final expectedEnd = (data?['expectedEnd'] ?? 'قريباً').toString();
-
-    if (!mounted) return true;
-
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: Dialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset('assets/img/nameerThink.png', height: 100),
-                const SizedBox(height: 16),
-                Text(
-                  'التطبيق تحت الصيانة 🔧',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'الوقت المتوقع للعودة: $expectedEnd',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[500],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
+if (!mounted) return true;
+    _go(_Target.maintenance);
     return true;
+    
   } catch (_) {
     return false; // لو فيه خطأ في جلب البيانات نكمل طبيعي
   }
 }
+}
+class MaintenancePage extends StatelessWidget {
+  const MaintenancePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('config')
+          .doc('maintenance')
+          .snapshots(),
+      builder: (context, snap) {
+        final data = snap.data?.data() as Map<String, dynamic>?;
+        final isActive = data?['isActive'] == true;
+
+        // لو انتهت الصيانة → أعد التشغيل
+        if (!isActive && snap.hasData) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const LaunchDecider()),
+            );
+          });
+        }
+
+        final message = (data?['message'] ?? 'التطبيق تحت الصيانة حالياً').toString();
+        final expectedEnd = (data?['expectedEnd'] ?? 'قريباً').toString();
+
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset('assets/img/nameerThink.png', height: 160),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'التطبيق تحت الصيانة 🔧',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.black87,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      message,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 15, color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'الوقت المتوقع للعودة: $expectedEnd',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                    ),
+                    const SizedBox(height: 32),
+                    const CircularProgressIndicator(color: Color(0xFF4BAA98)),
+                    const SizedBox(height: 12),
+                    Text(
+                      'سيتم تحديث الصفحة تلقائياً عند انتهاء الصيانة',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

@@ -3401,3 +3401,61 @@ exports.getAdminRecommendations = onCall(async (request) => {
     throw new HttpsError("internal", `ADMIN_AGENT_ERROR: ${err.message}`);
   }
 });
+
+/* ============================================================
+ * 🔔 sendMaintenanceNotification → تراقب config/maintenance
+ * لما isActive يصير true ترسل إشعار لكل المستخدمين
+ * ============================================================ */
+exports.onMaintenanceActivated = functions
+  .region("us-central1")
+  .firestore.document("config/maintenance")
+  .onWrite(async (change, context) => {
+    const before = change.before.data() || {};
+    const after = change.after.data() || {};
+
+    // فقط لما isActive يتغير من false لـ true
+    if (before.isActive === after.isActive) return null;
+    if (!after.isActive) return null;
+
+    const message = after.message || 'التطبيق تحت الصيانة حالياً';
+    const expectedEnd = after.expectedEnd || '';
+
+    const fullMessage = `${message}${expectedEnd ? ` — الوقت المتوقع للعودة: ${expectedEnd}` : ''}`;
+
+    try {
+      // جلب كل المستخدمين العاديين
+      const usersSnap = await db
+        .collection('users')
+        .where('role', '==', 'regular')
+        .get();
+
+      if (usersSnap.empty) {
+        console.log('⚠️ No users found');
+        return null;
+      }
+
+      // إرسال إشعار لكل مستخدم
+      const batch = db.batch();
+
+      usersSnap.docs.forEach((userDoc) => {
+        const notifRef = db.collection('notifications').doc();
+        batch.set(notifRef, {
+          userId: userDoc.id,
+          type: 'maintenance',
+          title: '🔧 التطبيق تحت الصيانة',
+          body: fullMessage,
+          message: fullMessage,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          seen: false,
+        });
+      });
+
+      await batch.commit();
+      console.log(`✅ Maintenance notifications sent to ${usersSnap.docs.length} users`);
+
+    } catch (err) {
+      console.error('❌ onMaintenanceActivated error:', err);
+    }
+
+    return null;
+  });
