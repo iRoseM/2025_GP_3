@@ -28,11 +28,46 @@ class LevelModel {
 // تعريف جميع المراحل
 // ====================================================
 const List<LevelModel> kLevels = [
-  LevelModel(index: 0, id: 'seedling', nameAr: 'بذرة',  requiredXp: 0,   icon: '🌱', color: Color(0xFF81C784)),
-  LevelModel(index: 1, id: 'sprout',   nameAr: 'شجيرة', requiredXp: 100, icon: '🌿', color: Color(0xFF4CAF50)),
-  LevelModel(index: 2, id: 'tree',     nameAr: 'شجرة',  requiredXp: 250, icon: '🌳', color: Color(0xFF2E7D32)),
-  LevelModel(index: 3, id: 'guardian', nameAr: 'واحة',  requiredXp: 500, icon: '🌍', color: Color(0xFF00796B)),
-  LevelModel(index: 4, id: 'champion', nameAr: 'بطل',   requiredXp: 900, icon: '🏆', color: Color(0xFFF9A825)),
+  LevelModel(
+    index: 0,
+    id: 'seedling',
+    nameAr: 'بذرة',
+    requiredXp: 0,
+    icon: '🌱',
+    color: Color(0xFF81C784),
+  ),
+  LevelModel(
+    index: 1,
+    id: 'sprout',
+    nameAr: 'شجيرة',
+    requiredXp: 100,
+    icon: '🌿',
+    color: Color(0xFF4CAF50),
+  ),
+  LevelModel(
+    index: 2,
+    id: 'tree',
+    nameAr: 'شجرة',
+    requiredXp: 250,
+    icon: '🌳',
+    color: Color(0xFF2E7D32),
+  ),
+  LevelModel(
+    index: 3,
+    id: 'guardian',
+    nameAr: 'واحة',
+    requiredXp: 500,
+    icon: '🌍',
+    color: Color(0xFF00796B),
+  ),
+  LevelModel(
+    index: 4,
+    id: 'champion',
+    nameAr: 'بطل',
+    requiredXp: 900,
+    icon: '🏆',
+    color: Color(0xFFF9A825),
+  ),
 ];
 
 // ====================================================
@@ -40,11 +75,16 @@ const List<LevelModel> kLevels = [
 // ====================================================
 String? getLevelFigurePath(String levelId) {
   switch (levelId) {
-    case 'sprout':   return 'assets/img/bush.png';
-    case 'tree':     return 'assets/img/tree.png';
-    case 'guardian': return 'assets/img/pond.png';
-    case 'champion': return 'assets/img/palm.png';
-    default:         return null;
+    case 'sprout':
+      return 'assets/img/bush.png';
+    case 'tree':
+      return 'assets/img/tree.png';
+    case 'guardian':
+      return 'assets/img/pond.png';
+    case 'champion':
+      return 'assets/img/palm.png';
+    default:
+      return null;
   }
 }
 
@@ -53,10 +93,13 @@ String? getLevelFigurePath(String levelId) {
 // ====================================================
 int getXpForTask(String levelId) {
   switch (levelId) {
-    case 'hard':    return 35;
-    case 'medium':  return 20;
+    case 'hard':
+      return 35;
+    case 'medium':
+      return 20;
     case 'beginner':
-    default:        return 10;
+    default:
+      return 10;
   }
 }
 
@@ -99,7 +142,10 @@ double getLevelProgress(int xp) {
 // ====================================================
 // بوب اب ترقية المستوى
 // ====================================================
-Future<void> showLevelUpDialog(BuildContext context, LevelModel newLevel) async {
+Future<void> showLevelUpDialog(
+  BuildContext context,
+  LevelModel newLevel,
+) async {
   final figurePath = getLevelFigurePath(newLevel.id);
 
   await showDialog(
@@ -137,10 +183,7 @@ Future<void> showLevelUpDialog(BuildContext context, LevelModel newLevel) async 
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
-                    colors: [
-                      newLevel.color.withOpacity(0.7),
-                      newLevel.color,
-                    ],
+                    colors: [newLevel.color.withOpacity(0.7), newLevel.color],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -153,7 +196,10 @@ Future<void> showLevelUpDialog(BuildContext context, LevelModel newLevel) async 
                   ],
                 ),
                 child: Center(
-                  child: Text(newLevel.icon, style: const TextStyle(fontSize: 42)),
+                  child: Text(
+                    newLevel.icon,
+                    style: const TextStyle(fontSize: 42),
+                  ),
                 ),
               ),
 
@@ -263,11 +309,11 @@ class XpService {
   static final _auth = FirebaseAuth.instance;
 
   /// أضف XP وارجع المستوى الجديد إذا ترقّى
-  static Future<LevelModel?> addXpForTask({required String taskLevelId}) async {
+  static Future<LevelModel?> addXpForTask({required int taskPoints}) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return null;
 
-    final xpToAdd = getXpForTask(taskLevelId);
+    final xpToAdd = (taskPoints * 0.5).round();
     final userRef = _db.collection('users').doc(uid);
 
     LevelModel? levelUp;
@@ -285,10 +331,7 @@ class XpService {
         levelUp = newLevel;
       }
 
-      tx.update(userRef, {
-        'xp': newXp,
-        'currentLevel': newLevel.id,
-      });
+      tx.update(userRef, {'xp': newXp, 'currentLevel': newLevel.id});
     });
 
     return levelUp;

@@ -20,8 +20,9 @@ import 'services/background_container.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
 import 'complete_task.dart';
-import 'levels.dart';
+// import 'levels.dart';
 import 'services/location_service.dart';
+import 'services/xp_service.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -922,45 +923,42 @@ class _taskPageState extends State<taskPage> {
   // دالة تحسب المهام المكتملة لليوم
   // ====================================================
   Future<int> _getCompletedTasksForDay(String userId, DateTime day) async {
-    final dayKey = '${userId}_${_yyyyMMdd(day)}';
-    final bonusKey = '${userId}_${_yyyyMMdd(day)}_bonus';
-    final dailyTaskDate = _dayId(day);
-
     int count = 0;
 
     try {
-      // 1️⃣ المهمة الرئيسية من userTasks
-      final mainTask = await FirebaseFirestore.instance
+      // 1️⃣ المهمة الرئيسية
+      final mainSnap = await FirebaseFirestore.instance
           .collection('userTasks')
-          .doc(dayKey)
+          .doc('${userId}_${_yyyyMMdd(day)}')
           .get();
+      if (mainSnap.exists && mainSnap.data()?['status'] == 'completed') count++;
 
-      if (mainTask.exists && mainTask.data()?['status'] == 'completed') {
-        count++;
-      }
-
-      // 2️⃣ المهمة الإضافية من userTasks
-      final bonusTask = await FirebaseFirestore.instance
-          .collection('userTasks')
-          .doc(bonusKey)
-          .get();
-
-      if (bonusTask.exists && bonusTask.data()?['status'] == 'completed') {
-        count++;
-      }
-
-      // 🔥🔥🔥 3️⃣ المهمة من dailyTasks (الهوم بيج) 🔥🔥🔥
-      final dailyTask = await FirebaseFirestore.instance
-          .collection('dailyTasks')
+      // 2️⃣ المهام الإضافية task2..taskN
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
           .doc(userId)
-          .collection('tasks')
-          .doc(dailyTaskDate)
           .get();
+      final xp = (userDoc.data()?['xp'] ?? 0) as int;
+      final required = _getRequiredTasksForLevel(getCurrentLevel(xp).id);
+      for (int i = 2; i <= required; i++) {
+        final snap = await FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc('${userId}_${_yyyyMMdd(day)}_task$i')
+            .get();
+        if (snap.exists && snap.data()?['status'] == 'completed') count++;
+      }
 
-      // ✅ dailyTasks تستخدم حقل completed من نوع boolean
-      if (dailyTask.exists && dailyTask.data()?['completed'] == true) {
-        count++;
-        print('✅ Found completed daily task in home page');
+      // 3️⃣ مهمة الهوم بيج — تُحسب فقط لو ما فيه ولا مهمة مكتملة من صفحة المهام
+      if (count == 0) {
+        final dailySnap = await FirebaseFirestore.instance
+            .collection('dailyTasks')
+            .doc(userId)
+            .collection('tasks')
+            .doc(_dayId(day))
+            .get();
+        if (dailySnap.exists && dailySnap.data()?['completed'] == true) {
+          count++;
+        }
       }
     } catch (e) {
       debugPrint('⚠️ Error getting completed tasks: $e');
@@ -996,44 +994,43 @@ class _taskPageState extends State<taskPage> {
       int completed = 0;
 
       try {
-        // 1️⃣ التحقق من userTasks (المهمة الرئيسية)
+        // 1️⃣ المهمة الرئيسية
         final mainSnapshot = await FirebaseFirestore.instance
             .collection('userTasks')
             .doc(dayKey)
             .get(GetOptions(source: Source.server));
-
-        if (mainSnapshot.exists) {
-          final status = mainSnapshot.data()?['status'] as String?;
-          print('📄 Main userTask status (server): $status');
-          if (status == 'completed') completed++;
+        if (mainSnapshot.exists &&
+            mainSnapshot.data()?['status'] == 'completed') {
+          completed++;
         }
 
-        // 2️⃣ التحقق من userTasks (المهمة الإضافية)
-        final bonusSnapshot = await FirebaseFirestore.instance
-            .collection('userTasks')
-            .doc(bonusKey)
-            .get(GetOptions(source: Source.server));
-
-        if (bonusSnapshot.exists) {
-          final status = bonusSnapshot.data()?['status'] as String?;
-          print('📄 Bonus userTask status (server): $status');
-          if (status == 'completed') completed++;
-        }
-
-        // 🔥🔥🔥 التصحيح هنا 🔥🔥🔥
-        // 3️⃣ التحقق من dailyTasks - استخدام completed بدلاً من status
-        final dailySnapshot = await FirebaseFirestore.instance
-            .collection('dailyTasks')
+        // 2️⃣ المهام الإضافية task2..taskN
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
             .doc(_uid)
-            .collection('tasks')
-            .doc(dailyTaskDate)
-            .get(GetOptions(source: Source.server));
+            .get();
+        final xp = (userDoc.data()?['xp'] ?? 0) as int;
+        final required = _getRequiredTasksForLevel(getCurrentLevel(xp).id);
+        for (int i = 2; i <= required; i++) {
+          final snap = await FirebaseFirestore.instance
+              .collection('userTasks')
+              .doc('${_uid}_${_yyyyMMdd(_selectedDay!)}_task$i')
+              .get(GetOptions(source: Source.server));
+          if (snap.exists && snap.data()?['status'] == 'completed') completed++;
+        }
 
-        if (dailySnapshot.exists) {
-          // dailyTasks تستخدم حقل 'completed' (boolean) وليس 'status'
-          final isCompleted = dailySnapshot.data()?['completed'] == true;
-          print('📄 Daily task completed: $isCompleted');
-          if (isCompleted) completed++;
+        // 3️⃣ dailyTasks — فقط لو ما فيه ولا مهمة مكتملة من صفحة المهام
+        if (completed == 0) {
+          final dailySnapshot = await FirebaseFirestore.instance
+              .collection('dailyTasks')
+              .doc(_uid)
+              .collection('tasks')
+              .doc(dailyTaskDate)
+              .get(GetOptions(source: Source.server));
+          if (dailySnapshot.exists &&
+              dailySnapshot.data()?['completed'] == true) {
+            completed++;
+          }
         }
       } catch (e) {
         print('❌ Error calculating tasks: $e');
@@ -1102,8 +1099,10 @@ class _taskPageState extends State<taskPage> {
             completed++;
           }
 
-          // 🔥 تحقق من dailyTasks باستخدام completed
-          if (snapshot.exists && snapshot.data()?['completed'] == true) {
+          // 🔥 تحقق من dailyTasks — فقط لو ما فيه مهمة مكتملة من userTasks
+          if (completed == 0 &&
+              snapshot.exists &&
+              snapshot.data()?['completed'] == true) {
             completed++;
           }
 
@@ -1127,9 +1126,9 @@ class _taskPageState extends State<taskPage> {
           .doc(_uid)
           .get();
 
-      _userLevel = userDoc.data()?['userLevel'] ?? 'beginner';
-      _userLevelName = _getLevelName(_userLevel!);
-      _requiredTasksToday = _getRequiredTasksPerDay(_userLevel!);
+      final xp = (userDoc.data()?['xp'] ?? 0) as int;
+      final level = getCurrentLevel(xp);
+      _requiredTasksToday = _getRequiredTasksForLevel(level.id);
 
       // جلب المهام المكتملة لليوم المحدد - استخدم get مباشرة
       _completedTasksToday = await _getCompletedTasksForDay(
@@ -1149,6 +1148,23 @@ class _taskPageState extends State<taskPage> {
       if (mounted) {
         setState(() => _isLoadingProgress = false);
       }
+    }
+  }
+
+  int _getRequiredTasksForLevel(String levelId) {
+    switch (levelId) {
+      case 'seedling':
+        return 1;
+      case 'sprout':
+        return 2;
+      case 'tree':
+        return 2;
+      case 'guardian':
+        return 3;
+      case 'champion':
+        return 4;
+      default:
+        return 1;
     }
   }
 
@@ -1548,7 +1564,10 @@ class _taskPageState extends State<taskPage> {
   // =============================================================
   // ✅ تحديث مهمة اليوم المختار (عند الضغط على "تجديد المهمة")
   // =============================================================
-  Future<void> _refreshUserTask(Map<String, dynamic> currentTask) async {
+  Future<void> _refreshUserTask(
+    Map<String, dynamic> currentTask, {
+    String? docId, // ← جديد
+  }) async {
     if (_uid == null || _selectedDay == null) return;
 
     final selected = _dayStart(_selectedDay!);
@@ -1572,8 +1591,10 @@ class _taskPageState extends State<taskPage> {
 
     final monthKey =
         "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
-    final utKey = '${_uid!}_${_yyyyMMdd(selected)}';
+    final utKey = docId ?? '${_uid!}_${_yyyyMMdd(selected)}';
     final utRef = FirebaseFirestore.instance.collection('userTasks').doc(utKey);
+    final isMainTask =
+        (docId == null || docId == '${_uid!}_${_yyyyMMdd(selected)}');
 
     try {
       await utRef.update({
@@ -1729,7 +1750,8 @@ class _taskPageState extends State<taskPage> {
         'articleId': news['docId'],
       });
 
-      _attachUserTaskStreamFor(selected);
+      // ← فقط لو المهمة الرئيسية
+      if (isMainTask) _attachUserTaskStreamFor(selected);
       return;
     }
 
@@ -1743,7 +1765,106 @@ class _taskPageState extends State<taskPage> {
     };
 
     await utRef.update({'taskId': picked.id, ...denorm});
-    _attachUserTaskStreamFor(selected);
+    // ← فقط لو المهمة الرئيسية
+    if (isMainTask) _attachUserTaskStreamFor(selected);
+  }
+
+  Future<void> _ensureExtraTasksForDate(DateTime day) async {
+    if (_uid == null) return;
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .get();
+    final xp = (userDoc.data()?['xp'] ?? 0) as int;
+    final level = getCurrentLevel(xp);
+    final requiredTasks = _getRequiredTasksForLevel(level.id);
+
+    if (requiredTasks <= 1) return;
+
+    // جيب المهمة الأولى عشان نستبعدها
+    final mainKey = '${_uid!}_${_yyyyMMdd(day)}';
+    final mainSnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(mainKey)
+        .get();
+    final mainTaskId = mainSnap.data()?['taskId'] as String?;
+
+    // جيب المهام الإضافية الموجودة عشان نستبعدها
+    final usedIds = <String?>{mainTaskId};
+
+    for (int i = 2; i <= requiredTasks; i++) {
+      final extraKey = '${_uid!}_${_yyyyMMdd(day)}_task$i';
+      final extraSnap = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(extraKey)
+          .get();
+
+      if (extraSnap.exists) {
+        // أضف هذه المهمة للمستبعدين
+        usedIds.add(extraSnap.data()?['taskId'] as String?);
+        continue;
+      }
+
+      final monthKey = "${day.year}-${day.month.toString().padLeft(2, '0')}";
+      final tasksSnap = await FirebaseFirestore.instance
+          .collection('tasks')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      final validTasks = tasksSnap.docs.where((doc) {
+        final data = doc.data();
+        dynamic vf = data['visible_from'];
+        String? visibleFrom;
+        if (vf is Timestamp) {
+          final d = vf.toDate();
+          visibleFrom = "${d.year}-${d.month.toString().padLeft(2, '0')}";
+        } else if (vf is String)
+          visibleFrom = vf;
+        return (visibleFrom == null) || (visibleFrom.compareTo(monthKey) <= 0);
+      }).toList();
+
+      if (validTasks.isEmpty) return;
+
+      // استبعد المهام المستخدمة
+      final pool = validTasks
+          .where((doc) => !usedIds.contains(doc.id))
+          .toList();
+      final finalPool = pool.isEmpty ? validTasks : pool;
+
+      final rnd = Random(
+        DateTime.now().millisecondsSinceEpoch ^
+            day.millisecondsSinceEpoch ^
+            (i * 9999),
+      );
+      final picked = finalPool[rnd.nextInt(finalPool.length)];
+      final pickedData = picked.data();
+      final today = _dayStart(DateTime.now());
+      final status = day.isBefore(today) ? 'uncompleted' : 'pending';
+
+      await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(extraKey)
+          .set({
+            'userId': _uid,
+            'taskId': picked.id,
+            'selectedAt': Timestamp.fromDate(_dayStart(day)),
+            'status': status,
+            'completedAt': null,
+            'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
+            'taskDescription': pickedData['description'] ?? '',
+            'taskPoints': pickedData['points'] ?? 0,
+            'taskValidation':
+                pickedData['validationStrategy'] ??
+                pickedData['validation'] ??
+                'غير محددة',
+            'ignored': false,
+            'ignoredAt': null,
+          });
+
+      // أضف المهمة الجديدة للمستبعدين
+      usedIds.add(picked.id);
+    }
   }
 
   // =============================================================
@@ -1758,7 +1879,21 @@ class _taskPageState extends State<taskPage> {
     final key = '${_uid!}_${_yyyyMMdd(day)}';
     final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
     final snap = await ref.get();
-    if (snap.exists) return;
+
+    if (snap.exists) {
+      // تأكد من إنشاء المهام الإضافية حتى لو الأولى موجودة
+      await _ensureExtraTasksForDate(day);
+      return;
+    }
+
+    // جيب لفل اليوزر
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .get();
+    final xp = (userDoc.data()?['xp'] ?? 0) as int;
+    final level = getCurrentLevel(xp);
+    final requiredTasks = _getRequiredTasksForLevel(level.id);
 
     final monthKey = "${day.year}-${day.month.toString().padLeft(2, '0')}";
 
@@ -1881,6 +2016,52 @@ class _taskPageState extends State<taskPage> {
       'ignored': false,
       'ignoredAt': null,
     });
+
+    final usedIds = <String?>{yTaskId, picked.id}; // ← أضيفي picked.id
+    // إنشاء المهام الإضافية حسب اللفل
+    for (int i = 2; i <= requiredTasks; i++) {
+      final extraKey = '${_uid!}_${_yyyyMMdd(day)}_task$i';
+      final extraRef = FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(extraKey);
+      final extraSnap = await extraRef.get();
+      if (extraSnap.exists) continue;
+
+      // نختار مهمة مختلفة عن السابقة
+      final extraPool = validTasks
+          .where((doc) => !usedIds.contains(doc.id))
+          .toList();
+      final finalExtraPool = extraPool.isEmpty ? validTasks : extraPool;
+
+      final extraRnd = Random(
+        DateTime.now().millisecondsSinceEpoch ^
+            day.millisecondsSinceEpoch ^
+            (i * 9999),
+      );
+      final extraPicked =
+          finalExtraPool[extraRnd.nextInt(finalExtraPool.length)];
+      final extraData = extraPicked.data();
+
+      usedIds.add(extraPicked.id); // ← يمنع التكرار في الدورة الجاية
+
+      await extraRef.set({
+        'userId': _uid,
+        'taskId': extraPicked.id,
+        'selectedAt': Timestamp.fromDate(start),
+        'status': status,
+        'completedAt': null,
+        'taskTitle': extraData['title'] ?? '(بدون عنوان)',
+        'taskDescription': extraData['description'] ?? '',
+        'taskPoints': extraData['points'] ?? 0,
+        'taskValidation':
+            extraData['validationStrategy'] ??
+            extraData['validation'] ??
+            extraData['taskValidation'] ??
+            'غير محددة',
+        'ignored': false,
+        'ignoredAt': null,
+      });
+    }
   }
 
   // -------------------------------------------------------------
@@ -2449,18 +2630,72 @@ class _taskPageState extends State<taskPage> {
                                       'id': ut['taskId'],
                                       'status': ut['status'] ?? 'pending',
                                     };
+                                    final bool firstCompleted =
+                                        (data['status'] == 'completed');
 
-                                    return _buildUserTaskCard(
-                                      taskData: fData,
-                                      canPerform: canPerformDay,
+                                    return Column(
+                                      children: [
+                                        // لو المهمة الأولى مو مكتملة → تطلع فوق
+                                        if (!firstCompleted)
+                                          _buildUserTaskCard(
+                                            taskData: data,
+                                            canPerform: canPerformDay,
+                                            taskIndex: 1,
+                                          ),
+
+                                        // المهام الإضافية
+                                        for (
+                                          int i = 2;
+                                          i <= _requiredTasksToday;
+                                          i++
+                                        )
+                                          _buildExtraTaskCard(
+                                            day: sel,
+                                            taskIndex: i,
+                                            canPerform: canPerformDay,
+                                          ),
+
+                                        // لو المهمة الأولى مكتملة → تنزل تحت
+                                        if (firstCompleted)
+                                          _buildUserTaskCard(
+                                            taskData: data,
+                                            canPerform: canPerformDay,
+                                            taskIndex: 1,
+                                          ),
+                                      ],
                                     );
                                   },
                                 );
                               }
+                              final bool firstCompleted =
+                                  (data['status'] == 'completed');
 
-                              return _buildUserTaskCard(
-                                taskData: data,
-                                canPerform: canPerformDay,
+                              return Column(
+                                children: [
+                                  // لو المهمة الأولى مو مكتملة → تطلع فوق
+                                  if (!firstCompleted)
+                                    _buildUserTaskCard(
+                                      taskData: data,
+                                      canPerform: canPerformDay,
+                                      taskIndex: 1,
+                                    ),
+
+                                  // المهام الإضافية
+                                  for (int i = 2; i <= _requiredTasksToday; i++)
+                                    _buildExtraTaskCard(
+                                      day: sel,
+                                      taskIndex: i,
+                                      canPerform: canPerformDay,
+                                    ),
+
+                                  // لو المهمة الأولى مكتملة → تنزل تحت
+                                  if (firstCompleted)
+                                    _buildUserTaskCard(
+                                      taskData: data,
+                                      canPerform: canPerformDay,
+                                      taskIndex: 1,
+                                    ),
+                                ],
                               );
                             },
                           );
@@ -2998,6 +3233,8 @@ class _taskPageState extends State<taskPage> {
   Widget _buildUserTaskCard({
     required Map<String, dynamic> taskData,
     bool canPerform = false,
+    int taskIndex = 1,
+    String? userTaskDocId,
   }) {
     final title = taskData['title'] ?? 'مهمة غير محددة';
     final description = taskData['description'] ?? 'لا يوجد وصف متاح.';
@@ -3006,19 +3243,10 @@ class _taskPageState extends State<taskPage> {
     final status = taskData['status'] ?? 'pending';
     final today = _dayStart(DateTime.now());
 
-    // final taskType = (taskData['taskType'] ?? '').toString();
-    // final articleContent = (taskData['articleContent'] ?? '').toString().trim();
-
-    // 🔴 لو هي مهمة "خبر" لكن المقال فاضي → لا تعرض مهمة، اعرض كرت "لا توجد مهمة"
-    // if (taskType == 'news' && articleContent.isEmpty) {
-    //   return _buildUnavailableCard(
-    //     title: 'لا توجد مهمة لهذا اليوم',
-    //     subtitle: 'خبر هذا اليوم لم يعد متوفرًا، وسيتم استبداله لاحقًا.',
-    //   );
-    // }
     final sel = _dayStart(_selectedDay ?? DateTime.now());
     final uid = _uid ?? '';
-    final userTaskDocId = uid.isEmpty ? '' : '${uid}_${_yyyyMMdd(sel)}';
+    final effectiveDocId =
+        userTaskDocId ?? (uid.isEmpty ? '' : '${uid}_${_yyyyMMdd(sel)}');
 
     final isSubmitted = (status == 'submitted');
     final isCompleted = (status == 'completed');
@@ -3090,7 +3318,10 @@ class _taskPageState extends State<taskPage> {
                     ),
                   );
                   if (confirm == true) {
-                    await _refreshUserTask(taskData);
+                    await _refreshUserTask(
+                      taskData,
+                      docId: effectiveDocId, // ← أضيفي هذا
+                    );
                     _attachUserTaskStreamFor(sel);
                   }
                 },
@@ -3100,7 +3331,7 @@ class _taskPageState extends State<taskPage> {
           ],
 
           Text(
-            'مهمة اليوم',
+            _requiredTasksToday == 1 ? 'مهمة اليوم' : 'المهمة $taskIndex',
             style: GoogleFonts.ibmPlexSansArabic(
               fontSize: 18,
               fontWeight: FontWeight.w800,
@@ -3164,7 +3395,7 @@ class _taskPageState extends State<taskPage> {
                             context,
                             MaterialPageRoute(
                               builder: (_) => ArticlePage(
-                                userTaskDocId: userTaskDocId,
+                                userTaskDocId: effectiveDocId,
                                 taskId: taskData['id'],
                               ),
                             ),
@@ -3174,7 +3405,7 @@ class _taskPageState extends State<taskPage> {
                             context,
                             taskData,
                             selectedDay: sel,
-                            userTaskDocId: userTaskDocId,
+                            userTaskDocId: effectiveDocId,
                           );
                           if (result == true && mounted) {
                             _attachUserTaskStreamFor(sel);
@@ -3222,8 +3453,7 @@ class _taskPageState extends State<taskPage> {
               ),
             ),
           ),
-          // ✅ أضيفي هذا هنا
-          if (isCompleted) ...[
+          if (isCompleted && taskIndex == _requiredTasksToday) ...[
             const SizedBox(height: 16),
             _buildBonusTaskSection(),
           ],
@@ -3231,6 +3461,46 @@ class _taskPageState extends State<taskPage> {
       ),
     );
   }
+
+  Widget _buildExtraTaskCard({
+    required DateTime day,
+    required int taskIndex,
+    bool canPerform = false,
+  }) {
+    final uid = _uid ?? '';
+    final docId = '${uid}_${_yyyyMMdd(day)}_task$taskIndex';
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(docId)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData || !snap.data!.exists) {
+          return const SizedBox.shrink();
+        }
+
+        final ut = snap.data!.data() as Map<String, dynamic>;
+        final data = {
+          'taskId': ut['taskId'] ?? '',
+          'title': ut['taskTitle'] ?? '(بدون عنوان)',
+          'description': ut['taskDescription'] ?? '',
+          'points': ut['taskPoints'] ?? 0,
+          'validationStrategy': ut['taskValidation'] ?? 'غير محددة',
+          'id': ut['taskId'] ?? '',
+          'status': ut['status'] ?? 'pending',
+        };
+
+        return _buildUserTaskCard(
+          taskData: data,
+          canPerform: canPerform,
+          taskIndex: taskIndex,
+          userTaskDocId: docId,
+        );
+      },
+    );
+  }
+
   // =====================================================================
   // ✅ الدوال الجديدة — أضيفيها بعد _buildUserTaskCard
   // =====================================================================

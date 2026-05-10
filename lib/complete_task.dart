@@ -1820,15 +1820,30 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
 
     try {
+      final dailyTaskRef = firestore
+          .collection('dailyTasks')
+          .doc(uid)
+          .collection('tasks')
+          .doc(todayId);
+
+      final dailySnap = await dailyTaskRef.get();
+      if (dailySnap.exists && dailySnap.data()?['completed'] != true) {
+        await dailyTaskRef.set({
+          'completed': true,
+          'completedAt': FieldValue.serverTimestamp(),
+          'status': 'completed',
+        }, SetOptions(merge: true));
+      }
+    } catch (_) {}
+
+    try {
       await StreakService.updateStreakOnTaskCompletion();
     } catch (_) {}
 
     try {
-      final taskDifficulty =
-          widget.taskData['difficulty']?.toString() ??
-          widget.taskData['level']?.toString() ??
-          'beginner';
-      await XpService.addXpForTask(taskLevelId: taskDifficulty);
+      await XpService.addXpForTask(
+        taskPoints: (widget.taskData['points'] ?? 0) as int,
+      );
     } catch (e) {
       print('⚠️ خطأ في إضافة XP: $e');
     }
@@ -1920,10 +1935,61 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         t.contains('مشي');
 
     if (isAnyTransport) {
+      final permission = await Geolocator.checkPermission();
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+      if (!serviceEnabled ||
+          permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          builder: (_) => Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Text(
+                'الموقع غير متاح',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
+                ),
+              ),
+              content: Text(
+                'لم نتمكن من الوصول لموقعك، لذلك سيتم التحقق من المهمة عبر الصورة بدلاً من الموقع.',
+                style: GoogleFonts.ibmPlexSansArabic(fontSize: 14, height: 1.6),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: appColors.primary,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'تأكيد',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        _openCamera();
+        return;
+      }
+
       await _startFlowForTransportTask();
       return;
     }
-
     _openCamera();
   }
 
@@ -3481,6 +3547,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final bullets = [
       'تأكد من أن الإضاءة جيدة والعنصر واضح.',
       'التقط صورة تُظهر قيامك بالمهمة (مثل حاوية اعادة التدوير).',
+      'تأكد أن النص أو المنتج ظاهر بشكل مستقيم وغير مقلوب.',
       'لا تستخدم صورًا من الإنترنت.',
       'التقط من زاوية مناسبة وبدون فلاش إن أمكن.',
     ];
@@ -3549,26 +3616,71 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           ),
 
           // ── مثال الصورة لمهام الحاويات ──
-          if (isRecyclingTask) ...[
-            const SizedBox(height: 14),
-            Text(
-              'مثال على الصورة المطلوبة:',
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: appColors.dark,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.asset(
-                'assets/img/recycling_example.webp',
-                fit: BoxFit.cover,
-                width: double.infinity,
-              ),
-            ),
-          ],
+          Builder(
+            builder: (context) {
+              final t = (widget.taskData['title'] ?? '')
+                  .toString()
+                  .toLowerCase();
+
+              String? exampleImage;
+              String? exampleLabel;
+
+              if (t.contains('تدوير') ||
+                  t.contains('حاوية') ||
+                  t.contains('بلاستيك') ||
+                  t.contains('ورق') ||
+                  t.contains('rvm') ||
+                  t.contains('ملابس') ||
+                  t.contains('طعام')) {
+                exampleImage = 'assets/img/recycling_example.webp';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              } else if (t.contains('مترو') || t.contains('metro')) {
+                exampleImage = 'assets/img/metro_example.jpg';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              } else if (t.contains('باص') ||
+                  t.contains('bus') ||
+                  t.contains('حافلة')) {
+                exampleImage = 'assets/img/bus_example.jpeg';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              } else if (t.contains('دراجة') || t.contains('سيكل')) {
+                exampleImage = 'assets/img/bicycle_example.jpg';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              } else if (t.contains('محلي') || t.contains('منتج')) {
+                exampleImage = 'assets/img/local_example.png';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              } else if (t.contains('سكوتر') || t.contains('scooter')) {
+                exampleImage = 'assets/img/scooter_example.jpg';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              }
+
+              if (exampleImage == null) return const SizedBox.shrink();
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 14),
+                  Text(
+                    exampleLabel!,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: appColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.asset(
+                      exampleImage,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );

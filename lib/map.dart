@@ -20,6 +20,7 @@ import 'services/bottom_nav.dart';
 import 'services/connection.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../services/app_colors.dart';
+import 'dart:math' show cos, pi;
 
 /// Facility
 class Facility {
@@ -57,6 +58,7 @@ class _mapPageState extends State<mapPage> {
   final Completer<GoogleMapController> _mapCtrl = Completer();
   final TextEditingController _searchCtrl = TextEditingController();
   final int _currentIndex = 3;
+  static const double _loadRadiusKm = 25.0;
 
   void _onTap(int i) {
     if (i == _currentIndex) return;
@@ -134,15 +136,28 @@ class _mapPageState extends State<mapPage> {
   }
 
   Future<void> _init() async {
+    debugPrint('🟡 _init started');
     await _ensureLocationPermission();
+    debugPrint('🟡 location enabled: $_myLocationEnabled');
     await _loadMarkerIcons();
-    await _loadFacilitiesFromFirestore();
 
-    // إن كانت صلاحية الموقع مفعّلة: تمركز
-    if (mounted && _myLocationEnabled) {
-      await _centerOnUserOnly();
-      _didAutoCenter = true;
+    Position? userPos;
+    if (_myLocationEnabled) {
+      try {
+        userPos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+        debugPrint('🟡 userPos: ${userPos.latitude}, ${userPos.longitude}');
+      } catch (e) {
+        debugPrint('❌ get position error: $e');
+      }
     }
+
+    debugPrint(
+      '🟡 calling _loadFacilitiesFromFirestore with userPos: $userPos',
+    );
+    await _loadFacilitiesFromFirestore(userPos: userPos);
+    debugPrint('🟡 _loadFacilitiesFromFirestore done');
   }
 
   @override
@@ -274,29 +289,50 @@ class _mapPageState extends State<mapPage> {
     });
   }
 
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _fetchAllPaginated(
+    Query<Map<String, dynamic>> query,
+  ) async {
+    final first = await query.limit(20).get();
+    if (first.docs.isEmpty) return first.docs;
+
+    final rest = await query.startAfterDocument(first.docs.last).get();
+    return [...first.docs, ...rest.docs];
+  }
+
   // ===== Load facilities from Firestore =====
-  Future<void> _loadFacilitiesFromFirestore() async {
+
+  Future<void> _loadFacilitiesFromFirestore({Position? userPos}) async {
     if (!await hasInternetConnection()) {
       if (context.mounted) showNoInternetDialog(context);
       return;
     }
     setState(() => _isLoadingFacilities = true);
+
     try {
-      // ✅ أول 20 تظهر فوراً
-      final firstBatch = await FirebaseFirestore.instance
-          .collection('facilities')
-          .limit(20)
-          .get();
+      Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection(
+        'facilities',
+      );
 
-      final restBatch = firstBatch.docs.isNotEmpty
-          ? await FirebaseFirestore.instance
-                .collection('facilities')
-                .startAfterDocument(firstBatch.docs.last)
-                .get()
-          : null;
+      double? minLat, maxLat, minLng, maxLng;
+      if (userPos != null) {
+        final double latDelta = _loadRadiusKm / 111.0;
+        final double lngDelta =
+            _loadRadiusKm / (111.0 * cos(userPos.latitude * pi / 180));
 
-      // ندمج الـ docs
-      final qsDocs = [...firstBatch.docs, ...?restBatch?.docs];
+        minLat = userPos.latitude - latDelta;
+        maxLat = userPos.latitude + latDelta;
+        minLng = userPos.longitude - lngDelta;
+        maxLng = userPos.longitude + lngDelta;
+
+        query = query
+            .where('lat', isGreaterThanOrEqualTo: minLat)
+            .where('lat', isLessThanOrEqualTo: maxLat);
+      }
+
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> qsDocs =
+          userPos != null
+          ? (await query.get()).docs
+          : await _fetchAllPaginated(query);
 
       final markers = <Marker>{};
       final mapFacilities = <String, Facility>{};
@@ -309,16 +345,19 @@ class _mapPageState extends State<mapPage> {
         final double? lng = (m['lng'] as num?)?.toDouble();
         if (lat == null || lng == null) continue;
 
+        // ✅ فلترة lng على الكلاينت
+        if (minLng != null && maxLng != null) {
+          if (lng < minLng || lng > maxLng) continue;
+        }
+
         // تحقّق حدود منطقية حول الرياض
         final valid = lat > 20 && lat < 30 && lng > 40 && lng < 55;
         if (!valid) continue;
 
         final String type = _normalizeType((m['type'] ?? '').toString());
         final String provider = (m['provider'] ?? '').toString();
-        //final String city = (m['city'] ?? '').toString();
         final String address = (m['address'] ?? '').toString();
-
-        final String status = (m['status'] ?? 'نشط').toString(); // 👈 الحالة
+        final String status = (m['status'] ?? 'نشط').toString();
 
         final pos = LatLng(lat, lng);
         final markerId = MarkerId(d.id);
@@ -329,7 +368,6 @@ class _mapPageState extends State<mapPage> {
           lng: lng,
           type: type,
           provider: provider,
-          //city: city,
           address: address,
           status: status,
         );
@@ -345,10 +383,7 @@ class _mapPageState extends State<mapPage> {
               title: type,
               snippet: address.isNotEmpty
                   ? address
-                  : [
-                      if (provider.isNotEmpty) provider,
-                      //if (city.isNotEmpty) city,
-                    ].join(' • '),
+                  : [if (provider.isNotEmpty) provider].join(' • '),
               onTap: () => _showFacilitySheet(facility),
             ),
             onTap: () => _showFacilitySheet(facility),
@@ -371,11 +406,10 @@ class _mapPageState extends State<mapPage> {
           ..addAll(markers);
       });
 
-      // ✅ تطبيق الفلاتر الحالية بعد كل تحميل/تحديث
       _applyCurrentFilters();
 
-      // لو المستخدم ما فعّل الموقع، نملأ الخريطة bounds لكل النقاط.
-      if (!_myLocationEnabled && bounds != null && _markers.isNotEmpty) {
+      // لو ما في موقع يوزر → نفتح الخريطة على كل النقاط
+      if (userPos == null && bounds != null && _markers.isNotEmpty) {
         final ctrl = await _mapCtrl.future;
         await ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
       }
@@ -402,15 +436,8 @@ class _mapPageState extends State<mapPage> {
         setState(() {
           _isLoadingFacilities = false;
           if (!_didInitialLoad) _didInitialLoad = true;
-          // بعد اكتمال التحميل: إن كانت النتيجة فارغة أظهري الرسالة مؤقتًا
           if (_markers.isEmpty) _flashEmptyMsg();
         });
-      }
-
-      // إن كانت الصلاحية مفعلة ولم نتمركز تلقائياً بعد، نعمل تمركز فقط
-      if (mounted && _myLocationEnabled && !_didAutoCenter) {
-        await _centerOnUserOnly();
-        _didAutoCenter = true;
       }
     }
   }
@@ -1856,7 +1883,17 @@ class _mapPageState extends State<mapPage> {
                     _RoundBtn(
                       icon: Icons.refresh_rounded,
                       tooltip: 'تحديث النقاط',
-                      onTap: _loadFacilitiesFromFirestore,
+                      onTap: () async {
+                        Position? userPos;
+                        if (_myLocationEnabled) {
+                          try {
+                            userPos = await Geolocator.getCurrentPosition(
+                              desiredAccuracy: LocationAccuracy.high,
+                            );
+                          } catch (_) {}
+                        }
+                        await _loadFacilitiesFromFirestore(userPos: userPos);
+                      },
                     ),
                   ],
                 ),
