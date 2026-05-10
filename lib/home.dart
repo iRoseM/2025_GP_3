@@ -1040,7 +1040,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                   // },
                                   child: Container(
                                   width: double.infinity,
-                                  padding: const EdgeInsets.all(16),
+                                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
                                   decoration: BoxDecoration(
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(20),
@@ -1080,12 +1080,12 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                         ),
                                       ),
 
-                                      const SizedBox(height: 14),
+                                      const SizedBox(height: 2),
 
                                       // 🌍 EcoLand
                                       Container(
                                         width: double.infinity,
-                                        height: 450,
+                                        height: 280,
                                         decoration: BoxDecoration(
                                           color: Colors.white,
                                           borderRadius: BorderRadius.circular(16),
