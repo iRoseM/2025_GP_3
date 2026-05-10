@@ -1056,19 +1056,96 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       // 🔹 الهيدر
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            'EcoLand',
-                                            style: GoogleFonts.ibmPlexSansArabic(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w800,
-                                              color: appColors.dark,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+// بعد
+Row(
+  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  children: [
+    Row(
+      children: [
+        Text(
+          'EcoLand',
+          style: GoogleFonts.ibmPlexSansArabic(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: appColors.dark,
+          ),
+        ),
+        const SizedBox(width: 6),
+        GestureDetector(
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (ctx) => Directionality(
+                textDirection: ui.TextDirection.rtl,
+                child: Dialog(
+                  backgroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('🌍', style: TextStyle(fontSize: 22)),
+                            const SizedBox(width: 8),
+                            Text(
+                              'ما هي EcoLand؟',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                color: appColors.dark,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'EcoLand هي أرضك الافتراضية الخضراء 🌱\n\n'
+                          'كل مهمة بيئية تنجزها تضيف عنصراً جديداً لأرضك  '
+                          'من أشجار وبحيرات وزهور  وتساعدها على النمو والازدهار.\n\n'
+                          'كلما ارتقيت في المستويات، كلما أصبحت أرضك أجمل وأكثر حيوية! 🏆',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 13.5,
+                            height: 1.7,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: Text(
+                              'حسنًا ',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                fontWeight: FontWeight.w700,
+                                color: appColors.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+          child: const Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: appColors.sea,
+          ),
+        ),
+      ],
+    ),
+  ],
+),
 
                                       const SizedBox(height: 6),
 

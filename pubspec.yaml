@@ -100,6 +100,8 @@ flutter:
     - assets/img/فيقر بطل.png
     - assets/img/فيقر حارس.png
     - assets/img/فيقر شجرة.png
+    - assets/img/seedling.png
+
 
 
 flutter_native_splash:

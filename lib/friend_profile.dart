@@ -326,21 +326,24 @@ class _FriendProfilePageState extends State<FriendProfilePage> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Row(
-                  children: [
-                    _buildMiniChip(
-                      '${friendLevel.icon} ${friendLevel.nameAr}',
-                      Icons.stars_rounded,
-                      Colors.amber,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildMiniChip(
-                      '$points نقطة',
-                      Icons.eco_rounded,
-                      appColors.primary,
-                    ),
-                  ],
-                ),
+// بعد
+const SizedBox(height: 6),
+Wrap(
+  spacing: 8,
+  runSpacing: 6,
+  children: [
+    _buildMiniChip(
+      '${friendLevel.icon} ${friendLevel.nameAr}',
+      Icons.stars_rounded,
+      Colors.amber,
+    ),
+    _buildMiniChip(
+      '$points نقطة',
+      Icons.eco_rounded,
+      appColors.primary,
+    ),
+  ],
+),
               ],
             ),
           ),
