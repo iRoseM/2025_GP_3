@@ -480,8 +480,8 @@ exports.updateUserPreferences = onSchedule(
           taskPreferences,
           topTasks,
           topTaskTitle: taskPreferences[topTasks[0]]?.title || "",
-          lastUpdated:  FieldValue.serverTimestamp(),
-          scoringMethod: "wilson_score_miller_2009", // توثيق المنهج المستخدم
+          // lastUpdated:  FieldValue.serverTimestamp(),
+          // scoringMethod: "wilson_score_miller_2009", // توثيق المنهج المستخدم
         });
 
         updatedCount++;
@@ -3294,48 +3294,38 @@ exports.generateDailyTasks = onSchedule(
 /* ============================================================
  * ⏰ Scheduled Function: كل يوم 5:33 صباحاً
  * ============================================================ */
-exports.scheduledGetAdminRecommendations = onSchedule(
-  {
-    schedule: "0 11 * * *",
-    timeZone: "Asia/Riyadh",
-  },
-  async () => {
-    console.log("⏰ Triggering Python admin recommendations agent...");
-    try {
-      const admins = await db
-        .collection("users")
-        .where("role", "==", "admin")
-        .get();
- 
-      if (admins.empty) {
-        console.log("⚠️ No admins found");
-        return;
-      }
-      if (admins.empty) {
-        console.log("⚠️ No admins found, using system account");
-        const adminId = "SYSTEM_AUTO";  // ✅ استخدام النظام الآلي
-      } else {
-        const adminId = admins.docs[0].id;
-      }
- 
-      const AGENT_URL =
-        process.env.ADMIN_AGENT_URL ||
-        "https://us-central1-nameer-f3b95.cloudfunctions.net/admin_recommendations_agent";
- 
-      const response = await fetch(AGENT_URL, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ adminId }),
-      });
- 
-      const result = await response.json();
-      console.log(`✅ Admin recommendations: ${result.recommendations?.length || 0} recs for ${result.month}`);
- 
-    } catch (err) {
-      console.error("❌ scheduledGetAdminRecommendations error:", err.message);
-    }
+exports.scheduledGetAdminRecommendations = onSchedule({
+  schedule: "0 11 * * *",
+  timeZone: "Asia/Riyadh",
+},
+async () => {
+  console.log("⏰ Triggering Python admin recommendations agent...");
+  try {
+    const admins = await db
+      .collection("users")
+      .where("role", "==", "admin")
+      .get();
+
+    const adminId = admins.empty ? "SYSTEM_AUTO" : admins.docs[0].id;
+    console.log(`👤 Using adminId: ${adminId}`);
+
+    const AGENT_URL =
+      process.env.ADMIN_AGENT_URL ||
+      "https://us-central1-nameer-f3b95.cloudfunctions.net/admin_recommendations_agent";
+
+    const response = await fetch(AGENT_URL, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ adminId }),
+    });
+
+    const result = await response.json();
+    console.log(`✅ Admin recommendations: ${result.recommendations?.length || 0} recs for ${result.month}`);
+
+  } catch (err) {
+    console.error("❌ scheduledGetAdminRecommendations error:", err.message);
   }
-);
+});
  
 /* ============================================================
  * 📊 getAdminRecommendations → Callable (للفلاتر يستدعيها)

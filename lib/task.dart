@@ -1158,117 +1158,116 @@ class _taskPageState extends State<taskPage> {
   Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
     final firestore = FirebaseFirestore.instance;
 
-    // ========== 1) جلب المقالات من Firestore ==========
+    // ========== جلب من Firestore أولاً ==========
     Future<Map<String, dynamic>?> tryFromFirestore() async {
-      final articlesSnap = await firestore
-          .collection('articles')
-          .orderBy('publishedAt', descending: true)
-          .limit(50)
-          .get();
+      try {
+        final articlesSnap = await firestore
+            .collection('articles')
+            .limit(50)
+            .get();
 
-      if (articlesSnap.docs.isEmpty) return null;
+        print("📰 Firestore articles count: ${articlesSnap.docs.length}");
+        if (articlesSnap.docs.isEmpty) return null;
 
-      // كل المقالات اللي سبق ظهرت للمستخدم
-      final usedSnap = await firestore
-          .collection('userTasks')
-          .where('userId', isEqualTo: uid)
-          .where('taskTitle', isEqualTo: 'قراءة خبر بيئي')
-          .get();
+        final usedSnap = await firestore
+            .collection('userTasks')
+            .where('userId', isEqualTo: uid)
+            .where('taskTitle', isEqualTo: 'قراءة خبر بيئي')
+            .get();
 
-      final usedIds = usedSnap.docs
-          .map((d) => d.data()['articleId'])
-          .where((x) => x != null)
-          .toSet();
+        final usedIds = usedSnap.docs
+            .map((d) => d.data()['articleId'])
+            .where((x) => x != null)
+            .toSet();
 
-      // ابحث عن أول مقال جديد ما شافه المستخدم
-      for (var doc in articlesSnap.docs) {
-        if (!usedIds.contains(doc.id)) {
-          return {'docId': doc.id, ...doc.data()};
+        for (var doc in articlesSnap.docs) {
+          if (!usedIds.contains(doc.id)) {
+            return {'docId': doc.id, ...doc.data()};
+          }
+        }
+        return null;
+      } catch (e) {
+        print("❌ tryFromFirestore error: $e");
+        return null;
+      }
+    }
+
+    // ========== جلب من APIs وحفظ في Firestore ==========
+    Future<void> fetchAndSaveFromAPIs() async {
+      // تحقق آخر وقت جلبنا من APIs
+      try {
+        final metaDoc = await firestore
+            .collection('appSettings')
+            .doc('newsApiLastFetch')
+            .get();
+
+        if (metaDoc.exists) {
+          final lastFetch = metaDoc.data()?['fetchedAt'] as Timestamp?;
+          if (lastFetch != null) {
+            final diff = DateTime.now().difference(lastFetch.toDate());
+            if (diff.inHours < 6) {
+              print(
+                "📰 APIs fetched recently (${diff.inHours}h ago) → skipping",
+              );
+              return; // ← ما نستدعي APIs إلا كل 6 ساعات
+            }
+          }
+        }
+      } catch (e) {
+        print("⚠️ meta check error: $e");
+      }
+
+      print("📰 Fetching from APIs...");
+
+      // مصدر 1: NewsData.io
+      Future<List<Map<String, dynamic>>> fetchFromNewsData() async {
+        const apiKey = "pub_c9084d601ff6465289bd682c942dec4c";
+        const query = "البيئة OR الاستدامة OR تدوير OR مناخ";
+        final apiUrl = Uri.parse(
+          "https://newsdata.io/api/1/news?apikey=$apiKey&q=$query&language=ar",
+        );
+        try {
+          final res = await http
+              .get(apiUrl)
+              .timeout(const Duration(seconds: 10));
+          print("📰 NewsData status: ${res.statusCode}");
+          if (res.statusCode != 200) return [];
+          final body = jsonDecode(res.body);
+          return List<Map<String, dynamic>>.from(body["results"] ?? []);
+        } catch (e) {
+          print("❌ NewsData error: $e");
+          return [];
         }
       }
 
-      return null; // لا يوجد مقال جديد موجود أصلاً
-    }
-
-    // ========== 2) جلب مقال جديد من Firestore أولاً ==========
-    final firstTry = await tryFromFirestore();
-    if (firstTry != null) {
-      return firstTry; // ممتاز — لقينا مقال جاهز
-    }
-
-    // ========== 3) لو ما فيه مقالات جديدة → نجيب من NewsData.io ==========
-    const apiKey = "pub_c9084d601ff6465289bd682c942dec4c";
-    const query =
-        "البيئة OR المناخ OR الاستدامة OR الطاقة النظيفة OR تدوير OR نفايات OR تلوث OR انبعاثات OR تشجير";
-
-    final apiUrl = Uri.parse(
-      "https://newsdata.io/api/1/news?apikey=$apiKey&q=$query&language=ar&category=environment",
-    );
-
-    try {
-      final res = await http.get(apiUrl);
-
-      if (res.statusCode != 200) {
-        print("❌ News API Error: ${res.statusCode}");
-        return null;
+      final results = await fetchFromNewsData();
+      if (results.isEmpty) {
+        print("📰 No results from APIs");
+        return;
       }
 
-      final body = jsonDecode(res.body);
-      final List results = body["results"] ?? [];
-
-      if (results.isEmpty) return null;
-
-      // الكلمات المفتاحية لمنع أي مقال غير بيئي
       final keywords = [
         'البيئة',
         'استدامة',
         'تدوير',
-        'إعادة تدوير',
         'تلوث',
-        'احتباس حراري',
+        'مناخ',
         'كربون',
         'طاقة متجددة',
         'نفايات',
         'تشجير',
-        'هواء نقي',
-        'مناخ',
         'انبعاثات',
-        'محميات',
-        'تغير المناخ',
-        'طاقة نظيفة',
-        'مصادر طبيعية',
       ];
 
-      // نجيب المقالات المخزنة سابقًا لمنع التكرار
       final existing = await firestore.collection('articles').get();
       final existingTitles = existing.docs
           .map((d) => (d.data()['title'] ?? '').toString().trim())
           .toSet();
 
-      // فلترة نتائج الـ API
-      final filtered = results.where((art) {
-        final merged =
-            ((art['title'] ?? '') +
-                    ' ' +
-                    (art['full_content'] ?? '') +
-                    ' ' +
-                    (art['description'] ?? ''))
-                .toLowerCase();
-
-        return keywords.any((k) => merged.contains(k));
-      }).toList();
-
-      if (filtered.isEmpty) {
-        print("⚠️ No environmental articles matched filters");
-        return null;
-      }
-
-      // تخزين مقالات جديدة فقط (بدون تكرار)
-      for (final rawArt in filtered) {
+      int saved = 0;
+      for (final rawArt in results) {
         final title = (rawArt['title'] ?? '').toString().trim();
-        if (title.isEmpty) continue;
-
-        if (existingTitles.contains(title)) continue;
+        if (title.isEmpty || existingTitles.contains(title)) continue;
 
         final content =
             (rawArt['full_content'] ??
@@ -1276,31 +1275,48 @@ class _taskPageState extends State<taskPage> {
                     rawArt['description'] ??
                     '')
                 .toString();
+        if (content.length < 80) continue;
 
-        if (content.length < 80) continue; // محتوى غير صالح
+        final merged = (title + ' ' + content).toLowerCase();
+        if (!keywords.any((k) => merged.contains(k))) continue;
 
         await firestore.collection('articles').add({
           'title': title,
-          'description': rawArt['description'] ?? '',
           'content': content,
-          'url': rawArt['link'] ?? '',
-          'urlToImage': rawArt['image_url'] ?? '',
-          'sourceName': rawArt['source_id'] ?? '',
+          'urlToImage': rawArt['image_url'] ?? rawArt['image'] ?? '',
+          'sourceName': rawArt['source_id'] ?? 'مصدر بيئي',
           'publishedAt': rawArt['pubDate'] ?? '',
-          //'language': 'ar',
           'category': 'environment',
-          //'createdAt': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
         });
 
-        existingTitles.add(title); // منع التكرار لاحقًا
+        existingTitles.add(title);
+        saved++;
       }
 
-      // ========== 4) المحاولة الثانية بعد التخزين ==========
-      return await tryFromFirestore();
-    } catch (e) {
-      print("❌ NewsData fetch failed: $e");
-      return null;
+      print("📰 Saved $saved new articles from APIs");
+
+      // سجّل آخر وقت استدعاء
+      await firestore.collection('appSettings').doc('newsApiLastFetch').set({
+        'fetchedAt': FieldValue.serverTimestamp(),
+        'savedCount': saved,
+      });
     }
+
+    // ========== التدفق الرئيسي ==========
+    // 1) جرب Firestore أولاً
+    final firstTry = await tryFromFirestore();
+    if (firstTry != null) {
+      // ✅ في الخلفية — جلب مقالات جديدة لو مر 6 ساعات
+      fetchAndSaveFromAPIs().catchError(
+        (e) => print("⚠️ background fetch: $e"),
+      );
+      return firstTry;
+    }
+
+    // 2) Firestore فاضي → جلب من APIs وانتظر
+    await fetchAndSaveFromAPIs();
+    return await tryFromFirestore();
   }
 
   @override
@@ -1308,6 +1324,15 @@ class _taskPageState extends State<taskPage> {
     super.initState();
     _initializeApp();
     _loadUserProgress();
+
+    FirebaseFirestore.instance.collection('articles').limit(50).get().then((
+      snap,
+    ) {
+      print('📰 Articles in Firestore: ${snap.docs.length}');
+      for (var doc in snap.docs) {
+        print('  → ${doc.id}: ${doc.data()['title']}');
+      }
+    });
   }
 
   @override
@@ -1369,66 +1394,6 @@ class _taskPageState extends State<taskPage> {
         });
       }
     });
-  }
-
-  Future<void> _precheckTodayDoc() async {
-    if (_uid == null) {
-      setState(() {
-        _precheckDone = true;
-        _precheckError = 'unauthenticated';
-      });
-      return;
-    }
-
-    try {
-      final sel = _selectedDay ?? _dayStart(DateTime.now());
-      final key = '${_uid!}_${_yyyyMMdd(sel)}';
-      final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
-
-      var snap = await ref.get().timeout(
-        const Duration(seconds: 8),
-        onTimeout: () => throw TimeoutException('timeout-get-userTask'),
-      );
-
-      if (!snap.exists) {
-        await _ensureUserTaskForDate(sel);
-        snap = await ref.get().timeout(
-          const Duration(seconds: 8),
-          onTimeout: () =>
-              throw TimeoutException('timeout-get-userTask-after-create'),
-        );
-      }
-
-      _attachUserTaskStreamFor(sel);
-
-      if (mounted) {
-        setState(() {
-          _precheckDone = true;
-          _precheckError = null;
-        });
-      }
-    } on TimeoutException catch (e) {
-      if (mounted) {
-        setState(() {
-          _precheckDone = true;
-          _precheckError = e.message ?? 'timeout';
-        });
-      }
-    } on FirebaseException catch (e) {
-      if (mounted) {
-        setState(() {
-          _precheckDone = true;
-          _precheckError = e.code;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _precheckDone = true;
-          _precheckError = e.toString();
-        });
-      }
-    }
   }
 
   Future<void> _loadUserJoinDate(User user, DateTime today) async {
@@ -1548,46 +1513,298 @@ class _taskPageState extends State<taskPage> {
   // =============================================================
   // ✅ تحديث مهمة اليوم المختار (عند الضغط على "تجديد المهمة")
   // =============================================================
+  bool _isRefreshing = false;
+
   Future<void> _refreshUserTask(Map<String, dynamic> currentTask) async {
-    if (_uid == null || _selectedDay == null) return;
+    if (_isRefreshing) return;
+    _isRefreshing = true;
 
-    final selected = _dayStart(_selectedDay!);
-    final today = _dayStart(DateTime.now());
+    try {
+      if (_uid == null || _selectedDay == null) return;
 
-    // ❌ منع تحديث المهام للأيام الماضية
-    if (!selected.isAtSameMomentAs(today)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'يمكنك تغيير مهمة اليوم الحالي فقط',
-              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+      final selected = _dayStart(_selectedDay!);
+      final today = _dayStart(DateTime.now());
+
+      if (!selected.isAtSameMomentAs(today)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'يمكنك تغيير مهمة اليوم الحالي فقط',
+                style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+              ),
+              backgroundColor: AppColors.primary,
             ),
-            backgroundColor: AppColors.primary,
-          ),
-        );
+          );
+        }
+        return;
       }
+
+      final monthKey =
+          "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
+      final utKey = '${_uid!}_${_yyyyMMdd(selected)}';
+      final utRef = FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(utKey);
+
+      try {
+        await utRef.update({
+          'ignored': true,
+          'ignoredAt': FieldValue.serverTimestamp(),
+          'status': 'ignored',
+        });
+        print('✅ تم تسجيل المهمة كمتجاهلة (تحديث)');
+      } catch (e) {
+        print('⚠️ فشل تسجيل التجاهل: $e');
+      }
+
+      final tasksSnap = await FirebaseFirestore.instance
+          .collection('tasks')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      final validTasks = tasksSnap.docs.where((doc) {
+        final data = doc.data();
+        dynamic vf = data['visible_from'];
+        dynamic em = data['expiry_month'];
+        String? visibleFrom, expiryMonth;
+
+        if (vf is Timestamp) {
+          final d = vf.toDate();
+          visibleFrom = "${d.year}-${d.month.toString().padLeft(2, '0')}";
+        } else if (vf is String) {
+          visibleFrom = vf;
+        }
+        if (em is Timestamp) {
+          final d = em.toDate();
+          expiryMonth = "${d.year}-${d.month.toString().padLeft(2, '0')}";
+        } else if (em is String) {
+          expiryMonth = em;
+        }
+
+        final isVisible =
+            (visibleFrom == null) || (visibleFrom.compareTo(monthKey) <= 0);
+        final notExpired =
+            (expiryMonth == null) || (expiryMonth.compareTo(monthKey) >= 0);
+        return isVisible && notExpired;
+      }).toList();
+
+      if (validTasks.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'لا توجد مهام مُتاحة لهذا الشهر.',
+                style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+              ),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+        return;
+      }
+
+      final yesterday = _dayStart(selected.subtract(const Duration(days: 1)));
+      final tomorrow = _dayStart(selected.add(const Duration(days: 1)));
+      final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
+      final tKey = '${_uid!}_${_yyyyMMdd(tomorrow)}';
+      final ySnap = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(yKey)
+          .get();
+      final tSnap = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(tKey)
+          .get();
+
+      final yTaskId = ySnap.exists
+          ? (ySnap.data()?['taskId'] as String?)
+          : null;
+      final tTaskId = tSnap.exists
+          ? (tSnap.data()?['taskId'] as String?)
+          : null;
+      final currentTaskId =
+          (currentTask['taskId'] ?? currentTask['id']) as String?;
+
+      final excluded = <String?>{currentTaskId, yTaskId, tTaskId}
+        ..removeWhere((e) => e == null);
+      final pool = validTasks
+          .where((doc) => !excluded.contains(doc.id))
+          .toList();
+      final finalPool = pool.isEmpty ? validTasks : pool;
+
+      final freshNews = await getFreshNewsForUser(_uid!);
+      final hasFreshNews = freshNews != null;
+      final shouldOfferNewsTask = hasFreshNews && Random().nextDouble() < 0.2;
+
+      List newPool = [];
+      if (shouldOfferNewsTask) newPool.add(null);
+      newPool.addAll(finalPool);
+
+      final rnd = Random(DateTime.now().millisecondsSinceEpoch);
+      final picked = newPool[rnd.nextInt(newPool.length)];
+
+      if (picked == null && hasFreshNews) {
+        final news = freshNews!;
+        const newsTaskId = "bJjITCm7ZWlmzEk2QNPr";
+        final taskSnap = await FirebaseFirestore.instance
+            .collection('tasks')
+            .doc(newsTaskId)
+            .get();
+
+        if (!taskSnap.exists) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'تعذّر تحميل مهمة قراءة الخبر البيئي.',
+                  style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+                ),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+          return;
+        }
+
+        final taskData = taskSnap.data() ?? {};
+        await utRef.update({
+          'taskId': newsTaskId,
+          'taskTitle': taskData['title'] ?? '(بدون عنوان)',
+          'taskDescription': taskData['description'] ?? '',
+          'taskPoints': taskData['points'] ?? 0,
+          'taskValidation': taskData['validationStrategy'] ?? 'غير محددة',
+          'articleId': news['docId'],
+          'status': 'pending',
+          'ignored': false,
+          'ignoredAt': null,
+        });
+        _attachUserTaskStreamFor(selected);
+        return;
+      }
+
+      final pickedData = picked.data();
+      await utRef.update({
+        'taskId': picked.id,
+        'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
+        'taskDescription': pickedData['description'] ?? '',
+        'taskPoints': pickedData['points'] ?? 0,
+        'taskValidation': pickedData['validationStrategy'] ?? 'غير محددة',
+        'status': 'pending',
+        'ignored': false,
+        'ignoredAt': null,
+      });
+      _attachUserTaskStreamFor(selected);
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
+  Future<void> _precheckTodayDoc() async {
+    if (_uid == null) {
+      setState(() {
+        _precheckDone = true;
+        _precheckError = 'unauthenticated';
+      });
       return;
     }
 
-    final monthKey =
-        "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
-    final utKey = '${_uid!}_${_yyyyMMdd(selected)}';
-    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(utKey);
-
     try {
-      await utRef.update({
-        'ignored': true,
-        'ignoredAt': FieldValue.serverTimestamp(),
-        'status': 'ignored', // غيري الحالة عشان تختفي من الشاشة
-      });
-      print('✅ تم تسجيل المهمة كمتجاهلة (تحديث)');
-    } catch (e) {
-      print('⚠️ فشل تسجيل التجاهل: $e');
-      // نكمل عادي حتى لو فشل
-    }
+      final sel = _selectedDay ?? _dayStart(DateTime.now());
+      final key = '${_uid!}_${_yyyyMMdd(sel)}';
+      final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
 
-    // 🟩 1) جلب المهام الفعالة من كولكشن tasks (يختار المهام الحالية فقط)
+      var snap = await ref.get().timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => throw TimeoutException('timeout-get-userTask'),
+      );
+
+      // ✅ إذا المهمة ignored → أنشئ مهمة جديدة بدلها
+      if (snap.exists) {
+        final data = snap.data()!;
+        final status = data['status'] as String? ?? '';
+        final ignored = data['ignored'] as bool? ?? false;
+        final taskValidation = data['taskValidation'] as String? ?? '';
+        final articleId = data['articleId'];
+
+        // ✅ إذا مهمة اختبار قصير وما عندها articleId → أضيفيه
+        if (taskValidation == 'التحقق عبر اجراء اختبار قصير' &&
+            articleId == null) {
+          print('⚠️ Missing articleId → fetching...');
+          final freshNews = await getFreshNewsForUser(_uid!);
+          if (freshNews != null) {
+            await ref.update({'articleId': freshNews['docId']});
+            snap = await ref.get();
+            print('✅ articleId added: ${freshNews['docId']}');
+          }
+        }
+
+        if (status == 'ignored' || ignored == true) {
+          print('⚠️ Found ignored task → creating new one...');
+          await _ensureUserTaskForDate(sel, forceReplace: true);
+          snap = await ref.get();
+        }
+      }
+
+      if (!snap.exists) {
+        await _ensureUserTaskForDate(sel);
+        snap = await ref.get().timeout(
+          const Duration(seconds: 8),
+          onTimeout: () =>
+              throw TimeoutException('timeout-get-userTask-after-create'),
+        );
+      }
+
+      _attachUserTaskStreamFor(sel);
+
+      if (mounted) {
+        setState(() {
+          _precheckDone = true;
+          _precheckError = null;
+        });
+      }
+    } on TimeoutException catch (e) {
+      if (mounted) {
+        setState(() {
+          _precheckDone = true;
+          _precheckError = e.message ?? 'timeout';
+        });
+      }
+    } on FirebaseException catch (e) {
+      if (mounted) {
+        setState(() {
+          _precheckDone = true;
+          _precheckError = e.code;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _precheckDone = true;
+          _precheckError = e.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _ensureUserTaskForDate(
+    DateTime day, {
+    bool forceReplace = false,
+  }) async {
+    if (_uid == null) return;
+
+    final today = _dayStart(DateTime.now());
+    if (_joinDate != null && day.isBefore(_joinDate!)) return;
+
+    final key = '${_uid!}_${_yyyyMMdd(day)}';
+    final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
+    final snap = await ref.get();
+
+    // ← بدّلي هذا السطر
+    if (snap.exists && !forceReplace) return;
+
+    final monthKey = "${day.year}-${day.month.toString().padLeft(2, '0')}";
+
     final tasksSnap = await FirebaseFirestore.instance
         .collection('tasks')
         .where('status', isEqualTo: 'active')
@@ -1597,7 +1814,8 @@ class _taskPageState extends State<taskPage> {
       final data = doc.data();
       dynamic vf = data['visible_from'];
       dynamic em = data['expiry_month'];
-      String? visibleFrom, expiryMonth;
+      String? visibleFrom;
+      String? expiryMonth;
 
       if (vf is Timestamp) {
         final d = vf.toDate();
@@ -1619,225 +1837,49 @@ class _taskPageState extends State<taskPage> {
       return isVisible && notExpired;
     }).toList();
 
-    if (validTasks.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'لا توجد مهام مُتاحة لهذا الشهر.',
-            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-          ),
-          backgroundColor: AppColors.primary,
-        ),
-      );
-      return;
-    }
-
-    // 🟨 2) نتجنب تكرار مهمة الأمس أو الغد
-    final yesterday = _dayStart(selected.subtract(const Duration(days: 1)));
-    final tomorrow = _dayStart(selected.add(const Duration(days: 1)));
-
-    final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
-    final tKey = '${_uid!}_${_yyyyMMdd(tomorrow)}';
-    final ySnap = await FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(yKey)
-        .get();
-    final tSnap = await FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(tKey)
-        .get();
-
-    final yTaskId = (ySnap.exists)
-        ? (ySnap.data()?['taskId'] as String?)
-        : null;
-    final tTaskId = (tSnap.exists)
-        ? (tSnap.data()?['taskId'] as String?)
-        : null;
-    final currentTaskId =
-        (currentTask['taskId'] ?? currentTask['id']) as String?;
-
-    final excluded = <String?>{currentTaskId, yTaskId, tTaskId}
-      ..removeWhere((e) => e == null);
-    final pool = validTasks.where((doc) => !excluded.contains(doc.id)).toList();
-    final finalPool = pool.isEmpty ? validTasks : pool;
-
-    // 📰 3) نحاول نجيب خبر جديد (من الـ API أو من المقالات)
-    final freshNews = await getFreshNewsForUser(_uid!);
-    bool hasFreshNews = freshNews != null;
-
-    // 🧩 4) نجمع المهام العادية + مهمة الخبر في قائمة واحدة
-    List newPool = [];
-
-    //     1) إذا ما فيه مقال جديد فعليًا → hasFreshNews = false → ما تنعرض مهمة القراءة إطلاقًا
-
-    // حتى لو راح للـ API وما لقى شيء جديد.
-
-    // 2) حتى لو فيه مقال جديد → تظهر مهمة القراءة فقط بنسبة 20% من المرات
-
-    // 3) ما عاد يضيف مهمة القراءة دايمًا إلى قائمة المهام
-
-    // فما فيه تكرار ولا ظهور "قراءة خبر" بشكل مزعج.
-
-    // 4) الـ API الآن لن يسبب ظهور مهمة خبر إلا إذا فعلاً أعطى مقال جديد لم يظهر من قبل.
-
-    // نضيف مهمة الخبر فقط بنسبة 20٪ مثلاً
-    final shouldOfferNewsTask = hasFreshNews && Random().nextDouble() < 0.2;
-
-    if (shouldOfferNewsTask) {
-      newPool.add(null);
-    }
-    newPool.addAll(finalPool);
-
-    // 🌀 5) اختيار مهمة عشوائية
-    final rnd = Random(DateTime.now().millisecondsSinceEpoch);
-    final picked = newPool[rnd.nextInt(newPool.length)];
-
-    // 📰 6) لو اختير "مهمة خبر" → نربطها بمهمة الأدمن المحددة ID ونقرأ تفاصيلها من Firestore
-    if (picked == null && hasFreshNews) {
-      final news = freshNews!;
-      const newsTaskId =
-          "bJjITCm7ZWlmzEk2QNPr"; // ← ID مهمة "قراءة خبر بيئي" من الأدمن
-
-      // 🔹 نحضر بيانات مهمة الأدمن كاملة
-      final taskSnap = await FirebaseFirestore.instance
-          .collection('tasks')
-          .doc(newsTaskId)
-          .get();
-
-      if (!taskSnap.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'تعذّر تحميل مهمة قراءة الخبر البيئي. يرجى المحاولة لاحقًا.',
-              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-            ),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-        return;
-      }
-
-      final taskData = taskSnap.data() ?? {};
-
-      // 🔹 نكتبها داخل userTasks مع ربط المقال
-      await utRef.update({
-        'taskId': newsTaskId,
-        'taskTitle': taskData['title'] ?? '(بدون عنوان)',
-        'taskDescription': taskData['description'] ?? '',
-        'taskPoints': taskData['points'] ?? 0,
-        'taskValidation': taskData['validationStrategy'] ?? 'غير محددة',
-        'articleId': news['docId'],
-      });
-
-      _attachUserTaskStreamFor(selected);
-      return;
-    }
-
-    // 🟩 7) مهمة عادية (غير خبر)
-    final pickedData = picked.data();
-    final denorm = {
-      'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
-      'taskDescription': pickedData['description'] ?? '',
-      'taskPoints': pickedData['points'] ?? 0,
-      'taskValidation': pickedData['validationStrategy'] ?? 'غير محددة',
-    };
-
-    await utRef.update({'taskId': picked.id, ...denorm});
-    _attachUserTaskStreamFor(selected);
-  }
-
-  // =============================================================
-  // ✅ إنشاء مهمة اليوم للمستخدم (لو ما عنده مهمة لهذا اليوم)
-  // =============================================================
-  Future<void> _ensureUserTaskForDate(DateTime day) async {
-    if (_uid == null) return;
-
-    final today = _dayStart(DateTime.now());
-    if (_joinDate != null && day.isBefore(_joinDate!)) return;
-
-    final key = '${_uid!}_${_yyyyMMdd(day)}';
-    final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
-    final snap = await ref.get();
-    if (snap.exists) return;
-
-    final monthKey = "${day.year}-${day.month.toString().padLeft(2, '0')}";
-
-    // 🟩 1) نحضر المهام الفعالة حسب الشهر
-    final tasksSnap = await FirebaseFirestore.instance
-        .collection('tasks')
-        .where('status', isEqualTo: 'active')
-        .get();
-
-    final validTasks = tasksSnap.docs.where((doc) {
-      final data = doc.data();
-      dynamic vf = data['visible_from'];
-      dynamic em = data['expiry_month'];
-      String? visibleFrom;
-      String? expiryMonth;
-
-      if (vf is Timestamp) {
-        final d = vf.toDate();
-        visibleFrom = "${d.year}-${d.month.toString().padLeft(2, '0')}";
-      } else if (vf is String)
-        visibleFrom = vf;
-      if (em is Timestamp) {
-        final d = em.toDate();
-        expiryMonth = "${d.year}-${d.month.toString().padLeft(2, '0')}";
-      } else if (em is String)
-        expiryMonth = em;
-
-      final isVisible =
-          (visibleFrom == null) || (visibleFrom.compareTo(monthKey) <= 0);
-      final notExpired =
-          (expiryMonth == null) || (expiryMonth.compareTo(monthKey) >= 0);
-      return isVisible && notExpired;
-    }).toList();
-
     if (validTasks.isEmpty) return;
 
-    // 🟨 2) نتجنب تكرار مهمة الأمس
     final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
     final ySnap = await FirebaseFirestore.instance
         .collection('userTasks')
         .doc(yKey)
         .get();
-    final yTaskId = (ySnap.exists)
-        ? (ySnap.data()?['taskId'] as String?)
-        : null;
+    final yTaskId = ySnap.exists ? (ySnap.data()?['taskId'] as String?) : null;
 
-    final excludedIds = {yTaskId}..removeWhere((id) => id == null);
+    // إذا forceReplace، استبعد المهمة الحالية أيضاً
+    String? currentTaskId;
+    if (forceReplace && snap.exists) {
+      currentTaskId = snap.data()?['taskId'] as String?;
+    }
+
+    final excludedIds = <String?>{yTaskId, currentTaskId}
+      ..removeWhere((id) => id == null);
     final candidates = validTasks
         .where((doc) => !excludedIds.contains(doc.id))
         .toList();
     final filteredTasks = candidates.isEmpty ? validTasks : candidates;
 
-    // 📰 3) جلب خبر جديد فقط إذا اليوم = اليوم الحالي
     final bool isToday = _dayStart(day) == today;
     final freshNews = isToday ? await getFreshNewsForUser(_uid!) : null;
-    bool canShowNews = freshNews != null;
+    final canShowNews = freshNews != null;
 
-    // 🧩 4) بناء pool يشمل مهام + خبر
     List newPool = [];
-    if (canShowNews) newPool.add(null); // null = مهمة خبر
+    if (canShowNews) newPool.add(null);
     newPool.addAll(filteredTasks);
 
-    // 🎲 5) اختيار مهمة عشوائية
     final rnd = Random(
       DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch,
     );
     final picked = newPool[rnd.nextInt(newPool.length)];
 
-    // ⏰ تجهيز الوقت والحالة
     final start = _dayStart(day);
     final end = _dayEnd(day);
     final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
 
-    // 📰 6) لو هي مهمة خبر → استخدم ID الأدمن المحدد
     if (picked == null && canShowNews) {
       final news = freshNews!;
-      const newsTaskId =
-          "bJjTCm7ZWlmzEk2QNPr"; // ← ID مهمة "قراءة خبر بيئي" من الأدمن
+      const newsTaskId = "bJjITCm7ZWlmzEk2QNPr";
 
       await ref.set({
         'userId': _uid,
@@ -1852,14 +1894,12 @@ class _taskPageState extends State<taskPage> {
         'windowEnd': Timestamp.fromDate(end),
         'status': status,
         'completedAt': null,
-
         'ignored': false,
         'ignoredAt': null,
       });
       return;
     }
 
-    // 🟩 7) مهمة عادية
     final pickedData = picked.data();
     await ref.set({
       'userId': _uid,
@@ -1867,8 +1907,6 @@ class _taskPageState extends State<taskPage> {
       'selectedAt': Timestamp.fromDate(start),
       'status': status,
       'completedAt': null,
-      //'windowStart': Timestamp.fromDate(start),
-      //'windowEnd': Timestamp.fromDate(end),
       'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
       'taskDescription': pickedData['description'] ?? '',
       'taskPoints': pickedData['points'] ?? 0,
@@ -1877,11 +1915,14 @@ class _taskPageState extends State<taskPage> {
           pickedData['validation'] ??
           pickedData['taskValidation'] ??
           'غير محددة',
-
       'ignored': false,
       'ignoredAt': null,
     });
   }
+
+  // =============================================================
+  // ✅ إنشاء مهمة اليوم للمستخدم (لو ما عنده مهمة لهذا اليوم)
+  // =============================================================
 
   // -------------------------------------------------------------
   // 1) اختيار مهمة إضافية عشوائية (مختلفة عن مهمة اليوم)
@@ -2017,7 +2058,40 @@ class _taskPageState extends State<taskPage> {
         bonusTask['validationStrategy']?.toString() ?? '';
 
     if (validationStrategy == "التحقق عبر اجراء اختبار قصير") {
-      // 📖 مهمة قراءة مقال - نفتح ArticlePage
+      final freshNews = await getFreshNewsForUser(_uid!);
+      if (freshNews == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'لا يوجد مقال متاح حالياً',
+                style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+              ),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+        return;
+      }
+
+      await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(bonusDocId)
+          .set({
+            'userId': _uid,
+            'taskId': bonusTask['taskId'] ?? bonusTask['id'],
+            'taskTitle': bonusTask['title'] ?? '',
+            'taskDescription': bonusTask['description'] ?? '',
+            'taskPoints': bonusTask['points'] ?? 0,
+            'taskValidation': validationStrategy,
+            'articleId': freshNews['docId'],
+            'status': 'pending',
+            'selectedAt': Timestamp.fromDate(_dayStart(_selectedDay!)),
+            'ignored': false,
+            'ignoredAt': null,
+          }, SetOptions(merge: true));
+
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
