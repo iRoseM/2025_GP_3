@@ -128,7 +128,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   bool _isCapturing = false;
   bool _isUploading = false;
   bool _isCompleted = false;
-
+  bool _locationDenied = false; // ← أضيفيه مع باقي المتغيرات
+  
   // ─── Route Tracking ───
   final List<_TrackPoint> _trackPoints = [];
   Timer? _trackingTimer;
@@ -1991,7 +1992,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             ),
           ),
         );
-        _openCamera();
+        setState(() => _locationDenied = true); // ← أضيفي هذا
         return;
       }
 
@@ -2889,20 +2890,25 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   // ─── زر مهام المواصلات (يتغير حسب المرحلة) ───
                   if (requiresPhotoExact && isTransport && !_ready) ...[
                     _gradientButton(
-                      label: _transportVerifyPhase == 'end'
-                          ? _getArrivalLabel()
-                          : _getTransportButtonLabel(),
-                      icon: _transportVerifyPhase == 'end'
-                          ? Icons.location_on
-                          : _getTransportIcon(),
+                      label: _locationDenied
+                          ? 'ابدأ التصوير'
+                          : (_transportVerifyPhase == 'end'
+                              ? _getArrivalLabel()
+                              : _getTransportButtonLabel()),
+                      icon: _locationDenied
+                          ? Icons.camera_alt
+                          : (_transportVerifyPhase == 'end'
+                              ? Icons.location_on
+                              : _getTransportIcon()),
                       onTap: (_openingCamera || _isVerifying)
                           ? null
-                          : () => _transportVerifyPhase == 'end'
-                                ? _verifyTransportByLocation()
-                                : _startTaskFlow(),
+                          : () => _locationDenied
+                                ? _openCamera()
+                                : (_transportVerifyPhase == 'end'
+                                    ? _verifyTransportByLocation()
+                                    : _startTaskFlow()),
                       loading: _openingCamera || _isVerifying,
                     ),
-
                     // مؤشر التتبع الجاري
                     if (_isTracking) ...[
                       const SizedBox(height: 10),
@@ -3556,6 +3562,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   Widget _buildPhotoInstructions() {
     final isLocalProductTask = _isLocalProductTask;
+    final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
+
+    // ← أضيفي هذا الشرط في أول الدالة قبل أي شيء
+    final bool isTransportTask = t.contains('مترو') || t.contains('ميترو') ||
+        t.contains('metro') || t.contains('باص') || t.contains('bus') ||
+        t.contains('حافلة') || t.contains('دراجة') || t.contains('سكوتر') ||
+        t.contains('مشي');
+
+    if (isTransportTask && !_locationDenied) {
+      return _buildTransportGpsInstructions(); // ← return مبكر، ما يكمل
+    }
 
     final bullets = [
       'تأكد من أن الإضاءة جيدة والعنصر واضح.',
@@ -3640,7 +3657,14 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
               String? exampleImage;
               String? exampleLabel;
-
+              // بعد — أضيفي شرط _locationDenied
+              // if ((t.contains('مترو') || t.contains('ميترو') || t.contains('metro') ||
+              //     t.contains('باص') || t.contains('bus') || t.contains('حافلة') ||
+              //     t.contains('دراجة') || t.contains('سكوتر') || t.contains('مشي')) &&
+              //     !_locationDenied) {
+              //   // ✅ تعليمات GPS
+              //   return _buildTransportGpsInstructions();
+              // } 
               if (t.contains('تدوير') ||
                   t.contains('حاوية') ||
                   t.contains('بلاستيك') ||
@@ -3650,7 +3674,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                   t.contains('طعام')) {
                 exampleImage = 'assets/img/recycling_example.webp';
                 exampleLabel = 'مثال على الصورة المطلوبة:';
-              } else if (t.contains('مترو') || t.contains('metro')) {
+              } else if (t.contains('مترو') || t.contains('ميترو') || t.contains('metro')) {
                 exampleImage = 'assets/img/metro_example.jpg';
                 exampleLabel = 'مثال على الصورة المطلوبة:';
               } else if (t.contains('باص') ||
@@ -3668,6 +3692,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                 exampleImage = 'assets/img/scooter_example.jpg';
                 exampleLabel = 'مثال على الصورة المطلوبة:';
               }
+
 
               if (exampleImage == null) return const SizedBox.shrink();
 
@@ -3696,6 +3721,128 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                 ],
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransportGpsInstructions() {
+    final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
+
+    String transportName = 'المواصلات';
+    if (t.contains('مترو') || t.contains('ميترو')) transportName = 'المترو';
+    else if (t.contains('باص') || t.contains('حافلة')) transportName = 'الباص';
+    else if (t.contains('دراجة')) transportName = 'الدراجة';
+    else if (t.contains('سكوتر')) transportName = 'السكوتر';
+    else if (t.contains('مشي')) transportName = 'المشي';
+
+    final steps = [
+      ('1', Icons.map_outlined, 'اختر المحطات', 'اضغط الزر واختر محطة البداية ومحطة الوصول على الخريطة.'),
+      ('2', Icons.location_on_outlined, 'كن عند محطة البداية', 'توجه إلى محطة البداية التي اخترتها — سيتحقق التطبيق من وجودك فيها (في نطاق 150 متر).'),
+      ('3', Icons.directions, 'ابدأ رحلتك', 'بعد التأكيد، سيبدأ التطبيق بتتبع مسارك تلقائياً أثناء استخدامك لـ$transportName.'),
+      ('4', Icons.check_circle_outline, 'سجّل وصولك', 'عند وصولك لمحطة الوصول، اضغط زر "وصلت" ليتحقق التطبيق من موقعك ويكمل المهمة.'),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: appColors.mint.withOpacity(0.15),
+        border: Border.all(color: appColors.mint, width: 1.5),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.route_outlined, color: appColors.primary, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'كيف تُكمل مهمة $transportName',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: appColors.dark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ...steps.map((s) => Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: appColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      s.$1,
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.$3,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: appColors.dark,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        s.$4,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 13,
+                          height: 1.6,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.amber.shade300),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: Colors.amber, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'تأكد من تفعيل خدمة الموقع على جهازك طوال فترة الرحلة.',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 13,
+                      color: Colors.black87,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
