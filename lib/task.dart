@@ -54,7 +54,7 @@ class _taskPageState extends State<taskPage> {
   int _requiredTasksToday = 1; // المهام المطلوبة اليوم
   bool _isLoadingProgress = true; // حالة تحميل البروقريس
   StreamSubscription<DocumentSnapshot>? _userTasksSubscription;
-
+  int _viewingTaskIndex = 1; // الكارد الي يشوفه اليوزر حالياً
   final int _currentIndex = 1;
 
   bool _isInitializing = true;
@@ -1056,6 +1056,13 @@ bool _isTransportTitle(String title) {
           int completed = await _calculateCompletedTasks();
           updateCount++;
           setState(() => _completedTasksToday = completed);
+          
+          // ← أضيفي هذا
+          if (_selectedDay != null) {
+            final status = completed >= _requiredTasksToday ? 'completed' : 'pending';
+            _updateMonthStatusFor(_selectedDay!, status);
+          }
+          
           print(
             '✅ Progress update #$updateCount (from main): $completed/$_requiredTasksToday',
           );
@@ -1071,6 +1078,12 @@ bool _isTransportTitle(String title) {
           int completed = await _calculateCompletedTasks();
           updateCount++;
           setState(() => _completedTasksToday = completed);
+          
+          // ← أضيفي هذا
+          if (_selectedDay != null) {
+            final status = completed >= _requiredTasksToday ? 'completed' : 'pending';
+            _updateMonthStatusFor(_selectedDay!, status);
+          }
           print(
             '✅ Progress update #$updateCount (from bonus): $completed/$_requiredTasksToday',
           );
@@ -1115,6 +1128,12 @@ bool _isTransportTitle(String title) {
 
           updateCount++;
           setState(() => _completedTasksToday = completed);
+         
+          // ← أضيفي هذا
+          if (_selectedDay != null) {
+            final status = completed >= _requiredTasksToday ? 'completed' : 'pending';
+            _updateMonthStatusFor(_selectedDay!, status);
+          }
           print(
             '✅ Progress update #$updateCount (from daily): $completed/$_requiredTasksToday',
           );
@@ -2566,7 +2585,7 @@ bool _isTransportTitle(String title) {
                               }
 
                               final ut =
-                                  snap.data!.data() as Map<String, dynamic>;
+                                  (snap.data!.data() as Map<String, dynamic>?) ?? {};
 
                               final newStatus =
                                   (ut['status'] as String?) ?? 'pending';
@@ -2640,68 +2659,57 @@ bool _isTransportTitle(String title) {
                                     final bool firstCompleted =
                                         (data['status'] == 'completed');
 
-                                    return Column(
-                                      children: [
-                                        // لو المهمة الأولى مو مكتملة → تطلع فوق
-                                        if (!firstCompleted)
-                                          _buildUserTaskCard(
-                                            taskData: data,
-                                            canPerform: canPerformDay,
-                                            taskIndex: 1,
-                                          ),
+return Column(
+  children: [
+    // 🌟 كارد المهمة الإضافية (صغير، فوق)
+    if (sel.isAtSameMomentAs(today))
+      _buildBonusTaskSectionStandalone(),
 
-                                        // المهام الإضافية
-                                        for (
-                                          int i = 2;
-                                          i <= _requiredTasksToday;
-                                          i++
-                                        )
-                                          _buildExtraTaskCard(
-                                            day: sel,
-                                            taskIndex: i,
-                                            canPerform: canPerformDay,
-                                          ),
-
-                                        // لو المهمة الأولى مكتملة → تنزل تحت
-                                        if (firstCompleted)
-                                          _buildUserTaskCard(
-                                            taskData: data,
-                                            canPerform: canPerformDay,
-                                            taskIndex: 1,
-                                          ),
-                                      ],
-                                    );
+    // 🗂️ كارد المهام العادية مع سهم التنقل
+    _buildTaskCardWithNavigation(
+      mainData: fData,
+      canPerform: canPerformDay,
+      sel: sel,
+    ),
+  ],
+);
                                   },
                                 );
                               }
                               final bool firstCompleted =
                                   (data['status'] == 'completed');
 
-                              return Column(
+                            // return FutureBuilder<int>(
+                            //   key: ValueKey('$sel-$_completedTasksToday'), // ← هذا المهم
+                            //   future: _getNextIncompleteTaskIndex(sel),
+                            //   builder: (context, snap) {
+                            //     final nextIndex = snap.data ?? 1;
+
+                            //     if (nextIndex == 1 && !firstCompleted) {
+                            //       return _buildUserTaskCard(
+                            //         taskData: data, canPerform: canPerformDay, taskIndex: 1,
+                            //       );
+                            //     }
+                            //     if (nextIndex >= 2 && nextIndex <= _requiredTasksToday) {
+                            //       return _buildExtraTaskCard(
+                            //         day: sel, taskIndex: nextIndex, canPerform: canPerformDay,
+                            //       );
+                            //     }
+                            //     // كل شيء مكتمل
+                            //     return _buildUserTaskCard(
+                            //       taskData: data, canPerform: canPerformDay, taskIndex: 1,
+                            //     );
+                            //   },
+                            // );
+                            return Column(
                                 children: [
-                                  // لو المهمة الأولى مو مكتملة → تطلع فوق
-                                  if (!firstCompleted)
-                                    _buildUserTaskCard(
-                                      taskData: data,
-                                      canPerform: canPerformDay,
-                                      taskIndex: 1,
-                                    ),
-
-                                  // المهام الإضافية
-                                  for (int i = 2; i <= _requiredTasksToday; i++)
-                                    _buildExtraTaskCard(
-                                      day: sel,
-                                      taskIndex: i,
-                                      canPerform: canPerformDay,
-                                    ),
-
-                                  // لو المهمة الأولى مكتملة → تنزل تحت
-                                  if (firstCompleted)
-                                    _buildUserTaskCard(
-                                      taskData: data,
-                                      canPerform: canPerformDay,
-                                      taskIndex: 1,
-                                    ),
+                                  if (sel.isAtSameMomentAs(today))
+                                    _buildBonusTaskSectionStandalone(),
+                                  _buildTaskCardWithNavigation(
+                                    mainData: data,
+                                    canPerform: canPerformDay,
+                                    sel: sel,
+                                  ),
                                 ],
                               );
                             },
@@ -2721,7 +2729,360 @@ bool _isTransportTitle(String title) {
       ),
     );
   }
+  Widget _buildTaskCardWithNavigation({
+  required Map<String, dynamic> mainData,
+  required bool canPerform,
+  required DateTime sel,
+}) {
+  return StreamBuilder<DocumentSnapshot>(
+    key: ValueKey('task-$_viewingTaskIndex-${_yyyyMMdd(sel)}'),
+    stream: _viewingTaskIndex == 1
+        ? _userTaskStream
+        : FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc('${_uid}_${_yyyyMMdd(sel)}_task$_viewingTaskIndex')
+            .snapshots(),
+    builder: (context, snap) {
+      Map<String, dynamic> taskData = mainData;
 
+      if (_viewingTaskIndex > 1 && snap.hasData && snap.data!.exists) {
+        final ut = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+
+        taskData = {
+          'taskId': ut['taskId'] ?? '',
+          'title': ut['taskTitle'] ?? '(بدون عنوان)',
+          'description': ut['taskDescription'] ?? '',
+          'points': ut['taskPoints'] ?? 0,
+          'validationStrategy': ut['taskValidation'] ?? 'غير محددة',
+          'id': ut['taskId'] ?? '',
+          'status': ut['status'] ?? 'pending',
+        };
+      }
+
+      return Column(
+        children: [
+          // أزرار التنقل لو عنده أكثر من مهمة
+          if (_requiredTasksToday > 1)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                textDirection: TextDirection.ltr,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // سهم يسار (السابقة)
+                  IconButton(
+                    onPressed: _viewingTaskIndex > 1
+                        ? () => setState(() => _viewingTaskIndex--)
+                        : null,
+                    icon: Icon(
+                      Icons.arrow_forward_ios, // ← كان forward
+                      color: _viewingTaskIndex > 1
+                          ? AppColors.primary
+                          : Colors.grey.shade300,
+                      size: 20,
+                    ),
+                  ),
+
+                  // مؤشر الصفحة
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: Text(
+                      '$_viewingTaskIndex / $_requiredTasksToday',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.dark,
+                      ),
+                    ),
+                  ),
+
+                // سهم يمين (التالية)
+                IconButton(
+                  onPressed: _viewingTaskIndex < _requiredTasksToday
+                      ? () => setState(() => _viewingTaskIndex++)
+                      : null,
+                  icon: Icon(
+                    Icons.arrow_back_ios_new, // ← كان back
+                    color: _viewingTaskIndex < _requiredTasksToday
+                        ? AppColors.primary
+                        : Colors.grey.shade300,
+                    size: 20,
+                  ),
+                ),
+                ],
+              ),
+            ),
+
+          _buildUserTaskCard(
+            taskData: taskData,
+            canPerform: canPerform,
+            taskIndex: _viewingTaskIndex,
+            userTaskDocId: _viewingTaskIndex == 1
+                ? '${_uid}_${_yyyyMMdd(sel)}'
+                : '${_uid}_${_yyyyMMdd(sel)}_task$_viewingTaskIndex',
+            isPreviousCompleted: _viewingTaskIndex == 1
+            ? true
+            : (_completedTasksToday >= _viewingTaskIndex - 1), // ← هذا المهم
+          ),
+        ],
+      );
+    },
+  );
+}
+Widget _buildBonusTaskSectionStandalone() {
+  final sel = _dayStart(_selectedDay ?? DateTime.now());
+  final bonusDocId = '${_uid ?? ''}_${_yyyyMMdd(sel)}_bonus';
+
+  return StreamBuilder<DocumentSnapshot>(
+    stream: FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(bonusDocId)
+        .snapshots(),
+    builder: (context, snap) {
+      // مو موجودة بعد — اعرض زر الاقتراح الصغير
+      if (!snap.hasData || !snap.data!.exists) {
+        if (_suggestedBonusTask != null) {
+          return _buildProposedBonusCard(
+            task: _suggestedBonusTask!,
+            onAccept: () => _saveBonusTaskAndOpen(_suggestedBonusTask!),
+            onReject: () => setState(() => _suggestedBonusTask = null),
+            onAlternative: () async {
+              setState(() => _bonusLoading = true);
+              final currentTaskId = _suggestedBonusTask!['taskId'] ?? _suggestedBonusTask!['id'];
+              final next = await _suggestBonusTask(excludeTaskId: currentTaskId);
+              if (mounted) setState(() { _suggestedBonusTask = next; _bonusLoading = false; });
+            },
+            isLoading: _bonusLoading,
+          );
+        }
+
+        if (_completedTasksToday >= _requiredTasksToday)
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: _bonusLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.primary,
+                    ),
+                  )
+                : OutlinedButton.icon(
+                    icon: const Icon(
+                      Icons.add_task,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
+                    label: Text(
+                      'اقتراح مهمة إضافية ✨',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(
+                        color: AppColors.primary,
+                        width: 1.2,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 12,
+                      ),
+                      minimumSize: const Size(double.infinity, 0),
+                    ),
+                    onPressed: () async {
+                      setState(() => _bonusLoading = true);
+
+                      final task = await _suggestBonusTask();
+
+                      if (mounted) {
+                        setState(() {
+                          _suggestedBonusTask = task;
+                          _bonusLoading = false;
+                        });
+                      }
+                    },
+                  ),
+          );
+
+        return const SizedBox.shrink();
+      }
+
+      final bonusData = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+      final bonusStatus = bonusData['status'] as String? ?? 'pending';
+
+      // مكتملة
+      if (bonusStatus == 'completed') {
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.primary33,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.primary, width: 1.2),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.star, color: AppColors.primary, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'تم إكمال المهمة الإضافية 🌱',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: AppColors.dark,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // موجودة ولم تكتمل — اعرض كارد صغير
+      return _buildSmallActiveBonusCard(bonusData, bonusDocId, bonusStatus);
+    },
+  );
+}
+
+Widget _buildSmallActiveBonusCard(
+  Map<String, dynamic> bonusData,
+  String bonusDocId,
+  String status,
+) {
+  final sel = _dayStart(_selectedDay ?? DateTime.now());
+  final title = bonusData['taskTitle'] ?? '(بدون عنوان)';
+  final points = bonusData['taskPoints'] ?? 0;
+  final validation = bonusData['taskValidation'] ?? 'غير محددة';
+  final isSubmitted = status == 'submitted';
+
+  return Container(
+    margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.accent, width: 1.2),
+      boxShadow: const [
+        BoxShadow(color: Color(0x12000000), blurRadius: 6, offset: Offset(0, 3)),
+      ],
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.auto_awesome, color: AppColors.accent, size: 18),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'مهمة إضافية ✨',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 11,
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.dark,
+                ),
+              ),
+              Text(
+                '$points نقطة',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 11,
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ElevatedButton(
+          onPressed: isSubmitted
+              ? null
+              : () async {
+                  final taskId = bonusData['taskId'] as String?;
+                  final fullTask = {
+                    ...bonusData,
+                    'title': title,
+                    'description': bonusData['taskDescription'] ?? '',
+                    'points': points,
+                    'validationStrategy': validation,
+                    'id': taskId,
+                    'taskId': taskId,
+                    'status': status,
+                  };
+                  final result = await showCompleteTaskSheet(
+                    context, fullTask,
+                    selectedDay: sel,
+                    userTaskDocId: bonusDocId,
+                  );
+                  await _loadUserProgress();
+                  if (result == true && mounted) { 
+                    // ← أولاً حدّثي الـ index
+                    if (_viewingTaskIndex < _requiredTasksToday) {
+                      _viewingTaskIndex++;
+                    }
+              }
+                    // ← ثم الـ stream
+                    _attachUserTaskStreamFor(sel);
+                    setState(() {});
+                },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: isSubmitted ? Colors.grey.shade300 : AppColors.primary,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          ),
+          child: Text(
+            isSubmitted ? '⏳' : 'ابدأ',
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: isSubmitted ? AppColors.dark : Colors.white,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+  Future<bool> _isTaskCompleted(String docId) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(docId)
+        .get();
+    return snap.exists && snap.data()?['status'] == 'completed';
+  }
+
+  Future<int> _getNextIncompleteTaskIndex(DateTime day) async {
+    // تحقق من المهمة الرئيسية
+    final mainSnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc('${_uid}_${_yyyyMMdd(day)}')
+        .get();
+    if (mainSnap.data()?['status'] != 'completed') return 1;
+
+    // تحقق من المهام الإضافية
+    for (int i = 2; i <= _requiredTasksToday; i++) {
+      final snap = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc('${_uid}_${_yyyyMMdd(day)}_task$i')
+          .get();
+      if (snap.data()?['status'] != 'completed') return i;
+    }
+
+    // كل شيء مكتمل
+    return _requiredTasksToday + 1;
+  }
   // -------------------------------------------------------------
   // 🌱 Growth Progress Bar
   // -------------------------------------------------------------
@@ -2887,6 +3248,7 @@ bool _isTransportTitle(String title) {
               setState(() {
                 _selectedDay = selected;
                 _focusedDay = focused;
+                _viewingTaskIndex = 1; // ← أضيفيه هنا
               });
 
               final sel = _dayStart(selected);
@@ -3242,6 +3604,8 @@ bool _isTransportTitle(String title) {
     bool canPerform = false,
     int taskIndex = 1,
     String? userTaskDocId,
+    bool isPreviousCompleted = true, // ← أضيفي هذا
+
   }) {
     final title = taskData['title'] ?? 'مهمة غير محددة';
     final description = taskData['description'] ?? 'لا يوجد وصف متاح.';
@@ -3257,6 +3621,7 @@ bool _isTransportTitle(String title) {
 
     final isSubmitted = (status == 'submitted');
     final isCompleted = (status == 'completed');
+    final bool canStart = canPerform && isPreviousCompleted;
 
     return Container(
       width: double.infinity,
@@ -3277,7 +3642,7 @@ bool _isTransportTitle(String title) {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 🔁 زر تحديث صغير أعلى يسار الكرت
-          if (canPerform && !isCompleted && !isSubmitted) ...[
+          if (canStart && !isCompleted && !isSubmitted) ...[
             Align(
               alignment: Alignment.centerLeft,
               child: OutlinedButton.icon(
@@ -3394,7 +3759,7 @@ bool _isTransportTitle(String title) {
               borderRadius: BorderRadius.circular(14),
               child: InkWell(
                 borderRadius: BorderRadius.circular(14),
-                onTap: (isCompleted || isSubmitted || !canPerform)
+                onTap: (isCompleted || isSubmitted || !canStart)
                     ? null
                     : () async {
                         if (validation == "التحقق عبر اجراء اختبار قصير") {
@@ -3416,97 +3781,119 @@ bool _isTransportTitle(String title) {
                           );
                           if (result == true && mounted) {
                             _attachUserTaskStreamFor(sel);
+                             // ← أضيفي هذا
+                            if (_viewingTaskIndex < _requiredTasksToday) {
+                              setState(() => _viewingTaskIndex++);
+                            }
                             setState(() {});
                           }
                         }
                       },
-                child: Ink(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    color: (isSubmitted || !canPerform)
-                        ? Colors.grey.shade300
-                        : (isCompleted ? AppColors.primary33 : null),
-                    gradient: (!isCompleted && !isSubmitted && canPerform)
-                        ? const LinearGradient(
-                            colors: [AppColors.primary, AppColors.mint],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          )
-                        : null,
-                  ),
-                  child: Container(
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    child: Text(
-                      isCompleted
-                          ? 'تم الإنجاز ✅'
-                          : (isSubmitted
-                                ? 'بانتظار المراجعة ⏳'
-                                : (canPerform
-                                      ? 'بدء المهمة'
-                                      : (sel.isBefore(today)
-                                            ? 'انتهى موعد المهمة'
-                                            : 'يومها لم يحن بعد'))),
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                        color: (isCompleted || isSubmitted || !canPerform)
-                            ? AppColors.dark
-                            : Colors.white,
+                      child: Ink(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          color: (isSubmitted || !canStart)  // ← غيري
+                              ? Colors.grey.shade300
+                              : (isCompleted ? AppColors.primary33 : null),
+                          gradient: (!isCompleted && !isSubmitted && canStart)
+                              ? LinearGradient(
+                                  colors: [AppColors.primary, AppColors.mint],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                )
+                              : null,
+                        ),
+                        child: Container(
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          child: Text(
+                            isCompleted
+                                ? 'تم الإنجاز ✅'
+                                : (isSubmitted
+                                    ? 'بانتظار المراجعة ⏳'
+                                    : (!isPreviousCompleted  // ← غيري
+                                        ? 'أكمل المهمة السابقة أولاً 🔒'
+                                        : (canPerform
+                                            ? 'بدء المهمة'
+                                            : (sel.isBefore(today)
+                                                ? 'انتهى موعد المهمة'
+                                                : 'يومها لم يحن بعد')))),
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: (isCompleted || isSubmitted || !canStart)  // ← غيري
+                                  ? AppColors.dark
+                                  : Colors.white,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
               ),
             ),
           ),
-          if (isCompleted && taskIndex == _requiredTasksToday) ...[
-            const SizedBox(height: 16),
-            _buildBonusTaskSection(),
-          ],
+          // if (isCompleted && taskIndex == _requiredTasksToday) ...[
+          //   const SizedBox(height: 16),
+          //   _buildBonusTaskSection(),
+          // ],
         ],
       ),
     );
   }
 
-  Widget _buildExtraTaskCard({
-    required DateTime day,
-    required int taskIndex,
-    bool canPerform = false,
-  }) {
-    final uid = _uid ?? '';
-    final docId = '${uid}_${_yyyyMMdd(day)}_task$taskIndex';
+Widget _buildExtraTaskCard({
+  required DateTime day,
+  required int taskIndex,
+  bool canPerform = false,
+}) {
+  final uid = _uid ?? '';
+  final docId = '${uid}_${_yyyyMMdd(day)}_task$taskIndex';
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('userTasks')
-          .doc(docId)
-          .snapshots(),
-      builder: (context, snap) {
-        if (!snap.hasData || !snap.data!.exists) {
-          return const SizedBox.shrink();
+  return StreamBuilder<DocumentSnapshot>(
+    stream: FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(docId)
+        .snapshots(),
+    builder: (context, snap) {
+      if (!snap.hasData || !snap.data!.exists) {
+        return const SizedBox.shrink();
+      }
+
+      final ut = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+      final status = ut['status'] ?? 'pending';
+
+      // ✅ لو مكتملة → اعرض الكارد التالي
+      if (status == 'completed') {
+        final nextIndex = taskIndex + 1;
+        if (nextIndex <= _requiredTasksToday) {
+          return _buildExtraTaskCard(
+            day: day,
+            taskIndex: nextIndex,
+            canPerform: canPerform,
+          );
         }
+        // كل المهام مكتملة → اخفي
+        return const SizedBox.shrink();
+      }
 
-        final ut = snap.data!.data() as Map<String, dynamic>;
-        final data = {
-          'taskId': ut['taskId'] ?? '',
-          'title': ut['taskTitle'] ?? '(بدون عنوان)',
-          'description': ut['taskDescription'] ?? '',
-          'points': ut['taskPoints'] ?? 0,
-          'validationStrategy': ut['taskValidation'] ?? 'غير محددة',
-          'id': ut['taskId'] ?? '',
-          'status': ut['status'] ?? 'pending',
-        };
+      final data = {
+        'taskId': ut['taskId'] ?? '',
+        'title': ut['taskTitle'] ?? '(بدون عنوان)',
+        'description': ut['taskDescription'] ?? '',
+        'points': ut['taskPoints'] ?? 0,
+        'validationStrategy': ut['taskValidation'] ?? 'غير محددة',
+        'id': ut['taskId'] ?? '',
+        'status': status,
+      };
 
-        return _buildUserTaskCard(
-          taskData: data,
-          canPerform: canPerform,
-          taskIndex: taskIndex,
-          userTaskDocId: docId,
-        );
-      },
-    );
-  }
+      return _buildUserTaskCard(
+        taskData: data,
+        canPerform: canPerform,
+        taskIndex: taskIndex,
+        userTaskDocId: docId,
+      );
+    },
+  );
+}
 
   // =====================================================================
   // ✅ الدوال الجديدة — أضيفيها بعد _buildUserTaskCard
@@ -3530,7 +3917,7 @@ bool _isTransportTitle(String title) {
       builder: (context, snap) {
         // المهمة الإضافية موجودة في Firestore
         if (snap.hasData && snap.data!.exists) {
-          final bonusData = snap.data!.data() as Map<String, dynamic>;
+          final bonusData = (snap.data!.data() as Map<String, dynamic>?) ?? {};
           final bonusStatus = bonusData['status'] as String? ?? 'pending';
 
           if (bonusStatus == 'completed') {

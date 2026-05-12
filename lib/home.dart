@@ -1630,7 +1630,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                                 merge: true,
                                                               ),
                                                             );
-
                                                         print(
                                                           '✅ Tasks updated successfully',
                                                         );
@@ -5356,8 +5355,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                   .snapshots(),
               builder: (context, snap) {
                 final following = List<String>.from(
-                  snap.data?.get('following') ?? [],
-                );
+((snap.data?.data() as Map<String, dynamic>?)?['following'] as List?) ?? [],                );
                 final isFollowing = following.contains(userId);
 
                 return GestureDetector(
