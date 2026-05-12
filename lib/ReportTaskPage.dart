@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
-
+import 'package:image_picker/image_picker.dart';
 import 'services/background_container.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
@@ -26,6 +29,7 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
   String? _selectedTaskTitle;
 
   bool _sending = false;
+  File? _reportImage;
 
   @override
   void initState() {
@@ -100,6 +104,34 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
     });
   }
 
+  Future<void> _pickReportImage() async {
+    final picker = ImagePicker();
+
+    final XFile? pickedImage = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 75,
+    );
+
+    if (pickedImage == null) return;
+
+    setState(() {
+      _reportImage = File(pickedImage.path);
+    });
+  }
+
+  Future<String?> _uploadReportImage() async {
+    if (_reportImage == null) return null;
+
+    final fileName =
+        'task_reports/${_uid ?? FirebaseAuth.instance.currentUser?.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+    final ref = FirebaseStorage.instance.ref().child(fileName);
+
+    await ref.putFile(_reportImage!);
+
+    return await ref.getDownloadURL();
+  }
+
   Future<void> _submitReport() async {
     if (_sending) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -127,13 +159,18 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
     setState(() => _sending = true);
 
     try {
+      final imageUrl = await _uploadReportImage();
+
       await FirebaseFirestore.instance.collection('taskReports').add({
         'createdAt': FieldValue.serverTimestamp(),
         'decision': 'pending',
         'description': _descCtrl.text.trim(),
         'reportedBy': uid,
 
-        // ✅ البلاغ صار مربوط بالمهمة العامة نفسها
+        // ✅ الصورة اختيارية، إذا ما اختار صورة بتكون null
+        'imageUrl': imageUrl,
+
+        // ✅ البلاغ مربوط بالمهمة العامة نفسها
         'taskId': _selectedTaskId,
         'taskTitle': _selectedTaskTitle ?? '',
       });
@@ -158,6 +195,7 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
         _descCtrl.clear();
         _selectedTaskId = null;
         _selectedTaskTitle = null;
+        _reportImage = null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -576,7 +614,87 @@ class _ReportTaskPageState extends State<ReportTaskPage> {
                         ),
 
                         const SizedBox(height: 14),
+                        _SectionCard(
+                          title: 'ارفاق صورة',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              GestureDetector(
+                                onTap: _sending ? null : _pickReportImage,
+                                child: Container(
+                                  width: double.infinity,
+                                  height: 135,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.85),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  child: _reportImage == null
+                                      ? Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            const Icon(
+                                              Icons
+                                                  .add_photo_alternate_outlined,
+                                              color: appColors.primary,
+                                              size: 36,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'ارفاق الصورة اختياري',
+                                              style:
+                                                  GoogleFonts.ibmPlexSansArabic(
+                                                    color: Colors.grey[700],
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                            ),
+                                          ],
+                                        )
+                                      : ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          child: Image.file(
+                                            _reportImage!,
+                                            width: double.infinity,
+                                            height: 135,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                ),
+                              ),
 
+                              if (_reportImage != null) ...[
+                                const SizedBox(height: 8),
+                                TextButton.icon(
+                                  onPressed: _sending
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _reportImage = null;
+                                          });
+                                        },
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.red,
+                                  ),
+                                  label: Text(
+                                    'إزالة الصورة',
+                                    style: GoogleFonts.ibmPlexSansArabic(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 14),
                         Container(
                           width: double.infinity,
                           decoration: BoxDecoration(
