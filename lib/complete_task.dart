@@ -500,24 +500,22 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   //  Transport Flow
   // ─────────────────────────────────────────────
 
-  Future<void> _startFlowForTransportTask() async {
-    final taskTitle = widget.taskData['title']?.toString() ?? '';
-    final String stationType;
-    if (taskTitle.contains('مترو') || taskTitle.contains('metro')) {
-      stationType = 'metro';
-    } else if (taskTitle.contains('باص') ||
-        taskTitle.contains('bus') ||
-        taskTitle.contains('حافلة')) {
-      stationType = 'bus';
-    } else if (taskTitle.contains('دراجة') ||
-        taskTitle.contains('سيكل') ||
-        taskTitle.contains('cycle')) {
-      stationType = 'bicycle';
-    } else if (taskTitle.contains('سكوتر') || taskTitle.contains('scooter')) {
-      stationType = 'scooter';
-    } else {
-      stationType = 'walk';
-    }
+Future<void> _startFlowForTransportTask() async {
+  final taskTitle = widget.taskData['title']?.toString() ?? '';
+  final t = taskTitle.toLowerCase(); // ← أضيفي هذا السطر
+
+  final String stationType;
+  if (t.contains('ميترو') || t.contains('metro')) {  // ← غيري taskTitle إلى t
+    stationType = 'metro';
+  } else if (t.contains('باص') || t.contains('bus') || t.contains('حافلة')) {  // ← t
+    stationType = 'bus';
+  } else if (t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle')) {  // ← t
+    stationType = 'bicycle';
+  } else if (t.contains('سكوتر') || t.contains('scooter')) {  // ← t
+    stationType = 'scooter';
+  } else {
+    stationType = 'walk';
+  }
 
     final MapRoutePickResult? res =
         await Navigator.of(
@@ -1917,22 +1915,18 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     }
   }
 
-  Future<void> _startTaskFlow() async {
-    final taskTitle = widget.taskData['title']?.toString() ?? '';
-    final taskType = _getLocationTaskType(taskTitle);
-    final t = taskTitle.toLowerCase();
+Future<void> _startTaskFlow() async {
+  print('🔍 DEBUG: ${widget.taskData}');
+  final taskTitle = widget.taskData['title']?.toString() ?? '';
+  final t = taskTitle.toLowerCase(); // ← أضيفي هذا
 
-    final bool isAnyTransport =
-        taskType == TaskType.metro ||
-        taskType == TaskType.bus ||
-        t.contains('دراجة') ||
-        t.contains('سيكل') ||
-        t.contains('cycle') ||
-        t.contains('سكوتر') ||
-        t.contains('scooter') ||
-        t.contains('مشياً') ||
-        t.contains('مشيا') ||
-        t.contains('مشي');
+  // ← غيري الشرط كله ليعتمد على t فقط
+  final bool isAnyTransport =
+      t.contains('ميترو') || t.contains('metro') ||
+      t.contains('باص') || t.contains('bus') || t.contains('حافلة') ||
+      t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle') ||
+      t.contains('سكوتر') || t.contains('scooter') ||
+      t.contains('مشياً') || t.contains('مشيا') || t.contains('مشي');
 
     if (isAnyTransport) {
       final permission = await Geolocator.checkPermission();
@@ -2786,6 +2780,10 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final pts = (task['points'] ?? 0) as int;
     final requiresPhotoExact = true;
     final isTransport = (_autoDistance || _isTransportTask);
+    final String validationLabel = isTransport 
+    ? 'التحقق عبر الموقع' 
+    : (task['validationStrategy']?.toString() ?? 'التحقق عبر معالجة الصور');
+
 
     return Directionality(
       textDirection: TextDirection.rtl,

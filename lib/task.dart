@@ -400,6 +400,13 @@ class _taskPageState extends State<taskPage> {
     );
   }
 
+bool _isTransportTitle(String title) {
+  final t = title.toString().toLowerCase();
+  return t.contains('ميترو') || t.contains('مترو') ||
+      t.contains('باص') || t.contains('حافلة') ||
+      t.contains('دراجة') || t.contains('سكوتر') || t.contains('مشي');
+}
+
   Future<GeoPoint?> getCurrentLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -3369,8 +3376,8 @@ class _taskPageState extends State<taskPage> {
                 ),
               ),
               const Spacer(),
-              Text(
-                validation,
+           Text(
+  _isTransportTitle(title.toString()) ? 'التحقق عبر الموقع' : validation,
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 13,
                   color: Colors.grey.shade600,
