@@ -382,6 +382,80 @@ class _TaskReportCard extends StatefulWidget {
 
 class _TaskReportCardState extends State<_TaskReportCard> {
   bool _busy = false;
+  void _openReportImage(String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (_) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'صورة البلاغ',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: appColors.dark,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    bottom: Radius.circular(18),
+                  ),
+                  child: InteractiveViewer(
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const SizedBox(
+                          height: 260,
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return SizedBox(
+                          height: 220,
+                          child: Center(
+                            child: Text(
+                              'تعذر تحميل الصورة',
+                              style: GoogleFonts.ibmPlexSansArabic(
+                                color: slackMesseges.red,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   Color _statusColor(String s) {
     switch (s) {
@@ -559,12 +633,13 @@ class _TaskReportCardState extends State<_TaskReportCard> {
 
     try {
       final adminId = FirebaseAuth.instance.currentUser?.uid;
+      final note = (reason ?? '').trim();
 
       await widget.doc.reference.update({
         'decision': decision,
         'reviewedAt': FieldValue.serverTimestamp(),
         'reviewedBy': adminId,
-        if (reason != null && reason.isNotEmpty) 'adminNote': reason,
+        if (note.isNotEmpty) 'adminNote': note,
       });
 
       final m = widget.doc.data();
@@ -573,22 +648,44 @@ class _TaskReportCardState extends State<_TaskReportCard> {
 
       final notifTitle = decision == 'approved'
           ? 'تم معالجة البلاغ'
-          : 'تم رفض البلاغ';
+          : decision == 'rejected'
+          ? 'تم رفض البلاغ'
+          : 'تم تحديث حالة البلاغ';
 
-      final notifBody = decision == 'approved'
-          ? 'تمت معالجة البلاغ الخاص بمهمة "$taskTitle". نسعى دائمًا لتحسين تجربتك💚'
-          : 'بعد التحقق من البلاغ الخاص بمهمة "$taskTitle"، تبيّن أنه غير صحيح ♻️';
+      String notifBody;
+
+      if (decision == 'approved') {
+        notifBody =
+            'تمت معالجة البلاغ الخاص بمهمة "$taskTitle". نسعى دائمًا لتحسين تجربتك💚';
+
+        if (note.isNotEmpty) {
+          notifBody += '\nملاحظة: $note';
+        }
+      } else if (decision == 'rejected') {
+        notifBody =
+            'بعد التحقق من البلاغ الخاص بمهمة "$taskTitle"، تبيّن أنه غير صحيح ♻️';
+
+        if (note.isNotEmpty) {
+          notifBody += '\nسبب الرفض: $note';
+        }
+      } else {
+        notifBody =
+            'تم إرجاع البلاغ الخاص بمهمة "$taskTitle" إلى قيد المراجعة.';
+      }
 
       await FirebaseFirestore.instance.collection('notifications').add({
         'type': decision == 'approved'
             ? 'task_report_approved'
-            : 'task_report_rejected',
+            : decision == 'rejected'
+            ? 'task_report_rejected'
+            : 'task_report_pending',
         'userId': reportedBy,
         'reportId': widget.doc.id,
         'createdAt': FieldValue.serverTimestamp(),
         'seen': false,
         'title': notifTitle,
         'body': notifBody,
+        if (note.isNotEmpty) 'adminNote': note,
       });
 
       final messenger = widget.messengerKey.currentState;
@@ -598,7 +695,7 @@ class _TaskReportCardState extends State<_TaskReportCard> {
         Color bg;
 
         if (decision == 'approved') {
-          msg = 'تم اعتماد البلاغ بنجاح ✅';
+          msg = 'تم اعتماد البلاغ وإشعار المستخدم ✅';
           bg = slackMesseges.primary;
         } else if (decision == 'rejected') {
           msg = 'تم رفض البلاغ وإشعار المستخدم ❌';
@@ -644,6 +741,113 @@ class _TaskReportCardState extends State<_TaskReportCard> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _confirmApprove() {
+    final ctrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) {
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'اعتماد البلاغ',
+                  textAlign: TextAlign.right,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ctrl,
+                  maxLines: 3,
+                  textAlign: TextAlign.right,
+                  decoration: InputDecoration(
+                    labelText: 'سبب الاعتماد (اختياري)',
+                    hintText: 'اكتب ملاحظة تظهر للمستخدم',
+                    alignLabelWithHint: true,
+                    border: const OutlineInputBorder(),
+                    labelStyle: GoogleFonts.ibmPlexSansArabic(),
+                    hintStyle: GoogleFonts.ibmPlexSansArabic(),
+                  ),
+                  style: GoogleFonts.ibmPlexSansArabic(),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: slackMesseges.primary,
+                          minimumSize: const Size(0, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                        onPressed: _busy
+                            ? null
+                            : () async {
+                                Navigator.pop(ctx);
+                                await _updateDecision(
+                                  'approved',
+                                  reason: ctrl.text.trim(),
+                                );
+                              },
+                        child: Text(
+                          'تأكيد الاعتماد',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          side: BorderSide(
+                            color: Colors.grey.shade500,
+                            width: 1.4,
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: Text(
+                          'إلغاء',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _confirmReject() {
@@ -791,7 +995,7 @@ class _TaskReportCardState extends State<_TaskReportCard> {
     final decision = (m['decision'] ?? 'pending').toString();
     final taskTitle = (m['taskTitle'] ?? 'مهمة بدون عنوان').toString();
     final description = (m['description'] ?? m['reportText'] ?? '').toString();
-
+    final imageUrl = (m['imageUrl'] ?? '').toString();
     final taskId = (m['taskId'] ?? '').toString();
     final reportedBy = (m['reportedBy'] ?? '').toString();
     final createdAt = (m['createdAt'] as Timestamp?)?.toDate();
@@ -892,7 +1096,89 @@ class _TaskReportCardState extends State<_TaskReportCard> {
             ],
 
             const SizedBox(height: 10),
-
+            if (imageUrl.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: () => _openReportImage(imageUrl),
+                borderRadius: BorderRadius.circular(14),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Stack(
+                    children: [
+                      Image.network(
+                        imageUrl,
+                        width: double.infinity,
+                        height: 150,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, progress) {
+                          if (progress == null) return child;
+                          return Container(
+                            width: double.infinity,
+                            height: 150,
+                            color: const Color(0xFFF3F6F8),
+                            child: const Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: double.infinity,
+                            height: 110,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3F6F8),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'تعذر تحميل الصورة',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  color: slackMesseges.red,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      Positioned(
+                        left: 8,
+                        bottom: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(.45),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.zoom_in,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'عرض الصورة',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             Wrap(
               spacing: 8,
               runSpacing: 6,
@@ -934,7 +1220,7 @@ class _TaskReportCardState extends State<_TaskReportCard> {
                     ),
                     onPressed: _busy || decision == 'approved'
                         ? null
-                        : () => _updateDecision('approved'),
+                        : _confirmApprove,
                   ),
                 ),
                 const SizedBox(width: 8),

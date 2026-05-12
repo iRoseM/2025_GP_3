@@ -500,22 +500,28 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   //  Transport Flow
   // ─────────────────────────────────────────────
 
-Future<void> _startFlowForTransportTask() async {
-  final taskTitle = widget.taskData['title']?.toString() ?? '';
-  final t = taskTitle.toLowerCase(); // ← أضيفي هذا السطر
+  Future<void> _startFlowForTransportTask() async {
+    final taskTitle = widget.taskData['title']?.toString() ?? '';
+    final t = taskTitle.toLowerCase(); // ← أضيفي هذا السطر
 
-  final String stationType;
-  if (t.contains('ميترو') || t.contains('metro')) {  // ← غيري taskTitle إلى t
-    stationType = 'metro';
-  } else if (t.contains('باص') || t.contains('bus') || t.contains('حافلة')) {  // ← t
-    stationType = 'bus';
-  } else if (t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle')) {  // ← t
-    stationType = 'bicycle';
-  } else if (t.contains('سكوتر') || t.contains('scooter')) {  // ← t
-    stationType = 'scooter';
-  } else {
-    stationType = 'walk';
-  }
+    final String stationType;
+    if (t.contains('ميترو') || t.contains('metro')) {
+      // ← غيري taskTitle إلى t
+      stationType = 'metro';
+    } else if (t.contains('باص') || t.contains('bus') || t.contains('حافلة')) {
+      // ← t
+      stationType = 'bus';
+    } else if (t.contains('دراجة') ||
+        t.contains('سيكل') ||
+        t.contains('cycle')) {
+      // ← t
+      stationType = 'bicycle';
+    } else if (t.contains('سكوتر') || t.contains('scooter')) {
+      // ← t
+      stationType = 'scooter';
+    } else {
+      stationType = 'walk';
+    }
 
     final MapRoutePickResult? res =
         await Navigator.of(
@@ -1915,18 +1921,26 @@ Future<void> _startFlowForTransportTask() async {
     }
   }
 
-Future<void> _startTaskFlow() async {
-  print('🔍 DEBUG: ${widget.taskData}');
-  final taskTitle = widget.taskData['title']?.toString() ?? '';
-  final t = taskTitle.toLowerCase(); // ← أضيفي هذا
+  Future<void> _startTaskFlow() async {
+    print('🔍 DEBUG: ${widget.taskData}');
+    final taskTitle = widget.taskData['title']?.toString() ?? '';
+    final t = taskTitle.toLowerCase(); // ← أضيفي هذا
 
-  // ← غيري الشرط كله ليعتمد على t فقط
-  final bool isAnyTransport =
-      t.contains('ميترو') || t.contains('metro') ||
-      t.contains('باص') || t.contains('bus') || t.contains('حافلة') ||
-      t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle') ||
-      t.contains('سكوتر') || t.contains('scooter') ||
-      t.contains('مشياً') || t.contains('مشيا') || t.contains('مشي');
+    // ← غيري الشرط كله ليعتمد على t فقط
+    final bool isAnyTransport =
+        t.contains('ميترو') ||
+        t.contains('metro') ||
+        t.contains('باص') ||
+        t.contains('bus') ||
+        t.contains('حافلة') ||
+        t.contains('دراجة') ||
+        t.contains('سيكل') ||
+        t.contains('cycle') ||
+        t.contains('سكوتر') ||
+        t.contains('scooter') ||
+        t.contains('مشياً') ||
+        t.contains('مشيا') ||
+        t.contains('مشي');
 
     if (isAnyTransport) {
       final permission = await Geolocator.checkPermission();
@@ -2780,10 +2794,9 @@ Future<void> _startTaskFlow() async {
     final pts = (task['points'] ?? 0) as int;
     final requiresPhotoExact = true;
     final isTransport = (_autoDistance || _isTransportTask);
-    final String validationLabel = isTransport 
-    ? 'التحقق عبر الموقع' 
-    : (task['validationStrategy']?.toString() ?? 'التحقق عبر معالجة الصور');
-
+    final String validationLabel = isTransport
+        ? 'التحقق عبر الموقع'
+        : (task['validationStrategy']?.toString() ?? 'التحقق عبر معالجة الصور');
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -3542,12 +3555,17 @@ Future<void> _startTaskFlow() async {
   }
 
   Widget _buildPhotoInstructions() {
+    final isLocalProductTask = _isLocalProductTask;
+
     final bullets = [
       'تأكد من أن الإضاءة جيدة والعنصر واضح.',
-      'التقط صورة تُظهر قيامك بالمهمة (مثل حاوية اعادة التدوير).',
+      if (isLocalProductTask)
+        'التقط صورة واضحة لبلد الصنع أو عبارة "صنع في السعودية" على المنتج.',
+      if (!isLocalProductTask) 'التقط صورة تُظهر قيامك بالمهمة.',
       'تأكد أن النص أو المنتج ظاهر بشكل مستقيم وغير مقلوب.',
       'لا تستخدم صورًا من الإنترنت.',
       'التقط من زاوية مناسبة وبدون فلاش إن أمكن.',
+      'إذا واجهت مشكلة في المهمة، يمكنك الانتقال إلى صفحة الدعم وتقديم بلاغ عن المهمة ليتم مراجعته.',
     ];
 
     final isRecyclingTask = () {
