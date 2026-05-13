@@ -103,6 +103,9 @@ class _AdminHomePageState extends State<AdminHomePage> {
   late SharedPreferences _prefs;
   Set<String> _hiddenRecommendations = {};
 
+  final PageController _dashboardPageController = PageController();
+  int _dashboardPageIndex = 0;
+
   // أضف هذه الدالة
   Future<void> _testFunctionDirectly() async {
     if (_isTestingFunction) return;
@@ -427,6 +430,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   void dispose() {
     _refreshTimer?.cancel();
     _targetController.dispose();
+    _dashboardPageController.dispose();
     super.dispose();
   }
 
@@ -1119,13 +1123,12 @@ class _AdminHomePageState extends State<AdminHomePage> {
   }
 
   Future<QuerySnapshot<Map<String, dynamic>>> _getTaskReports() async {
-    // ❌ إزالة فلترة decision
     final snapshot = await FirebaseFirestore.instance
         .collection('taskReports')
-        .orderBy('createdAt', descending: true) // فقط الترتيب
+        .orderBy('createdAt', descending: true)
+        .limit(10)
         .get();
 
-    // فقط في أول مرة نضيف البلاغات كـ false
     if (!_initialReportsLoaded) {
       for (final doc in snapshot.docs) {
         if (!_viewedTaskReports.containsKey(doc.id)) {
@@ -1143,23 +1146,11 @@ class _AdminHomePageState extends State<AdminHomePage> {
     setState(() => _isLoadingContainerReports = true);
 
     try {
-      // ✅ جلب جميع المستندات بدون أي شروط
       final snapshot = await FirebaseFirestore.instance
           .collection('facilityReports')
+          .orderBy('createdAt', descending: true)
+          .limit(10)
           .get();
-      if (snapshot.docs.isEmpty) {
-        // جرب مجموعة أخرى للتحقق
-        final altSnapshot = await FirebaseFirestore.instance
-            .collection('facilitiesReports')
-            .get();
-      } else {
-        // طباعة أول مستند لمعرفة الحقول
-        final firstDoc = snapshot.docs.first;
-        print('🔍 أول مستند:');
-        print('   - id: ${firstDoc.id}');
-        print('   - الحقول: ${firstDoc.data().keys}');
-        print('   - البيانات: ${firstDoc.data()}');
-      }
 
       final reports = snapshot.docs.map((doc) {
         final data = doc.data();
@@ -1167,30 +1158,23 @@ class _AdminHomePageState extends State<AdminHomePage> {
         return data;
       }).toList();
 
-      // فقط في أول مرة نضيف البلاغات كـ false
       if (!_initialContainerReportsLoaded) {
-        print('🆕 تهيئة بلاغات الحاويات كـ false...');
         for (final report in reports) {
           final reportId = report['id'];
           if (!_viewedContainerReports.containsKey(reportId)) {
             _viewedContainerReports[reportId] = false;
-            print('   + ${reportId} -> false');
           }
         }
         _initialContainerReportsLoaded = true;
-        print('✅ تم تهيئة بلاغات الحاويات كـ false');
       } else {
-        // للبلاغات الجديدة بعد التهيئة الأولى
         for (final report in reports) {
           final reportId = report['id'];
           if (!_viewedContainerReports.containsKey(reportId)) {
             _viewedContainerReports[reportId] = false;
-            print('   + بلاغ جديد واصل: $reportId');
           }
         }
       }
 
-      // تحديث العداد
       final pendingCount = reports.where((r) {
         final reportId = r['id'];
         return !(_viewedContainerReports[reportId] ?? false);
@@ -1205,15 +1189,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
         });
       }
 
-      print('📊 عدد البلاغات الجديدة: $pendingCount من أصل ${reports.length}');
-
-      // ✅ أضف هذا السطر المهم جداً
       return reports;
     } catch (e) {
       debugPrint('❌ Error loading container reports: $e');
+
       if (mounted) {
         setState(() => _isLoadingContainerReports = false);
       }
+
       return _cachedContainerReports.isEmpty ? [] : _cachedContainerReports;
     }
   }
@@ -3272,26 +3255,99 @@ class _AdminHomePageState extends State<AdminHomePage> {
           ),
           const SizedBox(height: 20),
           SizedBox(
-            height: 380,
-            child: PageView(
+            height: 400,
+            child: Column(
               children: [
-                _buildBarChartCard(
-                  'إكمال المهام',
-                  _taskCompletionSpots,
-                  appColors.sea,
-                  _selectedTimeRange,
+                Expanded(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      PageView(
+                        controller: _dashboardPageController,
+                        onPageChanged: (index) {
+                          setState(() {
+                            _dashboardPageIndex = index;
+                          });
+                        },
+                        children: [
+                          _buildBarChartCard(
+                            'إكمال المهام',
+                            _taskCompletionSpots,
+                            appColors.sea,
+                            _selectedTimeRange,
+                          ),
+                          _buildChartCard(
+                            'تراكم النقاط',
+                            _pointsSpots,
+                            appColors.accent,
+                            _selectedTimeRange,
+                          ),
+                          _buildChartCard(
+                            'نمو المستخدمين',
+                            _userGrowthSpots,
+                            appColors.primary,
+                            _selectedTimeRange,
+                          ),
+                        ],
+                      ),
+
+                      // السهم الموجود يمين الشاشة
+                      Positioned(
+                        right: 6,
+                        child: _buildDashboardArrow(
+                          icon: Icons.chevron_left_rounded,
+                          isEnabled: _dashboardPageIndex > 0,
+                          onTap: () {
+                            if (_dashboardPageIndex > 0) {
+                              _dashboardPageController.previousPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                              );
+                            }
+                          },
+                        ),
+                      ),
+
+                      // السهم الموجود يسار الشاشة
+                      Positioned(
+                        left: 6,
+                        child: _buildDashboardArrow(
+                          icon: Icons.chevron_right_rounded,
+                          isEnabled: _dashboardPageIndex < 2,
+                          onTap: () {
+                            if (_dashboardPageIndex < 2) {
+                              _dashboardPageController.nextPage(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                _buildChartCard(
-                  'تراكم النقاط',
-                  _pointsSpots,
-                  appColors.accent,
-                  _selectedTimeRange,
-                ),
-                _buildChartCard(
-                  'نمو المستخدمين',
-                  _userGrowthSpots,
-                  appColors.primary,
-                  _selectedTimeRange,
+
+                const SizedBox(height: 8),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(3, (index) {
+                    final isSelected = _dashboardPageIndex == index;
+
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: isSelected ? 18 : 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? appColors.primary
+                            : appColors.primary.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    );
+                  }),
                 ),
               ],
             ),
@@ -3300,6 +3356,40 @@ class _AdminHomePageState extends State<AdminHomePage> {
           _buildLeaderboardCard(),
           const SizedBox(height: 16),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDashboardArrow({
+    required IconData icon,
+    required bool isEnabled,
+    required VoidCallback onTap,
+  }) {
+    return IgnorePointer(
+      ignoring: !isEnabled,
+      child: AnimatedOpacity(
+        opacity: isEnabled ? 1 : 0.25,
+        duration: const Duration(milliseconds: 200),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.95),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.10),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: appColors.primary, size: 21),
+          ),
+        ),
       ),
     );
   }

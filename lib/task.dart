@@ -20,8 +20,9 @@ import 'services/background_container.dart';
 import 'services/connection.dart';
 import 'services/title_header.dart';
 import 'complete_task.dart';
-import 'levels.dart';
+// import 'levels.dart';
 import 'services/location_service.dart';
+import 'services/xp_service.dart';
 
 class AppColors {
   static const primary = Color(0xFF4BAA98);
@@ -53,7 +54,7 @@ class _taskPageState extends State<taskPage> {
   int _requiredTasksToday = 1; // المهام المطلوبة اليوم
   bool _isLoadingProgress = true; // حالة تحميل البروقريس
   StreamSubscription<DocumentSnapshot>? _userTasksSubscription;
-
+  int _viewingTaskIndex = 1; // الكارد الي يشوفه اليوزر حالياً
   final int _currentIndex = 1;
 
   bool _isInitializing = true;
@@ -397,6 +398,17 @@ class _taskPageState extends State<taskPage> {
         );
       },
     );
+  }
+
+  bool _isTransportTitle(String title) {
+    final t = title.toString().toLowerCase();
+    return t.contains('ميترو') ||
+        t.contains('مترو') ||
+        t.contains('باص') ||
+        t.contains('حافلة') ||
+        t.contains('دراجة') ||
+        t.contains('سكوتر') ||
+        t.contains('مشي');
   }
 
   Future<GeoPoint?> getCurrentLocation() async {
@@ -922,45 +934,42 @@ class _taskPageState extends State<taskPage> {
   // دالة تحسب المهام المكتملة لليوم
   // ====================================================
   Future<int> _getCompletedTasksForDay(String userId, DateTime day) async {
-    final dayKey = '${userId}_${_yyyyMMdd(day)}';
-    final bonusKey = '${userId}_${_yyyyMMdd(day)}_bonus';
-    final dailyTaskDate = _dayId(day);
-
     int count = 0;
 
     try {
-      // 1️⃣ المهمة الرئيسية من userTasks
-      final mainTask = await FirebaseFirestore.instance
+      // 1️⃣ المهمة الرئيسية
+      final mainSnap = await FirebaseFirestore.instance
           .collection('userTasks')
-          .doc(dayKey)
+          .doc('${userId}_${_yyyyMMdd(day)}')
           .get();
+      if (mainSnap.exists && mainSnap.data()?['status'] == 'completed') count++;
 
-      if (mainTask.exists && mainTask.data()?['status'] == 'completed') {
-        count++;
-      }
-
-      // 2️⃣ المهمة الإضافية من userTasks
-      final bonusTask = await FirebaseFirestore.instance
-          .collection('userTasks')
-          .doc(bonusKey)
-          .get();
-
-      if (bonusTask.exists && bonusTask.data()?['status'] == 'completed') {
-        count++;
-      }
-
-      // 🔥🔥🔥 3️⃣ المهمة من dailyTasks (الهوم بيج) 🔥🔥🔥
-      final dailyTask = await FirebaseFirestore.instance
-          .collection('dailyTasks')
+      // 2️⃣ المهام الإضافية task2..taskN
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
           .doc(userId)
-          .collection('tasks')
-          .doc(dailyTaskDate)
           .get();
+      final xp = (userDoc.data()?['xp'] ?? 0) as int;
+      final required = _getRequiredTasksForLevel(getCurrentLevel(xp).id);
+      for (int i = 2; i <= required; i++) {
+        final snap = await FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc('${userId}_${_yyyyMMdd(day)}_task$i')
+            .get();
+        if (snap.exists && snap.data()?['status'] == 'completed') count++;
+      }
 
-      // ✅ dailyTasks تستخدم حقل completed من نوع boolean
-      if (dailyTask.exists && dailyTask.data()?['completed'] == true) {
-        count++;
-        print('✅ Found completed daily task in home page');
+      // 3️⃣ مهمة الهوم بيج — تُحسب فقط لو ما فيه ولا مهمة مكتملة من صفحة المهام
+      if (count == 0) {
+        final dailySnap = await FirebaseFirestore.instance
+            .collection('dailyTasks')
+            .doc(userId)
+            .collection('tasks')
+            .doc(_dayId(day))
+            .get();
+        if (dailySnap.exists && dailySnap.data()?['completed'] == true) {
+          count++;
+        }
       }
     } catch (e) {
       debugPrint('⚠️ Error getting completed tasks: $e');
@@ -996,44 +1005,43 @@ class _taskPageState extends State<taskPage> {
       int completed = 0;
 
       try {
-        // 1️⃣ التحقق من userTasks (المهمة الرئيسية)
+        // 1️⃣ المهمة الرئيسية
         final mainSnapshot = await FirebaseFirestore.instance
             .collection('userTasks')
             .doc(dayKey)
             .get(GetOptions(source: Source.server));
-
-        if (mainSnapshot.exists) {
-          final status = mainSnapshot.data()?['status'] as String?;
-          print('📄 Main userTask status (server): $status');
-          if (status == 'completed') completed++;
+        if (mainSnapshot.exists &&
+            mainSnapshot.data()?['status'] == 'completed') {
+          completed++;
         }
 
-        // 2️⃣ التحقق من userTasks (المهمة الإضافية)
-        final bonusSnapshot = await FirebaseFirestore.instance
-            .collection('userTasks')
-            .doc(bonusKey)
-            .get(GetOptions(source: Source.server));
-
-        if (bonusSnapshot.exists) {
-          final status = bonusSnapshot.data()?['status'] as String?;
-          print('📄 Bonus userTask status (server): $status');
-          if (status == 'completed') completed++;
-        }
-
-        // 🔥🔥🔥 التصحيح هنا 🔥🔥🔥
-        // 3️⃣ التحقق من dailyTasks - استخدام completed بدلاً من status
-        final dailySnapshot = await FirebaseFirestore.instance
-            .collection('dailyTasks')
+        // 2️⃣ المهام الإضافية task2..taskN
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
             .doc(_uid)
-            .collection('tasks')
-            .doc(dailyTaskDate)
-            .get(GetOptions(source: Source.server));
+            .get();
+        final xp = (userDoc.data()?['xp'] ?? 0) as int;
+        final required = _getRequiredTasksForLevel(getCurrentLevel(xp).id);
+        for (int i = 2; i <= required; i++) {
+          final snap = await FirebaseFirestore.instance
+              .collection('userTasks')
+              .doc('${_uid}_${_yyyyMMdd(_selectedDay!)}_task$i')
+              .get(GetOptions(source: Source.server));
+          if (snap.exists && snap.data()?['status'] == 'completed') completed++;
+        }
 
-        if (dailySnapshot.exists) {
-          // dailyTasks تستخدم حقل 'completed' (boolean) وليس 'status'
-          final isCompleted = dailySnapshot.data()?['completed'] == true;
-          print('📄 Daily task completed: $isCompleted');
-          if (isCompleted) completed++;
+        // 3️⃣ dailyTasks — فقط لو ما فيه ولا مهمة مكتملة من صفحة المهام
+        if (completed == 0) {
+          final dailySnapshot = await FirebaseFirestore.instance
+              .collection('dailyTasks')
+              .doc(_uid)
+              .collection('tasks')
+              .doc(dailyTaskDate)
+              .get(GetOptions(source: Source.server));
+          if (dailySnapshot.exists &&
+              dailySnapshot.data()?['completed'] == true) {
+            completed++;
+          }
         }
       } catch (e) {
         print('❌ Error calculating tasks: $e');
@@ -1052,6 +1060,15 @@ class _taskPageState extends State<taskPage> {
           int completed = await _calculateCompletedTasks();
           updateCount++;
           setState(() => _completedTasksToday = completed);
+
+          // ← أضيفي هذا
+          if (_selectedDay != null) {
+            final status = completed >= _requiredTasksToday
+                ? 'completed'
+                : 'pending';
+            _updateMonthStatusFor(_selectedDay!, status);
+          }
+
           print(
             '✅ Progress update #$updateCount (from main): $completed/$_requiredTasksToday',
           );
@@ -1067,6 +1084,14 @@ class _taskPageState extends State<taskPage> {
           int completed = await _calculateCompletedTasks();
           updateCount++;
           setState(() => _completedTasksToday = completed);
+
+          // ← أضيفي هذا
+          if (_selectedDay != null) {
+            final status = completed >= _requiredTasksToday
+                ? 'completed'
+                : 'pending';
+            _updateMonthStatusFor(_selectedDay!, status);
+          }
           print(
             '✅ Progress update #$updateCount (from bonus): $completed/$_requiredTasksToday',
           );
@@ -1102,13 +1127,23 @@ class _taskPageState extends State<taskPage> {
             completed++;
           }
 
-          // 🔥 تحقق من dailyTasks باستخدام completed
-          if (snapshot.exists && snapshot.data()?['completed'] == true) {
+          // 🔥 تحقق من dailyTasks — فقط لو ما فيه مهمة مكتملة من userTasks
+          if (completed == 0 &&
+              snapshot.exists &&
+              snapshot.data()?['completed'] == true) {
             completed++;
           }
 
           updateCount++;
           setState(() => _completedTasksToday = completed);
+
+          // ← أضيفي هذا
+          if (_selectedDay != null) {
+            final status = completed >= _requiredTasksToday
+                ? 'completed'
+                : 'pending';
+            _updateMonthStatusFor(_selectedDay!, status);
+          }
           print(
             '✅ Progress update #$updateCount (from daily): $completed/$_requiredTasksToday',
           );
@@ -1127,9 +1162,9 @@ class _taskPageState extends State<taskPage> {
           .doc(_uid)
           .get();
 
-      _userLevel = userDoc.data()?['userLevel'] ?? 'beginner';
-      _userLevelName = _getLevelName(_userLevel!);
-      _requiredTasksToday = _getRequiredTasksPerDay(_userLevel!);
+      final xp = (userDoc.data()?['xp'] ?? 0) as int;
+      final level = getCurrentLevel(xp);
+      _requiredTasksToday = _getRequiredTasksForLevel(level.id);
 
       // جلب المهام المكتملة لليوم المحدد - استخدم get مباشرة
       _completedTasksToday = await _getCompletedTasksForDay(
@@ -1149,6 +1184,23 @@ class _taskPageState extends State<taskPage> {
       if (mounted) {
         setState(() => _isLoadingProgress = false);
       }
+    }
+  }
+
+  int _getRequiredTasksForLevel(String levelId) {
+    switch (levelId) {
+      case 'seedling':
+        return 1;
+      case 'sprout':
+        return 2;
+      case 'tree':
+        return 2;
+      case 'guardian':
+        return 3;
+      case 'champion':
+        return 4;
+      default:
+        return 1;
     }
   }
 
@@ -1194,7 +1246,6 @@ class _taskPageState extends State<taskPage> {
 
     // ========== جلب من APIs وحفظ في Firestore ==========
     Future<void> fetchAndSaveFromAPIs() async {
-      // تحقق آخر وقت جلبنا من APIs
       try {
         final metaDoc = await firestore
             .collection('appSettings')
@@ -1205,21 +1256,23 @@ class _taskPageState extends State<taskPage> {
           final lastFetch = metaDoc.data()?['fetchedAt'] as Timestamp?;
           if (lastFetch != null) {
             final diff = DateTime.now().difference(lastFetch.toDate());
+            print(
+              "📰 Last API fetch: ${diff.inHours}h ${diff.inMinutes % 60}m ago",
+            );
             if (diff.inHours < 6) {
-              print(
-                "📰 APIs fetched recently (${diff.inHours}h ago) → skipping",
-              );
-              return; // ← ما نستدعي APIs إلا كل 6 ساعات
+              print("📰 Skipping APIs — fetched recently");
+              return;
             }
           }
+        } else {
+          print("📰 No previous fetch found → will fetch now");
         }
       } catch (e) {
         print("⚠️ meta check error: $e");
       }
 
-      print("📰 Fetching from APIs...");
+      print("📰 Fetching from NewsData API...");
 
-      // مصدر 1: NewsData.io
       Future<List<Map<String, dynamic>>> fetchFromNewsData() async {
         const apiKey = "pub_c9084d601ff6465289bd682c942dec4c";
         const query = "البيئة OR الاستدامة OR تدوير OR مناخ";
@@ -1231,9 +1284,16 @@ class _taskPageState extends State<taskPage> {
               .get(apiUrl)
               .timeout(const Duration(seconds: 10));
           print("📰 NewsData status: ${res.statusCode}");
-          if (res.statusCode != 200) return [];
+          if (res.statusCode != 200) {
+            print("📰 NewsData error body: ${res.body.substring(0, 200)}");
+            return [];
+          }
           final body = jsonDecode(res.body);
-          return List<Map<String, dynamic>>.from(body["results"] ?? []);
+          final results = List<Map<String, dynamic>>.from(
+            body["results"] ?? [],
+          );
+          print("📰 NewsData returned ${results.length} articles");
+          return results;
         } catch (e) {
           print("❌ NewsData error: $e");
           return [];
@@ -1241,8 +1301,15 @@ class _taskPageState extends State<taskPage> {
       }
 
       final results = await fetchFromNewsData();
+
       if (results.isEmpty) {
         print("📰 No results from APIs");
+        // سجّل المحاولة حتى لو ما جاب نتائج
+        await firestore.collection('appSettings').doc('newsApiLastFetch').set({
+          'fetchedAt': FieldValue.serverTimestamp(),
+          'savedCount': 0,
+          'note': 'API returned empty',
+        });
         return;
       }
 
@@ -1264,10 +1331,23 @@ class _taskPageState extends State<taskPage> {
           .map((d) => (d.data()['title'] ?? '').toString().trim())
           .toSet();
 
+      print("📰 Existing articles in Firestore: ${existingTitles.length}");
+
       int saved = 0;
+      int skipped = 0;
+
       for (final rawArt in results) {
         final title = (rawArt['title'] ?? '').toString().trim();
-        if (title.isEmpty || existingTitles.contains(title)) continue;
+
+        if (title.isEmpty) {
+          skipped++;
+          continue;
+        }
+
+        if (existingTitles.contains(title)) {
+          skipped++;
+          continue;
+        }
 
         final content =
             (rawArt['full_content'] ??
@@ -1275,10 +1355,17 @@ class _taskPageState extends State<taskPage> {
                     rawArt['description'] ??
                     '')
                 .toString();
-        if (content.length < 80) continue;
+
+        if (content.length < 80) {
+          skipped++;
+          continue;
+        }
 
         final merged = (title + ' ' + content).toLowerCase();
-        if (!keywords.any((k) => merged.contains(k))) continue;
+        if (!keywords.any((k) => merged.contains(k))) {
+          skipped++;
+          continue;
+        }
 
         await firestore.collection('articles').add({
           'title': title,
@@ -1292,14 +1379,16 @@ class _taskPageState extends State<taskPage> {
 
         existingTitles.add(title);
         saved++;
+        print("📰 Saved: ${title.substring(0, title.length.clamp(0, 50))}");
       }
 
-      print("📰 Saved $saved new articles from APIs");
+      print("📰 Done — Saved: $saved | Skipped: $skipped");
 
-      // سجّل آخر وقت استدعاء
       await firestore.collection('appSettings').doc('newsApiLastFetch').set({
         'fetchedAt': FieldValue.serverTimestamp(),
         'savedCount': saved,
+        'skippedCount': skipped,
+        'totalFromApi': results.length,
       });
     }
 
@@ -1324,15 +1413,6 @@ class _taskPageState extends State<taskPage> {
     super.initState();
     _initializeApp();
     _loadUserProgress();
-
-    FirebaseFirestore.instance.collection('articles').limit(50).get().then((
-      snap,
-    ) {
-      print('📰 Articles in Firestore: ${snap.docs.length}');
-      for (var doc in snap.docs) {
-        print('  → ${doc.id}: ${doc.data()['title']}');
-      }
-    });
   }
 
   @override
@@ -1394,6 +1474,84 @@ class _taskPageState extends State<taskPage> {
         });
       }
     });
+  }
+
+  Future<void> _precheckTodayDoc() async {
+    if (_uid == null) {
+      setState(() {
+        _precheckDone = true;
+        _precheckError = 'unauthenticated';
+      });
+      return;
+    }
+
+    try {
+      final sel = _selectedDay ?? _dayStart(DateTime.now());
+      final key = '${_uid!}_${_yyyyMMdd(sel)}';
+      final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
+
+      var snap = await ref.get();
+
+      // ✅ إذا المهمة ignored وما في مهمة جديدة → أصلحها
+      if (snap.exists) {
+        final data = snap.data()!;
+        final status = data['status'] as String? ?? '';
+        final ignored = data['ignored'] as bool? ?? false;
+
+        if (status == 'ignored' || ignored == true) {
+          print('⚠️ Found ignored task → fixing...');
+          await ref.update({
+            'status': 'pending',
+            'ignored': false,
+            'ignoredAt': null,
+          });
+          snap = await ref.get(); // أعد الجلب
+          print('✅ Fixed ignored task');
+        }
+      }
+
+      if (snap.exists) {
+        final data = snap.data()!;
+        final status = data['status'] as String? ?? '';
+        final ignored = data['ignored'] as bool? ?? false;
+        final taskValidation = data['taskValidation'] as String? ?? '';
+        final articleId = data['articleId'];
+
+        // ✅ إذا مهمة اختبار قصير وما عندها articleId → أضيفيه
+        if (taskValidation == 'التحقق عبر اجراء اختبار قصير' &&
+            articleId == null) {
+          print('⚠️ Missing articleId → fetching...');
+          final freshNews = await getFreshNewsForUser(_uid!);
+          if (freshNews != null) {
+            await ref.update({'articleId': freshNews['docId']});
+            snap = await ref.get();
+            print('✅ articleId added: ${freshNews['docId']}');
+          }
+        }
+
+        if (status == 'ignored' || ignored == true) {
+          print('⚠️ Found ignored task → creating new one...');
+          await _ensureUserTaskForDate(sel, forceReplace: true);
+          snap = await ref.get();
+        }
+      }
+
+      _attachUserTaskStreamFor(sel);
+
+      if (mounted) {
+        setState(() {
+          _precheckDone = true;
+          _precheckError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _precheckDone = true;
+          _precheckError = e.toString();
+        });
+      }
+    }
   }
 
   Future<void> _loadUserJoinDate(User user, DateTime today) async {
@@ -1515,7 +1673,10 @@ class _taskPageState extends State<taskPage> {
   // =============================================================
   bool _isRefreshing = false;
 
-  Future<void> _refreshUserTask(Map<String, dynamic> currentTask) async {
+  Future<void> _refreshUserTask(
+    Map<String, dynamic> currentTask, {
+    String? docId,
+  }) async {
     if (_isRefreshing) return;
     _isRefreshing = true;
 
@@ -1542,7 +1703,7 @@ class _taskPageState extends State<taskPage> {
 
       final monthKey =
           "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
-      final utKey = '${_uid!}_${_yyyyMMdd(selected)}';
+      final utKey = docId ?? '${_uid!}_${_yyyyMMdd(selected)}';
       final utRef = FirebaseFirestore.instance
           .collection('userTasks')
           .doc(utKey);
@@ -1700,93 +1861,6 @@ class _taskPageState extends State<taskPage> {
     }
   }
 
-  Future<void> _precheckTodayDoc() async {
-    if (_uid == null) {
-      setState(() {
-        _precheckDone = true;
-        _precheckError = 'unauthenticated';
-      });
-      return;
-    }
-
-    try {
-      final sel = _selectedDay ?? _dayStart(DateTime.now());
-      final key = '${_uid!}_${_yyyyMMdd(sel)}';
-      final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
-
-      var snap = await ref.get().timeout(
-        const Duration(seconds: 8),
-        onTimeout: () => throw TimeoutException('timeout-get-userTask'),
-      );
-
-      // ✅ إذا المهمة ignored → أنشئ مهمة جديدة بدلها
-      if (snap.exists) {
-        final data = snap.data()!;
-        final status = data['status'] as String? ?? '';
-        final ignored = data['ignored'] as bool? ?? false;
-        final taskValidation = data['taskValidation'] as String? ?? '';
-        final articleId = data['articleId'];
-
-        // ✅ إذا مهمة اختبار قصير وما عندها articleId → أضيفيه
-        if (taskValidation == 'التحقق عبر اجراء اختبار قصير' &&
-            articleId == null) {
-          print('⚠️ Missing articleId → fetching...');
-          final freshNews = await getFreshNewsForUser(_uid!);
-          if (freshNews != null) {
-            await ref.update({'articleId': freshNews['docId']});
-            snap = await ref.get();
-            print('✅ articleId added: ${freshNews['docId']}');
-          }
-        }
-
-        if (status == 'ignored' || ignored == true) {
-          print('⚠️ Found ignored task → creating new one...');
-          await _ensureUserTaskForDate(sel, forceReplace: true);
-          snap = await ref.get();
-        }
-      }
-
-      if (!snap.exists) {
-        await _ensureUserTaskForDate(sel);
-        snap = await ref.get().timeout(
-          const Duration(seconds: 8),
-          onTimeout: () =>
-              throw TimeoutException('timeout-get-userTask-after-create'),
-        );
-      }
-
-      _attachUserTaskStreamFor(sel);
-
-      if (mounted) {
-        setState(() {
-          _precheckDone = true;
-          _precheckError = null;
-        });
-      }
-    } on TimeoutException catch (e) {
-      if (mounted) {
-        setState(() {
-          _precheckDone = true;
-          _precheckError = e.message ?? 'timeout';
-        });
-      }
-    } on FirebaseException catch (e) {
-      if (mounted) {
-        setState(() {
-          _precheckDone = true;
-          _precheckError = e.code;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _precheckDone = true;
-          _precheckError = e.toString();
-        });
-      }
-    }
-  }
-
   Future<void> _ensureUserTaskForDate(
     DateTime day, {
     bool forceReplace = false,
@@ -1918,6 +1992,104 @@ class _taskPageState extends State<taskPage> {
       'ignored': false,
       'ignoredAt': null,
     });
+  }
+
+  Future<void> _ensureExtraTasksForDate(DateTime day) async {
+    if (_uid == null) return;
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .get();
+    final xp = (userDoc.data()?['xp'] ?? 0) as int;
+    final level = getCurrentLevel(xp);
+    final requiredTasks = _getRequiredTasksForLevel(level.id);
+
+    if (requiredTasks <= 1) return;
+
+    // جيب المهمة الأولى عشان نستبعدها
+    final mainKey = '${_uid!}_${_yyyyMMdd(day)}';
+    final mainSnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(mainKey)
+        .get();
+    final mainTaskId = mainSnap.data()?['taskId'] as String?;
+
+    // جيب المهام الإضافية الموجودة عشان نستبعدها
+    final usedIds = <String?>{mainTaskId};
+
+    for (int i = 2; i <= requiredTasks; i++) {
+      final extraKey = '${_uid!}_${_yyyyMMdd(day)}_task$i';
+      final extraSnap = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(extraKey)
+          .get();
+
+      if (extraSnap.exists) {
+        // أضف هذه المهمة للمستبعدين
+        usedIds.add(extraSnap.data()?['taskId'] as String?);
+        continue;
+      }
+
+      final monthKey = "${day.year}-${day.month.toString().padLeft(2, '0')}";
+      final tasksSnap = await FirebaseFirestore.instance
+          .collection('tasks')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      final validTasks = tasksSnap.docs.where((doc) {
+        final data = doc.data();
+        dynamic vf = data['visible_from'];
+        String? visibleFrom;
+        if (vf is Timestamp) {
+          final d = vf.toDate();
+          visibleFrom = "${d.year}-${d.month.toString().padLeft(2, '0')}";
+        } else if (vf is String)
+          visibleFrom = vf;
+        return (visibleFrom == null) || (visibleFrom.compareTo(monthKey) <= 0);
+      }).toList();
+
+      if (validTasks.isEmpty) return;
+
+      // استبعد المهام المستخدمة
+      final pool = validTasks
+          .where((doc) => !usedIds.contains(doc.id))
+          .toList();
+      final finalPool = pool.isEmpty ? validTasks : pool;
+
+      final rnd = Random(
+        DateTime.now().millisecondsSinceEpoch ^
+            day.millisecondsSinceEpoch ^
+            (i * 9999),
+      );
+      final picked = finalPool[rnd.nextInt(finalPool.length)];
+      final pickedData = picked.data();
+      final today = _dayStart(DateTime.now());
+      final status = day.isBefore(today) ? 'uncompleted' : 'pending';
+
+      await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(extraKey)
+          .set({
+            'userId': _uid,
+            'taskId': picked.id,
+            'selectedAt': Timestamp.fromDate(_dayStart(day)),
+            'status': status,
+            'completedAt': null,
+            'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
+            'taskDescription': pickedData['description'] ?? '',
+            'taskPoints': pickedData['points'] ?? 0,
+            'taskValidation':
+                pickedData['validationStrategy'] ??
+                pickedData['validation'] ??
+                'غير محددة',
+            'ignored': false,
+            'ignoredAt': null,
+          });
+
+      // أضف المهمة الجديدة للمستبعدين
+      usedIds.add(picked.id);
+    }
   }
 
   // =============================================================
@@ -2058,40 +2230,7 @@ class _taskPageState extends State<taskPage> {
         bonusTask['validationStrategy']?.toString() ?? '';
 
     if (validationStrategy == "التحقق عبر اجراء اختبار قصير") {
-      final freshNews = await getFreshNewsForUser(_uid!);
-      if (freshNews == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'لا يوجد مقال متاح حالياً',
-                style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-              ),
-              backgroundColor: AppColors.primary,
-            ),
-          );
-        }
-        return;
-      }
-
-      await FirebaseFirestore.instance
-          .collection('userTasks')
-          .doc(bonusDocId)
-          .set({
-            'userId': _uid,
-            'taskId': bonusTask['taskId'] ?? bonusTask['id'],
-            'taskTitle': bonusTask['title'] ?? '',
-            'taskDescription': bonusTask['description'] ?? '',
-            'taskPoints': bonusTask['points'] ?? 0,
-            'taskValidation': validationStrategy,
-            'articleId': freshNews['docId'],
-            'status': 'pending',
-            'selectedAt': Timestamp.fromDate(_dayStart(_selectedDay!)),
-            'ignored': false,
-            'ignoredAt': null,
-          }, SetOptions(merge: true));
-
-      if (!mounted) return;
+      // 📖 مهمة قراءة مقال - نفتح ArticlePage
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -2452,7 +2591,9 @@ class _taskPageState extends State<taskPage> {
                               }
 
                               final ut =
-                                  snap.data!.data() as Map<String, dynamic>;
+                                  (snap.data!.data()
+                                      as Map<String, dynamic>?) ??
+                                  {};
 
                               final newStatus =
                                   (ut['status'] as String?) ?? 'pending';
@@ -2523,18 +2664,61 @@ class _taskPageState extends State<taskPage> {
                                       'id': ut['taskId'],
                                       'status': ut['status'] ?? 'pending',
                                     };
+                                    final bool firstCompleted =
+                                        (data['status'] == 'completed');
 
-                                    return _buildUserTaskCard(
-                                      taskData: fData,
-                                      canPerform: canPerformDay,
+                                    return Column(
+                                      children: [
+                                        // 🌟 كارد المهمة الإضافية (صغير، فوق)
+                                        if (sel.isAtSameMomentAs(today))
+                                          _buildBonusTaskSectionStandalone(),
+
+                                        // 🗂️ كارد المهام العادية مع سهم التنقل
+                                        _buildTaskCardWithNavigation(
+                                          mainData: fData,
+                                          canPerform: canPerformDay,
+                                          sel: sel,
+                                        ),
+                                      ],
                                     );
                                   },
                                 );
                               }
+                              final bool firstCompleted =
+                                  (data['status'] == 'completed');
 
-                              return _buildUserTaskCard(
-                                taskData: data,
-                                canPerform: canPerformDay,
+                              // return FutureBuilder<int>(
+                              //   key: ValueKey('$sel-$_completedTasksToday'), // ← هذا المهم
+                              //   future: _getNextIncompleteTaskIndex(sel),
+                              //   builder: (context, snap) {
+                              //     final nextIndex = snap.data ?? 1;
+
+                              //     if (nextIndex == 1 && !firstCompleted) {
+                              //       return _buildUserTaskCard(
+                              //         taskData: data, canPerform: canPerformDay, taskIndex: 1,
+                              //       );
+                              //     }
+                              //     if (nextIndex >= 2 && nextIndex <= _requiredTasksToday) {
+                              //       return _buildExtraTaskCard(
+                              //         day: sel, taskIndex: nextIndex, canPerform: canPerformDay,
+                              //       );
+                              //     }
+                              //     // كل شيء مكتمل
+                              //     return _buildUserTaskCard(
+                              //       taskData: data, canPerform: canPerformDay, taskIndex: 1,
+                              //     );
+                              //   },
+                              // );
+                              return Column(
+                                children: [
+                                  if (sel.isAtSameMomentAs(today))
+                                    _buildBonusTaskSectionStandalone(),
+                                  _buildTaskCardWithNavigation(
+                                    mainData: data,
+                                    canPerform: canPerformDay,
+                                    sel: sel,
+                                  ),
+                                ],
                               );
                             },
                           );
@@ -2552,6 +2736,384 @@ class _taskPageState extends State<taskPage> {
             : BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),
       ),
     );
+  }
+
+  Widget _buildTaskCardWithNavigation({
+    required Map<String, dynamic> mainData,
+    required bool canPerform,
+    required DateTime sel,
+  }) {
+    return StreamBuilder<DocumentSnapshot>(
+      key: ValueKey('task-$_viewingTaskIndex-${_yyyyMMdd(sel)}'),
+      stream: _viewingTaskIndex == 1
+          ? _userTaskStream
+          : FirebaseFirestore.instance
+                .collection('userTasks')
+                .doc('${_uid}_${_yyyyMMdd(sel)}_task$_viewingTaskIndex')
+                .snapshots(),
+      builder: (context, snap) {
+        Map<String, dynamic> taskData = mainData;
+
+        if (_viewingTaskIndex > 1 && snap.hasData && snap.data!.exists) {
+          final ut = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+
+          taskData = {
+            'taskId': ut['taskId'] ?? '',
+            'title': ut['taskTitle'] ?? '(بدون عنوان)',
+            'description': ut['taskDescription'] ?? '',
+            'points': ut['taskPoints'] ?? 0,
+            'validationStrategy': ut['taskValidation'] ?? 'غير محددة',
+            'id': ut['taskId'] ?? '',
+            'status': ut['status'] ?? 'pending',
+          };
+        }
+
+        return Column(
+          children: [
+            // أزرار التنقل لو عنده أكثر من مهمة
+            if (_requiredTasksToday > 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                child: Row(
+                  textDirection: TextDirection.ltr,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // سهم يسار (السابقة)
+                    IconButton(
+                      onPressed: _viewingTaskIndex > 1
+                          ? () => setState(() => _viewingTaskIndex--)
+                          : null,
+                      icon: Icon(
+                        Icons.arrow_forward_ios, // ← كان forward
+                        color: _viewingTaskIndex > 1
+                            ? AppColors.primary
+                            : Colors.grey.shade300,
+                        size: 20,
+                      ),
+                    ),
+
+                    // مؤشر الصفحة
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Text(
+                        '$_viewingTaskIndex / $_requiredTasksToday',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                      ),
+                    ),
+
+                    // سهم يمين (التالية)
+                    IconButton(
+                      onPressed: _viewingTaskIndex < _requiredTasksToday
+                          ? () => setState(() => _viewingTaskIndex++)
+                          : null,
+                      icon: Icon(
+                        Icons.arrow_back_ios_new, // ← كان back
+                        color: _viewingTaskIndex < _requiredTasksToday
+                            ? AppColors.primary
+                            : Colors.grey.shade300,
+                        size: 20,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            _buildUserTaskCard(
+              taskData: taskData,
+              canPerform: canPerform,
+              taskIndex: _viewingTaskIndex,
+              userTaskDocId: _viewingTaskIndex == 1
+                  ? '${_uid}_${_yyyyMMdd(sel)}'
+                  : '${_uid}_${_yyyyMMdd(sel)}_task$_viewingTaskIndex',
+              isPreviousCompleted: _viewingTaskIndex == 1
+                  ? true
+                  : (_completedTasksToday >=
+                        _viewingTaskIndex - 1), // ← هذا المهم
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildBonusTaskSectionStandalone() {
+    final sel = _dayStart(_selectedDay ?? DateTime.now());
+    final bonusDocId = '${_uid ?? ''}_${_yyyyMMdd(sel)}_bonus';
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(bonusDocId)
+          .snapshots(),
+      builder: (context, snap) {
+        // مو موجودة بعد — اعرض زر الاقتراح الصغير
+        if (!snap.hasData || !snap.data!.exists) {
+          if (_suggestedBonusTask != null) {
+            return _buildProposedBonusCard(
+              task: _suggestedBonusTask!,
+              onAccept: () => _saveBonusTaskAndOpen(_suggestedBonusTask!),
+              onReject: () => setState(() => _suggestedBonusTask = null),
+              onAlternative: () async {
+                setState(() => _bonusLoading = true);
+                final currentTaskId =
+                    _suggestedBonusTask!['taskId'] ??
+                    _suggestedBonusTask!['id'];
+                final next = await _suggestBonusTask(
+                  excludeTaskId: currentTaskId,
+                );
+                if (mounted)
+                  setState(() {
+                    _suggestedBonusTask = next;
+                    _bonusLoading = false;
+                  });
+              },
+              isLoading: _bonusLoading,
+            );
+          }
+
+          if (_completedTasksToday >= _requiredTasksToday)
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: _bonusLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    )
+                  : OutlinedButton.icon(
+                      icon: const Icon(
+                        Icons.add_task,
+                        color: AppColors.primary,
+                        size: 18,
+                      ),
+                      label: Text(
+                        'اقتراح مهمة إضافية ✨',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.2,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 12,
+                        ),
+                        minimumSize: const Size(double.infinity, 0),
+                      ),
+                      onPressed: () async {
+                        setState(() => _bonusLoading = true);
+
+                        final task = await _suggestBonusTask();
+
+                        if (mounted) {
+                          setState(() {
+                            _suggestedBonusTask = task;
+                            _bonusLoading = false;
+                          });
+                        }
+                      },
+                    ),
+            );
+
+          return const SizedBox.shrink();
+        }
+
+        final bonusData = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+        final bonusStatus = bonusData['status'] as String? ?? 'pending';
+
+        // مكتملة
+        if (bonusStatus == 'completed') {
+          return Container(
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.primary33,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.primary, width: 1.2),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.star, color: AppColors.primary, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'تم إكمال المهمة الإضافية 🌱',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: AppColors.dark,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // موجودة ولم تكتمل — اعرض كارد صغير
+        return _buildSmallActiveBonusCard(bonusData, bonusDocId, bonusStatus);
+      },
+    );
+  }
+
+  Widget _buildSmallActiveBonusCard(
+    Map<String, dynamic> bonusData,
+    String bonusDocId,
+    String status,
+  ) {
+    final sel = _dayStart(_selectedDay ?? DateTime.now());
+    final title = bonusData['taskTitle'] ?? '(بدون عنوان)';
+    final points = bonusData['taskPoints'] ?? 0;
+    final validation = bonusData['taskValidation'] ?? 'غير محددة';
+    final isSubmitted = status == 'submitted';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.accent, width: 1.2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 6,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome, color: AppColors.accent, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'مهمة إضافية ✨',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 11,
+                    color: AppColors.accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.dark,
+                  ),
+                ),
+                Text(
+                  '$points نقطة',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 11,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: isSubmitted
+                ? null
+                : () async {
+                    final taskId = bonusData['taskId'] as String?;
+                    final fullTask = {
+                      ...bonusData,
+                      'title': title,
+                      'description': bonusData['taskDescription'] ?? '',
+                      'points': points,
+                      'validationStrategy': validation,
+                      'id': taskId,
+                      'taskId': taskId,
+                      'status': status,
+                    };
+                    final result = await showCompleteTaskSheet(
+                      context,
+                      fullTask,
+                      selectedDay: sel,
+                      userTaskDocId: bonusDocId,
+                    );
+                    await _loadUserProgress();
+                    if (result == true && mounted) {
+                      // ← أولاً حدّثي الـ index
+                      if (_viewingTaskIndex < _requiredTasksToday) {
+                        _viewingTaskIndex++;
+                      }
+                    }
+                    // ← ثم الـ stream
+                    _attachUserTaskStreamFor(sel);
+                    setState(() {});
+                  },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isSubmitted
+                  ? Colors.grey.shade300
+                  : AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            child: Text(
+              isSubmitted ? '⏳' : 'ابدأ',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: isSubmitted ? AppColors.dark : Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _isTaskCompleted(String docId) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc(docId)
+        .get();
+    return snap.exists && snap.data()?['status'] == 'completed';
+  }
+
+  Future<int> _getNextIncompleteTaskIndex(DateTime day) async {
+    // تحقق من المهمة الرئيسية
+    final mainSnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc('${_uid}_${_yyyyMMdd(day)}')
+        .get();
+    if (mainSnap.data()?['status'] != 'completed') return 1;
+
+    // تحقق من المهام الإضافية
+    for (int i = 2; i <= _requiredTasksToday; i++) {
+      final snap = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc('${_uid}_${_yyyyMMdd(day)}_task$i')
+          .get();
+      if (snap.data()?['status'] != 'completed') return i;
+    }
+
+    // كل شيء مكتمل
+    return _requiredTasksToday + 1;
   }
 
   // -------------------------------------------------------------
@@ -2719,6 +3281,7 @@ class _taskPageState extends State<taskPage> {
               setState(() {
                 _selectedDay = selected;
                 _focusedDay = focused;
+                _viewingTaskIndex = 1; // ← أضيفيه هنا
               });
 
               final sel = _dayStart(selected);
@@ -3072,6 +3635,9 @@ class _taskPageState extends State<taskPage> {
   Widget _buildUserTaskCard({
     required Map<String, dynamic> taskData,
     bool canPerform = false,
+    int taskIndex = 1,
+    String? userTaskDocId,
+    bool isPreviousCompleted = true, // ← أضيفي هذا
   }) {
     final title = taskData['title'] ?? 'مهمة غير محددة';
     final description = taskData['description'] ?? 'لا يوجد وصف متاح.';
@@ -3080,22 +3646,14 @@ class _taskPageState extends State<taskPage> {
     final status = taskData['status'] ?? 'pending';
     final today = _dayStart(DateTime.now());
 
-    // final taskType = (taskData['taskType'] ?? '').toString();
-    // final articleContent = (taskData['articleContent'] ?? '').toString().trim();
-
-    // 🔴 لو هي مهمة "خبر" لكن المقال فاضي → لا تعرض مهمة، اعرض كرت "لا توجد مهمة"
-    // if (taskType == 'news' && articleContent.isEmpty) {
-    //   return _buildUnavailableCard(
-    //     title: 'لا توجد مهمة لهذا اليوم',
-    //     subtitle: 'خبر هذا اليوم لم يعد متوفرًا، وسيتم استبداله لاحقًا.',
-    //   );
-    // }
     final sel = _dayStart(_selectedDay ?? DateTime.now());
     final uid = _uid ?? '';
-    final userTaskDocId = uid.isEmpty ? '' : '${uid}_${_yyyyMMdd(sel)}';
+    final effectiveDocId =
+        userTaskDocId ?? (uid.isEmpty ? '' : '${uid}_${_yyyyMMdd(sel)}');
 
     final isSubmitted = (status == 'submitted');
     final isCompleted = (status == 'completed');
+    final bool canStart = canPerform && isPreviousCompleted;
 
     return Container(
       width: double.infinity,
@@ -3116,7 +3674,7 @@ class _taskPageState extends State<taskPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 🔁 زر تحديث صغير أعلى يسار الكرت
-          if (canPerform && !isCompleted && !isSubmitted) ...[
+          if (canStart && !isCompleted && !isSubmitted) ...[
             Align(
               alignment: Alignment.centerLeft,
               child: OutlinedButton.icon(
@@ -3164,7 +3722,10 @@ class _taskPageState extends State<taskPage> {
                     ),
                   );
                   if (confirm == true) {
-                    await _refreshUserTask(taskData);
+                    await _refreshUserTask(
+                      taskData,
+                      docId: effectiveDocId, // ← أضيفي هذا
+                    );
                     _attachUserTaskStreamFor(sel);
                   }
                 },
@@ -3174,7 +3735,7 @@ class _taskPageState extends State<taskPage> {
           ],
 
           Text(
-            'مهمة اليوم',
+            _requiredTasksToday == 1 ? 'مهمة اليوم' : 'المهمة $taskIndex',
             style: GoogleFonts.ibmPlexSansArabic(
               fontSize: 18,
               fontWeight: FontWeight.w800,
@@ -3213,7 +3774,9 @@ class _taskPageState extends State<taskPage> {
               ),
               const Spacer(),
               Text(
-                validation,
+                _isTransportTitle(title.toString())
+                    ? 'التحقق عبر الموقع'
+                    : validation,
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 13,
                   color: Colors.grey.shade600,
@@ -3230,7 +3793,7 @@ class _taskPageState extends State<taskPage> {
               borderRadius: BorderRadius.circular(14),
               child: InkWell(
                 borderRadius: BorderRadius.circular(14),
-                onTap: (isCompleted || isSubmitted || !canPerform)
+                onTap: (isCompleted || isSubmitted || !canStart)
                     ? null
                     : () async {
                         if (validation == "التحقق عبر اجراء اختبار قصير") {
@@ -3238,7 +3801,7 @@ class _taskPageState extends State<taskPage> {
                             context,
                             MaterialPageRoute(
                               builder: (_) => ArticlePage(
-                                userTaskDocId: userTaskDocId,
+                                userTaskDocId: effectiveDocId,
                                 taskId: taskData['id'],
                               ),
                             ),
@@ -3248,10 +3811,14 @@ class _taskPageState extends State<taskPage> {
                             context,
                             taskData,
                             selectedDay: sel,
-                            userTaskDocId: userTaskDocId,
+                            userTaskDocId: effectiveDocId,
                           );
                           if (result == true && mounted) {
                             _attachUserTaskStreamFor(sel);
+                            // ← أضيفي هذا
+                            if (_viewingTaskIndex < _requiredTasksToday) {
+                              setState(() => _viewingTaskIndex++);
+                            }
                             setState(() {});
                           }
                         }
@@ -3259,11 +3826,12 @@ class _taskPageState extends State<taskPage> {
                 child: Ink(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    color: (isSubmitted || !canPerform)
+                    color:
+                        (isSubmitted || !canStart) // ← غيري
                         ? Colors.grey.shade300
                         : (isCompleted ? AppColors.primary33 : null),
-                    gradient: (!isCompleted && !isSubmitted && canPerform)
-                        ? const LinearGradient(
+                    gradient: (!isCompleted && !isSubmitted && canStart)
+                        ? LinearGradient(
                             colors: [AppColors.primary, AppColors.mint],
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
@@ -3278,15 +3846,18 @@ class _taskPageState extends State<taskPage> {
                           ? 'تم الإنجاز ✅'
                           : (isSubmitted
                                 ? 'بانتظار المراجعة ⏳'
-                                : (canPerform
-                                      ? 'بدء المهمة'
-                                      : (sel.isBefore(today)
-                                            ? 'انتهى موعد المهمة'
-                                            : 'يومها لم يحن بعد'))),
+                                : (!isPreviousCompleted // ← غيري
+                                      ? 'أكمل المهمة السابقة أولاً 🔒'
+                                      : (canPerform
+                                            ? 'بدء المهمة'
+                                            : (sel.isBefore(today)
+                                                  ? 'انتهى موعد المهمة'
+                                                  : 'يومها لم يحن بعد')))),
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
-                        color: (isCompleted || isSubmitted || !canPerform)
+                        color:
+                            (isCompleted || isSubmitted || !canStart) // ← غيري
                             ? AppColors.dark
                             : Colors.white,
                       ),
@@ -3296,15 +3867,70 @@ class _taskPageState extends State<taskPage> {
               ),
             ),
           ),
-          // ✅ أضيفي هذا هنا
-          if (isCompleted) ...[
-            const SizedBox(height: 16),
-            _buildBonusTaskSection(),
-          ],
+          // if (isCompleted && taskIndex == _requiredTasksToday) ...[
+          //   const SizedBox(height: 16),
+          //   _buildBonusTaskSection(),
+          // ],
         ],
       ),
     );
   }
+
+  Widget _buildExtraTaskCard({
+    required DateTime day,
+    required int taskIndex,
+    bool canPerform = false,
+  }) {
+    final uid = _uid ?? '';
+    final docId = '${uid}_${_yyyyMMdd(day)}_task$taskIndex';
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(docId)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData || !snap.data!.exists) {
+          return const SizedBox.shrink();
+        }
+
+        final ut = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+        final status = ut['status'] ?? 'pending';
+
+        // ✅ لو مكتملة → اعرض الكارد التالي
+        if (status == 'completed') {
+          final nextIndex = taskIndex + 1;
+          if (nextIndex <= _requiredTasksToday) {
+            return _buildExtraTaskCard(
+              day: day,
+              taskIndex: nextIndex,
+              canPerform: canPerform,
+            );
+          }
+          // كل المهام مكتملة → اخفي
+          return const SizedBox.shrink();
+        }
+
+        final data = {
+          'taskId': ut['taskId'] ?? '',
+          'title': ut['taskTitle'] ?? '(بدون عنوان)',
+          'description': ut['taskDescription'] ?? '',
+          'points': ut['taskPoints'] ?? 0,
+          'validationStrategy': ut['taskValidation'] ?? 'غير محددة',
+          'id': ut['taskId'] ?? '',
+          'status': status,
+        };
+
+        return _buildUserTaskCard(
+          taskData: data,
+          canPerform: canPerform,
+          taskIndex: taskIndex,
+          userTaskDocId: docId,
+        );
+      },
+    );
+  }
+
   // =====================================================================
   // ✅ الدوال الجديدة — أضيفيها بعد _buildUserTaskCard
   // =====================================================================
@@ -3327,7 +3953,7 @@ class _taskPageState extends State<taskPage> {
       builder: (context, snap) {
         // المهمة الإضافية موجودة في Firestore
         if (snap.hasData && snap.data!.exists) {
-          final bonusData = snap.data!.data() as Map<String, dynamic>;
+          final bonusData = (snap.data!.data() as Map<String, dynamic>?) ?? {};
           final bonusStatus = bonusData['status'] as String? ?? 'pending';
 
           if (bonusStatus == 'completed') {

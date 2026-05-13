@@ -26,8 +26,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'article.dart';
 import 'levels.dart';
 import 'widgets/ecoland_island.dart';
-import 'services/xp_service.dart'; 
-
+import 'services/xp_service.dart';
 
 class homePage extends StatefulWidget {
   const homePage({super.key});
@@ -1039,136 +1038,311 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                   //   });
                                   // },
                                   child: Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.grey.withOpacity(0.12),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // 🔹 الهيدر
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            'EcoLand',
-                                            style: GoogleFonts.ibmPlexSansArabic(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w800,
-                                              color: appColors.dark,
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      8,
+                                      8,
+                                      8,
+                                      8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(20),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.grey.withOpacity(0.12),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // 🔹 الهيدر
+                                        // بعد
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  'EcoLand',
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        fontSize: 18,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        color: appColors.dark,
+                                                      ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                GestureDetector(
+                                                  onTap: () {
+                                                    showDialog(
+                                                      context: context,
+                                                      builder: (ctx) => Directionality(
+                                                        textDirection: ui
+                                                            .TextDirection
+                                                            .rtl,
+                                                        child: Dialog(
+                                                          backgroundColor:
+                                                              Colors.white,
+                                                          shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  20,
+                                                                ),
+                                                          ),
+                                                          insetPadding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 24,
+                                                              ),
+                                                          child: Padding(
+                                                            padding:
+                                                                const EdgeInsets.all(
+                                                                  20,
+                                                                ),
+                                                            child: Column(
+                                                              mainAxisSize:
+                                                                  MainAxisSize
+                                                                      .min,
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                                Row(
+                                                                  children: [
+                                                                    const Text(
+                                                                      '🌍',
+                                                                      style: TextStyle(
+                                                                        fontSize:
+                                                                            22,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      width: 8,
+                                                                    ),
+                                                                    Text(
+                                                                      'ما هي EcoLand؟',
+                                                                      style: GoogleFonts.ibmPlexSansArabic(
+                                                                        fontSize:
+                                                                            17,
+                                                                        fontWeight:
+                                                                            FontWeight.w800,
+                                                                        color: appColors
+                                                                            .dark,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
+                                                                const SizedBox(
+                                                                  height: 14,
+                                                                ),
+                                                                Text(
+                                                                  'EcoLand هي أرضك الافتراضية الخضراء 🌱\n\n'
+                                                                  'كل مهمة بيئية تنجزها تضيف عنصراً جديداً لأرضك  '
+                                                                  'من أشجار وبحيرات وزهور  وتساعدها على النمو والازدهار.\n\n'
+                                                                  'كلما ارتقيت في المستويات، كلما أصبحت أرضك أجمل وأكثر حيوية! 🏆',
+                                                                  style: GoogleFonts.ibmPlexSansArabic(
+                                                                    fontSize:
+                                                                        13.5,
+                                                                    height: 1.7,
+                                                                    color: Colors
+                                                                        .black87,
+                                                                  ),
+                                                                ),
+                                                                const SizedBox(
+                                                                  height: 20,
+                                                                ),
+                                                                Align(
+                                                                  alignment:
+                                                                      Alignment
+                                                                          .centerLeft,
+                                                                  child: TextButton(
+                                                                    onPressed: () =>
+                                                                        Navigator.pop(
+                                                                          ctx,
+                                                                        ),
+                                                                    child: Text(
+                                                                      'حسنًا ',
+                                                                      style: GoogleFonts.ibmPlexSansArabic(
+                                                                        fontWeight:
+                                                                            FontWeight.w700,
+                                                                        color: appColors
+                                                                            .primary,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    );
+                                                  },
+                                                  child: const Icon(
+                                                    Icons.info_outline_rounded,
+                                                    size: 18,
+                                                    color: appColors.sea,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+
+                                        const SizedBox(height: 6),
+
+                                        Text(
+                                          'تابع تقدمك في إكمال المهام',
+                                          style: GoogleFonts.ibmPlexSansArabic(
+                                            fontSize: 13,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+
+                                        const SizedBox(height: 2),
+
+                                        // 🌍 EcoLand
+                                        Container(
+                                          width: double.infinity,
+                                          height: 280,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                              16,
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                          clipBehavior: Clip.hardEdge,
+                                          child:
+                                              StreamBuilder<
+                                                DocumentSnapshot<
+                                                  Map<String, dynamic>
+                                                >
+                                              >(
+                                                stream: FirebaseFirestore
+                                                    .instance
+                                                    .collection('users')
+                                                    .doc(
+                                                      FirebaseAuth
+                                                              .instance
+                                                              .currentUser
+                                                              ?.uid ??
+                                                          '',
+                                                    )
+                                                    .snapshots(),
+                                                builder: (context, snap) {
+                                                  final data =
+                                                      snap.data?.data() ?? {};
+                                                  final int xp =
+                                                      data['xp'] ?? 0;
+                                                  final currentLevel =
+                                                      getCurrentLevel(xp);
+                                                  final islandLevel =
+                                                      islandLevelFromId(
+                                                        currentLevel.id,
+                                                      );
 
-                                      const SizedBox(height: 6),
+                                                  // جديد — ديناميكي من Firebase
+                                                  final taskCounts =
+                                                      <String, int>{};
+                                                  final counts =
+                                                      data['taskCounts']
+                                                          as Map<
+                                                            String,
+                                                            dynamic
+                                                          >? ??
+                                                      {};
+                                                  counts.forEach((k, v) {
+                                                    if (v is int)
+                                                      taskCounts[k] = v;
+                                                  });
 
-                                      Text(
-                                        'تابع تقدمك في إكمال المهام',
-                                        style: GoogleFonts.ibmPlexSansArabic(
-                                          fontSize: 13,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-
-                                      const SizedBox(height: 14),
-
-                                      // 🌍 EcoLand
-                                      Container(
-                                        width: double.infinity,
-                                        height: 450,
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(16),
-                                        ),
-                                        clipBehavior: Clip.hardEdge,
-                                        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                                          stream: FirebaseFirestore.instance
-                                              .collection('users')
-                                              .doc(FirebaseAuth.instance.currentUser?.uid ?? '')
-                                              .snapshots(),
-                                          builder: (context, snap) {
-                                            final data = snap.data?.data() ?? {};
-                                            final int xp = data['xp'] ?? 0;
-                                            final currentLevel = getCurrentLevel(xp);
-                                            final islandLevel = islandLevelFromId(currentLevel.id);
-                                            
-                                            // جديد — ديناميكي من Firebase
-                                            final taskCounts = <String, int>{};
-                                            final counts = data['taskCounts'] as Map<String, dynamic>? ?? {};
-                                            counts.forEach((k, v) { if (v is int) taskCounts[k] = v; });
-
-                                            return EcoLandIsland(
-                                              level: islandLevel,
-                                              isReadOnly: false,
-                                              allowPan: false,
-                                              showFriends: false,
-                                              taskCounts: taskCounts,
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                      // 🔹 بار الإحصائيات
-                                      const SizedBox(height: 10),
-                                      GestureDetector(
-                                        onTap: () => setState(() => _ecoLandExpanded = !_ecoLandExpanded),
-                                        child: Container(
-                                          width: double.infinity,
-                                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                                          decoration: BoxDecoration(
-                                            color: appColors.primary.withOpacity(0.07),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              Icon(
-                                                _ecoLandExpanded
-                                                    ? Icons.keyboard_arrow_up
-                                                    : Icons.bar_chart_rounded,
-                                                color: appColors.primary,
-                                                size: 18,
+                                                  return EcoLandIsland(
+                                                    level: islandLevel,
+                                                    isReadOnly: false,
+                                                    allowPan: false,
+                                                    showFriends: false,
+                                                    taskCounts: taskCounts,
+                                                  );
+                                                },
                                               ),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                _ecoLandExpanded ? 'إخفاء الإحصائيات' : 'عرض الإحصائيات',
-                                                style: GoogleFonts.ibmPlexSansArabic(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
+                                        ),
+                                        // 🔹 بار الإحصائيات
+                                        const SizedBox(height: 10),
+                                        GestureDetector(
+                                          onTap: () => setState(
+                                            () => _ecoLandExpanded =
+                                                !_ecoLandExpanded,
+                                          ),
+                                          child: Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                              horizontal: 16,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: appColors.primary
+                                                  .withOpacity(0.07),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  _ecoLandExpanded
+                                                      ? Icons.keyboard_arrow_up
+                                                      : Icons.bar_chart_rounded,
                                                   color: appColors.primary,
+                                                  size: 18,
                                                 ),
-                                              ),
-                                            ],
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  _ecoLandExpanded
+                                                      ? 'إخفاء الإحصائيات'
+                                                      : 'عرض الإحصائيات',
+                                                  style:
+                                                      GoogleFonts.ibmPlexSansArabic(
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color:
+                                                            appColors.primary,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
 
-                                      // 👇 الإحصائيات
-                                      AnimatedSize(
-                                        duration: const Duration(milliseconds: 320),
-                                        curve: Curves.easeInOut,
-                                        child: _ecoLandExpanded
-                                            ? const Padding(
-                                                padding: EdgeInsets.only(top: 16),
-                                                child: SizedBox(
-                                                  height: 400,
-                                                  child: _UserTaskProgressCard(),
-                                                ),
-                                              )
-                                            : const SizedBox.shrink(),
-                                      ),
-                                    ],
+                                        // 👇 الإحصائيات
+                                        AnimatedSize(
+                                          duration: const Duration(
+                                            milliseconds: 320,
+                                          ),
+                                          curve: Curves.easeInOut,
+                                          child: _ecoLandExpanded
+                                              ? const Padding(
+                                                  padding: EdgeInsets.only(
+                                                    top: 16,
+                                                  ),
+                                                  child: SizedBox(
+                                                    height: 400,
+                                                    child:
+                                                        _UserTaskProgressCard(),
+                                                  ),
+                                                )
+                                              : const SizedBox.shrink(),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
                                 ),
                               ),
                             ),
@@ -1456,7 +1630,6 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                                 merge: true,
                                                               ),
                                                             );
-
                                                         print(
                                                           '✅ Tasks updated successfully',
                                                         );
@@ -4730,8 +4903,11 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
           'id': doc.id,
           'username': username,
           'xp': (data['xp'] ?? 0) is num ? (data['xp'] ?? 0) as int : 0,
-            'completedTasks': (data['completedTask'] ?? 0) is num  // ← أضيفي هذا
-      ? (data['completedTask'] ?? 0) as int : 0,
+          'completedTasks':
+              (data['completedTask'] ?? 0)
+                  is num // ← أضيفي هذا
+              ? (data['completedTask'] ?? 0) as int
+              : 0,
           'points': points is num ? points.toInt() : 0,
           'pfpIndex': pfpIndex,
           'isCurrentUser': doc.id == currentUserId,
@@ -4988,10 +5164,11 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
   Widget _buildLeaderItem({
     required int index,
     required String username,
+    required String userId, // ← جديد
     required int completedTasks,
     required int points,
     required int pfpIndex,
-    required int xp, 
+    required int xp,
     int? rank,
   }) {
     final actualRank = rank ?? (index + 1);
@@ -5105,12 +5282,20 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                     // المهام المكتملة
                     Row(
                       children: [
-                        Text(getCurrentLevel(xp).icon, style: TextStyle(fontSize: 12)),
+                        Text(
+                          getCurrentLevel(xp).icon,
+                          style: TextStyle(fontSize: 12),
+                        ),
                         SizedBox(width: 4),
-                          Text('$xp XP', style: TextStyle(
-    fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF2E7D32))),
-]
-                     
+                        Text(
+                          '$xp XP',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF2E7D32),
+                          ),
+                        ),
+                      ],
                     ),
 
                     const SizedBox(width: 12),
@@ -5160,50 +5345,159 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                 ),
               ),
             ),
+
+          // زر الفولو
+          if (userId != FirebaseAuth.instance.currentUser?.uid)
+            StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(FirebaseAuth.instance.currentUser?.uid)
+                  .snapshots(),
+              builder: (context, snap) {
+                final following = List<String>.from(
+((snap.data?.data() as Map<String, dynamic>?)?['following'] as List?) ?? [],                );
+                final isFollowing = following.contains(userId);
+
+                return GestureDetector(
+                  onTap: () async {
+                    final myUid = FirebaseAuth.instance.currentUser?.uid;
+                    if (myUid == null) return;
+
+                    if (isFollowing) {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: Text(
+                            'إلغاء المتابعة',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          content: Text(
+                            'هل تريد إلغاء متابعة $username؟',
+                            style: GoogleFonts.ibmPlexSansArabic(),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: Text(
+                                'لا',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  color: Colors.grey,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.redAccent,
+                                elevation: 0,
+                              ),
+                              child: Text(
+                                'نعم',
+                                style: GoogleFonts.ibmPlexSansArabic(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm != true) return;
+                      await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(myUid)
+                          .update({
+                            'following': FieldValue.arrayRemove([userId]),
+                          });
+                    } else {
+                      await FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(myUid)
+                          .update({
+                            'following': FieldValue.arrayUnion([userId]),
+                          });
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isFollowing
+                          ? Colors.grey.shade200
+                          : appColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isFollowing
+                            ? Colors.grey.shade400
+                            : appColors.primary,
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Text(
+                      isFollowing ? 'متابَع ✓' : 'تابع',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isFollowing
+                            ? Colors.grey.shade600
+                            : appColors.primary,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
         ],
       ),
     );
   }
 
-Future<List<Map<String, dynamic>>> _fetchFullLeaderboard() async {
-  try {
-    final usersSnapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .where('isVerified', isEqualTo: true)
-        .get();
+  Future<List<Map<String, dynamic>>> _fetchFullLeaderboard() async {
+    try {
+      final usersSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('isVerified', isEqualTo: true)
+          .get();
 
-    final List<Map<String, dynamic>> usersData = [];
-    final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final List<Map<String, dynamic>> usersData = [];
+      final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-    for (final doc in usersSnapshot.docs) {
-      final data = doc.data();
-      final points = data['points'] ?? 0;
-      final username = data['username'] ?? 'مستخدم';
-      final pfpIndex = data['pfpIndex'] ?? 0;
+      for (final doc in usersSnapshot.docs) {
+        final data = doc.data();
+        final points = data['points'] ?? 0;
+        final username = data['username'] ?? 'مستخدم';
+        final pfpIndex = data['pfpIndex'] ?? 0;
 
-      usersData.add({
-        'id': doc.id,
-        'username': username,
-        'xp': (data['xp'] ?? 0) is num ? (data['xp'] ?? 0) as int : 0, // ← أضفناه
-        'points': points is num ? points.toInt() : 0,
-        'pfpIndex': pfpIndex,
-        'isCurrentUser': doc.id == currentUserId,
-      });
+        usersData.add({
+          'id': doc.id,
+          'username': username,
+          'xp': (data['xp'] ?? 0) is num
+              ? (data['xp'] ?? 0) as int
+              : 0, // ← أضفناه
+          'points': points is num ? points.toInt() : 0,
+          'pfpIndex': pfpIndex,
+          'isCurrentUser': doc.id == currentUserId,
+        });
+      }
+
+      // ← رتّب بناءً على XP
+      usersData.sort((a, b) => (b['xp'] as int).compareTo(a['xp'] as int));
+
+      for (int i = 0; i < usersData.length; i++) {
+        usersData[i]['rank'] = i + 1;
+      }
+
+      return usersData;
+    } catch (e) {
+      debugPrint('❌ Full leaderboard error: $e');
+      return [];
     }
-
-    // ← رتّب بناءً على XP
-    usersData.sort((a, b) => (b['xp'] as int).compareTo(a['xp'] as int));
-
-    for (int i = 0; i < usersData.length; i++) {
-      usersData[i]['rank'] = i + 1;
-    }
-
-    return usersData;
-  } catch (e) {
-    debugPrint('❌ Full leaderboard error: $e');
-    return [];
   }
-}
 
   void _showFullLeaderboard() {
     showModalBottomSheet(
@@ -5290,6 +5584,7 @@ Future<List<Map<String, dynamic>>> _fetchFullLeaderboard() async {
                         return _buildLeaderItem(
                           index: index,
                           username: user['username'],
+                          userId: user['id'], // ← جديد
                           completedTasks: user['completedTasks'] ?? 0,
                           points: user['points'],
                           pfpIndex: user['pfpIndex'],
@@ -5402,6 +5697,7 @@ Future<List<Map<String, dynamic>>> _fetchFullLeaderboard() async {
                       username: user['username'],
                       completedTasks: user['completedTasks'] ?? 0,
                       points: user['points'],
+                      userId: user['id'], // ← جديد
                       pfpIndex: user['pfpIndex'],
                       xp: user['xp'] ?? 0,
                       rank: user['rank'],

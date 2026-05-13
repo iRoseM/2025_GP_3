@@ -502,18 +502,22 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   Future<void> _startFlowForTransportTask() async {
     final taskTitle = widget.taskData['title']?.toString() ?? '';
+    final t = taskTitle.toLowerCase(); // ← أضيفي هذا السطر
+
     final String stationType;
-    if (taskTitle.contains('مترو') || taskTitle.contains('metro')) {
+    if (t.contains('ميترو') || t.contains('metro')) {
+      // ← غيري taskTitle إلى t
       stationType = 'metro';
-    } else if (taskTitle.contains('باص') ||
-        taskTitle.contains('bus') ||
-        taskTitle.contains('حافلة')) {
+    } else if (t.contains('باص') || t.contains('bus') || t.contains('حافلة')) {
+      // ← t
       stationType = 'bus';
-    } else if (taskTitle.contains('دراجة') ||
-        taskTitle.contains('سيكل') ||
-        taskTitle.contains('cycle')) {
+    } else if (t.contains('دراجة') ||
+        t.contains('سيكل') ||
+        t.contains('cycle')) {
+      // ← t
       stationType = 'bicycle';
-    } else if (taskTitle.contains('سكوتر') || taskTitle.contains('scooter')) {
+    } else if (t.contains('سكوتر') || t.contains('scooter')) {
+      // ← t
       stationType = 'scooter';
     } else {
       stationType = 'walk';
@@ -1820,15 +1824,30 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     });
 
     try {
+      final dailyTaskRef = firestore
+          .collection('dailyTasks')
+          .doc(uid)
+          .collection('tasks')
+          .doc(todayId);
+
+      final dailySnap = await dailyTaskRef.get();
+      if (dailySnap.exists && dailySnap.data()?['completed'] != true) {
+        await dailyTaskRef.set({
+          'completed': true,
+          'completedAt': FieldValue.serverTimestamp(),
+          'status': 'completed',
+        }, SetOptions(merge: true));
+      }
+    } catch (_) {}
+
+    try {
       await StreakService.updateStreakOnTaskCompletion();
     } catch (_) {}
 
     try {
-      final taskDifficulty =
-          widget.taskData['difficulty']?.toString() ??
-          widget.taskData['level']?.toString() ??
-          'beginner';
-      await XpService.addXpForTask(taskLevelId: taskDifficulty);
+      await XpService.addXpForTask(
+        taskPoints: (widget.taskData['points'] ?? 0) as int,
+      );
     } catch (e) {
       print('⚠️ خطأ في إضافة XP: $e');
     }
@@ -1903,13 +1922,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   }
 
   Future<void> _startTaskFlow() async {
+    print('🔍 DEBUG: ${widget.taskData}');
     final taskTitle = widget.taskData['title']?.toString() ?? '';
-    final taskType = _getLocationTaskType(taskTitle);
-    final t = taskTitle.toLowerCase();
+    final t = taskTitle.toLowerCase(); // ← أضيفي هذا
 
+    // ← غيري الشرط كله ليعتمد على t فقط
     final bool isAnyTransport =
-        taskType == TaskType.metro ||
-        taskType == TaskType.bus ||
+        t.contains('ميترو') ||
+        t.contains('metro') ||
+        t.contains('باص') ||
+        t.contains('bus') ||
+        t.contains('حافلة') ||
         t.contains('دراجة') ||
         t.contains('سيكل') ||
         t.contains('cycle') ||
@@ -1920,10 +1943,61 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         t.contains('مشي');
 
     if (isAnyTransport) {
+      final permission = await Geolocator.checkPermission();
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+      if (!serviceEnabled ||
+          permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          builder: (_) => Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Text(
+                'الموقع غير متاح',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
+                ),
+              ),
+              content: Text(
+                'لم نتمكن من الوصول لموقعك، لذلك سيتم التحقق من المهمة عبر الصورة بدلاً من الموقع.',
+                style: GoogleFonts.ibmPlexSansArabic(fontSize: 14, height: 1.6),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: appColors.primary,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'تأكيد',
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        _openCamera();
+        return;
+      }
+
       await _startFlowForTransportTask();
       return;
     }
-
     _openCamera();
   }
 
@@ -2104,6 +2178,23 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                     width: 2,
                   ),
                 );
+                Widget fieldErrorText(String message) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6, right: 8),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        message,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 12.5,
+                          color: Colors.redAccent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
                 return Center(
                   child: Material(
                     color: Colors.white,
@@ -2202,6 +2293,8 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   });
                                 },
                               ),
+                              if (showFieldErrors && tempProductType == null)
+                                fieldErrorText('يرجى اختيار نوع المنتج'),
                               const SizedBox(height: 12),
                               TextField(
                                 controller: productNameCtrl,
@@ -2229,6 +2322,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   if (showFieldErrors) setLocalState(() {});
                                 },
                               ),
+                              if (showFieldErrors &&
+                                  productNameCtrl.text.trim().isEmpty)
+                                fieldErrorText('يرجى إدخال اسم المنتج'),
                               const SizedBox(height: 12),
                               // عدد المنتجات
                               Container(
@@ -2356,7 +2452,11 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
                                   if (showFieldErrors) setLocalState(() {});
                                 },
                               ),
-
+                              if (showFieldErrors &&
+                                  ((double.tryParse(measureCtrl.text.trim()) ??
+                                          0) <=
+                                      0))
+                                fieldErrorText('يرجى إدخال الكمية'),
                               const SizedBox(height: 12),
 
                               DropdownButtonFormField<String>(
@@ -2694,6 +2794,9 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final pts = (task['points'] ?? 0) as int;
     final requiresPhotoExact = true;
     final isTransport = (_autoDistance || _isTransportTask);
+    final String validationLabel = isTransport
+        ? 'التحقق عبر الموقع'
+        : (task['validationStrategy']?.toString() ?? 'التحقق عبر معالجة الصور');
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -3452,11 +3555,17 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
   }
 
   Widget _buildPhotoInstructions() {
+    final isLocalProductTask = _isLocalProductTask;
+
     final bullets = [
       'تأكد من أن الإضاءة جيدة والعنصر واضح.',
-      'التقط صورة تُظهر قيامك بالمهمة (مثل حاوية اعادة التدوير).',
+      if (isLocalProductTask)
+        'التقط صورة واضحة لبلد الصنع أو عبارة "صنع في السعودية" على المنتج.',
+      if (!isLocalProductTask) 'التقط صورة تُظهر قيامك بالمهمة.',
+      'تأكد أن النص أو المنتج ظاهر بشكل مستقيم وغير مقلوب.',
       'لا تستخدم صورًا من الإنترنت.',
       'التقط من زاوية مناسبة وبدون فلاش إن أمكن.',
+      'إذا واجهت مشكلة في المهمة، يمكنك الانتقال إلى صفحة الدعم وتقديم بلاغ عن المهمة ليتم مراجعته.',
     ];
 
     final isRecyclingTask = () {
@@ -3523,26 +3632,71 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
           ),
 
           // ── مثال الصورة لمهام الحاويات ──
-          if (isRecyclingTask) ...[
-            const SizedBox(height: 14),
-            Text(
-              'مثال على الصورة المطلوبة:',
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: appColors.dark,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.asset(
-                'assets/img/recycling_example.webp',
-                fit: BoxFit.cover,
-                width: double.infinity,
-              ),
-            ),
-          ],
+          Builder(
+            builder: (context) {
+              final t = (widget.taskData['title'] ?? '')
+                  .toString()
+                  .toLowerCase();
+
+              String? exampleImage;
+              String? exampleLabel;
+
+              if (t.contains('تدوير') ||
+                  t.contains('حاوية') ||
+                  t.contains('بلاستيك') ||
+                  t.contains('ورق') ||
+                  t.contains('rvm') ||
+                  t.contains('ملابس') ||
+                  t.contains('طعام')) {
+                exampleImage = 'assets/img/recycling_example.webp';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              } else if (t.contains('مترو') || t.contains('metro')) {
+                exampleImage = 'assets/img/metro_example.jpg';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              } else if (t.contains('باص') ||
+                  t.contains('bus') ||
+                  t.contains('حافلة')) {
+                exampleImage = 'assets/img/bus_example.jpeg';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              } else if (t.contains('دراجة') || t.contains('سيكل')) {
+                exampleImage = 'assets/img/bicycle_example.jpg';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              } else if (t.contains('محلي') || t.contains('منتج')) {
+                exampleImage = 'assets/img/local_example.png';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              } else if (t.contains('سكوتر') || t.contains('scooter')) {
+                exampleImage = 'assets/img/scooter_example.jpg';
+                exampleLabel = 'مثال على الصورة المطلوبة:';
+              }
+
+              if (exampleImage == null) return const SizedBox.shrink();
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 14),
+                  Text(
+                    exampleLabel!,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: appColors.dark,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.asset(
+                      exampleImage,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
