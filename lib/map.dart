@@ -105,6 +105,8 @@ class _mapPageState extends State<mapPage> {
   final Set<Polyline> _polylines = {};
   final Map<String, Facility> _facilitiesByMarkerId = {};
   Set<String> _allowedTypes = {}; // ✅ أنواع الحاويات المفعّلة في الفلتر
+  LatLng? _lastLoadedCenter;
+  static const double _reloadThresholdKm = 1.0; // يعيد التحميل لو تحرك أكثر من 1 كم    
 
   bool _myLocationEnabled = false;
   bool _isLoadingLocation = false;
@@ -134,30 +136,117 @@ class _mapPageState extends State<mapPage> {
     _loadMapsApiKey();
     _init();
   }
-
-  Future<void> _init() async {
-    debugPrint('🟡 _init started');
-    await _ensureLocationPermission();
-    debugPrint('🟡 location enabled: $_myLocationEnabled');
-    await _loadMarkerIcons();
-
-    Position? userPos;
-    if (_myLocationEnabled) {
-      try {
-        userPos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-        );
-        debugPrint('🟡 userPos: ${userPos.latitude}, ${userPos.longitude}');
-      } catch (e) {
-        debugPrint('❌ get position error: $e');
-      }
+  Future<void> _loadFacilitiesForCenter(LatLng center) async {
+    // لو ما تحركنا كثير ما نعيد التحميل
+    if (_lastLoadedCenter != null) {
+      final dist = Geolocator.distanceBetween(
+        _lastLoadedCenter!.latitude,
+        _lastLoadedCenter!.longitude,
+        center.latitude,
+        center.longitude,
+      );
+      if (dist < _reloadThresholdKm * 1000) return;
     }
 
-    debugPrint(
-      '🟡 calling _loadFacilitiesFromFirestore with userPos: $userPos',
-    );
-    await _loadFacilitiesFromFirestore(userPos: userPos);
-    debugPrint('🟡 _loadFacilitiesFromFirestore done');
+    _lastLoadedCenter = center;
+
+    if (!await hasInternetConnection()) return;
+
+    try {
+      final double latDelta = _loadRadiusKm / 111.0;
+      final double lngDelta =
+          _loadRadiusKm / (111.0 * cos(center.latitude * pi / 180));
+
+      final minLat = center.latitude - latDelta;
+      final maxLat = center.latitude + latDelta;
+      final minLng = center.longitude - lngDelta;
+      final maxLng = center.longitude + lngDelta;
+
+      final qs = await FirebaseFirestore.instance
+          .collection('facilities')
+          .where('lat', isGreaterThanOrEqualTo: minLat)
+          .where('lat', isLessThanOrEqualTo: maxLat)
+          .get();
+
+      final newMarkers = <Marker>{};
+      final newFacilities = <String, Facility>{};
+
+      for (final d in qs.docs) {
+        final m = d.data();
+        final double? lat = (m['lat'] as num?)?.toDouble();
+        final double? lng = (m['lng'] as num?)?.toDouble();
+        if (lat == null || lng == null) continue;
+        if (lng < minLng || lng > maxLng) continue;
+        if (lat < 20 || lat > 30 || lng < 40 || lng > 55) continue;
+
+        final String type = _normalizeType((m['type'] ?? '').toString());
+        final String provider = (m['provider'] ?? '').toString();
+        final String address = (m['address'] ?? '').toString();
+        final String status = (m['status'] ?? 'نشط').toString();
+
+        final pos = LatLng(lat, lng);
+        final markerId = MarkerId(d.id);
+
+        final facility = Facility(
+          id: d.id, lat: lat, lng: lng,
+          type: type, provider: provider,
+          address: address, status: status,
+        );
+        newFacilities[markerId.value] = facility;
+
+        newMarkers.add(Marker(
+          markerId: markerId,
+          position: pos,
+          icon: _iconForType(type),
+          consumeTapEvents: true,
+          infoWindow: InfoWindow(
+            title: type,
+            snippet: address.isNotEmpty ? address : provider,
+            onTap: () => _showFacilitySheet(facility),
+          ),
+          onTap: () => _showFacilitySheet(facility),
+        ));
+      }
+
+      if (!mounted) return;
+      setState(() {
+        // ✅ ندمج مع الموجودين ما نمسح القديم
+        _facilitiesByMarkerId.addAll(newFacilities);
+        _allMarkers.addAll(newMarkers);
+      });
+      _applyCurrentFilters();
+
+      debugPrint('✅ Loaded ${newMarkers.length} facilities for center $center');
+    } catch (e) {
+      debugPrint('❌ _loadFacilitiesForCenter error: $e');
+    }
+  }
+
+  Future<void> _init() async {
+    await _ensureLocationPermission();
+    await _loadMarkerIcons();
+
+    LatLng center = _riyadh; // default
+
+    if (_myLocationEnabled) {
+      try {
+        final pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+        center = LatLng(pos.latitude, pos.longitude);
+
+        // zoom على اليوزر
+        final ctrl = await _mapCtrl.future;
+        await ctrl.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: center, zoom: 15.5),
+          ),
+        );
+        _didAutoCenter = true;
+      } catch (_) {}
+    }
+
+    await _loadFacilitiesForCenter(center);
   }
 
   @override
@@ -1713,6 +1802,15 @@ class _mapPageState extends State<mapPage> {
                 ),
                 onMapCreated: (c) {
                   if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
+                },
+                onCameraIdle: () async {
+                  final ctrl = await _mapCtrl.future;
+                  final region = await ctrl.getVisibleRegion();
+                  final center = LatLng(
+                    (region.northeast.latitude + region.southwest.latitude) / 2,
+                    (region.northeast.longitude + region.southwest.longitude) / 2,
+                  );
+                  await _loadFacilitiesForCenter(center);
                 },
                 myLocationEnabled: _myLocationEnabled,
                 myLocationButtonEnabled: false,
