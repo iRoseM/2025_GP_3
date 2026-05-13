@@ -70,12 +70,18 @@ class MapPickRoutePage extends StatefulWidget {
 
 class _MapPickRoutePageState extends State<MapPickRoutePage> {
   static const _riyadhCenter = LatLng(24.7136, 46.6753);
-
+  List<_Station> _visibleStations = []; // المحطات المرئية فقط
+  LatLng _cameraCenter = _riyadhCenter;  // مركز الكاميرا الحالي
+  double get _visibilityRadiusKm {
+    if (widget.stationType == 'bus') return 3.0;
+    return 8.0;
+  }  
   GoogleMapController? _mapController;
 
   // المحطات المحمّلة من JSON (مترو/باص فقط)
   List<_Station> _stations = [];
   bool _loadingStations = true;
+  Timer? _cameraDebounce;
 
   // المحطتان المختارتان (مترو/باص)
   _Station? _startStation;
@@ -107,16 +113,36 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
 
   @override
   void dispose() {
+    _cameraDebounce?.cancel(); // ← أضيفي
     _mapController?.dispose();
     super.dispose();
   }
 
   // ─── Load stations ────────────────────────────────────────────────────────
+  void _updateVisibleStations() {
+    if (_stations.isEmpty) return; // ← أضيفي هذا
+    print('📍 cameraCenter: $_cameraCenter, stations: ${_stations.length}');
+    final filtered = _stations.where((s) {
+      final d = _haversineKm(_cameraCenter, s.position);
+      return d <= _visibilityRadiusKm;
+    }).toList();
+
+    // دايماً نخلي المحطتين المختارتين مرئيتين حتى لو خارج النطاق
+    if (_startStation != null && !filtered.any((s) => s.id == _startStation!.id)) {
+      filtered.add(_startStation!);
+    }
+    if (_endStation != null && !filtered.any((s) => s.id == _endStation!.id)) {
+      filtered.add(_endStation!);
+    }
+
+    if (mounted) setState(() => _visibleStations = filtered);
+  }
 
   Future<void> _loadStations() async {
     // الأنواع الحرة لا تحتاج محطات
     if (_isFree) {
       if (mounted) setState(() => _loadingStations = false);
+        _updateVisibleStations(); // ← أضيفي هذا
       return;
     }
 
@@ -136,6 +162,7 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
           _stations = list;
           _loadingStations = false;
         });
+          _updateVisibleStations(); // ← أضيفي هذا
       }
     } catch (e) {
       debugPrint('❌ Error loading stations: $e');
@@ -161,8 +188,11 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         if (mounted) {
           setState(() {
             _userLocation = here;
+            _cameraCenter = here; // ← مهم عشان الـ radius يكون حول موقع اليوزر
             _gotGps = true;
           });
+          _updateVisibleStations(); // ← أضيفي هذا
+
         }
         _mapController?.animateCamera(
           CameraUpdate.newCameraPosition(
@@ -295,7 +325,7 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     }
 
     // مترو / باص
-    for (final station in _stations) {
+  for (final station in _visibleStations) {
       final isStart = station.id == _startStation?.id;
       final isEnd = station.id == _endStation?.id;
 
@@ -400,6 +430,16 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               markers: _loadingStations ? {} : _buildMarkers(),
+
+              // ← أضيفي هذين
+              // في onCameraMove
+              onCameraMove: (position) {
+                _cameraCenter = position.target;
+                _cameraDebounce?.cancel();
+                _cameraDebounce = Timer(const Duration(milliseconds: 400), () {
+                  if (!_isFree) _updateVisibleStations();
+                });
+              },
               polylines: hasBoth
                   ? {
                       Polyline(
