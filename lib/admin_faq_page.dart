@@ -21,83 +21,197 @@ class _AdminFaqPageState extends State<AdminFaqPage> {
     await showDialog(
       context: context,
       builder: (ctx) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: AlertDialog(
-            title: Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'إضافة سؤال شائع',
-                textAlign: TextAlign.right,
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: qCtrl,
-                  textAlign: TextAlign.right,
-                  textDirection: TextDirection.rtl,
-                  decoration: const InputDecoration(
-                    labelText: 'السؤال',
-                    alignLabelWithHint: true,
-                    prefixIcon: Icon(Icons.help_outline),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: aCtrl,
-                  maxLines: 4,
-                  textAlign: TextAlign.right,
-                  textDirection: TextDirection.rtl,
-                  decoration: const InputDecoration(
-                    labelText: 'الإجابة',
-                    alignLabelWithHint: true,
-                    prefixIcon: Icon(Icons.chat_bubble_outline),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(
-                  'إلغاء',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: appColors.primary,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () async {
-                  final q = qCtrl.text.trim();
-                  final a = aCtrl.text.trim();
-                  if (q.isEmpty || a.isEmpty) return;
+        bool qError = false;
+        bool aError = false;
 
-                  await FirebaseFirestore.instance.collection('faqs').add({
-                    'q': q,
-                    'a': a,
-                    'createdAt': FieldValue.serverTimestamp(),
-                  });
-
-                  if (ctx.mounted) Navigator.pop(ctx);
-                },
-                child: Text(
-                  'إضافة',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w800,
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return Directionality(
+              textDirection: TextDirection.rtl,
+              child: AlertDialog(
+                title: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'إضافة سؤال شائع',
+                    textAlign: TextAlign.right,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
+
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: qCtrl,
+                      textAlign: TextAlign.right,
+                      textDirection: TextDirection.rtl,
+
+                      // إذا المستخدم كتب، يرجع الحقل أخضر
+                      onChanged: (value) {
+                        setDialogState(() {
+                          qError = value.trim().isEmpty;
+                        });
+                      },
+
+                      decoration: InputDecoration(
+                        labelText: 'السؤال',
+                        alignLabelWithHint: true,
+                        prefixIcon: const Icon(Icons.help_outline),
+
+                        errorText: qError ? 'الرجاء إدخال السؤال' : null,
+
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: qError
+                                ? Colors.redAccent
+                                : appColors.primary.withOpacity(.6),
+                          ),
+                        ),
+
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: qError
+                                ? Colors.redAccent
+                                : appColors.primary,
+                            width: 1.5,
+                          ),
+                        ),
+
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(color: Colors.redAccent),
+                        ),
+
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: Colors.redAccent,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    TextField(
+                      controller: aCtrl,
+                      maxLines: 4,
+                      textAlign: TextAlign.right,
+                      textDirection: TextDirection.rtl,
+
+                      // إذا المستخدم كتب، يرجع الحقل أخضر
+                      onChanged: (value) {
+                        setDialogState(() {
+                          aError = value.trim().isEmpty;
+                        });
+                      },
+
+                      decoration: InputDecoration(
+                        labelText: 'الإجابة',
+                        alignLabelWithHint: true,
+                        prefixIcon: const Icon(Icons.chat_bubble_outline),
+
+                        errorText: aError ? 'الرجاء إدخال الإجابة' : null,
+
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: aError
+                                ? Colors.redAccent
+                                : appColors.primary.withOpacity(.6),
+                          ),
+                        ),
+
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: aError
+                                ? Colors.redAccent
+                                : appColors.primary,
+                            width: 1.5,
+                          ),
+                        ),
+
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(color: Colors.redAccent),
+                        ),
+
+                        focusedErrorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: Colors.redAccent,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // يخلي أزرار إلغاء وإضافة على اليسار في RTL
+                actionsAlignment: MainAxisAlignment.end,
+
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(
+                      'إلغاء',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: appColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 10,
+                      ),
+                      shape: const StadiumBorder(),
+                    ),
+
+                    onPressed: () async {
+                      final q = qCtrl.text.trim();
+                      final a = aCtrl.text.trim();
+
+                      // إذا الحقول فاضية تصير حمراء
+                      if (q.isEmpty || a.isEmpty) {
+                        setDialogState(() {
+                          qError = q.isEmpty;
+                          aError = a.isEmpty;
+                        });
+                        return;
+                      }
+
+                      await FirebaseFirestore.instance.collection('faqs').add({
+                        'q': q,
+                        'a': a,
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
+
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+
+                    child: Text(
+                      'إضافة',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -207,11 +321,11 @@ class _AdminFaqPageState extends State<AdminFaqPage> {
             style: GoogleFonts.ibmPlexSansArabic(fontWeight: FontWeight.w800),
           ),
           content: Text(
-            'هل تريد تأكيد حذف السؤال؟ سيتم حذف السؤال نهائيًا.',
+            'هل تريد تأكيد حذف السؤال؟',
             textAlign: TextAlign.right,
             style: GoogleFonts.ibmPlexSansArabic(height: 1.5),
           ),
-          actionsAlignment: MainAxisAlignment.start, // RTL → يمين
+          actionsAlignment: MainAxisAlignment.end,
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
