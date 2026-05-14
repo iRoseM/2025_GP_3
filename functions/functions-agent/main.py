@@ -154,36 +154,65 @@ def _classify_place(place_type: str) -> str:
 def _call_gemini(prompt: str, temperature: float = 0.4, max_tokens: int = 800) -> Optional[str]:
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
-        print("❌ GEMINI_API_KEY missing")
         return None
+    
     url = f"https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key={api_key}"
     body = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens}
     }).encode()
+    
+    delays = [5, 15, 30] 
+    
     for attempt in range(3):
         try:
-            req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+            req = urllib.request.Request(
+                url, data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
             with urllib.request.urlopen(req, timeout=30) as resp:
                 result = json.loads(resp.read().decode())
                 if result.get("error"):
-                    print(f"❌ Gemini error: {result['error']}")
                     return None
-                text = result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                text = result.get("candidates",[{}])[0].get("content",{}).get("parts",[{}])[0].get("text","")
                 if text.strip():
                     return text.strip()
         except urllib.error.HTTPError as e:
-            print(f"⚠️ Gemini attempt {attempt+1} HTTP {e.code}: {e.read().decode()}")
+            body_text = e.read().decode()
+            print(f"⚠️ Gemini attempt {attempt+1} HTTP {e.code}: {body_text}")
+            if e.code == 429:
+                wait = delays[attempt]
+                print(f"⏳ Rate limited → waiting {wait}s...")
+                time.sleep(wait)  
+            else:
+                break
         except Exception as e:
             print(f"⚠️ Gemini attempt {attempt+1}: {e}")
+            time.sleep(delays[attempt])
+    
     return None
 
 
 def _extract_json(text: str) -> Optional[dict]:
     try:
         clean = text.replace("```json", "").replace("```", "").strip()
-        first, last = clean.index("{"), clean.rindex("}") + 1
+        first = clean.index("{")
+        last  = clean.rindex("}") + 1
         return json.loads(clean[first:last])
+    except json.JSONDecodeError as e:
+        print(f"⚠️ JSON extract failed: {e}")
+        try:
+            clean = text.replace("```json", "").replace("```", "").strip()
+            first = clean.index("{")
+            partial = clean[first:]
+            open_braces   = partial.count("{") - partial.count("}")
+            open_brackets = partial.count("[") - partial.count("]")
+            partial += "]" * open_brackets + "}" * open_braces
+            return json.loads(partial)
+        except Exception as e2:
+            print(f"⚠️ JSON fix failed: {e2}")
+            return None
     except Exception as e:
         print(f"⚠️ JSON extract failed: {e}")
         return None
@@ -528,6 +557,7 @@ def node_build_prompt(state: SuggestTaskState) -> dict:
 {priority}
 
 ✍️ قواعد الوصف:
+- لا تستخدم إيموجيات أكثر من 1 بحد اعلى
 - إذا "لا توجد أماكن قريبة" → لا تذكر أي حاوية أو محطة أو مسافة إطلاقاً
 - فقط اذكر الأماكن الموجودة في القائمة أعلاه
 - يتطابق مع طبيعة المهمة المختارة
@@ -1032,6 +1062,7 @@ def u_build_prompt(state: DailyTaskUserState) -> dict:
 4. وزّع على تصنيفات مختلفة
 
 ✍️ قواعد الوصف:
+- لا تستخدم إيموجيات أكثر من 1 بحد اعلى
 - خاطب بـ "{pronoun}"، 15-20 كلمة
 - مختلف عن الوصف الأصلي
 {f'- اذكر الـ streak: "حافظ{suffix} على سلسلتك!"' if streak_text else ""}
@@ -1092,11 +1123,11 @@ def _build_fallback_desc(task: dict, profile: dict) -> str:
     level_label = profile["level_label"]
     streak_text = profile["streak_text"]
     base = (
-        f"🌱 {pronoun} في بداية رحلتك البيئية! {task['title']} خطوة رائعة 🚀"
+        f"{pronoun} في بداية رحلتك البيئية، {task['title']} خطوة رائعة للانطلاق."
         if "بذرة" in level_label else
-        f"⭐ واصل{suffix} تقدمك! {task['title']} تضيف نقاطاً 💚"
+        f"واصل{suffix} تقدمك، {task['title']} تضيف نقاطاً وتفرق."
         if "نبتة" in level_label or "شجرة" in level_label else
-        f"🏆 تحدٍّ جديد يا بطل{suffix} البيئة! {task['title']} ✨"
+        f"تحدٍّ جديد يا بطل{suffix} البيئة، {task['title']} في انتظارك."
     )
     if streak_text:
         base += f" حافظ{suffix} على سلسلتك 🔥"
@@ -1801,8 +1832,8 @@ def admin_node_build_prompt(state: AdminAgentState) -> dict:
 4. تصنيف كان نشطاً العام الماضي → add
 5. تصنيف انخفض → add أو modify
 
-✍️ improvedDescription (modify): 15-20 كلمة، "أنت" خطاب مباشر، محفز، يذكر الفائدة البيئية
-✍️ userDescription (add): 15-25 كلمة، وصف المهمة الجديدة للمستخدم مباشرة
+improvedDescription (modify): 15-20 كلمة، "أنت" خطاب مباشر، محفز، يذكر الفائدة البيئية، بدون إيموجيات
+userDescription (add): 15-25 كلمة، وصف المهمة الجديدة للمستخدم مباشرة، بدون إيموجيات
 
 أرجع JSON فقط:
 {{
@@ -1831,7 +1862,11 @@ def admin_node_build_prompt(state: AdminAgentState) -> dict:
 # ══════════════════════════════════════════
 def admin_node_call_llm(state: AdminAgentState) -> dict:
     print("🤖 Node 7: Calling Gemini...")
-    response = _call_gemini(state["prompt"])
+    response = _call_gemini(
+        state["prompt"],
+        temperature=0.4,
+        max_tokens=2000
+    )
     return {"llm_response": response}
 
 
@@ -1857,10 +1892,18 @@ def node_parse_recommendations(state: AdminAgentState) -> dict:
 # ══════════════════════════════════════════
 def _pick_validation_strategy(title: str, description: str = "") -> str:
     text = (title + " " + description).lower()
-    knowledge_keywords = ["اقرأ", "تعلم", "توعية", "معلومات", "مقال", "نصائح", "وعي", "read", "learn", "awareness", "quiz", "article"]
-    visual_keywords    = ["تدوير", "فرز", "حاوية", "مشي", "دراجة", "باص", "زراعة", "طعام", "كهرباء", "ماء", "بلاستيك"]
+    knowledge_keywords = ["اقرأ", "تعلم", "توعية", "معلومات", "مقال", "نصائح", "وعي"]
+    visual_keywords    = ["تدوير", "فرز", "حاوية", "تصنيف", "سلة"]
+    
+    # ← أضيفي هذا
+    location_keywords  = ["محطة", "موقع", "قريب", "حافلة", "مترو", "سكوتر", "ركوب", "نقل"]
+    
     k_score = sum(1 for kw in knowledge_keywords if kw in text)
     v_score = sum(1 for kw in visual_keywords    if kw in text)
+    l_score = sum(1 for kw in location_keywords  if kw in text) 
+    
+    if l_score > k_score and l_score > v_score: 
+        return "التحقق عبر الموقع"
     return "التحقق عبر اجراء اختبار قصير" if k_score > v_score else "التحقق عبر معالجة الصور"
 
 def node_fallback_recommendations(state: AdminAgentState) -> dict:
