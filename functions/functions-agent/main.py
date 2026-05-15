@@ -65,7 +65,7 @@ def _load_stations():
             )
             if target == "BUS":
                 BUS_STATIONS = stations
-                print(f"🚌 Loaded {len(stations)} bus stations")
+                print(f" Loaded {len(stations)} bus stations")
             else:
                 METRO_STATIONS = stations
                 print(f"🚇 Loaded {len(stations)} metro stations")
@@ -496,49 +496,49 @@ def node_build_prompt(state: SuggestTaskState) -> dict:
     ]) or "   لا توجد أماكن قريبة"
 
     # وفي الـ prompt أضيفي:
-    nearby_section = f"""📍 الأماكن القريبة (فقط هذه الأماكن حقيقية — لا تختلق أماكن أخرى):
+    nearby_section = f""" الأماكن القريبة (فقط هذه الأماكن حقيقية — لا تختلق أماكن أخرى):
     {nearby_details}
 
-⚠️ تحذير مهم: إذا كانت القائمة "لا توجد أماكن قريبة" → لا تذكر أي مكان في الوصف إطلاقاً"""    
+تحذير مهم: إذا كانت القائمة "لا توجد أماكن قريبة" → لا تذكر أي مكان في الوصف إطلاقاً"""    
     task_list      = "\n".join([f"{i+1}. [{t['id']}] {t['title']} - {t['category']} [score: {t['preference_score']}]" for i, t in enumerate(tasks)])
 
     # Priority rules by time
     if time_type == "morning":
-        priority = """🎯 قواعد الاختيار (الصباح: أولوية للنقل المستدام):
-1. 🚌 إذا يوجد محطة باص/مترو قريبة → مهمة نقل عام
-2. ♻️ إذا يوجد مكان تدوير قريب → مهمة تدوير
-3. ⭐ بدون أماكن → من المفضلة (score > 5)
-4. 🚫 تجنب المتجاهلة"""
+        priority = """قواعد الاختيار (الصباح: أولوية للنقل المستدام):
+1.  إذا يوجد محطة باص/مترو قريبة → مهمة نقل عام
+2. إذا يوجد مكان تدوير قريب → مهمة تدوير
+3.  بدون أماكن → من المفضلة (score > 5)
+4. تجنب المتجاهلة"""
     elif time_type == "evening":
-        priority = """🎯 قواعد الاختيار (المساء: أولوية للتدوير):
-1. ♻️ إذا يوجد مكان تدوير قريب → مهمة تدوير
-2. 🚌 إذا يوجد محطة باص/مترو → مهمة نقل عام
-3. ⭐ بدون أماكن → من المفضلة (score > 5)
-4. 🚫 تجنب المتجاهلة"""
+        priority = """قواعد الاختيار (المساء: أولوية للتدوير):
+1. إذا يوجد مكان تدوير قريب → مهمة تدوير
+2.  إذا يوجد محطة باص/مترو → مهمة نقل عام
+3. بدون أماكن → من المفضلة (score > 5)
+4. تجنب المتجاهلة"""
     elif time_type == "afternoon":
-        priority = """🎯 قواعد الاختيار (الظهيرة: مهام سريعة):
-1. 🏆 أقرب مكان من أي نوع → مهمة سريعة مناسبة
-2. ⭐ بدون أماكن → من المفضلة (score > 5)
-3. 🚫 تجنب المتجاهلة"""
+        priority = """قواعد الاختيار (الظهيرة: مهام سريعة):
+1. أقرب مكان من أي نوع → مهمة سريعة مناسبة
+2. بدون أماكن → من المفضلة (score > 5)
+3. تجنب المتجاهلة"""
     else:
-        priority = """🎯 قواعد الاختيار (الليل: توعية):
-1. 📚 مهام توعوية/تعليمية (لا تحتاج حركة)
-2. ♻️ مكان تدوير أقل من 1 كم → يمكن اقتراحه
-3. ⭐ من المفضلة (score > 5)
-4. 🚫 تجنب المتجاهلة"""
+        priority = """قواعد الاختيار (الليل: توعية):
+1. مهام توعوية/تعليمية (لا تحتاج حركة)
+2. مكان تدوير أقل من 1 كم → يمكن اقتراحه
+3. من المفضلة (score > 5)
+4. تجنب المتجاهلة"""
 
     prompt = f"""أنت مساعد بيئي ذكي ومحفز. اختر مهمة واحدة وصِغ وصفاً شخصياً يحفز المستخدم.
 
-⏰ الوقت: {state['time_label']} (الساعة {hour})
+الوقت: {state['time_label']} (الساعة {hour})
 
-📍 الأماكن القريبة:
+الأماكن القريبة:
 {nearby_details}
 
-📊 إحصاءات الأماكن:
+إحصاءات الأماكن:
 - أماكن التدوير: {len(recycling_places)}
 - محطات النقل: {len(transport_places)}
 
-👤 شخصية المستخدم:
+شخصية المستخدم:
 - المستوى: {level_label} ({level_tone})
 - الجنس: {profile.get('gender', 'غير محدد')} — خاطب{suffix}ه بـ "{pronoun}"
 - المهام المكتملة: {profile.get('completed', 0)}
@@ -546,17 +546,17 @@ def node_build_prompt(state: SuggestTaskState) -> dict:
 - الكربون الموفَّر: {profile.get('carbon_saved', 0)} كغ
 {f"- {streak_text}" if streak_text else ""}
 
-📊 تفضيلاته:
+تفضيلاته:
 المفضلة:
 {top_tasks_text}
 {f"المتجاهلة:{chr(10)}{ignored_text}" if ignored_text else ""}
 
-📋 المهام المتاحة:
+ المهام المتاحة:
 {task_list}
 
 {priority}
 
-✍️ قواعد الوصف:
+قواعد الوصف:
 - لا تستخدم إيموجيات أكثر من 1 بحد اعلى
 - إذا "لا توجد أماكن قريبة" → لا تذكر أي حاوية أو محطة أو مسافة إطلاقاً
 - فقط اذكر الأماكن الموجودة في القائمة أعلاه
@@ -652,7 +652,7 @@ def node_fallback(state: SuggestTaskState) -> dict:
     # Build fallback description
     if time_type == "morning" and transport_places:
         nearest = transport_places[0]
-        desc = f"🌅 صباح الخير {pronoun}! محطة {nearest['type']} قريبة ({nearest['distance']} كم). استغل{suffix} الفرصة وجرب{suffix} {task['title']} 🚌✨"
+        desc = f"🌅 صباح الخير {pronoun}! محطة {nearest['type']} قريبة ({nearest['distance']} كم). استغل{suffix} الفرصة وجرب{suffix} {task['title']} ✨"
     elif time_type == "evening" and recycling_places:
         nearest = recycling_places[0]
         desc = f"🌙 مساء الخير {pronoun}! {nearest['type']} قريبة ({nearest['distance']} كم). وقت مثالي لـ {task['title']} ♻️💚"
@@ -1035,7 +1035,7 @@ def u_build_prompt(state: DailyTaskUserState) -> dict:
 
     prompt = f"""أنت مساعد بيئي ذكي. اختر مهمة يومية واحدة مناسبة واكتب وصفاً شخصياً.
 
-👤 ملف المستخدم:
+ملف المستخدم:
 - المستوى: {level_label} — {level_tone}
 - الجنس: {p['gender']} — خاطبه بـ "{pronoun}"
 - المهام المكتملة: {p['completed']}
@@ -1043,25 +1043,25 @@ def u_build_prompt(state: DailyTaskUserState) -> dict:
 - الكربون الموفَّر: {p['carbon_saved']} كغ
 {f"- {streak_text}" if streak_text else ""}
 
-⭐ المهام المفضلة (score عالي):
+المهام المفضلة (score عالي):
 {top_prefs_text}
 
-🚫 المهام المتجاهلة (تجنبها):
+المهام المتجاهلة (تجنبها):
 {ignored_text}
 
-👁️ معروضة كثيراً بدون إنجاز (تجنبها):
+معروضة كثيراً بدون إنجاز (تجنبها):
 {high_view_text}
 
-📋 المهام المتاحة:
+المهام المتاحة:
 {task_list}
 
-🎯 قواعد الاختيار:
+قواعد الاختيار:
 1. من المفضلة (score > 3) إن وجدت
 2. تجنب المتجاهلة والمعروضة كثيراً
 3. لا تكرر نفس المهمة يومياً
 4. وزّع على تصنيفات مختلفة
 
-✍️ قواعد الوصف:
+قواعد الوصف:
 - لا تستخدم إيموجيات أكثر من 1 بحد اعلى
 - خاطب بـ "{pronoun}"، 15-20 كلمة
 - مختلف عن الوصف الأصلي
@@ -1787,22 +1787,22 @@ def admin_node_build_prompt(state: AdminAgentState) -> dict:
 
     prompt = f"""أنت مستشار بيئي ذكي. بناءً على البيانات التالية، قدم 5 توصيات عملية للإدمن.
 
-🌍 الموسم: {season['season']} {season.get('emoji','')}
+الموسم: {season['season']} {season.get('emoji','')}
 
-📊 أداء المهام:
+أداء المهام:
 - إجمالي النشطة: {analytics.get('totalActiveTasks',0)}
 - بدون إنجازات: {analytics.get('zeroCompletionTasks',0)}
 
-✅ الأكثر نجاحاً:
+الأكثر نجاحاً:
 {successful_text}
 
-🚫 الأكثر تجاهلاً:
+الأكثر تجاهلاً:
 {ignored_text}
 
-⚪ بدون إنجازات:
+بدون إنجازات:
 {zero_text}
 
-🚨 بلاغات معلقة:
+بلاغات معلقة:
 - مهام: {reports.get('pendingTaskReports',0)}
 - حاويات: {reports.get('pendingFacilityReports',0)}
 
@@ -1812,12 +1812,12 @@ def admin_node_build_prompt(state: AdminAgentState) -> dict:
 حاويات بلاغات متكررة:
 {facility_text}
 
-👥 المستخدمون:
+المستخدمون:
 - الإجمالي: {insights.get('totalUsers',0)}
 - متوسط النقاط: {insights.get('avgPoints',0)}
 - كربون موفَّر: {insights.get('totalCarbon',0)} كغ
 
-📅 مقارنة بـ {seasonal.get('lastYearSameMonth','')}:
+مقارنة بـ {seasonal.get('lastYearSameMonth','')}:
 - الأكثر نشاطاً العام الماضي: {seasonal.get('topCategoryLastYear','لا توجد بيانات')}
 - {seasonal.get('suggestion','')}
 - أشهر الذروة: {', '.join(seasonal.get('peakMonths',[]))}
@@ -1825,7 +1825,7 @@ def admin_node_build_prompt(state: AdminAgentState) -> dict:
 التغيرات:
 {trends_text}
 
-🎯 قواعد التوصيات:
+قواعد التوصيات:
 1. بدون إنجازات → modify (وصف أكثر تحفيزاً)
 2. كثيرة التجاهل → modify (وصف أكثر جاذبية)
 3. بلاغات متكررة → review_reports
@@ -1937,11 +1937,25 @@ def node_fallback_recommendations(state: AdminAgentState) -> dict:
 # ══════════════════════════════════════════
 def node_save_to_firestore(state: AdminAgentState) -> dict:
     print("💾 Node 10: Saving to Firestore...")
+    
+    # ← دالة تحذف الـ null
+    def remove_nulls(obj):
+        if isinstance(obj, dict):
+            return {k: remove_nulls(v) for k, v in obj.items() if v is not None}
+        if isinstance(obj, list):
+            return [remove_nulls(i) for i in obj]
+        return obj
+    
+    clean_recs = remove_nulls(state["recommendations"][:12])
+    
     try:
+        season_data = state["season"]
+        season_name = season_data.get("season", "") if isinstance(season_data, dict) else str(season_data)
+
         db.collection("adminRecommendations").document(state["current_month"]).set({
             "month":           state["current_month"],
-            "season":          state["season"],
-            "recommendations": state["recommendations"][:12],
+            "season":          season_name,
+            "recommendations": clean_recs,
             "analytics":       state.get("analytics", {}),
             "generatedAt":     firestore.SERVER_TIMESTAMP,
         })
@@ -1949,7 +1963,6 @@ def node_save_to_firestore(state: AdminAgentState) -> dict:
     except Exception as e:
         print(f"   ⚠️ Save failed: {e}")
 
-    # Check auto mode
     auto_mode = False
     try:
         doc = db.collection("users").document(state["admin_id"]).get()
@@ -1996,7 +2009,7 @@ def node_apply_auto(state: AdminAgentState) -> dict:
                     "visible_from":       next_month,
                     "calcMode":           "perItem",
                     "autoGenerated":      True,
-                    "generatedAt":        firestore.SERVER_TIMESTAMP,
+                    # "generatedAt":        firestore.SERVER_TIMESTAMP,
                 })
 
                 cat_name = rec.get("category", "")
@@ -2025,8 +2038,8 @@ def node_apply_auto(state: AdminAgentState) -> dict:
 
                 db.collection("tasks").document(task_id).update({
                     "description":    improved,
-                    "autoModified":   True,
-                    "lastModifiedAt": firestore.SERVER_TIMESTAMP,
+                    # "autoModified":   True,
+                    # "lastModifiedAt": firestore.SERVER_TIMESTAMP,
                 })
                 applied += 1
 

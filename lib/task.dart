@@ -697,11 +697,7 @@ class _taskPageState extends State<taskPage> {
       await FirebaseFirestore.instance
           .collection('scheduledTasks')
           .doc(scheduledDocId)
-          .update({
-            'status': 'cancelled',
-            'cancelledAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+          .delete();
 
       // ✅ نجيب مهمة عادية بديلة لهذا اليوم
       final monthKey =
@@ -1333,11 +1329,15 @@ class _taskPageState extends State<taskPage> {
         final title = (rawArt['title'] ?? '').toString().trim();
 
         if (title.isEmpty) {
+          print("⏭️ Skipped: empty title");
           skipped++;
           continue;
         }
 
         if (existingTitles.contains(title)) {
+          print(
+            "⏭️ Skipped (duplicate): ${title.substring(0, title.length.clamp(0, 40))}",
+          );
           skipped++;
           continue;
         }
@@ -1350,12 +1350,24 @@ class _taskPageState extends State<taskPage> {
                 .toString();
 
         if (content.length < 80) {
+          print("⏭️ Skipped (short content ${content.length} chars): $title");
           skipped++;
           continue;
         }
 
         final merged = (title + ' ' + content).toLowerCase();
         if (!keywords.any((k) => merged.contains(k))) {
+          print("⏭️ Skipped (no keywords): $title");
+          skipped++;
+          continue;
+        }
+
+        if (title.isEmpty) {
+          skipped++;
+          continue;
+        }
+
+        if (existingTitles.contains(title)) {
           skipped++;
           continue;
         }
