@@ -142,12 +142,8 @@ class _MyReportsPageState extends State<MyReportsPage> {
                                 ts != null &&
                                 ts.toDate().isAfter(localLastOpened);
 
-                            final title =
-                                (data['title'] ?? data['header'] ?? '')
-                                    .toString();
-                            final message =
-                                (data['message'] ?? data['body'] ?? '')
-                                    .toString();
+                            final title = (data['title'] ?? '').toString();
+                            final message = (data['message'] ?? '').toString();
                             final type = (data['type'] ?? '').toString();
 
                             // ===== الأيقونات =====

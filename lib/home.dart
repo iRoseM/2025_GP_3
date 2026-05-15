@@ -4945,12 +4945,10 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
     final points = _currentUserRank!['points'] ?? 0;
     final pfpIndex = _currentUserRank!['pfpIndex'] ?? 0;
 
-    // ✅ إذا كان المستخدم ضمن أول 3، لا نعرضه مرتين
     if (rank <= 3) return const SizedBox.shrink();
 
     return Column(
       children: [
-        // ✅ 3 نقاط فوق المستخدم الحالي
         Container(
           margin: const EdgeInsets.only(bottom: 8),
           child: Row(
@@ -4986,7 +4984,6 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
           ),
         ),
 
-        // ✅ كارد المستخدم الحالي
         Container(
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -5007,10 +5004,9 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
           ),
           child: Row(
             children: [
-              // الرتبة - بنفس حجم أول 3
               Container(
-                width: 30,
-                height: 30,
+                width: 34, // ✅ من 30 إلى 34
+                height: 34,
                 decoration: BoxDecoration(
                   color: appColors.primary.withOpacity(0.12),
                   shape: BoxShape.circle,
@@ -5020,20 +5016,17 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                   child: Text(
                     '$rank',
                     style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 12,
+                      fontSize: 14, // ✅ من 12 إلى 14
                       fontWeight: FontWeight.w900,
                       color: appColors.primary,
                     ),
                   ),
                 ),
               ),
-
               const SizedBox(width: 12),
-
-              // الصورة الشخصية - بنفس حجم أول 3
               Container(
-                width: 36,
-                height: 36,
+                width: 42, // ✅ من 36 إلى 42
+                height: 42,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
@@ -5052,15 +5045,12 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                       ? null
                       : const Icon(
                           Icons.person,
-                          size: 20,
+                          size: 24, // ✅ من 20 إلى 24
                           color: appColors.primary,
                         ),
                 ),
               ),
-
               const SizedBox(width: 12),
-
-              // الاسم والإحصائيات - بنفس تصميم أول 3
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -5072,13 +5062,12 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.ibmPlexSansArabic(
-                            fontSize: 13,
+                            fontSize: 15, // ✅ من 13 إلى 15
                             fontWeight: FontWeight.w700,
                             color: appColors.dark,
                           ),
                         ),
                         const SizedBox(width: 6),
-                        // علامة "مركزك" صغيرة
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 6,
@@ -5091,7 +5080,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                           child: Text(
                             'مركزك',
                             style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 9,
+                              fontSize: 11, // ✅ من 9 إلى 11
                               fontWeight: FontWeight.w700,
                               color: appColors.primary,
                             ),
@@ -5099,18 +5088,21 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4), // ✅ من 2 إلى 4
                     Row(
                       children: [
-                        // المهام المكتملة
                         Row(
                           children: [
-                            Icon(Icons.task_alt, size: 12, color: Colors.green),
+                            Icon(
+                              Icons.task_alt,
+                              size: 14,
+                              color: Colors.green,
+                            ), // ✅ من 12 إلى 14
                             const SizedBox(width: 4),
                             Text(
                               '$completedTasks',
                               style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 11,
+                                fontSize: 13, // ✅ من 11 إلى 13
                                 fontWeight: FontWeight.w600,
                                 color: Colors.green,
                               ),
@@ -5118,24 +5110,25 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                             Text(
                               ' مهام',
                               style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 11,
+                                fontSize: 12, // ✅ من 11 إلى 12
                                 color: Colors.grey[600],
                               ),
                             ),
                           ],
                         ),
-
                         const SizedBox(width: 12),
-
-                        // النقاط
                         Row(
                           children: [
-                            Icon(Icons.star, size: 12, color: Colors.amber),
+                            Icon(
+                              Icons.star,
+                              size: 14,
+                              color: Colors.amber,
+                            ), // ✅ من 12 إلى 14
                             const SizedBox(width: 4),
                             Text(
                               '$points',
                               style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 11,
+                                fontSize: 13, // ✅ من 11 إلى 13
                                 fontWeight: FontWeight.w600,
                                 color: Colors.amber,
                               ),
@@ -5143,7 +5136,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                             Text(
                               ' نقطة',
                               style: GoogleFonts.ibmPlexSansArabic(
-                                fontSize: 11,
+                                fontSize: 12, // ✅ من 11 إلى 12
                                 color: Colors.grey[600],
                               ),
                             ),
@@ -5164,7 +5157,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
   Widget _buildLeaderItem({
     required int index,
     required String username,
-    required String userId, // ← جديد
+    required String userId,
     required int completedTasks,
     required int points,
     required int pfpIndex,
@@ -5195,35 +5188,36 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: actualRank <= 3
             ? rankColor.withOpacity(0.05)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: actualRank <= 3
-            ? Border.all(color: rankColor.withOpacity(0.3), width: 1.5)
+            ? Border.all(color: rankColor.withOpacity(0.3), width: 1)
             : null,
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // الرتبة
           Container(
-            width: 30,
-            height: 30,
+            width: 26,
+            height: 26,
             decoration: BoxDecoration(
               color: rankColor.withOpacity(actualRank <= 3 ? 0.2 : 0.1),
               shape: BoxShape.circle,
-              border: Border.all(color: rankColor.withOpacity(0.3), width: 1),
+              border: Border.all(color: rankColor.withOpacity(0.3), width: 0.8),
             ),
             child: Center(
               child: rankIcon != null && actualRank <= 3
-                  ? Icon(rankIcon, size: 16, color: rankColor)
+                  ? Icon(rankIcon, size: 12, color: rankColor)
                   : Text(
                       '$actualRank',
                       style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 12,
+                        fontSize: 10,
                         fontWeight: FontWeight.w800,
                         color: rankColor,
                       ),
@@ -5231,12 +5225,12 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
             ),
           ),
 
-          const SizedBox(width: 12),
+          const SizedBox(width: 6),
 
-          // الصورة الشخصية
+          // صورة البروفايل
           Container(
-            width: 36,
-            height: 36,
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
@@ -5247,77 +5241,73 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
               ),
             ),
             child: CircleAvatar(
+              radius: 14,
               backgroundColor: Colors.transparent,
               backgroundImage: AssetImage('assets/pfp/pfp${pfpIndex + 1}.png'),
               child: pfpIndex >= 0 && pfpIndex < 8
                   ? null
                   : const Icon(
                       Icons.person,
-                      size: 20,
+                      size: 16,
                       color: appColors.primary,
                     ),
             ),
           ),
 
-          const SizedBox(width: 12),
-
+          const SizedBox(width: 6), // ✅ قللنا المسافة بين الصورة والاسم
           // الاسم والإحصائيات
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
+                // الاسم فقط (بدون علامة "مركزك" لتوفير مساحة)
                 Text(
                   username,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 13,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: actualRank <= 3 ? appColors.dark : Colors.grey[800],
                   ),
                 ),
                 const SizedBox(height: 2),
+                // XP والنقاط في نفس الصف
                 Row(
                   children: [
-                    // المهام المكتملة
+                    // مستوى XP
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           getCurrentLevel(xp).icon,
-                          style: TextStyle(fontSize: 12),
+                          style: const TextStyle(fontSize: 9),
                         ),
-                        SizedBox(width: 4),
+                        const SizedBox(width: 2),
                         Text(
-                          '$xp XP',
-                          style: TextStyle(
-                            fontSize: 11,
+                          '$xp',
+                          style: const TextStyle(
+                            fontSize: 9,
                             fontWeight: FontWeight.w600,
                             color: Color(0xFF2E7D32),
                           ),
                         ),
                       ],
                     ),
-
-                    const SizedBox(width: 12),
-
+                    const SizedBox(width: 6),
                     // النقاط
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.star, size: 12, color: Colors.amber),
-                        const SizedBox(width: 4),
+                        const Icon(Icons.star, size: 9, color: Colors.amber),
+                        const SizedBox(width: 2),
                         Text(
                           '$points',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            fontSize: 11,
+                          style: const TextStyle(
+                            fontSize: 9,
                             fontWeight: FontWeight.w600,
                             color: Colors.amber,
-                          ),
-                        ),
-                        Text(
-                          ' نقطة',
-                          style: GoogleFonts.ibmPlexSansArabic(
-                            fontSize: 11,
-                            color: Colors.grey[600],
                           ),
                         ),
                       ],
@@ -5328,25 +5318,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
             ),
           ),
 
-          // مؤشر التقدم للأول فقط
-          if (actualRank == 1)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: rankColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'الأول',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: rankColor,
-                ),
-              ),
-            ),
-
-          // زر الفولو
+          // زر المتابعة (مبسط جداً)
           if (userId != FirebaseAuth.instance.currentUser?.uid)
             StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
@@ -5355,7 +5327,10 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                   .snapshots(),
               builder: (context, snap) {
                 final following = List<String>.from(
-((snap.data?.data() as Map<String, dynamic>?)?['following'] as List?) ?? [],                );
+                  ((snap.data?.data() as Map<String, dynamic>?)?['following']
+                          as List?) ??
+                      [],
+                );
                 final isFollowing = following.contains(userId);
 
                 return GestureDetector(
@@ -5367,40 +5342,19 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (_) => AlertDialog(
-                          title: Text(
-                            'إلغاء المتابعة',
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          content: Text(
-                            'هل تريد إلغاء متابعة $username؟',
-                            style: GoogleFonts.ibmPlexSansArabic(),
-                          ),
+                          title: Text('إلغاء المتابعة'),
+                          content: Text('هل تريد إلغاء متابعة $username؟'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
-                              child: Text(
-                                'لا',
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  color: Colors.grey,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              child: const Text('لا'),
                             ),
                             ElevatedButton(
                               onPressed: () => Navigator.pop(context, true),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.redAccent,
-                                elevation: 0,
                               ),
-                              child: Text(
-                                'نعم',
-                                style: GoogleFonts.ibmPlexSansArabic(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              child: const Text('نعم'),
                             ),
                           ],
                         ),
@@ -5423,25 +5377,25 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
+                      horizontal: 6,
+                      vertical: 3,
                     ),
                     decoration: BoxDecoration(
                       color: isFollowing
                           ? Colors.grey.shade200
                           : appColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: isFollowing
                             ? Colors.grey.shade400
                             : appColors.primary,
-                        width: 1.2,
+                        width: 0.8,
                       ),
                     ),
                     child: Text(
-                      isFollowing ? 'متابَع ✓' : 'تابع',
+                      isFollowing ? 'متابَع' : 'تابع',
                       style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 11,
+                        fontSize: 9,
                         fontWeight: FontWeight.w700,
                         color: isFollowing
                             ? Colors.grey.shade600
@@ -5630,15 +5584,15 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                 Text(
                   'لوحة الصدارة 🏆',
                   style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 16,
+                    fontSize: 18, // ✅ من 16 إلى 18
                     fontWeight: FontWeight.w800,
                     color: appColors.dark,
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
+                    horizontal: 12, // ✅ من 10 إلى 12
+                    vertical: 6, // ✅ من 4 إلى 6
                   ),
                   decoration: BoxDecoration(
                     color: appColors.accent.withOpacity(0.1),
@@ -5648,14 +5602,14 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                     children: [
                       const Icon(
                         Icons.leaderboard,
-                        size: 14,
+                        size: 16, // ✅ من 14 إلى 16
                         color: appColors.accent,
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8), // ✅ من 6 إلى 8
                       Text(
                         'قائمة المتصدرين',
                         style: GoogleFonts.ibmPlexSansArabic(
-                          fontSize: 11,
+                          fontSize: 13, // ✅ من 11 إلى 13
                           fontWeight: FontWeight.w600,
                           color: appColors.accent,
                         ),
@@ -5681,7 +5635,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                   'لا توجد بيانات متاحة',
                   style: GoogleFonts.ibmPlexSansArabic(
                     color: Colors.grey[600],
-                    fontSize: 13,
+                    fontSize: 14, // ✅ من 13 إلى 14
                   ),
                 ),
               )
@@ -5697,14 +5651,13 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                       username: user['username'],
                       completedTasks: user['completedTasks'] ?? 0,
                       points: user['points'],
-                      userId: user['id'], // ← جديد
+                      userId: user['id'],
                       pfpIndex: user['pfpIndex'],
                       xp: user['xp'] ?? 0,
                       rank: user['rank'],
                     );
                   }).toList(),
 
-                  // ✅ إضافة المستخدم الحالي مع 3 نقاط فوقه
                   if (_currentUserRank != null &&
                       (_currentUserRank!['rank'] ?? 0) > 3)
                     _buildCurrentUserRankCard(),
@@ -5725,7 +5678,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                           Text(
                             'عرض القائمة الكاملة',
                             style: GoogleFonts.ibmPlexSansArabic(
-                              fontSize: 12,
+                              fontSize: 13, // ✅ من 12 إلى 13
                               fontWeight: FontWeight.w600,
                               color: appColors.primary,
                             ),
@@ -5733,7 +5686,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                           const SizedBox(width: 4),
                           Icon(
                             Icons.chevron_left,
-                            size: 16,
+                            size: 18, // ✅ من 16 إلى 18
                             color: appColors.primary,
                           ),
                         ],
@@ -6084,7 +6037,7 @@ class _DynamicFriendCard extends StatelessWidget {
                       : null,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   name,

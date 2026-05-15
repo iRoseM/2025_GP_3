@@ -121,16 +121,12 @@ class _taskPageState extends State<taskPage> {
           Text(
             '${d.day}',
             style: GoogleFonts.ibmPlexSansArabic(
-              color: isSel
-                  ? Colors.white
-                  : AppColors.dark, // زي الطبيعي فوق الأخضر أبيض
+              color: isSel ? Colors.white : AppColors.dark,
               fontWeight: FontWeight.w600,
               fontSize: 13.5,
             ),
           ),
 
-          // 🔔 الجرس — يطلع حتى لو اليوم محدد
-          // إذا تبينه يطلع حتى في today بعد: شيل شرط !isToday
           if (isScheduled && !isToday)
             Positioned(
               top: 6,
@@ -1314,16 +1310,13 @@ class _taskPageState extends State<taskPage> {
       }
 
       final keywords = [
-        'البيئة',
-        'استدامة',
-        'تدوير',
-        'تلوث',
-        'مناخ',
-        'كربون',
-        'طاقة متجددة',
-        'نفايات',
-        'تشجير',
-        'انبعاثات',
+        'البيئة', 'استدامة', 'تدوير', 'تلوث', 'مناخ',
+        'كربون', 'طاقة متجددة', 'نفايات', 'تشجير', 'انبعاثات',
+        //جديدات
+        'طبيعة', 'غابات', 'محيط', 'بحر', 'مياه', 'جفاف',
+        'فيضان', 'زلزال', 'درجة حرارة', 'احترار', 'أوزون',
+        'حيوانات', 'نباتات', 'زراعة', 'غذاء', 'صحراء',
+        'طاقة شمسية', 'رياح', 'نفط', 'وقود', 'غاز',
       ];
 
       final existing = await firestore.collection('articles').get();
@@ -1394,18 +1387,12 @@ class _taskPageState extends State<taskPage> {
 
     // ========== التدفق الرئيسي ==========
     // 1) جرب Firestore أولاً
-    final firstTry = await tryFromFirestore();
-    if (firstTry != null) {
-      // ✅ في الخلفية — جلب مقالات جديدة لو مر 6 ساعات
-      fetchAndSaveFromAPIs().catchError(
-        (e) => print("⚠️ background fetch: $e"),
-      );
-      return firstTry;
-    }
-
-    // 2) Firestore فاضي → جلب من APIs وانتظر
     await fetchAndSaveFromAPIs();
-    return await tryFromFirestore();
+
+    // 2) ثم جيب من Firestore
+    final result = await tryFromFirestore();
+    print("📰 getFreshNewsForUser result: ${result?['title'] ?? 'null'}");
+    return result;
   }
 
   @override
