@@ -101,7 +101,7 @@ class _levelsPageState extends State<levelsPage> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         extendBodyBehindAppBar: true,
-        appBar: const NameerAppBar(showTitleInBar: false, showBack: true),
+        appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
         body: StreamBuilder<DocumentSnapshot>(
           stream: XpService.userStream(),
           builder: (context, snapshot) {
