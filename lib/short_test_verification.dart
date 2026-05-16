@@ -7,6 +7,7 @@ import 'services/title_header.dart';
 import 'services/background_container.dart';
 import '../services/app_colors.dart';
 import 'dart:async';
+import 'home.dart';
 
 class ShortTestVerificationPage extends StatefulWidget {
   final String userTaskDocId;
@@ -317,10 +318,55 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
 
         await userRef.update({
           'completedTask': FieldValue.increment(1),
-          'points': FieldValue.increment(taskPoints), // ← من الفايربيس
+          'points': FieldValue.increment(taskPoints),
+          'xp': FieldValue.increment(taskPoints), // ← أضيفي هذا
           'lastCompletedTaskType': "quiz",
           'lastQuizAnswer': selected,
         });
+        try {
+          final uid = user.uid;
+          final today = DateTime.now();
+          final dayKey =
+              '${today.year.toString().padLeft(4, '0')}${today.month.toString().padLeft(2, '0')}${today.day.toString().padLeft(2, '0')}';
+
+          // معرفة كم مهمة مطلوبة حسب الـ XP الجديد
+          final updatedDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .get();
+          final newXp = (updatedDoc.data()?['xp'] ?? 0) as int;
+
+          int requiredTasks = 1;
+          if (newXp >= 900) requiredTasks = 4;
+          else if (newXp >= 500) requiredTasks = 3;
+          else if (newXp >= 100) requiredTasks = 2;
+
+          // عد المهام المكتملة اليوم
+          int completedToday = 0;
+
+          final mainSnap = await FirebaseFirestore.instance
+              .collection('userTasks')
+              .doc('${uid}_$dayKey')
+              .get();
+          if (mainSnap.exists && mainSnap.data()?['status'] == 'completed') {
+            completedToday++;
+          }
+
+          for (int i = 2; i <= requiredTasks; i++) {
+            final snap = await FirebaseFirestore.instance
+                .collection('userTasks')
+                .doc('${uid}_${dayKey}_task$i')
+                .get();
+            if (snap.exists && snap.data()?['status'] == 'completed') {
+              completedToday++;
+            }
+          }
+
+          // ✅ نحدث الستريك بس لو اكتملت كل المهام
+          if (completedToday >= requiredTasks) {
+            await StreakService.updateStreakOnTaskCompletion();
+          }
+        } catch (_) {}
       }
 
       // 🎉 بوب-اب
