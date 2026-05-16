@@ -652,16 +652,29 @@ def node_fallback(state: SuggestTaskState) -> dict:
     # Build fallback description
     if time_type == "morning" and transport_places:
         nearest = transport_places[0]
-        desc = f"🌅 صباح الخير {pronoun}! محطة {nearest['type']} قريبة ({nearest['distance']} كم). استغل{suffix} الفرصة وجرب{suffix} {task['title']} ✨"
+        # فقط اذكر المحطة لو المهمة نقل
+        if "نقل" in task.get("category","") or "transport" in task.get("category",""):
+            desc = f" صباح الخير {pronoun}! محطة {nearest['type']} قريبة ({nearest['distance']} كم). جربي {task['title']} ✨"
+        else:
+            desc = f"🌱 {pronoun} في بداية يومك! {task['title']} خطوة رائعة للبيئة ✨"
     elif time_type == "evening" and recycling_places:
         nearest = recycling_places[0]
-        desc = f"🌙 مساء الخير {pronoun}! {nearest['type']} قريبة ({nearest['distance']} كم). وقت مثالي لـ {task['title']} ♻️💚"
+        # فقط اذكر الحاوية لو المهمة تدوير
+        if "تدوير" in task.get("category","") or "recycl" in task.get("category",""):
+            desc = f"🌙 مساء الخير {pronoun}! {nearest['type']} قريبة ({nearest['distance']} كم). وقت مثالي لـ {task['title']} ♻️"
+        else:
+            desc = f"🌙 مساء الخير {pronoun}! {task['title']} خطوة جميلة لإنهاء يومك "
     elif nearby:
         nearest = nearby[0]
-        desc = f"📍 {nearest['type']} قريبة ({nearest['distance']} كم)! جرب{suffix} {task['title']} الآن ✨"
+        task_cat = task.get("category","")
+        # اذكر المكان فقط لو يتطابق مع المهمة
+        if ("تدوير" in task_cat and nearest["category"] != "transport") or \
+        ("نقل" in task_cat and nearest["category"] == "transport"):
+            desc = f"📍 {nearest['type']} قريبة ({nearest['distance']} كم)! جربي {task['title']} الآن ✨"
+        else:
+            desc = f"🌱 {pronoun} في بداية رحلتك! {task['title']} خطوة رائعة للانطلاق"
     else:
-        desc = f"🌱 {pronoun} في بداية رحلتك! {task['title']} خطوة رائعة للانطلاق 🚀"
-
+        desc = f"🌱 {pronoun} في بداية رحلتك! {task['title']} خطوة رائعة للانطلاق"
     return {
         "final_task":        task,
         "final_description": desc,

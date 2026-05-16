@@ -5189,48 +5189,56 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: actualRank <= 3
-            ? rankColor.withOpacity(0.05)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        border: actualRank <= 3
-            ? Border.all(color: rankColor.withOpacity(0.3), width: 1)
-            : null,
+        color: actualRank <= 3 ? rankColor.withOpacity(0.05) : Colors.grey[50],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: actualRank <= 3
+              ? rankColor.withOpacity(0.3)
+              : appColors.primary.withOpacity(0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: appColors.primary.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // الرتبة
           Container(
-            width: 26,
-            height: 26,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
               color: rankColor.withOpacity(actualRank <= 3 ? 0.2 : 0.1),
               shape: BoxShape.circle,
-              border: Border.all(color: rankColor.withOpacity(0.3), width: 0.8),
+              border: Border.all(color: rankColor.withOpacity(0.3), width: 1.5),
             ),
             child: Center(
               child: rankIcon != null && actualRank <= 3
-                  ? Icon(rankIcon, size: 12, color: rankColor)
+                  ? Icon(rankIcon, size: 14, color: rankColor)
                   : Text(
                       '$actualRank',
                       style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
                         color: rankColor,
                       ),
                     ),
             ),
           ),
 
-          const SizedBox(width: 6),
+          const SizedBox(width: 12),
 
           // صورة البروفايل
           Container(
-            width: 28,
-            height: 28,
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
@@ -5241,71 +5249,68 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
               ),
             ),
             child: CircleAvatar(
-              radius: 14,
+              radius: 21,
               backgroundColor: Colors.transparent,
               backgroundImage: AssetImage('assets/pfp/pfp${pfpIndex + 1}.png'),
               child: pfpIndex >= 0 && pfpIndex < 8
                   ? null
                   : const Icon(
                       Icons.person,
-                      size: 16,
+                      size: 24,
                       color: appColors.primary,
                     ),
             ),
           ),
 
-          const SizedBox(width: 6), // ✅ قللنا المسافة بين الصورة والاسم
+          const SizedBox(width: 12),
+
           // الاسم والإحصائيات
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // الاسم فقط (بدون علامة "مركزك" لتوفير مساحة)
                 Text(
                   username,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 11,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: actualRank <= 3 ? appColors.dark : Colors.grey[800],
                   ),
                 ),
-                const SizedBox(height: 2),
-                // XP والنقاط في نفس الصف
+                const SizedBox(height: 4),
                 Row(
                   children: [
-                    // مستوى XP
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           getCurrentLevel(xp).icon,
-                          style: const TextStyle(fontSize: 9),
+                          style: const TextStyle(fontSize: 11),
                         ),
                         const SizedBox(width: 2),
                         Text(
                           '$xp',
                           style: const TextStyle(
-                            fontSize: 9,
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: Color(0xFF2E7D32),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(width: 6),
-                    // النقاط
+                    const SizedBox(width: 12),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.star, size: 9, color: Colors.amber),
-                        const SizedBox(width: 2),
+                        const Icon(Icons.star, size: 14, color: Colors.amber),
+                        const SizedBox(width: 4),
                         Text(
                           '$points',
                           style: const TextStyle(
-                            fontSize: 9,
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: Colors.amber,
                           ),
@@ -5318,7 +5323,7 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
             ),
           ),
 
-          // زر المتابعة (مبسط جداً)
+          // زر المتابعة
           if (userId != FirebaseAuth.instance.currentUser?.uid)
             StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
@@ -5377,8 +5382,8 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
+                      horizontal: 8,
+                      vertical: 4,
                     ),
                     decoration: BoxDecoration(
                       color: isFollowing
@@ -5389,13 +5394,13 @@ class _TopLeaderboardCardState extends State<TopLeaderboardCard> {
                         color: isFollowing
                             ? Colors.grey.shade400
                             : appColors.primary,
-                        width: 0.8,
+                        width: 1,
                       ),
                     ),
                     child: Text(
                       isFollowing ? 'متابَع' : 'تابع',
                       style: GoogleFonts.ibmPlexSansArabic(
-                        fontSize: 9,
+                        fontSize: 11,
                         fontWeight: FontWeight.w700,
                         color: isFollowing
                             ? Colors.grey.shade600
