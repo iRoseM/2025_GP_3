@@ -1851,7 +1851,51 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     } catch (_) {}
 
     try {
-      await StreakService.updateStreakOnTaskCompletion();
+      // ✅ نحدث الستريك بس لو اليوزر أكمل كل المهام المطلوبة لليوم
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        final today = DateTime.now();
+        final dayKey =
+            '${today.year.toString().padLeft(4, '0')}${today.month.toString().padLeft(2, '0')}${today.day.toString().padLeft(2, '0')}';
+
+        // جلب مستوى اليوزر ومعرفة كم مهمة مطلوبة
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .get();
+        final xp = (userDoc.data()?['xp'] ?? 0) as int;
+
+        int requiredTasks = 1;
+        if (xp >= 900) requiredTasks = 4;
+        else if (xp >= 500) requiredTasks = 3;
+        else if (xp >= 100) requiredTasks = 2;
+
+        // عد المهام المكتملة لليوم
+        int completedToday = 0;
+
+        final mainSnap = await FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc('${uid}_$dayKey')
+            .get();
+        if (mainSnap.exists && mainSnap.data()?['status'] == 'completed') {
+          completedToday++;
+        }
+
+        for (int i = 2; i <= requiredTasks; i++) {
+          final snap = await FirebaseFirestore.instance
+              .collection('userTasks')
+              .doc('${uid}_${dayKey}_task$i')
+              .get();
+          if (snap.exists && snap.data()?['status'] == 'completed') {
+            completedToday++;
+          }
+        }
+
+        // تحديث الستريك بس لو اكتملت كل المهام
+        if (completedToday >= requiredTasks) {
+          await StreakService.updateStreakOnTaskCompletion();
+        }
+      }
     } catch (_) {}
 
     try {
