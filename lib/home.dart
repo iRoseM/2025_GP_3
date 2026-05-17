@@ -42,6 +42,7 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
   final GlobalKey _summaryKey = GlobalKey(); // الكربون + الداشبورد
   final GlobalKey _ecoLandKey = GlobalKey();
   final GlobalKey _navKey = GlobalKey();
+  bool _allTasksDoneToday = false;
   final GlobalKey _ecoLandAnchorKey = GlobalKey(); // مرساة للسكرول
   final GlobalKey _bannerKey = GlobalKey();
   final GlobalKey _friendsKey = GlobalKey();
@@ -130,7 +131,15 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
       _initHome();
       ensureUserCarbonFields();
       StreakService.initializeStreakFields();
+      _checkAllTasksDone();
     });
+  }
+
+  Future<void> _checkAllTasksDone() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final done = await StreakService.areAllTasksCompleted(uid, DateTime.now());
+    if (mounted) setState(() => _allTasksDoneToday = done);
   }
 
   Future<void> _initHome() async {
@@ -1441,11 +1450,17 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                     final validationStrategy =
                                         taskData['validationStrategy'] ??
                                         'photo';
-
                                     final status =
                                         taskData['status'] ?? 'pending';
-                                    final isCompleted = status == 'completed';
 
+                                    // ✅ استخدم _allTasksDoneToday من الـ state مباشرة
+                                    final isCompleted = _allTasksDoneToday;
+
+                                    // ← حدّث الـ state عند كل تغيير في الـ stream
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback(
+                                          (_) => _checkAllTasksDone(),
+                                        );
                                     return Container(
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
@@ -2243,10 +2258,72 @@ class _StreakTrackerState extends State<StreakTracker> {
 }
 
 class StreakService {
+  static Future<bool> areAllTasksCompleted(String uid, DateTime day) async {
+    // جيب اللفل والمهام المطلوبة
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    final xp = (userDoc.data()?['xp'] ?? 0) as int;
+    final level = getCurrentLevel(xp);
+
+    int required = 1;
+    switch (level.id) {
+      case 'seedling':
+        required = 1;
+        break;
+      case 'sprout':
+        required = 2;
+        break;
+      case 'tree':
+        required = 2;
+        break;
+      case 'guardian':
+        required = 3;
+        break;
+      case 'champion':
+        required = 4;
+        break;
+    }
+
+    final yyyyMMdd =
+        '${day.year.toString().padLeft(4, '0')}'
+        '${day.month.toString().padLeft(2, '0')}'
+        '${day.day.toString().padLeft(2, '0')}';
+
+    int completed = 0;
+
+    // المهمة الرئيسية
+    final mainSnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc('${uid}_$yyyyMMdd')
+        .get();
+    if (mainSnap.exists && mainSnap.data()?['status'] == 'completed')
+      completed++;
+
+    // المهام الإضافية
+    for (int i = 2; i <= required; i++) {
+      final snap = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc('${uid}_${yyyyMMdd}_task$i')
+          .get();
+      if (snap.exists && snap.data()?['status'] == 'completed') completed++;
+    }
+
+    return completed >= required;
+  }
+
   static Future<void> updateStreakOnTaskCompletion() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
+
+      // ✅ تحقق إن كل المهام مكتملة أولاً
+      final allDone = await areAllTasksCompleted(user.uid, DateTime.now());
+      if (!allDone) {
+        print('⏳ Streak not updated — not all tasks completed yet');
+        return;
+      }
 
       final userRef = FirebaseFirestore.instance
           .collection('users')
@@ -2265,7 +2342,6 @@ class StreakService {
       print('   - Current streak: $currentStreak');
       print('   - Last activity: $lastActivity');
 
-      // 🔹 أول مرة
       if (lastActivity == null) {
         print('   - First time ever → set streak to 1');
         await userRef.update({
@@ -2277,7 +2353,6 @@ class StreakService {
 
       final lastDate = lastActivity.toDate();
       final lastDay = DateTime(lastDate.year, lastDate.month, lastDate.day);
-
       final difference = today.difference(lastDay).inDays;
 
       print('   - Last day: $lastDay');
@@ -2285,11 +2360,9 @@ class StreakService {
       print('   - Difference: $difference days');
 
       if (difference == 0) {
-        // نفس اليوم → لا نزيد
         print('   - Same day → keep streak: $currentStreak');
         await userRef.update({'lastActivityAt': FieldValue.serverTimestamp()});
       } else if (difference == 1) {
-        // أمس → نزيد الستريك
         final newStreak = currentStreak + 1;
         print('   - Yesterday → increase streak: $newStreak');
         await userRef.update({
@@ -2297,10 +2370,9 @@ class StreakService {
           'lastActivityAt': FieldValue.serverTimestamp(),
         });
       } else {
-        // انقطع أكثر من يوم → نبدأ streak جديد من 1
         print('   - Gap of $difference days → start new streak at 1');
         await userRef.update({
-          'currentStreak': 1, // ✅ هنا التصحيح
+          'currentStreak': 1,
           'lastActivityAt': FieldValue.serverTimestamp(),
         });
       }

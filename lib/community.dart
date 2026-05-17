@@ -443,6 +443,7 @@ class _communityPageState extends State<communityPage> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         extendBody: true,
         extendBodyBehindAppBar: true,
         backgroundColor: Colors.transparent,
@@ -1388,44 +1389,44 @@ class _communityPageState extends State<communityPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-// بعد - الحل
-Row(
-  children: [
-    Flexible(
-      child: Text(
-        follower['username'] ?? '',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.ibmPlexSansArabic(
-          fontWeight: FontWeight.w700,
-          fontSize: 15,
-          color: appColors.dark,
-        ),
-      ),
-    ),
-    if (isFollowingBack) ...[
-      const SizedBox(width: 6),
-      Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 6,
-          vertical: 2,
-        ),
-        decoration: BoxDecoration(
-          color: appColors.primary.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          'متبادل',
-          style: GoogleFonts.ibmPlexSansArabic(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: appColors.primary,
-          ),
-        ),
-      ),
-    ],
-  ],
-),
+                // بعد - الحل
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        follower['username'] ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: appColors.dark,
+                        ),
+                      ),
+                    ),
+                    if (isFollowingBack) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: appColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'متبادل',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: appColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 6),
                 Row(
                   children: [

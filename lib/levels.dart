@@ -458,7 +458,7 @@ class _XpProgressCard extends StatelessWidget {
               ),
               if (nextLevel != null)
                 Text(
-                  'باقي ${nextLevel!.requiredXp - xp} XP للوصول لـ${nextLevel!.nameAr} ${nextLevel!.icon}',
+                  'تبقى لك ${nextLevel!.requiredXp - xp} XP للوصول إلى مستوى ${nextLevel!.nameAr} ${nextLevel!.icon}',
                   style: GoogleFonts.ibmPlexSansArabic(
                     fontSize: 12,
                     color: Colors.grey[500],

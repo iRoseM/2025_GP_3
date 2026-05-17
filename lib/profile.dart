@@ -1282,6 +1282,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     _gender = widget.initialGender;
     _pfpIndex = widget.initialPfpIndex; // من الداتابيس
+
+    _googlePhotoUrl = FirebaseAuth.instance.currentUser?.photoURL;
   }
 
   @override
@@ -1298,6 +1300,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.dispose();
   }
 
+  String? _googlePhotoUrl;
+  bool _useGooglePhoto = false;
   // شارة “غير قابل للتعديل”
   Widget _lockedTag() => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -1399,13 +1403,16 @@ class _EditProfilePageState extends State<EditProfilePage> {
       final newGender = _gender;
       final newPfp = _pfpIndex;
 
-      // 🚫 لا نعدّل username ولا email
-      final patch = <String, dynamic>{
-        'age': newAge,
-        'gender': newGender,
-        //'updatedAt': FieldValue.serverTimestamp(),
-      };
-      if (newPfp != null) patch['pfpIndex'] = newPfp;
+      final patch = <String, dynamic>{'age': newAge, 'gender': newGender};
+
+      // ← حفظ الصورة المختارة
+      if (_useGooglePhoto && _googlePhotoUrl != null) {
+        patch['googlePhotoUrl'] = _googlePhotoUrl;
+        patch['pfpIndex'] = FieldValue.delete();
+      } else if (newPfp != null) {
+        patch['pfpIndex'] = newPfp;
+        patch['googlePhotoUrl'] = FieldValue.delete();
+      }
 
       await userRef.set(patch, SetOptions(merge: true));
 
@@ -1504,6 +1511,54 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   ],
                 ),
                 const SizedBox(height: 12),
+                if (_googlePhotoUrl != null)
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _useGooglePhoto = true;
+                        _pfpIndex = null;
+                      });
+                      Navigator.pop(ctx);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: _useGooglePhoto
+                            ? appColors.primary.withOpacity(0.1)
+                            : Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: _useGooglePhoto
+                              ? appColors.primary
+                              : Colors.grey.shade200,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundImage: NetworkImage(_googlePhotoUrl!),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'استخدام صورة Google',
+                            style: GoogleFonts.ibmPlexSansArabic(
+                              fontWeight: FontWeight.w700,
+                              color: appColors.dark,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_useGooglePhoto)
+                            const Icon(
+                              Icons.check_circle,
+                              color: appColors.primary,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 GridView.builder(
                   shrinkWrap: true,
                   itemCount: _avatars.length,
@@ -1514,11 +1569,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     crossAxisSpacing: 12,
                   ),
                   itemBuilder: (_, i) {
-                    final selected = _pfpIndex == i;
+                    final selected = !_useGooglePhoto && _pfpIndex == i;
                     return InkWell(
                       borderRadius: BorderRadius.circular(999),
                       onTap: () {
-                        setState(() => _pfpIndex = i);
+                        setState(() {
+                          _pfpIndex = i;
+                          _useGooglePhoto = false;
+                        });
                         Navigator.pop(ctx);
                       },
                       child: Stack(
@@ -1580,10 +1638,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
           child: CircleAvatar(
             radius: 32,
             backgroundColor: Colors.transparent,
-            backgroundImage: _pfpIndex != null
+            backgroundImage: _useGooglePhoto && _googlePhotoUrl != null
+                ? NetworkImage(_googlePhotoUrl!) as ImageProvider
+                : _pfpIndex != null
                 ? AssetImage(_avatars[_pfpIndex!])
                 : null,
-            child: _pfpIndex == null
+            child: (!_useGooglePhoto && _pfpIndex == null)
                 ? const Icon(
                     Icons.person_outline,
                     color: Colors.white,
