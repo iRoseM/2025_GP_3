@@ -2202,7 +2202,24 @@ class _taskPageState extends State<taskPage> {
         bonusTask['validationStrategy']?.toString() ?? '';
 
     if (validationStrategy == "التحقق عبر اجراء اختبار قصير") {
-      // 📖 مهمة قراءة مقال - نفتح ArticlePage
+      final articleId = bonusTask['articleId'];
+      if (articleId != null) {
+        await FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc(bonusDocId)
+            .set({
+              'userId': _uid,
+              'taskId': bonusTask['taskId'] ?? bonusTask['id'],
+              'taskTitle': bonusTask['title'] ?? '',
+              'taskDescription': bonusTask['description'] ?? '',
+              'taskPoints': bonusTask['points'] ?? 0,
+              'taskValidation': validationStrategy,
+              'articleId': articleId,
+              'selectedAt': Timestamp.fromDate(_dayStart(sel)),
+              'status': 'pending',
+            }, SetOptions(merge: true));
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -3817,6 +3834,17 @@ class _taskPageState extends State<taskPage> {
                     ? null
                     : () async {
                         if (validation == "التحقق عبر اجراء اختبار قصير") {
+                          // ← احفظي articleId أولاً
+                          final articleId = taskData['articleId'];
+                          if (articleId != null) {
+                            await FirebaseFirestore.instance
+                                .collection('userTasks')
+                                .doc(effectiveDocId)
+                                .set({
+                                  'articleId': articleId,
+                                }, SetOptions(merge: true));
+                          }
+
                           Navigator.push(
                             context,
                             MaterialPageRoute(

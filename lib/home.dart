@@ -1527,11 +1527,50 @@ class _homePageState extends State<homePage> with TickerProviderStateMixin {
                                                         taskData['taskId'] ??
                                                         snapshot.data!.id,
                                                     'status': status,
+
+                                                    'calcMode':
+                                                        taskData['calcMode'] ??
+                                                        taskData['calc_mode'] ??
+                                                        '',
+                                                    'calc_mode':
+                                                        taskData['calcMode'] ??
+                                                        taskData['calc_mode'] ??
+                                                        '',
+                                                    'ef_ref':
+                                                        taskData['ef_ref'] ??
+                                                        taskData['emissionFactorRef'] ??
+                                                        '',
+                                                    'referenceDistanceKm':
+                                                        taskData['referenceDistanceKm'] ??
+                                                        taskData['reference_distance_km'],
+
+                                                    'articleId':
+                                                        taskData['articleId'],
                                                   };
 
                                                   // ✅ التفريق بين المقال والتصوير
                                                   if (validationStrategy ==
                                                       "التحقق عبر اجراء اختبار قصير") {
+                                                    final articleId =
+                                                        taskDataForSheet['articleId'];
+                                                    if (articleId != null) {
+                                                      await FirebaseFirestore
+                                                          .instance
+                                                          .collection(
+                                                            'userTasks',
+                                                          )
+                                                          .doc(userTaskDocId)
+                                                          .set(
+                                                            {
+                                                              'articleId':
+                                                                  articleId,
+                                                            },
+                                                            SetOptions(
+                                                              merge: true,
+                                                            ),
+                                                          );
+                                                    }
+
                                                     Navigator.push(
                                                       context,
                                                       MaterialPageRoute(

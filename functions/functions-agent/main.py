@@ -697,6 +697,32 @@ def node_finalize(state: SuggestTaskState) -> dict:
     if not task:
         return {"error": "NO_SUITABLE_TASK_FOUND"}
 
+    # ── تنظيف الوصف لو ذكر أماكن وهمية ──
+    final_desc = state.get("final_description") or task.get("description", "")
+    if final_desc:
+        suspicious_words = ["كم", "قريب", "حاوية", "محطة", "متر", "بعد"]
+        has_suspicious   = any(w in final_desc for w in suspicious_words)
+
+        if not nearby and has_suspicious:
+            # ما في أماكن قريبة حقيقية → استخدم الوصف الأصلي
+            print("   ⚠️ Desc mentions location but no nearby places → using original")
+            final_desc = task.get("description", "")
+        elif nearby and has_suspicious:
+            # في أماكن قريبة → تحقق إن المكان المذكور موجود فعلاً
+            nearby_types = [p["type"] for p in nearby]
+            nearby_names = [p.get("name", "") for p in nearby]
+            all_known    = nearby_types + nearby_names
+            # لو الوصف يذكر نوع مكان مو موجود في القائمة الحقيقية → استخدم الأصلي
+            mentioned_fake = False
+            for fake_word in ["حاوية طعام", "حاوية بلاستيك", "حاوية ورق", "محطة باص", "محطة مترو"]:
+                if fake_word in final_desc:
+                    if not any(fake_word in k for k in all_known):
+                        mentioned_fake = True
+                        break
+            if mentioned_fake:
+                print("   ⚠️ Desc mentions fake location → using original")
+                final_desc = task.get("description", "")
+
     # ── ربط مقال إذا المهمة تحتاج اختبار قصير ──
     article_id = None
     if task.get("validation") == "التحقق عبر اجراء اختبار قصير":
@@ -713,7 +739,7 @@ def node_finalize(state: SuggestTaskState) -> dict:
         "id":                         task["id"],
         "taskId":                     task["id"],
         "title":                      task.get("title", ""),
-        "description":                state.get("final_description") or task.get("description", ""),
+        "description":                final_desc,
         "originalDescription":        task.get("description", ""),
         "points":                     task.get("points", 0),
         "category":                   task.get("category", ""),
@@ -744,7 +770,6 @@ def node_finalize(state: SuggestTaskState) -> dict:
         result["articleId"] = article_id
 
     return {"result": result}
-
 
 # ══════════════════════════════════════════
 # Conditional edges
