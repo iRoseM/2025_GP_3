@@ -64,6 +64,8 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
   Color _uploadBtnColor = appColors.primary;
   String _uploadBtnText = 'اختيار الصورة';
   IconData _uploadBtnIcon = Icons.image_outlined;
+  bool _isUploadingRewardImage = false;
+  bool _isSavingReward = false;
 
   @override
   void initState() {
@@ -226,6 +228,8 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
       _uploadBtnColor = appColors.primary;
       _uploadBtnText = 'اختيار الصورة';
       _uploadBtnIcon = Icons.image_outlined;
+      _isUploadingRewardImage = false;
+      _isSavingReward = false;
     });
 
     if (existingData != null) {
@@ -414,33 +418,61 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                             const SizedBox(height: 6),
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _uploadBtnColor,
+                                backgroundColor: _isUploadingRewardImage
+                                    ? Colors.grey
+                                    : _uploadBtnColor,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              icon: Icon(_uploadBtnIcon, color: Colors.white),
+                              icon: _isUploadingRewardImage
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : Icon(_uploadBtnIcon, color: Colors.white),
                               label: Text(
-                                _uploadBtnText,
+                                _isUploadingRewardImage
+                                    ? 'جاري رفع الصورة...'
+                                    : _uploadBtnText,
                                 style: const TextStyle(color: Colors.white),
                               ),
-                              onPressed: () async {
-                                final url = await _pickAndUploadImage();
-                                if (url != null) {
-                                  setSt(() {
-                                    _imgCtrl.text = url;
-                                    _uploadBtnColor = Colors.green;
-                                    _uploadBtnText = 'تم رفع الصورة بنجاح';
-                                    _uploadBtnIcon = Icons.check_circle_outline;
-                                  });
-                                } else {
-                                  setSt(() {
-                                    _uploadBtnColor = slackMesseges.red;
-                                    _uploadBtnText = 'لم يتم اختيار صورة';
-                                    _uploadBtnIcon = Icons.error_outline;
-                                  });
-                                }
-                              },
+                              onPressed:
+                                  (_isUploadingRewardImage || _isSavingReward)
+                                  ? null
+                                  : () async {
+                                      setSt(() {
+                                        _isUploadingRewardImage = true;
+                                        _uploadBtnColor = Colors.grey;
+                                        _uploadBtnText = 'جاري رفع الصورة...';
+                                        _uploadBtnIcon = Icons.hourglass_top;
+                                      });
+
+                                      final url = await _pickAndUploadImage();
+
+                                      if (url != null) {
+                                        setSt(() {
+                                          _imgCtrl.text = url;
+                                          _uploadBtnColor = Colors.green;
+                                          _uploadBtnText =
+                                              'تم رفع الصورة بنجاح';
+                                          _uploadBtnIcon =
+                                              Icons.check_circle_outline;
+                                          _isUploadingRewardImage = false;
+                                        });
+                                      } else {
+                                        setSt(() {
+                                          _uploadBtnColor = slackMesseges.red;
+                                          _uploadBtnText = 'لم يتم اختيار صورة';
+                                          _uploadBtnIcon = Icons.error_outline;
+                                          _isUploadingRewardImage = false;
+                                        });
+                                      }
+                                    },
                             ),
                             const SizedBox(height: 14),
 
@@ -475,13 +507,24 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                 ],
                               ),
                               child: FilledButton.icon(
-                                icon: const Icon(
-                                  Icons.check,
-                                  color: Colors.white,
-                                ),
-                                label: const Text(
-                                  'حفظ المكافأة',
-                                  style: TextStyle(
+                                icon: _isSavingReward
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.check,
+                                        color: Colors.white,
+                                      ),
+                                label: Text(
+                                  _isSavingReward
+                                      ? 'جاري الحفظ...'
+                                      : 'حفظ المكافأة',
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -498,12 +541,31 @@ class _AdminRewardsPageState extends State<AdminRewardsPage> {
                                   ),
                                   minimumSize: const Size.fromHeight(42),
                                 ),
-                                onPressed: () async {
-                                  if (!(_formKey.currentState?.validate() ??
-                                      false))
-                                    return;
-                                  await _saveReward(context, docId: docId);
-                                },
+                                onPressed:
+                                    (_isUploadingRewardImage || _isSavingReward)
+                                    ? null
+                                    : () async {
+                                        if (!(_formKey.currentState
+                                                ?.validate() ??
+                                            false)) {
+                                          return;
+                                        }
+
+                                        setSt(() {
+                                          _isSavingReward = true;
+                                        });
+
+                                        await _saveReward(
+                                          context,
+                                          docId: docId,
+                                        );
+
+                                        if (context.mounted) {
+                                          setSt(() {
+                                            _isSavingReward = false;
+                                          });
+                                        }
+                                      },
                               ),
                             ),
                           ],

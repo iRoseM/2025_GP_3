@@ -510,6 +510,10 @@ class _ReportCardState extends State<_ReportCard> {
           notifBody =
               'تم معالجة البلاغ المتعلق بـ "$facName". شكرًا لتعاونك 🌱';
         }
+
+        if (reason != null && reason.trim().isNotEmpty) {
+          notifBody += '\nملاحظة: ${reason.trim()}';
+        }
       } else {
         notifTitle = 'البلاغ غير صحيح';
 
@@ -519,6 +523,10 @@ class _ReportCardState extends State<_ReportCard> {
         } else {
           notifBody =
               'بعد التحقق من البلاغ المتعلق بـ "$facName". تبيّن أنه غير صحيح ♻️';
+        }
+
+        if (reason != null && reason.trim().isNotEmpty) {
+          notifBody += '\nسبب الرفض: ${reason.trim()}';
         }
       }
 
@@ -588,6 +596,102 @@ class _ReportCardState extends State<_ReportCard> {
         setState(() => _busy = false);
       }
     }
+  }
+
+  void _confirmApprove() {
+    final ctrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) {
+        final bottomInset = MediaQuery.of(ctx).viewInsets.bottom;
+
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'اعتماد البلاغ',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: ctrl,
+                  maxLines: 3,
+                  textAlign: TextAlign.right,
+                  decoration: const InputDecoration(
+                    labelText: 'سبب الاعتماد (اختياري)',
+                    hintText: 'اكتب ملاحظة تظهر للمستخدم',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: slackMesseges.primary,
+                          minimumSize: const Size(0, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                        onPressed: _busy
+                            ? null
+                            : () async {
+                                Navigator.pop(ctx);
+                                await _updateDecision(
+                                  'approved',
+                                  reason: ctrl.text.trim(),
+                                );
+                              },
+                        child: const Text('تأكيد الاعتماد'),
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          side: BorderSide(
+                            color: Colors.grey.shade500,
+                            width: 1.4,
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('إلغاء'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _confirmReject() {
@@ -958,7 +1062,7 @@ class _ReportCardState extends State<_ReportCard> {
                     label: const Text('اعتماد'),
                     onPressed: _busy || decision == 'approved'
                         ? null
-                        : () => _updateDecision('approved'),
+                        : _confirmApprove,
                   ),
                 ),
                 const SizedBox(width: 8),
