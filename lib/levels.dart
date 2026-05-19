@@ -10,6 +10,7 @@ import 'community.dart';
 import 'services/bottom_nav.dart';
 import '../services/app_colors.dart';
 import 'services/xp_service.dart';
+import 'services/title_header.dart';
 
 class levelsPage extends StatefulWidget {
   const levelsPage({super.key});
@@ -26,24 +27,38 @@ class _levelsPageState extends State<levelsPage> {
     if (i == _currentIndex) return;
     switch (i) {
       case 0:
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const homePage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const homePage()),
+        );
         break;
       case 1:
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const taskPage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const taskPage()),
+        );
         break;
       case 2:
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const levelsPage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const levelsPage()),
+        );
         break;
       case 3:
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const mapPage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const mapPage()),
+        );
         break;
       case 4:
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const communityPage()));
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const communityPage()),
+        );
         break;
     }
   }
 
-  // ✅ تحقق من الترقية مرة وحدة فقط
   Future<void> _checkLevelUp(int xp) async {
     if (_levelUpChecked) return;
     _levelUpChecked = true;
@@ -69,6 +84,16 @@ class _levelsPageState extends State<levelsPage> {
       }
     }
   }
+  // Future<void> _checkLevelUp(int xp) async {
+  //   if (_levelUpChecked) return;
+  //   _levelUpChecked = true;
+
+  //   final currentLevel = getCurrentLevel(xp);
+
+  //   if (mounted) {
+  //     await showLevelUpDialog(context, currentLevel);
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +101,7 @@ class _levelsPageState extends State<levelsPage> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         extendBodyBehindAppBar: true,
+        appBar: const NameerAppBar(showTitleInBar: false, showBack: false),
         body: StreamBuilder<DocumentSnapshot>(
           stream: XpService.userStream(),
           builder: (context, snapshot) {
@@ -85,7 +111,11 @@ class _levelsPageState extends State<levelsPage> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xFF1B5E20), Color(0xFF2E7D32)],
+                    // skeleton
+                    colors: [
+                      Color(0x994BAA98), // appColors.primary بـ 60% opacity
+                      Color(0x66B6E9C1), // appColors.mint بـ 40% opacity
+                    ],
                   ),
                 ),
                 child: SafeArea(
@@ -132,8 +162,8 @@ class _levelsPageState extends State<levelsPage> {
                       end: Alignment.bottomCenter,
                       stops: [0.0, 0.32, 0.32, 1.0],
                       colors: [
-                        Color.fromARGB(83, 30, 112, 97),
-                        Color.fromARGB(255, 50, 105, 95),
+                        Colors.transparent,
+                        Colors.transparent,
                         Color(0xFFF0F7EC),
                         Color(0xFFF0F7EC),
                       ],
@@ -143,21 +173,8 @@ class _levelsPageState extends State<levelsPage> {
                 SafeArea(
                   child: Column(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _NavIconButton(
-                              icon: Icons.arrow_back_ios_new_rounded,
-                              onTap: () => Navigator.maybePop(context),
-                            ),
-                            const SizedBox(width: 36),
-                          ],
-                        ),
-                      ),
                       const SizedBox(height: 14),
-                      const _SeasonBanner(),
+                      // const _SeasonBanner(),
                       const SizedBox(height: 14),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -177,7 +194,10 @@ class _levelsPageState extends State<levelsPage> {
             );
           },
         ),
-        bottomNavigationBar: BottomNavPage(currentIndex: _currentIndex, onTap: _onTap),
+        bottomNavigationBar: BottomNavPage(
+          currentIndex: _currentIndex,
+          onTap: _onTap,
+        ),
       ),
     );
   }
@@ -211,48 +231,51 @@ class _NavIconButton extends StatelessWidget {
 // ─────────────────────────────────────────
 // بانر الموسم
 // ─────────────────────────────────────────
-class _SeasonBanner extends StatelessWidget {
-  const _SeasonBanner();
+// class _SeasonBanner extends StatelessWidget {
+//   const _SeasonBanner();
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
-        ),
-        child: Row(
-          children: [
-            const Text('🌸', style: TextStyle(fontSize: 26)),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'مهرجان الربيع ',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'الموسم ١ · ينتهي بعد ١٨ يوماً',
-                  style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, color: Colors.white60),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return Padding(
+//       padding: const EdgeInsets.symmetric(horizontal: 20),
+//       child: Container(
+//         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+//         decoration: BoxDecoration(
+//           color: Colors.white.withOpacity(0.12),
+//           borderRadius: BorderRadius.circular(16),
+//           border: Border.all(color: Colors.white.withOpacity(0.2)),
+//         ),
+//         child: Row(
+//           children: [
+//             const Text('🌸', style: TextStyle(fontSize: 26)),
+//             const SizedBox(width: 14),
+//             Column(
+//               crossAxisAlignment: CrossAxisAlignment.start,
+//               children: [
+//                 Text(
+//                   'مهرجان الربيع ',
+//                   style: GoogleFonts.ibmPlexSansArabic(
+//                     fontSize: 15,
+//                     fontWeight: FontWeight.w700,
+//                     color: Colors.white,
+//                   ),
+//                 ),
+//                 const SizedBox(height: 2),
+//                 Text(
+//                   'الموسم ١ · ينتهي بعد ١٨ يوماً',
+//                   style: GoogleFonts.ibmPlexSansArabic(
+//                     fontSize: 12,
+//                     color: Colors.white60,
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+// }
 
 // ─────────────────────────────────────────
 // بطاقة XP
@@ -278,7 +301,11 @@ class _XpProgressCard extends StatelessWidget {
         color: Colors.white.withOpacity(0.95),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 6)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
       child: Column(
@@ -290,16 +317,29 @@ class _XpProgressCard extends StatelessWidget {
                 height: 50,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [currentLevel.color.withOpacity(0.7), currentLevel.color],
+                    colors: [
+                      Color(0x994BAA98), // appColors.primary بـ 60% opacity
+                      Color(0x66B6E9C1), // appColors.mint بـ 40% opacity
+                    ],
+
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   shape: BoxShape.circle,
                   boxShadow: [
-                    BoxShadow(color: currentLevel.color.withOpacity(0.35), blurRadius: 10, offset: const Offset(0, 3)),
+                    BoxShadow(
+                      color: currentLevel.color.withOpacity(0.35),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
                   ],
                 ),
-                child: Center(child: Text(currentLevel.icon, style: const TextStyle(fontSize: 24))),
+                child: Center(
+                  child: Text(
+                    currentLevel.icon,
+                    style: const TextStyle(fontSize: 24),
+                  ),
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -308,11 +348,18 @@ class _XpProgressCard extends StatelessWidget {
                   children: [
                     Text(
                       currentLevel.nameAr,
-                      style: GoogleFonts.ibmPlexSansArabic(fontSize: 16, fontWeight: FontWeight.w800, color: currentLevel.color),
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: currentLevel.color,
+                      ),
                     ),
                     Text(
                       'مرحلتك الحالية',
-                      style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, color: Colors.grey[500]),
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                      ),
                     ),
                   ],
                 ),
@@ -322,11 +369,21 @@ class _XpProgressCard extends StatelessWidget {
                 children: [
                   Text(
                     '$xp',
-                    style: GoogleFonts.ibmPlexSansArabic(fontSize: 28, fontWeight: FontWeight.w900, color: const Color(0xFF1B5E20), height: 1),
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFF1B5E20),
+                      height: 1,
+                    ),
                   ),
                   Text(
                     'XP',
-                    style: GoogleFonts.ibmPlexSansArabic(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey[500], letterSpacing: 1),
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[500],
+                      letterSpacing: 1,
+                    ),
                   ),
                 ],
               ),
@@ -335,20 +392,31 @@ class _XpProgressCard extends StatelessWidget {
           const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) {
-              final double dotPos = (constraints.maxWidth * progress).clamp(8.0, constraints.maxWidth - 8.0);
+              final double dotPos = (constraints.maxWidth * progress).clamp(
+                8.0,
+                constraints.maxWidth - 8.0,
+              );
               return Stack(
                 clipBehavior: Clip.none,
                 children: [
                   Container(
                     height: 10,
-                    decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(99)),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(99),
+                    ),
                   ),
                   FractionallySizedBox(
                     widthFactor: progress,
                     child: Container(
                       height: 10,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [currentLevel.color.withOpacity(0.6), currentLevel.color]),
+                        gradient: LinearGradient(
+                          colors: [
+                            currentLevel.color.withOpacity(0.6),
+                            currentLevel.color,
+                          ],
+                        ),
                         borderRadius: BorderRadius.circular(99),
                       ),
                     ),
@@ -363,7 +431,12 @@ class _XpProgressCard extends StatelessWidget {
                         color: Colors.white,
                         shape: BoxShape.circle,
                         border: Border.all(color: currentLevel.color, width: 3),
-                        boxShadow: [BoxShadow(color: currentLevel.color.withOpacity(0.3), blurRadius: 6)],
+                        boxShadow: [
+                          BoxShadow(
+                            color: currentLevel.color.withOpacity(0.3),
+                            blurRadius: 6,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -377,17 +450,28 @@ class _XpProgressCard extends StatelessWidget {
             children: [
               Text(
                 '${(progress * 100).toInt()}%',
-                style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, fontWeight: FontWeight.w700, color: currentLevel.color),
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: currentLevel.color,
+                ),
               ),
               if (nextLevel != null)
                 Text(
-                  'باقي ${nextLevel!.requiredXp - xp} XP للوصول لـ${nextLevel!.nameAr} ${nextLevel!.icon}',
-                  style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, color: Colors.grey[500]),
+                  'تبقى لك ${nextLevel!.requiredXp - xp} XP للوصول إلى مستوى ${nextLevel!.nameAr} ${nextLevel!.icon}',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                  ),
                 )
               else
                 Text(
                   '🎉 وصلت لأعلى مرحلة!',
-                  style: GoogleFonts.ibmPlexSansArabic(fontSize: 12, fontWeight: FontWeight.w700, color: currentLevel.color),
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: currentLevel.color,
+                  ),
                 ),
             ],
           ),
@@ -400,20 +484,64 @@ class _XpProgressCard extends StatelessWidget {
 // ─────────────────────────────────────────
 // Timeline
 // ─────────────────────────────────────────
-class _LevelsTimeline extends StatelessWidget {
+class _LevelsTimeline extends StatefulWidget {
   final int userXp;
   const _LevelsTimeline({required this.userXp});
+
+  @override
+  State<_LevelsTimeline> createState() => _LevelsTimelineState();
+}
+
+class _LevelsTimelineState extends State<_LevelsTimeline> {
+  final ScrollController _scrollController = ScrollController();
+  bool _scrolled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrent());
+  }
+
+  void _scrollToCurrent() {
+    if (_scrolled) return;
+    _scrolled = true;
+
+    final levels = kLevels.reversed.toList();
+    final currentId = getCurrentLevel(widget.userXp).id;
+    final index = levels.indexWhere((l) => l.id == currentId);
+    if (index < 0) return;
+
+    // كل عنصر تقريباً 80 + 28 (connector) = 108
+    const itemHeight = 108.0;
+    final offset = (index * itemHeight).clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
+
+    _scrollController.animateTo(
+      offset,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final levels = kLevels.reversed.toList();
     return ListView.builder(
+      controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 30),
       itemCount: levels.length,
       itemBuilder: (context, index) {
         final level = levels[index];
-        final bool isUnlocked = userXp >= level.requiredXp;
-        final bool isCurrent = getCurrentLevel(userXp).id == level.id;
+        final bool isUnlocked = widget.userXp >= level.requiredXp;
+        final bool isCurrent = getCurrentLevel(widget.userXp).id == level.id;
         final bool isFirst = index == 0;
         final bool isLast = index == levels.length - 1;
 
@@ -426,11 +554,17 @@ class _LevelsTimeline extends StatelessWidget {
                   height: 28,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(99),
-                    color: isUnlocked ? const Color(0xFF4CAF50).withOpacity(0.3) : const Color(0xFFBDBDBD).withOpacity(0.4),
+                    color: isUnlocked
+                        ? const Color(0xFF4CAF50).withOpacity(0.3)
+                        : const Color(0xFFBDBDBD).withOpacity(0.4),
                   ),
                 ),
               ),
-            _LevelRow(level: level, isUnlocked: isUnlocked, isCurrent: isCurrent),
+            _LevelRow(
+              level: level,
+              isUnlocked: isUnlocked,
+              isCurrent: isCurrent,
+            ),
             if (!isLast)
               Center(
                 child: Container(
@@ -438,7 +572,9 @@ class _LevelsTimeline extends StatelessWidget {
                   height: 28,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(99),
-                    color: isUnlocked ? const Color(0xFF4CAF50).withOpacity(0.3) : const Color(0xFFBDBDBD).withOpacity(0.4),
+                    color: isUnlocked
+                        ? const Color(0xFF4CAF50).withOpacity(0.3)
+                        : const Color(0xFFBDBDBD).withOpacity(0.4),
                   ),
                 ),
               ),
@@ -457,18 +593,34 @@ class _LevelRow extends StatelessWidget {
   final bool isUnlocked;
   final bool isCurrent;
 
-  const _LevelRow({required this.level, required this.isUnlocked, required this.isCurrent});
+  const _LevelRow({
+    required this.level,
+    required this.isUnlocked,
+    required this.isCurrent,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Expanded(child: _RewardCard(level: level, isUnlocked: isUnlocked, isVip: false)),
+        Expanded(
+          child: _RewardCard(
+            level: level,
+            isUnlocked: isUnlocked,
+            isVip: false,
+          ),
+        ),
         const SizedBox(width: 8),
-        _TimelineNode(level: level, isUnlocked: isUnlocked, isCurrent: isCurrent),
+        _TimelineNode(
+          level: level,
+          isUnlocked: isUnlocked,
+          isCurrent: isCurrent,
+        ),
         const SizedBox(width: 8),
-        Expanded(child: _RewardCard(level: level, isUnlocked: isUnlocked, isVip: true)),
+        Expanded(
+          child: _RewardCard(level: level, isUnlocked: isUnlocked, isVip: true),
+        ),
       ],
     );
   }
@@ -482,20 +634,46 @@ class _TimelineNode extends StatelessWidget {
   final bool isUnlocked;
   final bool isCurrent;
 
-  const _TimelineNode({required this.level, required this.isUnlocked, required this.isCurrent});
+  const _TimelineNode({
+    required this.level,
+    required this.isUnlocked,
+    required this.isCurrent,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final Color bgColor = isCurrent ? level.color : isUnlocked ? Colors.white : const Color(0xFFEEEEEE);
-    final Color borderColor = isCurrent ? Colors.white : isUnlocked ? level.color : const Color(0xFFBDBDBD);
+    final Color bgColor = isCurrent
+        ? level.color
+        : isUnlocked
+        ? Colors.white
+        : const Color(0xFFEEEEEE);
+    final Color borderColor = isCurrent
+        ? Colors.white
+        : isUnlocked
+        ? level.color
+        : const Color(0xFFBDBDBD);
     final List<BoxShadow> shadows = isCurrent
         ? [
-            BoxShadow(color: level.color.withOpacity(0.4), blurRadius: 16, spreadRadius: 2),
-            BoxShadow(color: level.color.withOpacity(0.15), blurRadius: 6, spreadRadius: 8),
+            BoxShadow(
+              color: level.color.withOpacity(0.4),
+              blurRadius: 16,
+              spreadRadius: 2,
+            ),
+            BoxShadow(
+              color: level.color.withOpacity(0.15),
+              blurRadius: 6,
+              spreadRadius: 8,
+            ),
           ]
         : isUnlocked
-            ? [BoxShadow(color: level.color.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 3))]
-            : [];
+        ? [
+            BoxShadow(
+              color: level.color.withOpacity(0.15),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ]
+        : [];
 
     return Stack(
       alignment: Alignment.topCenter,
@@ -505,7 +683,18 @@ class _TimelineNode extends StatelessWidget {
           width: 58,
           height: 58,
           decoration: BoxDecoration(
-            color: bgColor,
+            gradient: isCurrent
+                ? const LinearGradient(
+                    colors: [Color(0x994BAA98), Color(0x66B6E9C1)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: isCurrent
+                ? null
+                : isUnlocked
+                ? Colors.white
+                : const Color(0xFFEEEEEE),
             shape: BoxShape.circle,
             border: Border.all(color: borderColor, width: isCurrent ? 3 : 2),
             boxShadow: shadows,
@@ -516,23 +705,56 @@ class _TimelineNode extends StatelessWidget {
               children: [
                 ColorFiltered(
                   colorFilter: isUnlocked
-                      ? const ColorFilter.mode(Colors.transparent, BlendMode.saturation)
+                      ? const ColorFilter.mode(
+                          Colors.transparent,
+                          BlendMode.saturation,
+                        )
                       : const ColorFilter.matrix([
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0.2126, 0.7152, 0.0722, 0, 0,
-                          0, 0, 0, 1, 0,
+                          0.2126,
+                          0.7152,
+                          0.0722,
+                          0,
+                          0,
+                          0.2126,
+                          0.7152,
+                          0.0722,
+                          0,
+                          0,
+                          0.2126,
+                          0.7152,
+                          0.0722,
+                          0,
+                          0,
+                          0,
+                          0,
+                          0,
+                          1,
+                          0,
                         ]),
                   child: level.id == 'seedling'
-                      ? Image.asset('assets/img/seedling.png', height: 22, fit: BoxFit.contain)
-                      : Text(level.icon, style: TextStyle(fontSize: 22, color: isUnlocked ? null : Colors.grey)),
+                      ? Image.asset(
+                          'assets/img/seedling.png',
+                          height: 22,
+                          fit: BoxFit.contain,
+                        )
+                      : Text(
+                          level.icon,
+                          style: TextStyle(
+                            fontSize: 22,
+                            color: isUnlocked ? null : Colors.grey,
+                          ),
+                        ),
                 ),
                 Text(
-                  '${level.requiredXp}',
+                  '${level.requiredXp}XP',
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
-                    color: isCurrent ? Colors.white70 : isUnlocked ? level.color : const Color(0xFFBDBDBD),
+                    color: isCurrent
+                        ? Colors.white70
+                        : isUnlocked
+                        ? level.color
+                        : const Color(0xFFBDBDBD),
                   ),
                 ),
               ],
@@ -547,11 +769,18 @@ class _TimelineNode extends StatelessWidget {
               decoration: BoxDecoration(
                 color: level.color,
                 borderRadius: BorderRadius.circular(99),
-                boxShadow: [BoxShadow(color: level.color.withOpacity(0.4), blurRadius: 6)],
+                boxShadow: [
+                  BoxShadow(color: level.color.withOpacity(0.4), blurRadius: 6),
+                ],
               ),
               child: Text(
-                'حالياً',
-                style: GoogleFonts.ibmPlexSansArabic(fontSize: 8, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.5),
+                'مستواك الحالي',
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
           ),
@@ -567,7 +796,11 @@ class _TimelineNode extends StatelessWidget {
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 1.5),
               ),
-              child: const Icon(Icons.lock_rounded, color: Colors.white, size: 10),
+              child: const Icon(
+                Icons.lock_rounded,
+                color: Colors.white,
+                size: 10,
+              ),
             ),
           ),
       ],
@@ -583,7 +816,11 @@ class _RewardCard extends StatelessWidget {
   final bool isUnlocked;
   final bool isVip;
 
-  const _RewardCard({required this.level, required this.isUnlocked, required this.isVip});
+  const _RewardCard({
+    required this.level,
+    required this.isUnlocked,
+    required this.isVip,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -600,26 +837,56 @@ class _RewardCard extends StatelessWidget {
           children: [
             ColorFiltered(
               colorFilter: const ColorFilter.matrix([
-                0.2126, 0.7152, 0.0722, 0, 0,
-                0.2126, 0.7152, 0.0722, 0, 0,
-                0.2126, 0.7152, 0.0722, 0, 0,
-                0, 0, 0, 0.5, 0,
+                0.2126,
+                0.7152,
+                0.0722,
+                0,
+                0,
+                0.2126,
+                0.7152,
+                0.0722,
+                0,
+                0,
+                0.2126,
+                0.7152,
+                0.0722,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0.5,
+                0,
               ]),
-              child: Text(isVip ? '🏅' : level.icon, style: const TextStyle(fontSize: 22)),
+              child: Text(
+                isVip ? '🏅' : level.icon,
+                style: const TextStyle(fontSize: 22),
+              ),
             ),
             const SizedBox(height: 5),
             Text(
               isVip ? 'جائزة VIP' : level.nameAr,
               textAlign: TextAlign.center,
-              style: GoogleFonts.ibmPlexSansArabic(fontSize: 10, fontWeight: FontWeight.w600, color: const Color(0xFFBDBDBD)),
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFFBDBDBD),
+              ),
             ),
             const SizedBox(height: 3),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: const Color(0xFFEEEEEE), borderRadius: BorderRadius.circular(99)),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEEEEEE),
+                borderRadius: BorderRadius.circular(99),
+              ),
               child: Text(
                 '${level.requiredXp} XP',
-                style: GoogleFonts.ibmPlexSansArabic(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFFBDBDBD)),
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFBDBDBD),
+                ),
               ),
             ),
           ],
@@ -630,17 +897,28 @@ class _RewardCard extends StatelessWidget {
     if (isVip) {
       String? figurePath;
       switch (level.id) {
-        case 'sprout':   figurePath = 'assets/img/bush.png'; break;
-        case 'tree':     figurePath = 'assets/img/tree.png'; break;
-        case 'guardian': figurePath = 'assets/img/pond.png'; break;
-        case 'champion': figurePath = 'assets/img/palm.png'; break;
+        case 'sprout':
+          figurePath = 'assets/img/bush.png';
+          break;
+        case 'tree':
+          figurePath = 'assets/img/tree.png';
+          break;
+        case 'guardian':
+          figurePath = 'assets/img/pond.png';
+          break;
+        case 'champion':
+          figurePath = 'assets/img/palm.png';
+          break;
       }
 
       return Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [const Color(0xFFFBBF24).withOpacity(0.18), const Color(0xFFF59E0B).withOpacity(0.06)],
+            colors: [
+              const Color(0xFFFBBF24).withOpacity(0.18),
+              const Color(0xFFF59E0B).withOpacity(0.06),
+            ],
             begin: Alignment.topRight,
             end: Alignment.bottomLeft,
           ),
@@ -658,15 +936,26 @@ class _RewardCard extends StatelessWidget {
             Text(
               'جائزة ذهبية',
               textAlign: TextAlign.center,
-              style: GoogleFonts.ibmPlexSansArabic(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF92400E)),
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF92400E),
+              ),
             ),
             const SizedBox(height: 3),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(99)),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(99),
+              ),
               child: Text(
                 'VIP ✨',
-                style: GoogleFonts.ibmPlexSansArabic(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFFB45309)),
+                style: GoogleFonts.ibmPlexSansArabic(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFB45309),
+                ),
               ),
             ),
           ],
@@ -680,28 +969,49 @@ class _RewardCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: level.color.withOpacity(0.2)),
-        boxShadow: [BoxShadow(color: level.color.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+            color: level.color.withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (level.id == 'seedling')
-            Image.asset('assets/img/seedling.png', height: 32, fit: BoxFit.contain)
+            Image.asset(
+              'assets/img/seedling.png',
+              height: 32,
+              fit: BoxFit.contain,
+            )
           else
             Text(level.icon, style: const TextStyle(fontSize: 22)),
           const SizedBox(height: 5),
           Text(
             level.nameAr,
             textAlign: TextAlign.center,
-            style: GoogleFonts.ibmPlexSansArabic(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xFF1a2e1a)),
+            style: GoogleFonts.ibmPlexSansArabic(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF1a2e1a),
+            ),
           ),
           const SizedBox(height: 3),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(99)),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F5E9),
+              borderRadius: BorderRadius.circular(99),
+            ),
             child: Text(
               'مفتوح ✓',
-              style: GoogleFonts.ibmPlexSansArabic(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF2E7D32)),
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF2E7D32),
+              ),
             ),
           ),
         ],
@@ -722,14 +1032,18 @@ class _SkeletonBox extends StatefulWidget {
   State<_SkeletonBox> createState() => _SkeletonBoxState();
 }
 
-class _SkeletonBoxState extends State<_SkeletonBox> with SingleTickerProviderStateMixin {
+class _SkeletonBoxState extends State<_SkeletonBox>
+    with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double> _anim;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
     _anim = Tween(begin: 0.3, end: 0.7).animate(_ctrl);
   }
 

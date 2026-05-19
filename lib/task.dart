@@ -64,6 +64,7 @@ class _taskPageState extends State<taskPage> {
 
   bool _isMonthLoading = false;
   bool _scheduleMode = false;
+  final List<StreamSubscription> _allSubscriptions = [];
   final Set<DateTime> _scheduledDays = {};
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
   bool _isScheduledDay(DateTime d) => _scheduledDays.contains(_dateOnly(d));
@@ -121,16 +122,12 @@ class _taskPageState extends State<taskPage> {
           Text(
             '${d.day}',
             style: GoogleFonts.ibmPlexSansArabic(
-              color: isSel
-                  ? Colors.white
-                  : AppColors.dark, // زي الطبيعي فوق الأخضر أبيض
+              color: isSel ? Colors.white : AppColors.dark,
               fontWeight: FontWeight.w600,
               fontSize: 13.5,
             ),
           ),
 
-          // 🔔 الجرس — يطلع حتى لو اليوم محدد
-          // إذا تبينه يطلع حتى في today بعد: شيل شرط !isToday
           if (isScheduled && !isToday)
             Positioned(
               top: 6,
@@ -400,12 +397,16 @@ class _taskPageState extends State<taskPage> {
     );
   }
 
-bool _isTransportTitle(String title) {
-  final t = title.toString().toLowerCase();
-  return t.contains('ميترو') || t.contains('مترو') ||
-      t.contains('باص') || t.contains('حافلة') ||
-      t.contains('دراجة') || t.contains('سكوتر') || t.contains('مشي');
-}
+  bool _isTransportTitle(String title) {
+    final t = title.toString().toLowerCase();
+    return t.contains('ميترو') ||
+        t.contains('مترو') ||
+        t.contains('باص') ||
+        t.contains('حافلة') ||
+        t.contains('دراجة') ||
+        t.contains('سكوتر') ||
+        t.contains('مشي');
+  }
 
   Future<GeoPoint?> getCurrentLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -697,11 +698,7 @@ bool _isTransportTitle(String title) {
       await FirebaseFirestore.instance
           .collection('scheduledTasks')
           .doc(scheduledDocId)
-          .update({
-            'status': 'cancelled',
-            'cancelledAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+          .delete();
 
       // ✅ نجيب مهمة عادية بديلة لهذا اليوم
       final monthKey =
@@ -991,34 +988,19 @@ bool _isTransportTitle(String title) {
 
     print('👀 Watching all progress sources for: $dayKey');
 
-    // إلغاء الاشتراكات السابقة
-    _userTasksSubscription?.cancel();
+    final subscriptions = <StreamSubscription>[];
 
-    int updateCount = 0;
-
-    // دالة لحساب المهام المكتملة من جميع المصادر
-    Future<int> _calculateCompletedTasks() async {
+    Future<int> calculateCompleted() async {
       int completed = 0;
-
       try {
-        // 1️⃣ المهمة الرئيسية
-        final mainSnapshot = await FirebaseFirestore.instance
+        final mainSnap = await FirebaseFirestore.instance
             .collection('userTasks')
             .doc(dayKey)
             .get(GetOptions(source: Source.server));
-        if (mainSnapshot.exists &&
-            mainSnapshot.data()?['status'] == 'completed') {
+        if (mainSnap.exists && mainSnap.data()?['status'] == 'completed')
           completed++;
-        }
 
-        // 2️⃣ المهام الإضافية task2..taskN
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_uid)
-            .get();
-        final xp = (userDoc.data()?['xp'] ?? 0) as int;
-        final required = _getRequiredTasksForLevel(getCurrentLevel(xp).id);
-        for (int i = 2; i <= required; i++) {
+        for (int i = 2; i <= _requiredTasksToday; i++) {
           final snap = await FirebaseFirestore.instance
               .collection('userTasks')
               .doc('${_uid}_${_yyyyMMdd(_selectedDay!)}_task$i')
@@ -1026,118 +1008,89 @@ bool _isTransportTitle(String title) {
           if (snap.exists && snap.data()?['status'] == 'completed') completed++;
         }
 
-        // 3️⃣ dailyTasks — فقط لو ما فيه ولا مهمة مكتملة من صفحة المهام
         if (completed == 0) {
-          final dailySnapshot = await FirebaseFirestore.instance
+          final dailySnap = await FirebaseFirestore.instance
               .collection('dailyTasks')
               .doc(_uid)
               .collection('tasks')
               .doc(dailyTaskDate)
               .get(GetOptions(source: Source.server));
-          if (dailySnapshot.exists &&
-              dailySnapshot.data()?['completed'] == true) {
+          if (dailySnap.exists && dailySnap.data()?['completed'] == true)
             completed++;
-          }
         }
       } catch (e) {
-        print('❌ Error calculating tasks: $e');
+        print('❌ Error: $e');
       }
-
       return completed;
     }
 
-    // 🔥 راقب التغييرات في المهمة الرئيسية
-    FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(dayKey)
-        .snapshots(includeMetadataChanges: true)
-        .listen((_) async {
-          if (!mounted) return;
-          int completed = await _calculateCompletedTasks();
-          updateCount++;
-          setState(() => _completedTasksToday = completed);
-          
-          // ← أضيفي هذا
-          if (_selectedDay != null) {
-            final status = completed >= _requiredTasksToday ? 'completed' : 'pending';
-            _updateMonthStatusFor(_selectedDay!, status);
-          }
-          
-          print(
-            '✅ Progress update #$updateCount (from main): $completed/$_requiredTasksToday',
-          );
-        });
+    void onUpdate(String source) async {
+      if (!mounted) return;
+      final completed = await calculateCompleted();
+      if (!mounted) return;
+      setState(() => _completedTasksToday = completed);
+      if (_selectedDay != null) {
+        _updateMonthStatusFor(
+          _selectedDay!,
+          completed >= _requiredTasksToday ? 'completed' : 'pending',
+        );
+      }
+      print('✅ Update (from $source): $completed/$_requiredTasksToday');
+    }
 
-    // 🔥 راقب التغييرات في المهمة الإضافية
-    FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(bonusKey)
-        .snapshots(includeMetadataChanges: true)
-        .listen((_) async {
-          if (!mounted) return;
-          int completed = await _calculateCompletedTasks();
-          updateCount++;
-          setState(() => _completedTasksToday = completed);
-          
-          // ← أضيفي هذا
-          if (_selectedDay != null) {
-            final status = completed >= _requiredTasksToday ? 'completed' : 'pending';
-            _updateMonthStatusFor(_selectedDay!, status);
-          }
-          print(
-            '✅ Progress update #$updateCount (from bonus): $completed/$_requiredTasksToday',
-          );
-        });
+    // ← main task
+    subscriptions.add(
+      FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(dayKey)
+          .snapshots(includeMetadataChanges: true)
+          .listen((_) => onUpdate('main')),
+    );
 
-    // 🔥 راقب التغييرات في dailyTasks
-    FirebaseFirestore.instance
-        .collection('dailyTasks')
-        .doc(_uid)
-        .collection('tasks')
-        .doc(dailyTaskDate)
-        .snapshots(includeMetadataChanges: true)
-        .listen((snapshot) async {
-          if (!mounted) return;
+    // ← bonus
+    subscriptions.add(
+      FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(bonusKey)
+          .snapshots(includeMetadataChanges: true)
+          .listen((_) => onUpdate('bonus')),
+    );
 
-          // نجيب القيمة المحدثة مباشرة
-          int completed = 0;
+    // ← daily
+    subscriptions.add(
+      FirebaseFirestore.instance
+          .collection('dailyTasks')
+          .doc(_uid)
+          .collection('tasks')
+          .doc(dailyTaskDate)
+          .snapshots(includeMetadataChanges: true)
+          .listen((_) => onUpdate('daily')),
+    );
 
-          // تحقق من userTasks
-          final mainSnap = await FirebaseFirestore.instance
-              .collection('userTasks')
-              .doc(dayKey)
-              .get(GetOptions(source: Source.server));
-          if (mainSnap.exists && mainSnap.data()?['status'] == 'completed') {
-            completed++;
-          }
+    // ← task2..taskN
+    for (int i = 2; i <= _requiredTasksToday; i++) {
+      final taskIndex = i;
+      subscriptions.add(
+        FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc('${_uid}_${_yyyyMMdd(_selectedDay!)}_task$taskIndex')
+            .snapshots(includeMetadataChanges: true)
+            .listen((_) => onUpdate('task$taskIndex')),
+      );
+    }
 
-          final bonusSnap = await FirebaseFirestore.instance
-              .collection('userTasks')
-              .doc(bonusKey)
-              .get(GetOptions(source: Source.server));
-          if (bonusSnap.exists && bonusSnap.data()?['status'] == 'completed') {
-            completed++;
-          }
+    // ← ألغِ الاشتراكات القديمة أولاً
+    for (final sub in _allSubscriptions) {
+      sub.cancel();
+    }
+    _allSubscriptions.clear();
 
-          // 🔥 تحقق من dailyTasks — فقط لو ما فيه مهمة مكتملة من userTasks
-          if (completed == 0 &&
-              snapshot.exists &&
-              snapshot.data()?['completed'] == true) {
-            completed++;
-          }
-
-          updateCount++;
-          setState(() => _completedTasksToday = completed);
-         
-          // ← أضيفي هذا
-          if (_selectedDay != null) {
-            final status = completed >= _requiredTasksToday ? 'completed' : 'pending';
-            _updateMonthStatusFor(_selectedDay!, status);
-          }
-          print(
-            '✅ Progress update #$updateCount (from daily): $completed/$_requiredTasksToday',
-          );
-        });
+    // ← احفظ كل الاشتراكات الجديدة
+    _allSubscriptions.addAll(subscriptions);
+    if (subscriptions.isNotEmpty) {
+      _userTasksSubscription =
+          subscriptions.first as StreamSubscription<DocumentSnapshot>;
+    }
   }
 
   Future<void> _loadUserProgress() async {
@@ -1146,7 +1099,6 @@ bool _isTransportTitle(String title) {
     setState(() => _isLoadingProgress = true);
 
     try {
-      // جلب مستوى المستخدم من users collection
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(_uid)
@@ -1154,19 +1106,16 @@ bool _isTransportTitle(String title) {
 
       final xp = (userDoc.data()?['xp'] ?? 0) as int;
       final level = getCurrentLevel(xp);
-      _requiredTasksToday = _getRequiredTasksForLevel(level.id);
+      final newRequired = _getRequiredTasksForLevel(level.id);
 
-      // جلب المهام المكتملة لليوم المحدد - استخدم get مباشرة
+      // ✅ استخدم اللفل مباشرة بدون شرط task2
+      _requiredTasksToday = newRequired;
+
       _completedTasksToday = await _getCompletedTasksForDay(
         _uid!,
         _selectedDay!,
       );
 
-      print(
-        '📊 User progress loaded - Level: $_userLevel, Completed: $_completedTasksToday/$_requiredTasksToday',
-      );
-
-      // بدء مراقبة التغييرات
       _watchUserProgress();
     } catch (e) {
       debugPrint('❌ Error loading progress: $e');
@@ -1200,117 +1149,145 @@ bool _isTransportTitle(String title) {
   Future<Map<String, dynamic>?> getFreshNewsForUser(String uid) async {
     final firestore = FirebaseFirestore.instance;
 
-    // ========== 1) جلب المقالات من Firestore ==========
+    // ========== جلب من Firestore أولاً ==========
     Future<Map<String, dynamic>?> tryFromFirestore() async {
-      final articlesSnap = await firestore
-          .collection('articles')
-          .orderBy('publishedAt', descending: true)
-          .limit(50)
-          .get();
+      try {
+        final articlesSnap = await firestore
+            .collection('articles')
+            .limit(50)
+            .get();
 
-      if (articlesSnap.docs.isEmpty) return null;
+        print("📰 Firestore articles count: ${articlesSnap.docs.length}");
+        if (articlesSnap.docs.isEmpty) return null;
 
-      // كل المقالات اللي سبق ظهرت للمستخدم
-      final usedSnap = await firestore
-          .collection('userTasks')
-          .where('userId', isEqualTo: uid)
-          .where('taskTitle', isEqualTo: 'قراءة خبر بيئي')
-          .get();
+        final usedSnap = await firestore
+            .collection('userTasks')
+            .where('userId', isEqualTo: uid)
+            .where('taskTitle', isEqualTo: 'قراءة خبر بيئي')
+            .get();
 
-      final usedIds = usedSnap.docs
-          .map((d) => d.data()['articleId'])
-          .where((x) => x != null)
-          .toSet();
+        final usedIds = usedSnap.docs
+            .map((d) => d.data()['articleId'])
+            .where((x) => x != null)
+            .toSet();
 
-      // ابحث عن أول مقال جديد ما شافه المستخدم
-      for (var doc in articlesSnap.docs) {
-        if (!usedIds.contains(doc.id)) {
-          return {'docId': doc.id, ...doc.data()};
+        for (var doc in articlesSnap.docs) {
+          if (!usedIds.contains(doc.id)) {
+            return {'docId': doc.id, ...doc.data()};
+          }
+        }
+        return null;
+      } catch (e) {
+        print("❌ tryFromFirestore error: $e");
+        return null;
+      }
+    }
+
+    // ========== جلب من APIs وحفظ في Firestore ==========
+    Future<void> fetchAndSaveFromAPIs() async {
+      try {
+        final metaDoc = await firestore
+            .collection('appSettings')
+            .doc('newsApiLastFetch')
+            .get();
+
+        if (metaDoc.exists) {
+          final lastFetch = metaDoc.data()?['fetchedAt'] as Timestamp?;
+          if (lastFetch != null) {
+            final diff = DateTime.now().difference(lastFetch.toDate());
+            print(
+              "📰 Last API fetch: ${diff.inHours}h ${diff.inMinutes % 60}m ago",
+            );
+            if (diff.inHours < 6) {
+              print("📰 Skipping APIs — fetched recently");
+              return;
+            }
+          }
+        } else {
+          print("📰 No previous fetch found → will fetch now");
+        }
+      } catch (e) {
+        print("⚠️ meta check error: $e");
+      }
+
+      print("📰 Fetching from NewsData API...");
+
+      Future<List<Map<String, dynamic>>> fetchFromNewsData() async {
+        const apiKey = "pub_c9084d601ff6465289bd682c942dec4c";
+        const query = "البيئة OR الاستدامة OR تدوير OR مناخ";
+        final apiUrl = Uri.parse(
+          "https://newsdata.io/api/1/news?apikey=$apiKey&q=$query&language=ar",
+        );
+        try {
+          final res = await http
+              .get(apiUrl)
+              .timeout(const Duration(seconds: 10));
+          print("📰 NewsData status: ${res.statusCode}");
+          if (res.statusCode != 200) {
+            print("📰 NewsData error body: ${res.body.substring(0, 200)}");
+            return [];
+          }
+          final body = jsonDecode(res.body);
+          final results = List<Map<String, dynamic>>.from(
+            body["results"] ?? [],
+          );
+          print("📰 NewsData returned ${results.length} articles");
+          return results;
+        } catch (e) {
+          print("❌ NewsData error: $e");
+          return [];
         }
       }
 
-      return null; // لا يوجد مقال جديد موجود أصلاً
-    }
+      final results = await fetchFromNewsData();
 
-    // ========== 2) جلب مقال جديد من Firestore أولاً ==========
-    final firstTry = await tryFromFirestore();
-    if (firstTry != null) {
-      return firstTry; // ممتاز — لقينا مقال جاهز
-    }
-
-    // ========== 3) لو ما فيه مقالات جديدة → نجيب من NewsData.io ==========
-    const apiKey = "pub_c9084d601ff6465289bd682c942dec4c";
-    const query =
-        "البيئة OR المناخ OR الاستدامة OR الطاقة النظيفة OR تدوير OR نفايات OR تلوث OR انبعاثات OR تشجير";
-
-    final apiUrl = Uri.parse(
-      "https://newsdata.io/api/1/news?apikey=$apiKey&q=$query&language=ar&category=environment",
-    );
-
-    try {
-      final res = await http.get(apiUrl);
-
-      if (res.statusCode != 200) {
-        print("❌ News API Error: ${res.statusCode}");
-        return null;
+      if (results.isEmpty) {
+        print("📰 No results from APIs");
+        // سجّل المحاولة حتى لو ما جاب نتائج
+        await firestore.collection('appSettings').doc('newsApiLastFetch').set({
+          'fetchedAt': FieldValue.serverTimestamp(),
+          'savedCount': 0,
+          'note': 'API returned empty',
+        });
+        return;
       }
 
-      final body = jsonDecode(res.body);
-      final List results = body["results"] ?? [];
-
-      if (results.isEmpty) return null;
-
-      // الكلمات المفتاحية لمنع أي مقال غير بيئي
       final keywords = [
-        'البيئة',
-        'استدامة',
-        'تدوير',
-        'إعادة تدوير',
-        'تلوث',
-        'احتباس حراري',
-        'كربون',
-        'طاقة متجددة',
-        'نفايات',
-        'تشجير',
-        'هواء نقي',
-        'مناخ',
-        'انبعاثات',
-        'محميات',
-        'تغير المناخ',
-        'طاقة نظيفة',
-        'مصادر طبيعية',
+        'البيئة', 'استدامة', 'تدوير', 'تلوث', 'مناخ',
+        'كربون', 'طاقة متجددة', 'نفايات', 'تشجير', 'انبعاثات',
+        //جديدات
+        'طبيعة', 'غابات', 'محيط', 'بحر', 'مياه', 'جفاف',
+        'فيضان', 'زلزال', 'درجة حرارة', 'احترار', 'أوزون',
+        'حيوانات', 'نباتات', 'زراعة', 'غذاء', 'صحراء',
+        'طاقة شمسية', 'رياح', 'نفط', 'وقود', 'غاز',
       ];
 
-      // نجيب المقالات المخزنة سابقًا لمنع التكرار
       final existing = await firestore.collection('articles').get();
       final existingTitles = existing.docs
           .map((d) => (d.data()['title'] ?? '').toString().trim())
           .toSet();
 
-      // فلترة نتائج الـ API
-      final filtered = results.where((art) {
-        final merged =
-            ((art['title'] ?? '') +
-                    ' ' +
-                    (art['full_content'] ?? '') +
-                    ' ' +
-                    (art['description'] ?? ''))
-                .toLowerCase();
+      print("📰 Existing articles in Firestore: ${existingTitles.length}");
 
-        return keywords.any((k) => merged.contains(k));
-      }).toList();
+      int saved = 0;
+      int skipped = 0;
 
-      if (filtered.isEmpty) {
-        print("⚠️ No environmental articles matched filters");
-        return null;
-      }
-
-      // تخزين مقالات جديدة فقط (بدون تكرار)
-      for (final rawArt in filtered) {
+      for (final rawArt in results) {
         final title = (rawArt['title'] ?? '').toString().trim();
-        if (title.isEmpty) continue;
 
-        if (existingTitles.contains(title)) continue;
+        if (title.isEmpty) {
+          print("⏭️ Skipped: empty title");
+          skipped++;
+          continue;
+        }
+
+        if (existingTitles.contains(title)) {
+          print(
+            "⏭️ Skipped (duplicate): ${title.substring(0, title.length.clamp(0, 40))}",
+          );
+          skipped++;
+          continue;
+        }
 
         final content =
             (rawArt['full_content'] ??
@@ -1319,30 +1296,62 @@ bool _isTransportTitle(String title) {
                     '')
                 .toString();
 
-        if (content.length < 80) continue; // محتوى غير صالح
+        if (content.length < 80) {
+          print("⏭️ Skipped (short content ${content.length} chars): $title");
+          skipped++;
+          continue;
+        }
+
+        final merged = (title + ' ' + content).toLowerCase();
+        if (!keywords.any((k) => merged.contains(k))) {
+          print("⏭️ Skipped (no keywords): $title");
+          skipped++;
+          continue;
+        }
+
+        if (title.isEmpty) {
+          skipped++;
+          continue;
+        }
+
+        if (existingTitles.contains(title)) {
+          skipped++;
+          continue;
+        }
 
         await firestore.collection('articles').add({
           'title': title,
-          'description': rawArt['description'] ?? '',
           'content': content,
-          'url': rawArt['link'] ?? '',
-          'urlToImage': rawArt['image_url'] ?? '',
-          'sourceName': rawArt['source_id'] ?? '',
+          'urlToImage': rawArt['image_url'] ?? rawArt['image'] ?? '',
+          'sourceName': rawArt['source_id'] ?? 'مصدر بيئي',
           'publishedAt': rawArt['pubDate'] ?? '',
-          //'language': 'ar',
           'category': 'environment',
-          //'createdAt': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
         });
 
-        existingTitles.add(title); // منع التكرار لاحقًا
+        existingTitles.add(title);
+        saved++;
+        print("📰 Saved: ${title.substring(0, title.length.clamp(0, 50))}");
       }
 
-      // ========== 4) المحاولة الثانية بعد التخزين ==========
-      return await tryFromFirestore();
-    } catch (e) {
-      print("❌ NewsData fetch failed: $e");
-      return null;
+      print("📰 Done — Saved: $saved | Skipped: $skipped");
+
+      await firestore.collection('appSettings').doc('newsApiLastFetch').set({
+        'fetchedAt': FieldValue.serverTimestamp(),
+        'savedCount': saved,
+        'skippedCount': skipped,
+        'totalFromApi': results.length,
+      });
     }
+
+    // ========== التدفق الرئيسي ==========
+    // 1) جرب Firestore أولاً
+    await fetchAndSaveFromAPIs();
+
+    // 2) ثم جيب من Firestore
+    final result = await tryFromFirestore();
+    print("📰 getFreshNewsForUser result: ${result?['title'] ?? 'null'}");
+    return result;
   }
 
   @override
@@ -1354,6 +1363,9 @@ bool _isTransportTitle(String title) {
 
   @override
   void dispose() {
+    for (final sub in _allSubscriptions) {
+      sub.cancel();
+    }
     _userTasksSubscription?.cancel();
     super.dispose();
   }
@@ -1392,16 +1404,35 @@ bool _isTransportTitle(String title) {
     }
   }
 
+  Future<void> _ensureExtraTasksForDateIfCompleted(DateTime day) async {
+    if (_uid == null) return;
+
+    // تحقق إن المهمة الأولى مكتملة
+    final mainSnap = await FirebaseFirestore.instance
+        .collection('userTasks')
+        .doc('${_uid}_${_yyyyMMdd(day)}')
+        .get();
+
+    final status = mainSnap.data()?['status'] as String? ?? '';
+    if (status != 'completed') return; // ← لو ما اكتملت، ما تنشئ task2
+
+    await _ensureExtraTasksForDate(day, bypassTodayCheck: true);
+  }
+
   Future<void> _bootstrapTodayOnly() async {
     final user = _auth.currentUser;
     if (user == null) return;
 
     final today = _dayStart(DateTime.now());
 
+    final tomorrow = today.add(const Duration(days: 1));
+
     await Future.wait([
       _loadUserJoinDate(user, today),
       _ensureUserTaskForDate(today),
-      _ensureUserTaskForDate(today.add(const Duration(days: 1))),
+      _ensureUserTaskForDate(tomorrow),
+      _ensureExtraTasksForDate(today, bypassTodayCheck: true),
+      _ensureExtraTasksForDate(tomorrow), // ← أضيفي هذا
     ]);
 
     _getTaskStatusesForMonth(today).then((statuses) {
@@ -1427,18 +1458,50 @@ bool _isTransportTitle(String title) {
       final key = '${_uid!}_${_yyyyMMdd(sel)}';
       final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
 
-      var snap = await ref.get().timeout(
-        const Duration(seconds: 8),
-        onTimeout: () => throw TimeoutException('timeout-get-userTask'),
-      );
+      var snap = await ref.get();
 
-      if (!snap.exists) {
-        await _ensureUserTaskForDate(sel);
-        snap = await ref.get().timeout(
-          const Duration(seconds: 8),
-          onTimeout: () =>
-              throw TimeoutException('timeout-get-userTask-after-create'),
-        );
+      // ✅ إذا المهمة ignored وما في مهمة جديدة → أصلحها
+      if (snap.exists) {
+        final data = snap.data()!;
+        final status = data['status'] as String? ?? '';
+        final ignored = data['ignored'] as bool? ?? false;
+
+        if (status == 'ignored' || ignored == true) {
+          print('⚠️ Found ignored task → fixing...');
+          await ref.update({
+            'status': 'pending',
+            'ignored': false,
+            'ignoredAt': null,
+          });
+          snap = await ref.get(); // أعد الجلب
+          print('✅ Fixed ignored task');
+        }
+      }
+
+      if (snap.exists) {
+        final data = snap.data()!;
+        final status = data['status'] as String? ?? '';
+        final ignored = data['ignored'] as bool? ?? false;
+        final taskValidation = data['taskValidation'] as String? ?? '';
+        final articleId = data['articleId'];
+
+        // ✅ إذا مهمة اختبار قصير وما عندها articleId → أضيفيه
+        if (taskValidation == 'التحقق عبر اجراء اختبار قصير' &&
+            articleId == null) {
+          print('⚠️ Missing articleId → fetching...');
+          final freshNews = await getFreshNewsForUser(_uid!);
+          if (freshNews != null) {
+            await ref.update({'articleId': freshNews['docId']});
+            snap = await ref.get();
+            print('✅ articleId added: ${freshNews['docId']}');
+          }
+        }
+
+        if (status == 'ignored' || ignored == true) {
+          print('⚠️ Found ignored task → creating new one...');
+          await _ensureUserTaskForDate(sel, forceReplace: true);
+          snap = await ref.get();
+        }
       }
 
       _attachUserTaskStreamFor(sel);
@@ -1447,20 +1510,6 @@ bool _isTransportTitle(String title) {
         setState(() {
           _precheckDone = true;
           _precheckError = null;
-        });
-      }
-    } on TimeoutException catch (e) {
-      if (mounted) {
-        setState(() {
-          _precheckDone = true;
-          _precheckError = e.message ?? 'timeout';
-        });
-      }
-    } on FirebaseException catch (e) {
-      if (mounted) {
-        setState(() {
-          _precheckDone = true;
-          _precheckError = e.code;
         });
       }
     } catch (e) {
@@ -1590,51 +1639,214 @@ bool _isTransportTitle(String title) {
   // =============================================================
   // ✅ تحديث مهمة اليوم المختار (عند الضغط على "تجديد المهمة")
   // =============================================================
+  bool _isRefreshing = false;
+
   Future<void> _refreshUserTask(
     Map<String, dynamic> currentTask, {
-    String? docId, // ← جديد
+    String? docId,
   }) async {
-    if (_uid == null || _selectedDay == null) return;
-
-    final selected = _dayStart(_selectedDay!);
-    final today = _dayStart(DateTime.now());
-
-    // ❌ منع تحديث المهام للأيام الماضية
-    if (!selected.isAtSameMomentAs(today)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'يمكنك تغيير مهمة اليوم الحالي فقط',
-              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-            ),
-            backgroundColor: AppColors.primary,
-          ),
-        );
-      }
-      return;
-    }
-
-    final monthKey =
-        "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
-    final utKey = docId ?? '${_uid!}_${_yyyyMMdd(selected)}';
-    final utRef = FirebaseFirestore.instance.collection('userTasks').doc(utKey);
-    final isMainTask =
-        (docId == null || docId == '${_uid!}_${_yyyyMMdd(selected)}');
+    if (_isRefreshing) return;
+    _isRefreshing = true;
 
     try {
-      await utRef.update({
-        'ignored': true,
-        'ignoredAt': FieldValue.serverTimestamp(),
-        'status': 'ignored', // غيري الحالة عشان تختفي من الشاشة
-      });
-      print('✅ تم تسجيل المهمة كمتجاهلة (تحديث)');
-    } catch (e) {
-      print('⚠️ فشل تسجيل التجاهل: $e');
-      // نكمل عادي حتى لو فشل
-    }
+      if (_uid == null || _selectedDay == null) return;
 
-    // 🟩 1) جلب المهام الفعالة من كولكشن tasks (يختار المهام الحالية فقط)
+      final selected = _dayStart(_selectedDay!);
+      final today = _dayStart(DateTime.now());
+
+      if (!selected.isAtSameMomentAs(today)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'يمكنك تغيير مهمة اليوم الحالي فقط',
+                style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+              ),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+        return;
+      }
+
+      final monthKey =
+          "${selected.year}-${selected.month.toString().padLeft(2, '0')}";
+      final utKey = docId ?? '${_uid!}_${_yyyyMMdd(selected)}';
+      final utRef = FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(utKey);
+
+      try {
+        await utRef.update({
+          'ignored': true,
+          'ignoredAt': FieldValue.serverTimestamp(),
+          'status': 'ignored',
+        });
+        print('✅ تم تسجيل المهمة كمتجاهلة (تحديث)');
+      } catch (e) {
+        print('⚠️ فشل تسجيل التجاهل: $e');
+      }
+
+      final tasksSnap = await FirebaseFirestore.instance
+          .collection('tasks')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      final validTasks = tasksSnap.docs.where((doc) {
+        final data = doc.data();
+        dynamic vf = data['visible_from'];
+        dynamic em = data['expiry_month'];
+        String? visibleFrom, expiryMonth;
+
+        if (vf is Timestamp) {
+          final d = vf.toDate();
+          visibleFrom = "${d.year}-${d.month.toString().padLeft(2, '0')}";
+        } else if (vf is String) {
+          visibleFrom = vf;
+        }
+        if (em is Timestamp) {
+          final d = em.toDate();
+          expiryMonth = "${d.year}-${d.month.toString().padLeft(2, '0')}";
+        } else if (em is String) {
+          expiryMonth = em;
+        }
+
+        final isVisible =
+            (visibleFrom == null) || (visibleFrom.compareTo(monthKey) <= 0);
+        final notExpired =
+            (expiryMonth == null) || (expiryMonth.compareTo(monthKey) >= 0);
+        return isVisible && notExpired;
+      }).toList();
+
+      if (validTasks.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'لا توجد مهام مُتاحة لهذا الشهر.',
+                style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+              ),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+        return;
+      }
+
+      final yesterday = _dayStart(selected.subtract(const Duration(days: 1)));
+      final tomorrow = _dayStart(selected.add(const Duration(days: 1)));
+      final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
+      final tKey = '${_uid!}_${_yyyyMMdd(tomorrow)}';
+      final ySnap = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(yKey)
+          .get();
+      final tSnap = await FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(tKey)
+          .get();
+
+      final yTaskId = ySnap.exists
+          ? (ySnap.data()?['taskId'] as String?)
+          : null;
+      final tTaskId = tSnap.exists
+          ? (tSnap.data()?['taskId'] as String?)
+          : null;
+      final currentTaskId =
+          (currentTask['taskId'] ?? currentTask['id']) as String?;
+
+      final excluded = <String?>{currentTaskId, yTaskId, tTaskId}
+        ..removeWhere((e) => e == null);
+      final pool = validTasks
+          .where((doc) => !excluded.contains(doc.id))
+          .toList();
+      final finalPool = pool.isEmpty ? validTasks : pool;
+
+      final freshNews = await getFreshNewsForUser(_uid!);
+      final hasFreshNews = freshNews != null;
+      final shouldOfferNewsTask = hasFreshNews && Random().nextDouble() < 0.2;
+
+      List newPool = [];
+      if (shouldOfferNewsTask) newPool.add(null);
+      newPool.addAll(finalPool);
+
+      final rnd = Random(DateTime.now().millisecondsSinceEpoch);
+      final picked = newPool[rnd.nextInt(newPool.length)];
+
+      if (picked == null && hasFreshNews) {
+        final news = freshNews!;
+        const newsTaskId = "bJjITCm7ZWlmzEk2QNPr";
+        final taskSnap = await FirebaseFirestore.instance
+            .collection('tasks')
+            .doc(newsTaskId)
+            .get();
+
+        if (!taskSnap.exists) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'تعذّر تحميل مهمة قراءة الخبر البيئي.',
+                  style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
+                ),
+                backgroundColor: Colors.redAccent,
+              ),
+            );
+          }
+          return;
+        }
+
+        final taskData = taskSnap.data() ?? {};
+        await utRef.update({
+          'taskId': newsTaskId,
+          'taskTitle': taskData['title'] ?? '(بدون عنوان)',
+          'taskDescription': taskData['description'] ?? '',
+          'taskPoints': taskData['points'] ?? 0,
+          'taskValidation': taskData['validationStrategy'] ?? 'غير محددة',
+          'articleId': news['docId'],
+          'status': 'pending',
+          'ignored': false,
+          'ignoredAt': null,
+        });
+        _attachUserTaskStreamFor(selected);
+        return;
+      }
+
+      final pickedData = picked.data();
+      await utRef.update({
+        'taskId': picked.id,
+        'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
+        'taskDescription': pickedData['description'] ?? '',
+        'taskPoints': pickedData['points'] ?? 0,
+        'taskValidation': pickedData['validationStrategy'] ?? 'غير محددة',
+        'status': 'pending',
+        'ignored': false,
+        'ignoredAt': null,
+      });
+      _attachUserTaskStreamFor(selected);
+    } finally {
+      _isRefreshing = false;
+    }
+  }
+
+  Future<void> _ensureUserTaskForDate(
+    DateTime day, {
+    bool forceReplace = false,
+  }) async {
+    if (_uid == null) return;
+
+    final today = _dayStart(DateTime.now());
+    if (_joinDate != null && day.isBefore(_joinDate!)) return;
+
+    final key = '${_uid!}_${_yyyyMMdd(day)}';
+    final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
+    final snap = await ref.get();
+
+    // ← بدّلي هذا السطر
+    if (snap.exists && !forceReplace) return;
+
+    final monthKey = "${day.year}-${day.month.toString().padLeft(2, '0')}";
+
     final tasksSnap = await FirebaseFirestore.instance
         .collection('tasks')
         .where('status', isEqualTo: 'active')
@@ -1644,7 +1856,8 @@ bool _isTransportTitle(String title) {
       final data = doc.data();
       dynamic vf = data['visible_from'];
       dynamic em = data['expiry_month'];
-      String? visibleFrom, expiryMonth;
+      String? visibleFrom;
+      String? expiryMonth;
 
       if (vf is Timestamp) {
         final d = vf.toDate();
@@ -1666,137 +1879,97 @@ bool _isTransportTitle(String title) {
       return isVisible && notExpired;
     }).toList();
 
-    if (validTasks.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'لا توجد مهام مُتاحة لهذا الشهر.',
-            style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-          ),
-          backgroundColor: AppColors.primary,
-        ),
-      );
-      return;
-    }
+    if (validTasks.isEmpty) return;
 
-    // 🟨 2) نتجنب تكرار مهمة الأمس أو الغد
-    final yesterday = _dayStart(selected.subtract(const Duration(days: 1)));
-    final tomorrow = _dayStart(selected.add(const Duration(days: 1)));
-
+    final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
     final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
-    final tKey = '${_uid!}_${_yyyyMMdd(tomorrow)}';
     final ySnap = await FirebaseFirestore.instance
         .collection('userTasks')
         .doc(yKey)
         .get();
-    final tSnap = await FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(tKey)
-        .get();
+    final yTaskId = ySnap.exists ? (ySnap.data()?['taskId'] as String?) : null;
 
-    final yTaskId = (ySnap.exists)
-        ? (ySnap.data()?['taskId'] as String?)
-        : null;
-    final tTaskId = (tSnap.exists)
-        ? (tSnap.data()?['taskId'] as String?)
-        : null;
-    final currentTaskId =
-        (currentTask['taskId'] ?? currentTask['id']) as String?;
-
-    final excluded = <String?>{currentTaskId, yTaskId, tTaskId}
-      ..removeWhere((e) => e == null);
-    final pool = validTasks.where((doc) => !excluded.contains(doc.id)).toList();
-    final finalPool = pool.isEmpty ? validTasks : pool;
-
-    // 📰 3) نحاول نجيب خبر جديد (من الـ API أو من المقالات)
-    final freshNews = await getFreshNewsForUser(_uid!);
-    bool hasFreshNews = freshNews != null;
-
-    // 🧩 4) نجمع المهام العادية + مهمة الخبر في قائمة واحدة
-    List newPool = [];
-
-    //     1) إذا ما فيه مقال جديد فعليًا → hasFreshNews = false → ما تنعرض مهمة القراءة إطلاقًا
-
-    // حتى لو راح للـ API وما لقى شيء جديد.
-
-    // 2) حتى لو فيه مقال جديد → تظهر مهمة القراءة فقط بنسبة 20% من المرات
-
-    // 3) ما عاد يضيف مهمة القراءة دايمًا إلى قائمة المهام
-
-    // فما فيه تكرار ولا ظهور "قراءة خبر" بشكل مزعج.
-
-    // 4) الـ API الآن لن يسبب ظهور مهمة خبر إلا إذا فعلاً أعطى مقال جديد لم يظهر من قبل.
-
-    // نضيف مهمة الخبر فقط بنسبة 20٪ مثلاً
-    final shouldOfferNewsTask = hasFreshNews && Random().nextDouble() < 0.2;
-
-    if (shouldOfferNewsTask) {
-      newPool.add(null);
+    // إذا forceReplace، استبعد المهمة الحالية أيضاً
+    String? currentTaskId;
+    if (forceReplace && snap.exists) {
+      currentTaskId = snap.data()?['taskId'] as String?;
     }
-    newPool.addAll(finalPool);
 
-    // 🌀 5) اختيار مهمة عشوائية
-    final rnd = Random(DateTime.now().millisecondsSinceEpoch);
+    final excludedIds = <String?>{yTaskId, currentTaskId}
+      ..removeWhere((id) => id == null);
+    final candidates = validTasks
+        .where((doc) => !excludedIds.contains(doc.id))
+        .toList();
+    final filteredTasks = candidates.isEmpty ? validTasks : candidates;
+
+    final bool isToday = _dayStart(day) == today;
+    final freshNews = isToday ? await getFreshNewsForUser(_uid!) : null;
+    final canShowNews = freshNews != null;
+
+    List newPool = [];
+    if (canShowNews) newPool.add(null);
+    newPool.addAll(filteredTasks);
+
+    final rnd = Random(_uid.hashCode ^ day.millisecondsSinceEpoch);
     final picked = newPool[rnd.nextInt(newPool.length)];
 
-    // 📰 6) لو اختير "مهمة خبر" → نربطها بمهمة الأدمن المحددة ID ونقرأ تفاصيلها من Firestore
-    if (picked == null && hasFreshNews) {
+    final start = _dayStart(day);
+    final end = _dayEnd(day);
+    final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
+
+    if (picked == null && canShowNews) {
       final news = freshNews!;
-      const newsTaskId =
-          "bJjITCm7ZWlmzEk2QNPr"; // ← ID مهمة "قراءة خبر بيئي" من الأدمن
+      const newsTaskId = "bJjITCm7ZWlmzEk2QNPr";
 
-      // 🔹 نحضر بيانات مهمة الأدمن كاملة
-      final taskSnap = await FirebaseFirestore.instance
-          .collection('tasks')
-          .doc(newsTaskId)
-          .get();
-
-      if (!taskSnap.exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'تعذّر تحميل مهمة قراءة الخبر البيئي. يرجى المحاولة لاحقًا.',
-              style: GoogleFonts.ibmPlexSansArabic(color: Colors.white),
-            ),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-        return;
-      }
-
-      final taskData = taskSnap.data() ?? {};
-
-      // 🔹 نكتبها داخل userTasks مع ربط المقال
-      await utRef.update({
+      await ref.set({
+        'userId': _uid,
         'taskId': newsTaskId,
-        'taskTitle': taskData['title'] ?? '(بدون عنوان)',
-        'taskDescription': taskData['description'] ?? '',
-        'taskPoints': taskData['points'] ?? 0,
-        'taskValidation': taskData['validationStrategy'] ?? 'غير محددة',
+        'taskTitle': 'قراءة خبر بيئي',
+        'taskDescription': 'قراءة هذا الخبر البيئي ثم الإجابة على الاختبار.',
+        'taskPoints': 10,
+        'taskValidation': 'التحقق عبر اجراء اختبار قصير',
         'articleId': news['docId'],
+        'selectedAt': Timestamp.fromDate(start),
+        'windowStart': Timestamp.fromDate(start),
+        'windowEnd': Timestamp.fromDate(end),
+        'status': status,
+        'completedAt': null,
+        'ignored': false,
+        'ignoredAt': null,
       });
-
-      // ← فقط لو المهمة الرئيسية
-      if (isMainTask) _attachUserTaskStreamFor(selected);
       return;
     }
 
-    // 🟩 7) مهمة عادية (غير خبر)
     final pickedData = picked.data();
-    final denorm = {
+    await ref.set({
+      'userId': _uid,
+      'taskId': picked.id,
+      'selectedAt': Timestamp.fromDate(start),
+      'status': status,
+      'completedAt': null,
       'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
       'taskDescription': pickedData['description'] ?? '',
       'taskPoints': pickedData['points'] ?? 0,
-      'taskValidation': pickedData['validationStrategy'] ?? 'غير محددة',
-    };
-
-    await utRef.update({'taskId': picked.id, ...denorm});
-    // ← فقط لو المهمة الرئيسية
-    if (isMainTask) _attachUserTaskStreamFor(selected);
+      'taskValidation':
+          pickedData['validationStrategy'] ??
+          pickedData['validation'] ??
+          pickedData['taskValidation'] ??
+          'غير محددة',
+      'ignored': false,
+      'ignoredAt': null,
+    });
+    await _ensureExtraTasksForDate(day);
   }
 
-  Future<void> _ensureExtraTasksForDate(DateTime day) async {
+  Future<void> _ensureExtraTasksForDate(
+    DateTime day, {
+    bool bypassTodayCheck = false,
+  }) async {
     if (_uid == null) return;
+
+    // ✅ المهام الإضافية تبدأ من الغد فقط
+    final today = _dayStart(DateTime.now());
+    if (!bypassTodayCheck && day.isBefore(today)) return;
 
     final userDoc = await FirebaseFirestore.instance
         .collection('users')
@@ -1852,16 +2025,14 @@ bool _isTransportTitle(String title) {
 
       if (validTasks.isEmpty) return;
 
-      // استبعد المهام المستخدمة
+      // استبعد المهام المستخدمة + المهام اللي اخترناها في نفس الـ loop
       final pool = validTasks
           .where((doc) => !usedIds.contains(doc.id))
           .toList();
       final finalPool = pool.isEmpty ? validTasks : pool;
 
       final rnd = Random(
-        DateTime.now().millisecondsSinceEpoch ^
-            day.millisecondsSinceEpoch ^
-            (i * 9999),
+        _uid.hashCode ^ day.millisecondsSinceEpoch ^ (i * 9999),
       );
       final picked = finalPool[rnd.nextInt(finalPool.length)];
       final pickedData = picked.data();
@@ -1888,7 +2059,7 @@ bool _isTransportTitle(String title) {
             'ignoredAt': null,
           });
 
-      // أضف المهمة الجديدة للمستبعدين
+      // ✅ أضف المهمة الجديدة للمستبعدين عشان ما تتكرر في الـ iterations القادمة
       usedIds.add(picked.id);
     }
   }
@@ -1896,199 +2067,6 @@ bool _isTransportTitle(String title) {
   // =============================================================
   // ✅ إنشاء مهمة اليوم للمستخدم (لو ما عنده مهمة لهذا اليوم)
   // =============================================================
-  Future<void> _ensureUserTaskForDate(DateTime day) async {
-    if (_uid == null) return;
-
-    final today = _dayStart(DateTime.now());
-    if (_joinDate != null && day.isBefore(_joinDate!)) return;
-
-    final key = '${_uid!}_${_yyyyMMdd(day)}';
-    final ref = FirebaseFirestore.instance.collection('userTasks').doc(key);
-    final snap = await ref.get();
-
-    if (snap.exists) {
-      // تأكد من إنشاء المهام الإضافية حتى لو الأولى موجودة
-      await _ensureExtraTasksForDate(day);
-      return;
-    }
-
-    // جيب لفل اليوزر
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(_uid)
-        .get();
-    final xp = (userDoc.data()?['xp'] ?? 0) as int;
-    final level = getCurrentLevel(xp);
-    final requiredTasks = _getRequiredTasksForLevel(level.id);
-
-    final monthKey = "${day.year}-${day.month.toString().padLeft(2, '0')}";
-
-    // 🟩 1) نحضر المهام الفعالة حسب الشهر
-    final tasksSnap = await FirebaseFirestore.instance
-        .collection('tasks')
-        .where('status', isEqualTo: 'active')
-        .get();
-
-    final validTasks = tasksSnap.docs.where((doc) {
-      final data = doc.data();
-      dynamic vf = data['visible_from'];
-      dynamic em = data['expiry_month'];
-      String? visibleFrom;
-      String? expiryMonth;
-
-      if (vf is Timestamp) {
-        final d = vf.toDate();
-        visibleFrom = "${d.year}-${d.month.toString().padLeft(2, '0')}";
-      } else if (vf is String)
-        visibleFrom = vf;
-      if (em is Timestamp) {
-        final d = em.toDate();
-        expiryMonth = "${d.year}-${d.month.toString().padLeft(2, '0')}";
-      } else if (em is String)
-        expiryMonth = em;
-
-      final isVisible =
-          (visibleFrom == null) || (visibleFrom.compareTo(monthKey) <= 0);
-      final notExpired =
-          (expiryMonth == null) || (expiryMonth.compareTo(monthKey) >= 0);
-      return isVisible && notExpired;
-    }).toList();
-
-    if (validTasks.isEmpty) return;
-
-    // 🟨 2) نتجنب تكرار مهمة الأمس
-    final yesterday = _dayStart(day.subtract(const Duration(days: 1)));
-    final yKey = '${_uid!}_${_yyyyMMdd(yesterday)}';
-    final ySnap = await FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(yKey)
-        .get();
-    final yTaskId = (ySnap.exists)
-        ? (ySnap.data()?['taskId'] as String?)
-        : null;
-
-    final excludedIds = {yTaskId}..removeWhere((id) => id == null);
-    final candidates = validTasks
-        .where((doc) => !excludedIds.contains(doc.id))
-        .toList();
-    final filteredTasks = candidates.isEmpty ? validTasks : candidates;
-
-    // 📰 3) جلب خبر جديد فقط إذا اليوم = اليوم الحالي
-    final bool isToday = _dayStart(day) == today;
-    final freshNews = isToday ? await getFreshNewsForUser(_uid!) : null;
-    bool canShowNews = freshNews != null;
-
-    // 🧩 4) بناء pool يشمل مهام + خبر
-    List newPool = [];
-    if (canShowNews) newPool.add(null); // null = مهمة خبر
-    newPool.addAll(filteredTasks);
-
-    // 🎲 5) اختيار مهمة عشوائية
-    final rnd = Random(
-      DateTime.now().millisecondsSinceEpoch ^ day.millisecondsSinceEpoch,
-    );
-    final picked = newPool[rnd.nextInt(newPool.length)];
-
-    // ⏰ تجهيز الوقت والحالة
-    final start = _dayStart(day);
-    final end = _dayEnd(day);
-    final String status = day.isBefore(today) ? 'uncompleted' : 'pending';
-
-    // 📰 6) لو هي مهمة خبر → استخدم ID الأدمن المحدد
-    if (picked == null && canShowNews) {
-      final news = freshNews!;
-      const newsTaskId =
-          "bJjTCm7ZWlmzEk2QNPr"; // ← ID مهمة "قراءة خبر بيئي" من الأدمن
-
-      await ref.set({
-        'userId': _uid,
-        'taskId': newsTaskId,
-        'taskTitle': 'قراءة خبر بيئي',
-        'taskDescription': 'قراءة هذا الخبر البيئي ثم الإجابة على الاختبار.',
-        'taskPoints': 10,
-        'taskValidation': 'التحقق عبر اجراء اختبار قصير',
-        'articleId': news['docId'],
-        'selectedAt': Timestamp.fromDate(start),
-        'windowStart': Timestamp.fromDate(start),
-        'windowEnd': Timestamp.fromDate(end),
-        'status': status,
-        'completedAt': null,
-
-        'ignored': false,
-        'ignoredAt': null,
-      });
-      return;
-    }
-
-    // 🟩 7) مهمة عادية
-    final pickedData = picked.data();
-    await ref.set({
-      'userId': _uid,
-      'taskId': picked.id,
-      'selectedAt': Timestamp.fromDate(start),
-      'status': status,
-      'completedAt': null,
-      //'windowStart': Timestamp.fromDate(start),
-      //'windowEnd': Timestamp.fromDate(end),
-      'taskTitle': pickedData['title'] ?? '(بدون عنوان)',
-      'taskDescription': pickedData['description'] ?? '',
-      'taskPoints': pickedData['points'] ?? 0,
-      'taskValidation':
-          pickedData['validationStrategy'] ??
-          pickedData['validation'] ??
-          pickedData['taskValidation'] ??
-          'غير محددة',
-
-      'ignored': false,
-      'ignoredAt': null,
-    });
-
-    final usedIds = <String?>{yTaskId, picked.id}; // ← أضيفي picked.id
-    // إنشاء المهام الإضافية حسب اللفل
-    for (int i = 2; i <= requiredTasks; i++) {
-      final extraKey = '${_uid!}_${_yyyyMMdd(day)}_task$i';
-      final extraRef = FirebaseFirestore.instance
-          .collection('userTasks')
-          .doc(extraKey);
-      final extraSnap = await extraRef.get();
-      if (extraSnap.exists) continue;
-
-      // نختار مهمة مختلفة عن السابقة
-      final extraPool = validTasks
-          .where((doc) => !usedIds.contains(doc.id))
-          .toList();
-      final finalExtraPool = extraPool.isEmpty ? validTasks : extraPool;
-
-      final extraRnd = Random(
-        DateTime.now().millisecondsSinceEpoch ^
-            day.millisecondsSinceEpoch ^
-            (i * 9999),
-      );
-      final extraPicked =
-          finalExtraPool[extraRnd.nextInt(finalExtraPool.length)];
-      final extraData = extraPicked.data();
-
-      usedIds.add(extraPicked.id); // ← يمنع التكرار في الدورة الجاية
-
-      await extraRef.set({
-        'userId': _uid,
-        'taskId': extraPicked.id,
-        'selectedAt': Timestamp.fromDate(start),
-        'status': status,
-        'completedAt': null,
-        'taskTitle': extraData['title'] ?? '(بدون عنوان)',
-        'taskDescription': extraData['description'] ?? '',
-        'taskPoints': extraData['points'] ?? 0,
-        'taskValidation':
-            extraData['validationStrategy'] ??
-            extraData['validation'] ??
-            extraData['taskValidation'] ??
-            'غير محددة',
-        'ignored': false,
-        'ignoredAt': null,
-      });
-    }
-  }
 
   // -------------------------------------------------------------
   // 1) اختيار مهمة إضافية عشوائية (مختلفة عن مهمة اليوم)
@@ -2224,7 +2202,24 @@ bool _isTransportTitle(String title) {
         bonusTask['validationStrategy']?.toString() ?? '';
 
     if (validationStrategy == "التحقق عبر اجراء اختبار قصير") {
-      // 📖 مهمة قراءة مقال - نفتح ArticlePage
+      final articleId = bonusTask['articleId'];
+      if (articleId != null) {
+        await FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc(bonusDocId)
+            .set({
+              'userId': _uid,
+              'taskId': bonusTask['taskId'] ?? bonusTask['id'],
+              'taskTitle': bonusTask['title'] ?? '',
+              'taskDescription': bonusTask['description'] ?? '',
+              'taskPoints': bonusTask['points'] ?? 0,
+              'taskValidation': validationStrategy,
+              'articleId': articleId,
+              'selectedAt': Timestamp.fromDate(_dayStart(sel)),
+              'status': 'pending',
+            }, SetOptions(merge: true));
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -2585,7 +2580,9 @@ bool _isTransportTitle(String title) {
                               }
 
                               final ut =
-                                  (snap.data!.data() as Map<String, dynamic>?) ?? {};
+                                  (snap.data!.data()
+                                      as Map<String, dynamic>?) ??
+                                  {};
 
                               final newStatus =
                                   (ut['status'] as String?) ?? 'pending';
@@ -2659,49 +2656,49 @@ bool _isTransportTitle(String title) {
                                     final bool firstCompleted =
                                         (data['status'] == 'completed');
 
-return Column(
-  children: [
-    // 🌟 كارد المهمة الإضافية (صغير، فوق)
-    if (sel.isAtSameMomentAs(today))
-      _buildBonusTaskSectionStandalone(),
+                                    return Column(
+                                      children: [
+                                        // 🌟 كارد المهمة الإضافية (صغير، فوق)
+                                        if (sel.isAtSameMomentAs(today))
+                                          _buildBonusTaskSectionStandalone(),
 
-    // 🗂️ كارد المهام العادية مع سهم التنقل
-    _buildTaskCardWithNavigation(
-      mainData: fData,
-      canPerform: canPerformDay,
-      sel: sel,
-    ),
-  ],
-);
+                                        // 🗂️ كارد المهام العادية مع سهم التنقل
+                                        _buildTaskCardWithNavigation(
+                                          mainData: fData,
+                                          canPerform: canPerformDay,
+                                          sel: sel,
+                                        ),
+                                      ],
+                                    );
                                   },
                                 );
                               }
                               final bool firstCompleted =
                                   (data['status'] == 'completed');
 
-                            // return FutureBuilder<int>(
-                            //   key: ValueKey('$sel-$_completedTasksToday'), // ← هذا المهم
-                            //   future: _getNextIncompleteTaskIndex(sel),
-                            //   builder: (context, snap) {
-                            //     final nextIndex = snap.data ?? 1;
+                              // return FutureBuilder<int>(
+                              //   key: ValueKey('$sel-$_completedTasksToday'), // ← هذا المهم
+                              //   future: _getNextIncompleteTaskIndex(sel),
+                              //   builder: (context, snap) {
+                              //     final nextIndex = snap.data ?? 1;
 
-                            //     if (nextIndex == 1 && !firstCompleted) {
-                            //       return _buildUserTaskCard(
-                            //         taskData: data, canPerform: canPerformDay, taskIndex: 1,
-                            //       );
-                            //     }
-                            //     if (nextIndex >= 2 && nextIndex <= _requiredTasksToday) {
-                            //       return _buildExtraTaskCard(
-                            //         day: sel, taskIndex: nextIndex, canPerform: canPerformDay,
-                            //       );
-                            //     }
-                            //     // كل شيء مكتمل
-                            //     return _buildUserTaskCard(
-                            //       taskData: data, canPerform: canPerformDay, taskIndex: 1,
-                            //     );
-                            //   },
-                            // );
-                            return Column(
+                              //     if (nextIndex == 1 && !firstCompleted) {
+                              //       return _buildUserTaskCard(
+                              //         taskData: data, canPerform: canPerformDay, taskIndex: 1,
+                              //       );
+                              //     }
+                              //     if (nextIndex >= 2 && nextIndex <= _requiredTasksToday) {
+                              //       return _buildExtraTaskCard(
+                              //         day: sel, taskIndex: nextIndex, canPerform: canPerformDay,
+                              //       );
+                              //     }
+                              //     // كل شيء مكتمل
+                              //     return _buildUserTaskCard(
+                              //       taskData: data, canPerform: canPerformDay, taskIndex: 1,
+                              //     );
+                              //   },
+                              // );
+                              return Column(
                                 children: [
                                   if (sel.isAtSameMomentAs(today))
                                     _buildBonusTaskSectionStandalone(),
@@ -2729,332 +2726,404 @@ return Column(
       ),
     );
   }
+
   Widget _buildTaskCardWithNavigation({
-  required Map<String, dynamic> mainData,
-  required bool canPerform,
-  required DateTime sel,
-}) {
-  return StreamBuilder<DocumentSnapshot>(
-    key: ValueKey('task-$_viewingTaskIndex-${_yyyyMMdd(sel)}'),
-    stream: _viewingTaskIndex == 1
-        ? _userTaskStream
-        : FirebaseFirestore.instance
-            .collection('userTasks')
-            .doc('${_uid}_${_yyyyMMdd(sel)}_task$_viewingTaskIndex')
-            .snapshots(),
-    builder: (context, snap) {
-      Map<String, dynamic> taskData = mainData;
+    required Map<String, dynamic> mainData,
+    required bool canPerform,
+    required DateTime sel,
+  }) {
+    return StreamBuilder<DocumentSnapshot>(
+      key: ValueKey('task-$_viewingTaskIndex-${_yyyyMMdd(sel)}'),
+      stream: FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(
+            _viewingTaskIndex == 1
+                ? '${_uid}_${_yyyyMMdd(sel)}'
+                : '${_uid}_${_yyyyMMdd(sel)}_task$_viewingTaskIndex',
+          )
+          .snapshots(),
+      builder: (context, snap) {
+        Map<String, dynamic> taskData = mainData;
 
-      if (_viewingTaskIndex > 1 && snap.hasData && snap.data!.exists) {
-        final ut = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+        if (snap.hasData && snap.data!.exists) {
+          final ut = (snap.data!.data() as Map<String, dynamic>?) ?? {};
 
-        taskData = {
-          'taskId': ut['taskId'] ?? '',
-          'title': ut['taskTitle'] ?? '(بدون عنوان)',
-          'description': ut['taskDescription'] ?? '',
-          'points': ut['taskPoints'] ?? 0,
-          'validationStrategy': ut['taskValidation'] ?? 'غير محددة',
-          'id': ut['taskId'] ?? '',
-          'status': ut['status'] ?? 'pending',
-        };
-      }
-
-      return Column(
-        children: [
-          // أزرار التنقل لو عنده أكثر من مهمة
-          if (_requiredTasksToday > 1)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
-                textDirection: TextDirection.ltr,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // سهم يسار (السابقة)
-                  IconButton(
-                    onPressed: _viewingTaskIndex > 1
-                        ? () => setState(() => _viewingTaskIndex--)
-                        : null,
-                    icon: Icon(
-                      Icons.arrow_forward_ios, // ← كان forward
-                      color: _viewingTaskIndex > 1
-                          ? AppColors.primary
-                          : Colors.grey.shade300,
-                      size: 20,
+          taskData = {
+            'taskId': ut['taskId'] ?? '',
+            'title': ut['taskTitle'] ?? '(بدون عنوان)',
+            'description': ut['taskDescription'] ?? '',
+            'points': ut['taskPoints'] ?? 0,
+            'validationStrategy': ut['taskValidation'] ?? 'غير محددة',
+            'id': ut['taskId'] ?? '',
+            'status': ut['status'] ?? 'pending',
+          };
+        } else if (_viewingTaskIndex > 1 &&
+            (!snap.hasData || !snap.data!.exists)) {
+          // ← أضيفي هذا
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                child: Row(
+                  textDirection: TextDirection.ltr,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      onPressed: () => setState(() => _viewingTaskIndex--),
+                      icon: const Icon(
+                        Icons.arrow_forward_ios,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
                     ),
-                  ),
-
-                  // مؤشر الصفحة
-                  Directionality(
-                    textDirection: TextDirection.ltr,
-                    child: Text(
+                    Text(
                       '$_viewingTaskIndex / $_requiredTasksToday',
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontWeight: FontWeight.w700,
                         color: AppColors.dark,
                       ),
                     ),
-                  ),
-
-                // سهم يمين (التالية)
-                IconButton(
-                  onPressed: _viewingTaskIndex < _requiredTasksToday
-                      ? () => setState(() => _viewingTaskIndex++)
-                      : null,
-                  icon: Icon(
-                    Icons.arrow_back_ios_new, // ← كان back
-                    color: _viewingTaskIndex < _requiredTasksToday
-                        ? AppColors.primary
-                        : Colors.grey.shade300,
-                    size: 20,
-                  ),
+                    IconButton(
+                      onPressed: null,
+                      icon: Icon(
+                        Icons.arrow_back_ios_new,
+                        color: Colors.grey.shade300,
+                        size: 20,
+                      ),
+                    ),
+                  ],
                 ),
-                ],
               ),
-            ),
-
-          _buildUserTaskCard(
-            taskData: taskData,
-            canPerform: canPerform,
-            taskIndex: _viewingTaskIndex,
-            userTaskDocId: _viewingTaskIndex == 1
-                ? '${_uid}_${_yyyyMMdd(sel)}'
-                : '${_uid}_${_yyyyMMdd(sel)}_task$_viewingTaskIndex',
-            isPreviousCompleted: _viewingTaskIndex == 1
-            ? true
-            : (_completedTasksToday >= _viewingTaskIndex - 1), // ← هذا المهم
-          ),
-        ],
-      );
-    },
-  );
-}
-Widget _buildBonusTaskSectionStandalone() {
-  final sel = _dayStart(_selectedDay ?? DateTime.now());
-  final bonusDocId = '${_uid ?? ''}_${_yyyyMMdd(sel)}_bonus';
-
-  return StreamBuilder<DocumentSnapshot>(
-    stream: FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(bonusDocId)
-        .snapshots(),
-    builder: (context, snap) {
-      // مو موجودة بعد — اعرض زر الاقتراح الصغير
-      if (!snap.hasData || !snap.data!.exists) {
-        if (_suggestedBonusTask != null) {
-          return _buildProposedBonusCard(
-            task: _suggestedBonusTask!,
-            onAccept: () => _saveBonusTaskAndOpen(_suggestedBonusTask!),
-            onReject: () => setState(() => _suggestedBonusTask = null),
-            onAlternative: () async {
-              setState(() => _bonusLoading = true);
-              final currentTaskId = _suggestedBonusTask!['taskId'] ?? _suggestedBonusTask!['id'];
-              final next = await _suggestBonusTask(excludeTaskId: currentTaskId);
-              if (mounted) setState(() { _suggestedBonusTask = next; _bonusLoading = false; });
-            },
-            isLoading: _bonusLoading,
+              _buildUnavailableCard(
+                title: 'المهمة غير متاحة',
+                subtitle: 'ستُتاح مهامك الإضافية اعتباراً من الغد 🌱',
+              ),
+            ],
           );
         }
 
-        if (_completedTasksToday >= _requiredTasksToday)
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: _bonusLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primary,
-                    ),
-                  )
-                : OutlinedButton.icon(
-                    icon: const Icon(
-                      Icons.add_task,
-                      color: AppColors.primary,
-                      size: 18,
-                    ),
-                    label: Text(
-                      'اقتراح مهمة إضافية ✨',
-                      style: GoogleFonts.ibmPlexSansArabic(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        color: AppColors.primary,
+        return Column(
+          children: [
+            // أزرار التنقل لو عنده أكثر من مهمة
+            if (_requiredTasksToday > 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                child: Row(
+                  textDirection: TextDirection.ltr,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // سهم يسار (السابقة)
+                    IconButton(
+                      onPressed: _viewingTaskIndex > 1
+                          ? () => setState(() => _viewingTaskIndex--)
+                          : null,
+                      icon: Icon(
+                        Icons.arrow_forward_ios, // ← كان forward
+                        color: _viewingTaskIndex > 1
+                            ? AppColors.primary
+                            : Colors.grey.shade300,
+                        size: 20,
                       ),
                     ),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(
-                        color: AppColors.primary,
-                        width: 1.2,
+
+                    // مؤشر الصفحة
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Text(
+                        '$_viewingTaskIndex / $_requiredTasksToday',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 10,
-                        horizontal: 12,
-                      ),
-                      minimumSize: const Size(double.infinity, 0),
                     ),
-                    onPressed: () async {
-                      setState(() => _bonusLoading = true);
 
-                      final task = await _suggestBonusTask();
-
-                      if (mounted) {
-                        setState(() {
-                          _suggestedBonusTask = task;
-                          _bonusLoading = false;
-                        });
-                      }
-                    },
-                  ),
-          );
-
-        return const SizedBox.shrink();
-      }
-
-      final bonusData = (snap.data!.data() as Map<String, dynamic>?) ?? {};
-      final bonusStatus = bonusData['status'] as String? ?? 'pending';
-
-      // مكتملة
-      if (bonusStatus == 'completed') {
-        return Container(
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.primary33,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.primary, width: 1.2),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.star, color: AppColors.primary, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'تم إكمال المهمة الإضافية 🌱',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  color: AppColors.dark,
+                    // سهم يمين (التالية)
+                    IconButton(
+                      onPressed: _viewingTaskIndex < _requiredTasksToday
+                          ? () => setState(() => _viewingTaskIndex++)
+                          : null,
+                      icon: Icon(
+                        Icons.arrow_back_ios_new, // ← كان back
+                        color: _viewingTaskIndex < _requiredTasksToday
+                            ? AppColors.primary
+                            : Colors.grey.shade300,
+                        size: 20,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+
+            _buildUserTaskCard(
+              taskData: taskData,
+              canPerform: canPerform,
+              taskIndex: _viewingTaskIndex,
+              userTaskDocId: _viewingTaskIndex == 1
+                  ? '${_uid}_${_yyyyMMdd(sel)}'
+                  : '${_uid}_${_yyyyMMdd(sel)}_task$_viewingTaskIndex',
+              isPreviousCompleted: _viewingTaskIndex == 1
+                  ? true
+                  : (_completedTasksToday >=
+                        _viewingTaskIndex - 1), // ← هذا المهم
+            ),
+          ],
         );
-      }
+      },
+    );
+  }
 
-      // موجودة ولم تكتمل — اعرض كارد صغير
-      return _buildSmallActiveBonusCard(bonusData, bonusDocId, bonusStatus);
-    },
-  );
-}
+  Widget _buildBonusTaskSectionStandalone() {
+    final sel = _dayStart(_selectedDay ?? DateTime.now());
+    final bonusDocId = '${_uid ?? ''}_${_yyyyMMdd(sel)}_bonus';
 
-Widget _buildSmallActiveBonusCard(
-  Map<String, dynamic> bonusData,
-  String bonusDocId,
-  String status,
-) {
-  final sel = _dayStart(_selectedDay ?? DateTime.now());
-  final title = bonusData['taskTitle'] ?? '(بدون عنوان)';
-  final points = bonusData['taskPoints'] ?? 0;
-  final validation = bonusData['taskValidation'] ?? 'غير محددة';
-  final isSubmitted = status == 'submitted';
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(bonusDocId)
+          .snapshots(),
+      builder: (context, snap) {
+        // مو موجودة بعد — اعرض زر الاقتراح الصغير
+        if (!snap.hasData || !snap.data!.exists) {
+          if (_suggestedBonusTask != null) {
+            return _buildProposedBonusCard(
+              task: _suggestedBonusTask!,
+              onAccept: () => _saveBonusTaskAndOpen(_suggestedBonusTask!),
+              onReject: () => setState(() => _suggestedBonusTask = null),
+              onAlternative: () async {
+                setState(() => _bonusLoading = true);
+                final currentTaskId =
+                    _suggestedBonusTask!['taskId'] ??
+                    _suggestedBonusTask!['id'];
+                final next = await _suggestBonusTask(
+                  excludeTaskId: currentTaskId,
+                );
+                if (mounted)
+                  setState(() {
+                    _suggestedBonusTask = next;
+                    _bonusLoading = false;
+                  });
+              },
+              isLoading: _bonusLoading,
+            );
+          }
 
-  return Container(
-    margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: AppColors.accent, width: 1.2),
-      boxShadow: const [
-        BoxShadow(color: Color(0x12000000), blurRadius: 6, offset: Offset(0, 3)),
-      ],
-    ),
-    child: Row(
-      children: [
-        const Icon(Icons.auto_awesome, color: AppColors.accent, size: 18),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'مهمة إضافية ✨',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 11,
-                  color: AppColors.accent,
-                  fontWeight: FontWeight.w700,
+          if (_completedTasksToday >= _requiredTasksToday)
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: _bonusLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    )
+                  : OutlinedButton.icon(
+                      icon: const Icon(
+                        Icons.add_task,
+                        color: AppColors.primary,
+                        size: 18,
+                      ),
+                      label: Text(
+                        'اقتراح مهمة إضافية ✨',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.2,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 12,
+                        ),
+                        minimumSize: const Size(double.infinity, 0),
+                      ),
+                      onPressed: () async {
+                        setState(() => _bonusLoading = true);
+
+                        final task = await _suggestBonusTask();
+
+                        if (mounted) {
+                          setState(() {
+                            _suggestedBonusTask = task;
+                            _bonusLoading = false;
+                          });
+                        }
+                      },
+                    ),
+            );
+
+          return const SizedBox.shrink();
+        }
+
+        final bonusData = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+        final bonusStatus = bonusData['status'] as String? ?? 'pending';
+
+        // مكتملة
+        if (bonusStatus == 'completed') {
+          return Container(
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.primary33,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.primary, width: 1.2),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.star, color: AppColors.primary, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'تم إكمال المهمة الإضافية 🌱',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: AppColors.dark,
+                  ),
                 ),
-              ),
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.dark,
-                ),
-              ),
-              Text(
-                '$points نقطة',
-                style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 11,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+              ],
+            ),
+          );
+        }
+
+        // موجودة ولم تكتمل — اعرض كارد صغير
+        return _buildSmallActiveBonusCard(bonusData, bonusDocId, bonusStatus);
+      },
+    );
+  }
+
+  Widget _buildSmallActiveBonusCard(
+    Map<String, dynamic> bonusData,
+    String bonusDocId,
+    String status,
+  ) {
+    final sel = _dayStart(_selectedDay ?? DateTime.now());
+    final title = bonusData['taskTitle'] ?? '(بدون عنوان)';
+    final points = bonusData['taskPoints'] ?? 0;
+    final validation = bonusData['taskValidation'] ?? 'غير محددة';
+    final isSubmitted = status == 'submitted';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.accent, width: 1.2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 6,
+            offset: Offset(0, 3),
           ),
-        ),
-        ElevatedButton(
-          onPressed: isSubmitted
-              ? null
-              : () async {
-                  final taskId = bonusData['taskId'] as String?;
-                  final fullTask = {
-                    ...bonusData,
-                    'title': title,
-                    'description': bonusData['taskDescription'] ?? '',
-                    'points': points,
-                    'validationStrategy': validation,
-                    'id': taskId,
-                    'taskId': taskId,
-                    'status': status,
-                  };
-                  final result = await showCompleteTaskSheet(
-                    context, fullTask,
-                    selectedDay: sel,
-                    userTaskDocId: bonusDocId,
-                  );
-                  await _loadUserProgress();
-                  if (result == true && mounted) { 
-                    // ← أولاً حدّثي الـ index
-                    if (_viewingTaskIndex < _requiredTasksToday) {
-                      _viewingTaskIndex++;
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome, color: AppColors.accent, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'مهمة إضافية ✨',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 11,
+                    color: AppColors.accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.dark,
+                  ),
+                ),
+                Text(
+                  '$points نقطة',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 11,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: isSubmitted
+                ? null
+                : () async {
+                    final taskId = bonusData['taskId'] as String?;
+                    final fullTask = {
+                      ...bonusData,
+                      'title': title,
+                      'description': bonusData['taskDescription'] ?? '',
+                      'points': points,
+                      'validationStrategy': validation,
+                      'id': taskId,
+                      'taskId': taskId,
+                      'status': status,
+                    };
+                    final result = await showCompleteTaskSheet(
+                      context,
+                      fullTask,
+                      selectedDay: sel,
+                      userTaskDocId: bonusDocId,
+                    );
+                    await _loadUserProgress();
+                    if (result == true && mounted) {
+                      // ← أولاً حدّثي الـ index
+                      if (_viewingTaskIndex < _requiredTasksToday) {
+                        _viewingTaskIndex++;
+                      }
                     }
-              }
                     // ← ثم الـ stream
                     _attachUserTaskStreamFor(sel);
                     setState(() {});
-                },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: isSubmitted ? Colors.grey.shade300 : AppColors.primary,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          ),
-          child: Text(
-            isSubmitted ? '⏳' : 'ابدأ',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-              color: isSubmitted ? AppColors.dark : Colors.white,
+                  },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isSubmitted
+                  ? Colors.grey.shade300
+                  : AppColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            child: Text(
+              isSubmitted ? '⏳' : 'ابدأ',
+              style: GoogleFonts.ibmPlexSansArabic(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: isSubmitted ? AppColors.dark : Colors.white,
+              ),
             ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
+
   Future<bool> _isTaskCompleted(String docId) async {
     final snap = await FirebaseFirestore.instance
         .collection('userTasks')
@@ -3083,6 +3152,7 @@ Widget _buildSmallActiveBonusCard(
     // كل شيء مكتمل
     return _requiredTasksToday + 1;
   }
+
   // -------------------------------------------------------------
   // 🌱 Growth Progress Bar
   // -------------------------------------------------------------
@@ -3605,7 +3675,6 @@ Widget _buildSmallActiveBonusCard(
     int taskIndex = 1,
     String? userTaskDocId,
     bool isPreviousCompleted = true, // ← أضيفي هذا
-
   }) {
     final title = taskData['title'] ?? 'مهمة غير محددة';
     final description = taskData['description'] ?? 'لا يوجد وصف متاح.';
@@ -3741,8 +3810,10 @@ Widget _buildSmallActiveBonusCard(
                 ),
               ),
               const Spacer(),
-           Text(
-  _isTransportTitle(title.toString()) ? 'التحقق عبر الموقع' : validation,
+              Text(
+                _isTransportTitle(title.toString())
+                    ? 'التحقق عبر الموقع'
+                    : validation,
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 13,
                   color: Colors.grey.shade600,
@@ -3763,6 +3834,17 @@ Widget _buildSmallActiveBonusCard(
                     ? null
                     : () async {
                         if (validation == "التحقق عبر اجراء اختبار قصير") {
+                          // ← احفظي articleId أولاً
+                          final articleId = taskData['articleId'];
+                          if (articleId != null) {
+                            await FirebaseFirestore.instance
+                                .collection('userTasks')
+                                .doc(effectiveDocId)
+                                .set({
+                                  'articleId': articleId,
+                                }, SetOptions(merge: true));
+                          }
+
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -3781,7 +3863,8 @@ Widget _buildSmallActiveBonusCard(
                           );
                           if (result == true && mounted) {
                             _attachUserTaskStreamFor(sel);
-                             // ← أضيفي هذا
+                            await _loadUserProgress(); // ← موجودة؟
+                            // ← أضيفي هذا
                             if (_viewingTaskIndex < _requiredTasksToday) {
                               setState(() => _viewingTaskIndex++);
                             }
@@ -3789,45 +3872,47 @@ Widget _buildSmallActiveBonusCard(
                           }
                         }
                       },
-                      child: Ink(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          color: (isSubmitted || !canStart)  // ← غيري
-                              ? Colors.grey.shade300
-                              : (isCompleted ? AppColors.primary33 : null),
-                          gradient: (!isCompleted && !isSubmitted && canStart)
-                              ? LinearGradient(
-                                  colors: [AppColors.primary, AppColors.mint],
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                )
-                              : null,
-                        ),
-                        child: Container(
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          child: Text(
-                            isCompleted
-                                ? 'تم الإنجاز ✅'
-                                : (isSubmitted
-                                    ? 'بانتظار المراجعة ⏳'
-                                    : (!isPreviousCompleted  // ← غيري
-                                        ? 'أكمل المهمة السابقة أولاً 🔒'
-                                        : (canPerform
+                child: Ink(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color:
+                        (isSubmitted || !canStart) // ← غيري
+                        ? Colors.grey.shade300
+                        : (isCompleted ? AppColors.primary33 : null),
+                    gradient: (!isCompleted && !isSubmitted && canStart)
+                        ? LinearGradient(
+                            colors: [AppColors.primary, AppColors.mint],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          )
+                        : null,
+                  ),
+                  child: Container(
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Text(
+                      isCompleted
+                          ? 'تم الإنجاز ✅'
+                          : (isSubmitted
+                                ? 'بانتظار المراجعة ⏳'
+                                : (!isPreviousCompleted // ← غيري
+                                      ? 'أكمل المهمة السابقة أولاً 🔒'
+                                      : (canPerform
                                             ? 'بدء المهمة'
                                             : (sel.isBefore(today)
-                                                ? 'انتهى موعد المهمة'
-                                                : 'يومها لم يحن بعد')))),
-                            style: GoogleFonts.ibmPlexSansArabic(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                              color: (isCompleted || isSubmitted || !canStart)  // ← غيري
-                                  ? AppColors.dark
-                                  : Colors.white,
-                            ),
-                          ),
-                        ),
+                                                  ? 'انتهى موعد المهمة'
+                                                  : 'يومها لم يحن بعد')))),
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color:
+                            (isCompleted || isSubmitted || !canStart) // ← غيري
+                            ? AppColors.dark
+                            : Colors.white,
                       ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -3840,60 +3925,60 @@ Widget _buildSmallActiveBonusCard(
     );
   }
 
-Widget _buildExtraTaskCard({
-  required DateTime day,
-  required int taskIndex,
-  bool canPerform = false,
-}) {
-  final uid = _uid ?? '';
-  final docId = '${uid}_${_yyyyMMdd(day)}_task$taskIndex';
+  Widget _buildExtraTaskCard({
+    required DateTime day,
+    required int taskIndex,
+    bool canPerform = false,
+  }) {
+    final uid = _uid ?? '';
+    final docId = '${uid}_${_yyyyMMdd(day)}_task$taskIndex';
 
-  return StreamBuilder<DocumentSnapshot>(
-    stream: FirebaseFirestore.instance
-        .collection('userTasks')
-        .doc(docId)
-        .snapshots(),
-    builder: (context, snap) {
-      if (!snap.hasData || !snap.data!.exists) {
-        return const SizedBox.shrink();
-      }
-
-      final ut = (snap.data!.data() as Map<String, dynamic>?) ?? {};
-      final status = ut['status'] ?? 'pending';
-
-      // ✅ لو مكتملة → اعرض الكارد التالي
-      if (status == 'completed') {
-        final nextIndex = taskIndex + 1;
-        if (nextIndex <= _requiredTasksToday) {
-          return _buildExtraTaskCard(
-            day: day,
-            taskIndex: nextIndex,
-            canPerform: canPerform,
-          );
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('userTasks')
+          .doc(docId)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData || !snap.data!.exists) {
+          return const SizedBox.shrink();
         }
-        // كل المهام مكتملة → اخفي
-        return const SizedBox.shrink();
-      }
 
-      final data = {
-        'taskId': ut['taskId'] ?? '',
-        'title': ut['taskTitle'] ?? '(بدون عنوان)',
-        'description': ut['taskDescription'] ?? '',
-        'points': ut['taskPoints'] ?? 0,
-        'validationStrategy': ut['taskValidation'] ?? 'غير محددة',
-        'id': ut['taskId'] ?? '',
-        'status': status,
-      };
+        final ut = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+        final status = ut['status'] ?? 'pending';
 
-      return _buildUserTaskCard(
-        taskData: data,
-        canPerform: canPerform,
-        taskIndex: taskIndex,
-        userTaskDocId: docId,
-      );
-    },
-  );
-}
+        // ✅ لو مكتملة → اعرض الكارد التالي
+        if (status == 'completed') {
+          final nextIndex = taskIndex + 1;
+          if (nextIndex <= _requiredTasksToday) {
+            return _buildExtraTaskCard(
+              day: day,
+              taskIndex: nextIndex,
+              canPerform: canPerform,
+            );
+          }
+          // كل المهام مكتملة → اخفي
+          return const SizedBox.shrink();
+        }
+
+        final data = {
+          'taskId': ut['taskId'] ?? '',
+          'title': ut['taskTitle'] ?? '(بدون عنوان)',
+          'description': ut['taskDescription'] ?? '',
+          'points': ut['taskPoints'] ?? 0,
+          'validationStrategy': ut['taskValidation'] ?? 'غير محددة',
+          'id': ut['taskId'] ?? '',
+          'status': status,
+        };
+
+        return _buildUserTaskCard(
+          taskData: data,
+          canPerform: canPerform,
+          taskIndex: taskIndex,
+          userTaskDocId: docId,
+        );
+      },
+    );
+  }
 
   // =====================================================================
   // ✅ الدوال الجديدة — أضيفيها بعد _buildUserTaskCard

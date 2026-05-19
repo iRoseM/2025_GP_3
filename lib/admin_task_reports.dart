@@ -684,7 +684,7 @@ class _TaskReportCardState extends State<_TaskReportCard> {
         'createdAt': FieldValue.serverTimestamp(),
         'seen': false,
         'title': notifTitle,
-        'body': notifBody,
+        // 'body': notifBody,
         if (note.isNotEmpty) 'adminNote': note,
       });
 

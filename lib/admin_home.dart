@@ -2389,8 +2389,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
           child: Stack(
             children: [
               Container(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                decoration: BoxDecoration(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),                 
+                  decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
@@ -2405,17 +2405,22 @@ class _AdminHomePageState extends State<AdminHomePage> {
                   children: [
                     // 👇 دائرة التقدم مع إمكانية الضغط لتحديد الهدف
                     GestureDetector(
-                      onTap: _openTargetForm, // 👈 هذا السطر الجديد
+                      onTap: _openTargetForm,
                       child: SizedBox(
-                        width: 60,
-                        height: 60,
+                        width: 56,
+                        height: 56,
                         child: Stack(
                           children: [
-                            CircularProgressIndicator(
-                              value: progress,
-                              strokeWidth: 6,
-                              backgroundColor: Colors.teal.withOpacity(0.2),
-                              color: Colors.teal,
+                            Positioned.fill(
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: CircularProgressIndicator(
+                                  value: progress,
+                                  strokeWidth: 5,
+                                  backgroundColor: Colors.teal.withOpacity(0.2),
+                                  color: Colors.teal,
+                                ),
+                              ),
                             ),
                             Center(
                               child: Column(

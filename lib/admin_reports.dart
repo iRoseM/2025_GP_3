@@ -540,7 +540,7 @@ class _ReportCardState extends State<_ReportCard> {
         'createdAt': FieldValue.serverTimestamp(),
         'seen': false,
         'title': notifTitle,
-        'body': notifBody,
+        // 'body': notifBody,
       });
 
       // نحدد الرسالة واللون حسب القرار

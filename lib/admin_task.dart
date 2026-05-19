@@ -1323,14 +1323,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
       // القيم الصالحة للـ DropdownButton
       const validStrategies = [
-        'التحقق عبر الصور',
         'التحقق عبر اجراء اختبار قصير',
+        'التحقق عبر الموقع',
+        'التحقق عبر معالجة الصور', // ← أضيفيها هنا كمان
       ];
 
       if (validStrategies.contains(strategy)) {
         _validationType = strategy;
       } else {
-        // محاولة التطابق الضمني
         if (strategy.contains('صور') ||
             strategy.contains('معالجة') ||
             strategy.contains('image')) {
@@ -1339,8 +1339,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
             strategy.contains('قراءة') ||
             strategy.contains('quiz')) {
           _validationType = 'التحقق عبر اجراء اختبار قصير';
+        } else if (strategy.contains('موقع') || // ← أضيفيها
+            strategy.contains('location') ||
+            strategy.contains('GPS')) {
+          _validationType = 'التحقق عبر الموقع';
         } else {
-          _validationType = validStrategies.first; // القيمة الافتراضية
+          _validationType = validStrategies.first;
         }
         print(
           '⚠️ Mapped validation strategy: "$strategy" -> "$_validationType"',
@@ -1876,6 +1880,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   DropdownMenuItem(
                                     value: 'التحقق عبر اجراء اختبار قصير',
                                     child: Text('التحقق عبر اجراء اختبار قصير'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'التحقق عبر الموقع',
+                                    child: Text('التحقق عبر الموقع'),
                                   ),
                                 ],
                                 onChanged: (v) {

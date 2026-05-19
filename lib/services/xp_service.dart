@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'app_colors.dart';
 
 // ====================================================
 // نموذج المرحلة
@@ -142,104 +143,60 @@ double getLevelProgress(int xp) {
 // ====================================================
 // بوب اب ترقية المستوى
 // ====================================================
-Future<void> showLevelUpDialog(
-  BuildContext context,
-  LevelModel newLevel,
-) async {
-  final figurePath = getLevelFigurePath(newLevel.id);
+Future<void> showLevelUpDialog(BuildContext context, LevelModel level) async {
+  final figurePath = getLevelFigurePath(level.id);
 
   await showDialog(
     context: context,
     barrierDismissible: false,
-    barrierColor: Colors.black.withOpacity(0.7),
     builder: (ctx) => Directionality(
       textDirection: TextDirection.rtl,
       child: Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: newLevel.color.withOpacity(0.3),
-                blurRadius: 30,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // ✨ نجوم فوق
-              Text('✨ ✨ ✨', style: TextStyle(fontSize: 22)),
-              const SizedBox(height: 12),
-
-              // أيقونة المستوى
-              Container(
-                width: 90,
-                height: 90,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [newLevel.color.withOpacity(0.7), newLevel.color],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: newLevel.color.withOpacity(0.4),
-                      blurRadius: 20,
-                      spreadRadius: 3,
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    newLevel.icon,
-                    style: const TextStyle(fontSize: 42),
-                  ),
-                ),
+              Image.asset(
+                'assets/img/nameerHappy.png',
+                height: 150,
+                fit: BoxFit.contain,
               ),
-
               const SizedBox(height: 16),
-
-              // مبروك
               Text(
-                '🎉 مبروك!',
+                'تهانينا، حصلت على ترقية جديدة🎉!',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  color: newLevel.color,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: appColors.dark,
                 ),
               ),
-
               const SizedBox(height: 6),
-
               Text(
                 'وصلت لمستوى',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.ibmPlexSansArabic(
                   fontSize: 14,
-                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                  color: appColors.dark,
                 ),
               ),
-
               Text(
-                newLevel.nameAr,
+                '${level.nameAr} ${level.icon}',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.ibmPlexSansArabic(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: newLevel.color,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: appColors.dark,
                 ),
               ),
-
-              const SizedBox(height: 20),
-
-              // الفيقر الجديد
               if (figurePath != null) ...[
+                const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -247,7 +204,7 @@ Future<void> showLevelUpDialog(
                         const Color(0xFFF59E0B).withOpacity(0.05),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: const Color(0xFFF59E0B).withOpacity(0.4),
                     ),
@@ -255,40 +212,42 @@ Future<void> showLevelUpDialog(
                   child: Column(
                     children: [
                       Text(
-                        'فيقر جديد في EcoLand! 🌍',
+                        'مجسم جديد أضيف لك في EcoLand الخاصة بك!',
                         style: GoogleFonts.ibmPlexSansArabic(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: const Color(0xFF92400E),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Image.asset(figurePath, height: 80, fit: BoxFit.contain),
+                      const SizedBox(height: 10),
+                      Image.asset(figurePath, height: 70, fit: BoxFit.contain),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
               ],
-
-              // زر تأكيد
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: newLevel.color,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+              const SizedBox(height: 24),
+              Center(
+                child: SizedBox(
+                  width: 140,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: appColors.primary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 10,
+                      ),
                     ),
-                    elevation: 0,
-                  ),
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text(
-                    'رائع! 🚀',
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(
+                      'رائع!',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                 ),
