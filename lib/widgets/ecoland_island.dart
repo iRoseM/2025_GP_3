@@ -830,10 +830,32 @@ class GlobalEcoLandPage extends StatelessWidget {
             final islandLevel = islandLevelFromId(currentLevel.id);
             
             final taskCounts = <String, int>{};
-            final counts = data['taskCounts'] as Map<String, dynamic>? ?? {};
-            counts.forEach((k, v) {
-              if (v is int) taskCounts[k] = v;
-            });
+
+            int readCount(String key) {
+              final mapCounts = data['taskCounts'];
+              if (mapCounts is Map && mapCounts[key] is num) {
+                return (mapCounts[key] as num).toInt();
+              }
+
+              final flatValue = data['taskCounts.$key'];
+              if (flatValue is num) {
+                return flatValue.toInt();
+              }
+
+              return 0;
+            }
+
+            for (final key in [
+              'metro',
+              'bus',
+              'cycle',
+              'scooter',
+              'recycling',
+              'article',
+              'local',
+            ]) {
+              taskCounts[key] = readCount(key);
+            }
 
             return EcoLandIsland(
               level: islandLevel,

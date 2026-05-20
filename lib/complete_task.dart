@@ -1071,7 +1071,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
 
   String _getCategoryKey(String title) {
     final t = title.toLowerCase();
-    if (t.contains('مترو') || t.contains('metro')) return 'metro';
+    if (t.contains('مترو') || t.contains('metro') || t.contains('ميترو')) return 'metro';
     if (t.contains('باص') || t.contains('bus') || t.contains('حافلة'))
       return 'bus';
     if (t.contains('دراجة') || t.contains('سيكل') || t.contains('cycle'))
