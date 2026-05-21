@@ -602,7 +602,7 @@ exports.sendImmediateTomorrowReminderOnScheduledTaskWrite = functions
  * ⏰ Scheduled Function: كل يوم 5:33 صباحاً
  * ============================================================ */
 exports.scheduledGetAdminRecommendations = onSchedule({
-  sschedule: "0 11 1 * *",  // أول يوم من كل شهر فقط
+  schedule: "0 11 1 * *",  // أول يوم من كل شهر فقط
   timeZone: "Asia/Riyadh",
 },
 async () => {

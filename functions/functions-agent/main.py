@@ -26,6 +26,7 @@ import time
 import random
 from datetime import datetime, timezone, timedelta
 from typing import TypedDict, Optional, Any
+from google.cloud.firestore_v1 import FieldFilter
 
 # ─────────────────────────────────────────
 # Firebase Init
@@ -469,6 +470,67 @@ def node_get_user_history(state: SuggestTaskState) -> dict:
 # ══════════════════════════════════════════
 # Node 7 — Build prompt
 # ══════════════════════════════════════════
+# ══════════════════════════════════════════
+# Helper: Clean description from fake locations
+# ══════════════════════════════════════════
+def _clean_description_from_fake_location(desc: str, nearby: list, task_category: str = "") -> str:
+    """
+    التأكد من أن أي مكان مذكور في الوصف موجود فعلاً في nearby
+    إذا تم ذكر مكان غير موجود → نرجع وصف عام بدون مكان
+    """
+    if not nearby:
+        # لا توجد أماكن قريبة → تأكد أن الوصف لا يذكر أي مكان
+        location_keywords = ["كم", "قريب", "حاوية", "محطة", "متر", "بعد", "مسافة", "كيلو"]
+        if any(kw in desc for kw in location_keywords):
+            return ""  # سيتم استخدام الوصف الأصلي للمهمة
+        return desc
+    
+    # قائمة الأماكن الحقيقية
+    real_place_names = []
+    for p in nearby:
+        real_place_names.append(p.get('type', ''))
+        real_place_names.append(p.get('name', ''))
+        # أضف أجزاء من العنوان إذا موجود
+        addr = p.get('address', '')
+        if addr:
+            real_place_names.extend(addr.split()[:3])
+    
+    real_place_names = [n for n in real_place_names if n and len(n) > 2]
+    
+    # كلمات تدل على ذكر مكان
+    location_indicators = ["حاوية", "محطة", "قريب", "كم", "كيلو", "متر", "بعد", "عند"]
+    
+    has_location_mention = any(ind in desc for ind in location_indicators)
+    
+    if not has_location_mention:
+        return desc
+    
+    # فحص: هل المكان المذكور موجود فعلاً؟
+    for real_name in real_place_names:
+        if real_name in desc:
+            return desc  # المكان حقيقي ✅
+    
+    # أيضاً فحص: هل فيه رقم مسافة مثل "0.8 كم"؟
+    import re
+    distance_pattern = r'\d+\.?\d*\s*كم'
+    if re.search(distance_pattern, desc):
+        # فيه مسافة مذكورة → تأكد إنها تطابق أي مسافة حقيقية
+        real_distances = [str(p.get('distance', '')) for p in nearby]
+        found = False
+        for rd in real_distances:
+            if rd and rd in desc:
+                found = True
+                break
+        if not found:
+            return ""  # مسافة وهمية → نرفض الوصف
+    
+    # إذا وصلنا هنا → الوصف يذكر مكان غير موجود
+    return ""
+
+
+# ══════════════════════════════════════════
+# Node 7 — Build prompt (معدل)
+# ══════════════════════════════════════════
 def node_build_prompt(state: SuggestTaskState) -> dict:
     print("📝 Node 7: Building prompt...")
     profile   = state["profile"]
@@ -490,17 +552,27 @@ def node_build_prompt(state: SuggestTaskState) -> dict:
 
     top_tasks_text = "\n".join([f"   • {t['title']} (score: {t['score']})" for t in prefs.get("top_tasks", [])]) or "   لا توجد"
     ignored_text   = "\n".join([f"   • {t['title']} (viewCount: {t['viewCount']})" for t in prefs.get("ignored_tasks", [])]) or ""
-    nearby_details = "\n".join([
-        f"   • {p['type']} — بعد {p['distance']} كم — {p['address']} [نوع: {p['category']}]" 
-        for p in nearby[:5]
-    ]) or "   لا توجد أماكن قريبة"
 
-    # وفي الـ prompt أضيفي:
-    nearby_section = f""" الأماكن القريبة (فقط هذه الأماكن حقيقية — لا تختلق أماكن أخرى):
-    {nearby_details}
+    # ========== التعديل الرئيسي هنا ==========
+    if not nearby:
+        nearby_section = "⚠️ لا توجد أي أماكن أو حاويات أو محطات قريبة من المستخدم نهائياً. ⚠️\nلا تذكر أي مكان في الوصف إطلاقاً. إذا ذكرت مكاناً أو مسافة، فهذا خطأ فادح."
+        nearby_details = "لا توجد أماكن قريبة"
+    else:
+        nearby_list = "\n".join([
+            f"   • {p['type']} — {p['distance']} كم — {p['address'][:50]}" 
+            for p in nearby[:5]
+        ])
+        nearby_details = nearby_list
+        nearby_section = f"""✅ الأماكن القريبة الفعلية (فقط هذه الأماكن موجودة، لا تختلق غيرها):
+{nearby_list}
 
-تحذير مهم: إذا كانت القائمة "لا توجد أماكن قريبة" → لا تذكر أي مكان في الوصف إطلاقاً"""    
-    task_list      = "\n".join([f"{i+1}. [{t['id']}] {t['title']} - {t['category']} [score: {t['preference_score']}]" for i, t in enumerate(tasks)])
+🔴 تنبيه شديد: 
+- إذا ذكرت مكاناً غير مدرج في القائمة أعلاه، فهذا خطأ فادح.
+- لا تختلق مسافات أو أرقام غير موجودة في القائمة.
+- فقط استخدم الأماكن المذكورة حرفياً."""
+    # ========================================
+
+    task_list = "\n".join([f"{i+1}. [{t['id']}] {t['title']} - {t['category']} [score: {t['preference_score']}]" for i, t in enumerate(tasks)])
 
     # Priority rules by time
     if time_type == "morning":
@@ -531,8 +603,7 @@ def node_build_prompt(state: SuggestTaskState) -> dict:
 
 الوقت: {state['time_label']} (الساعة {hour})
 
-الأماكن القريبة:
-{nearby_details}
+{nearby_section}
 
 إحصاءات الأماكن:
 - أماكن التدوير: {len(recycling_places)}
@@ -551,23 +622,39 @@ def node_build_prompt(state: SuggestTaskState) -> dict:
 {top_tasks_text}
 {f"المتجاهلة:{chr(10)}{ignored_text}" if ignored_text else ""}
 
- المهام المتاحة:
+المهام المتاحة:
 {task_list}
 
 {priority}
 
-قواعد الوصف:
-- لا تستخدم إيموجيات أكثر من 1 بحد اعلى
-- إذا "لا توجد أماكن قريبة" → لا تذكر أي حاوية أو محطة أو مسافة إطلاقاً
-- فقط اذكر الأماكن الموجودة في القائمة أعلاه
-- يتطابق مع طبيعة المهمة المختارة تماماً
-- إذا المهمة تدوير بلاستيك → اذكر حاوية بلاستيك فقط، لا تذكر حاوية طعام
-- إذا المهمة تدوير طعام → اذكر حاوية طعام فقط، لا تذكر حاوية بلاستيك
-- إذا المهمة تدوير ورق → اذكر حاوية ورق فقط
-- إذا المهمة نقل عام → اذكر محطة باص أو مترو فقط، لا تذكر حاويات
-- إذا المهمة منزلية أو توعوية → لا تذكر أي مكان إطلاقاً
-- تحذير: لا تذكر مكان لا يتطابق مع نوع المهمة المختارة
-- إذا المهمة منتج محلي → اطلب من المستخدم شراء منتج سعودي الصنع وتصوير بلد المنشأ
+🔴🔴🔴 قواعد المطابقة الإلزامية (MUST FOLLOW - الأهم في الـ prompt) 🔴🔴🔴:
+
+1. إذا المهمة من نوع "إعادة تدوير ورق" أو "Paper" أو "ورق" → اذكر فقط "حاوية ورق" أو "حاوية ورق مقوى"
+2. إذا المهمة من نوع "إعادة تدوير بلاستيك" أو "Plastic" → اذكر فقط "حاوية بلاستيك" أو "حاوية عبوات بلاستيكية"
+3. إذا المهمة من نوع "إعادة تدوير طعام" أو "Food" → اذكر فقط "حاوية طعام" أو "حاوية نفايات عضوية"
+4. إذا المهمة من نوع "إعادة تدوير ملابس" أو "Clothing" → اذكر فقط "حاوية ملابس" أو "حاوية منسوجات"
+5. إذا المهمة من نوع "ميترو" أو "مترو" → اذكر فقط "محطة مترو" أو "قطار الرياض"
+6. إذا المهمة من نوع "باص" أو "حافلة" → اذكر فقط "محطة باص" أو "موقف حافلات"
+7. إذا المهمة من نوع "دراجة" أو "Bicycle" → اذكر فقط "محطة دراجات" أو "مسرب دراجات"
+8. إذا المهمة من نوع "سكوتر" أو "Scooter" → اذكر فقط "محطة سكوتر" أو "منطقة سكوتر"
+9. إذا المهمة "منتج محلي" أو "شراء منتج محلي" → لا تذكر أي حاوية أو محطة إطلاقاً
+10. إذا المهمة "قراءة خبر" أو "توعوية" أو "Awareness" → لا تذكر أي مكان إطلاقاً
+
+🔴 تحذير فادح: لا تذكر مكاناً لا يتطابق مع نوع المهمة المختارة. هذا خطأ فادح وكارثي.
+🔴 إذا لم تجد مكاناً مناسباً في القائمة أعلاه → لا تذكر أي مكان في الوصف إطلاقاً.
+
+
+- إذا اخترت مهمة تدوير (بلاستيك/ورق/طعام/ملابس) وكان هناك حاوية من نفس النوع في قائمة الأماكن القريبة:
+  → اذكر المسافة بالكيلومترات (مثلاً "حاوية بلاستيك قريبة 0.3 كم")
+- إذا اخترت مهمة نقل عام (مترو/باص/دراجة) وكانت محطة قريبة:
+  → اذكر المسافة بالكيلومترات (مثلاً "محطة مترو قريبة 0.5 كم")
+- إذا لم تكن هناك أماكن قريبة مناسبة: لا تذكر أي مسافة إطلاقاً
+
+
+قواعد الوصف العامة:
+- لا تستخدم إيموجيات أكثر من 1 بحد أعلى
+- إذا كانت "لا توجد أماكن قريبة" → لا تذكر أي حاوية أو محطة أو مسافة إطلاقاً
+- فقط اذكر الأماكن الموجودة في القائمة أعلاه (إذا وجدت وتطابق نوع المهمة)
 
 أرجع JSON فقط:
 {{
@@ -578,9 +665,82 @@ def node_build_prompt(state: SuggestTaskState) -> dict:
 
     return {"prompt": prompt}
 
+def _validate_task_place_match(task_category: str, description: str, nearby_places: list) -> tuple[bool, str]:
+    """
+    تتحقق من أن المكان المذكور في الوصف يتطابق مع نوع المهمة
+    ترجع (صحيح/خطأ, سبب الرفض)
+    """
+    if not nearby_places:
+        # لا توجد أماكن → تأكد أن الوصف لا يذكر أي مكان
+        forbidden_words = ["حاوية", "محطة", "كم", "كيلو", "قريب", "بعد", "كيلومتر"]
+        for word in forbidden_words:
+            if word in description:
+                return False, f"يذكر '{word}' مع عدم وجود أماكن قريبة"
+        return True, ""
+    
+    # قواعد التطابق حسب تصنيف المهمة
+    task_lower = task_category.lower()
+    
+    # قائمة الكلمات المسموحة لكل نوع مهمة
+    allowed_place_keywords = []
+    
+    if "ورق" in task_lower or "paper" in task_lower:
+        allowed_place_keywords = ["ورق", "ورقية", "كرتون"]
+    elif "بلاستيك" in task_lower or "plastic" in task_lower:
+        allowed_place_keywords = ["بلاستيك", "عبوات"]
+    elif "طعام" in task_lower or "food" in task_lower or "عضوي" in task_lower:
+        allowed_place_keywords = ["طعام", "عضوي", "نفايات عضوية"]
+    elif "ملابس" in task_lower or "clothing" in task_lower or "منسوجات" in task_lower:
+        allowed_place_keywords = ["ملابس", "منسوجات", "قماش"]
+    elif "مترو" in task_lower or "ميترو" in task_lower or "metro" in task_lower:
+        allowed_place_keywords = ["مترو", "ميترو", "قطار"]
+    elif "باص" in task_lower or "حافلة" in task_lower or "bus" in task_lower:
+        allowed_place_keywords = ["باص", "حافلة", "موقف"]
+    elif "دراجة" in task_lower or "bicycle" in task_lower or "سيكل" in task_lower:
+        allowed_place_keywords = ["دراجة", "سيكل", "مسرب"]
+    elif "سكوتر" in task_lower or "scooter" in task_lower:
+        allowed_place_keywords = ["سكوتر"]
+    else:
+        # تصنيف غير معروف → نسمح بمكان واحد فقط إذا كان موجوداً
+        # أو نمنع ذكر الأماكن تماماً
+        has_place = any(kw in description for kw in ["حاوية", "محطة", "قريب", "كم", "كيلو"])
+        if has_place:
+            return False, f"تصنيف غير معروف '{task_category}' لا يمكنه ذكر أماكن"
+        return True, ""
+    
+    # فحص الوصف: هل يذكر أي مكان؟
+    has_place = any(kw in description for kw in ["حاوية", "محطة", "قريب", "كم", "كيلو"])
+    
+    if not has_place:
+        return True, ""  # ما ذكر مكان → تمام
+    
+    # تأكد أن المكان المذكور مسموح
+    found_allowed = False
+    for allowed in allowed_place_keywords:
+        if allowed in description:
+            found_allowed = True
+            break
+    
+    # أيضاً تأكد أن المهمة والمكان من نفس الفئة (تدوير مع تدوير، نقل مع نقل)
+    is_recycling_task = any(kw in task_lower for kw in ["تدوير", "recycl", "ورق", "بلاستيك", "طعام", "ملابس"])
+    is_transport_task = any(kw in task_lower for kw in ["مترو", "باص", "دراجة", "سكوتر", "نقل"])
+    
+    mentions_recycling_place = any(kw in description for kw in ["حاوية", "سلة"])
+    mentions_transport_place = any(kw in description for kw in ["محطة", "موقف"])
+    
+    if is_recycling_task and mentions_transport_place and not mentions_recycling_place:
+        return False, "مهمة تدوير تذكر محطة نقل"
+    
+    if is_transport_task and mentions_recycling_place and not mentions_transport_place:
+        return False, "مهمة نقل تذكر حاوية تدوير"
+    
+    if not found_allowed:
+        return False, f"يذكر مكان غير مناسب. المسموح: {', '.join(allowed_place_keywords)}"
+    
+    return True, ""
 
 # ══════════════════════════════════════════
-# Node 8 — Call LLM
+# Node 8 — Call LLM 
 # ══════════════════════════════════════════
 def node_call_llm(state: SuggestTaskState) -> dict:
     print("🤖 Node 8: Calling Gemini...")
@@ -651,38 +811,78 @@ def node_fallback(state: SuggestTaskState) -> dict:
         return {"error": "NO_SUITABLE_TASK_FOUND"}
 
     # Build fallback description
+    desc = ""
+    used_fake_location = False
+    
     if time_type == "morning" and transport_places:
         nearest = transport_places[0]
-        # فقط اذكر المحطة لو المهمة نقل
         if "نقل" in task.get("category","") or "transport" in task.get("category",""):
-            desc = f" صباح الخير {pronoun}! محطة {nearest['type']} قريبة ({nearest['distance']} كم). جربي {task['title']} ✨"
+            desc = f"صباح الخير {pronoun}! محطة {nearest['type']} قريبة ({nearest['distance']} كم). جربي {task['title']} ✨"
         else:
             desc = f"🌱 {pronoun} في بداية يومك! {task['title']} خطوة رائعة للبيئة ✨"
     elif time_type == "evening" and recycling_places:
         nearest = recycling_places[0]
-        # فقط اذكر الحاوية لو المهمة تدوير
         if "تدوير" in task.get("category","") or "recycl" in task.get("category",""):
             desc = f"🌙 مساء الخير {pronoun}! {nearest['type']} قريبة ({nearest['distance']} كم). وقت مثالي لـ {task['title']} ♻️"
         else:
-            desc = f"🌙 مساء الخير {pronoun}! {task['title']} خطوة جميلة لإنهاء يومك "
+            desc = f"🌙 مساء الخير {pronoun}! {task['title']} خطوة جميلة لإنهاء يومك ✨"
     elif nearby:
         nearest = nearby[0]
         task_cat = task.get("category","")
-        # اذكر المكان فقط لو يتطابق مع المهمة
         if ("تدوير" in task_cat and nearest["category"] != "transport") or \
-        ("نقل" in task_cat and nearest["category"] == "transport"):
+           ("نقل" in task_cat and nearest["category"] == "transport"):
             desc = f"📍 {nearest['type']} قريبة ({nearest['distance']} كم)! جربي {task['title']} الآن ✨"
         else:
-            desc = f"🌱 {pronoun} في بداية رحلتك! {task['title']} خطوة رائعة للانطلاق"
+            desc = f"🌱 {pronoun} في بداية رحلتك! {task['title']} خطوة رائعة للانطلاق ✨"
     else:
-        desc = f"🌱 {pronoun} في بداية رحلتك! {task['title']} خطوة رائعة للانطلاق"
+        desc = f"🌱 {pronoun} في بداية رحلتك! {task['title']} خطوة رائعة للانطلاق ✨"
+    
+    # ========== فحص إضافي: تأكد إن المكان المذكور موجود فعلاً ==========
+    if nearby and desc:
+        # قائمة الأماكن الحقيقية
+        real_place_types = [p.get('type', '') for p in nearby]
+        real_place_names = [p.get('name', '') for p in nearby if p.get('name')]
+        
+        # كلمات تدل على مكان في الوصف
+        import re
+        has_fake = False
+        
+        # فحص: هل فيه ذكر لنوع مكان غير موجود؟
+        for ptype in real_place_types:
+            if ptype and ptype in desc:
+                break
+        else:
+            # ما لقينا أي نوع مكان حقيقي في الوصف → يمكن فيه مكان وهمي
+            # نفحص كلمات عامة مثل "حاوية" بدون تحديد
+            if "حاوية" in desc and not any("حاوية" in rt for rt in real_place_types):
+                has_fake = True
+            if "محطة" in desc and not any("محطة" in rt for rt in real_place_types):
+                has_fake = True
+        
+        # فحص المسافات الوهمية
+        distance_numbers = re.findall(r'\d+\.?\d*\s*كم', desc)
+        if distance_numbers:
+            real_distances = [str(p.get('distance', '')) for p in nearby]
+            found = False
+            for rd in real_distances:
+                if rd and rd in desc:
+                    found = True
+                    break
+            if not found:
+                has_fake = True
+        
+        if has_fake:
+            # وصف فيه مكان وهمي → نستبدله بالوصف العام
+            desc = f"🌱 {pronoun} في بداية رحلتك! {task['title']} خطوة رائعة للبيئة ✨"
+            print(f"   ⚠️ Fallback: removed fake location from description")
+    # ================================================================
+
     return {
         "final_task":        task,
         "final_description": desc,
         "agent_reasoning":   f"fallback: time={time_type}, places={len(nearby)}",
         "used_fallback":     True,
     }
-
 
 # ══════════════════════════════════════════
 # Node 11 — Finalize output
@@ -697,31 +897,53 @@ def node_finalize(state: SuggestTaskState) -> dict:
     if not task:
         return {"error": "NO_SUITABLE_TASK_FOUND"}
 
-    # ── تنظيف الوصف لو ذكر أماكن وهمية ──
+    # ── تنظيف الوصف ──
     final_desc = state.get("final_description") or task.get("description", "")
-    if final_desc:
-        suspicious_words = ["كم", "قريب", "حاوية", "محطة", "متر", "بعد"]
-        has_suspicious   = any(w in final_desc for w in suspicious_words)
 
-        if not nearby and has_suspicious:
-            # ما في أماكن قريبة حقيقية → استخدم الوصف الأصلي
-            print("   ⚠️ Desc mentions location but no nearby places → using original")
-            final_desc = task.get("description", "")
-        elif nearby and has_suspicious:
-            # في أماكن قريبة → تحقق إن المكان المذكور موجود فعلاً
-            nearby_types = [p["type"] for p in nearby]
-            nearby_names = [p.get("name", "") for p in nearby]
-            all_known    = nearby_types + nearby_names
-            # لو الوصف يذكر نوع مكان مو موجود في القائمة الحقيقية → استخدم الأصلي
-            mentioned_fake = False
-            for fake_word in ["حاوية طعام", "حاوية بلاستيك", "حاوية ورق", "محطة باص", "محطة مترو"]:
-                if fake_word in final_desc:
-                    if not any(fake_word in k for k in all_known):
+    if not nearby:
+        # ← لو ما في أماكن قريبة → استخدم الوصف الأصلي مباشرة
+        print("   ⚠️ No nearby places → using original description")
+        final_desc = task.get("description", "")
+    else:
+        # ← في أماكن قريبة → تحقق إن المكان المذكور موجود فعلاً
+        if final_desc:
+            location_words = ["كم", "قريب", "حاوية", "محطة", "متر", "بعد", "مسافة"]
+            has_location = any(w in final_desc for w in location_words)
+
+            if has_location:
+                nearby_types     = [p["type"] for p in nearby]
+                nearby_names     = [p.get("name", "") for p in nearby]
+                nearby_addresses = [p.get("address", "") for p in nearby]
+                all_known        = nearby_types + nearby_names + nearby_addresses
+
+                fake_patterns = [
+                    "حاوية طعام", "حاوية بلاستيك", "حاوية ورق",
+                    "حاوية ملابس", "حاوية زجاج", "حاوية إلكتروني",
+                    "محطة باص", "محطة مترو", "محطة الباص", "محطة المترو",
+                ]
+                mentioned_fake = False
+                for pattern in fake_patterns:
+                    if pattern in final_desc:
+                        if not any(pattern in k for k in all_known):
+                            mentioned_fake = True
+                            print(f"   ⚠️ Fake location '{pattern}' → using original")
+                            break
+
+                # ← فحص الأرقام: لو فيه مسافة مخترعة (مثل 0.8 كم)
+                import re
+                distance_numbers = re.findall(r'\d+\.?\d*\s*كم', final_desc)
+                if distance_numbers:
+                    real_distances = [str(p.get("distance", "")) for p in nearby]
+                    found_real = any(
+                        any(d in num for d in real_distances)
+                        for num in distance_numbers
+                    )
+                    if not found_real:
                         mentioned_fake = True
-                        break
-            if mentioned_fake:
-                print("   ⚠️ Desc mentions fake location → using original")
-                final_desc = task.get("description", "")
+                        print(f"   ⚠️ Fake distance {distance_numbers} → using original")
+
+                if mentioned_fake:
+                    final_desc = task.get("description", "")
 
     # ── ربط مقال إذا المهمة تحتاج اختبار قصير ──
     article_id = None
@@ -770,7 +992,6 @@ def node_finalize(state: SuggestTaskState) -> dict:
         result["articleId"] = article_id
 
     return {"result": result}
-
 # ══════════════════════════════════════════
 # Conditional edges
 # ══════════════════════════════════════════
