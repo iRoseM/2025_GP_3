@@ -2202,7 +2202,24 @@ class _taskPageState extends State<taskPage> {
         bonusTask['validationStrategy']?.toString() ?? '';
 
     if (validationStrategy == "التحقق عبر اجراء اختبار قصير") {
-      // 📖 مهمة قراءة مقال - نفتح ArticlePage
+      final articleId = bonusTask['articleId'];
+      if (articleId != null) {
+        await FirebaseFirestore.instance
+            .collection('userTasks')
+            .doc(bonusDocId)
+            .set({
+              'userId': _uid,
+              'taskId': bonusTask['taskId'] ?? bonusTask['id'],
+              'taskTitle': bonusTask['title'] ?? '',
+              'taskDescription': bonusTask['description'] ?? '',
+              'taskPoints': bonusTask['points'] ?? 0,
+              'taskValidation': validationStrategy,
+              'articleId': articleId,
+              'selectedAt': Timestamp.fromDate(_dayStart(sel)),
+              'status': 'pending',
+            }, SetOptions(merge: true));
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -2864,6 +2881,21 @@ class _taskPageState extends State<taskPage> {
 
   Widget _buildBonusTaskSectionStandalone() {
     final sel = _dayStart(_selectedDay ?? DateTime.now());
+    final today = _dayStart(DateTime.now());
+
+    // ✅ شرط 1: اليوم الحالي فقط
+    if (!sel.isAtSameMomentAs(today)) {
+      return const SizedBox.shrink();
+    }
+
+    // ✅ شرط 2: المهام اليومية المطلوبة يجب أن تكون مكتملة
+    final bool dailyTasksCompleted =
+        _completedTasksToday >= _requiredTasksToday;
+
+    if (!dailyTasksCompleted) {
+      return const SizedBox.shrink();
+    }
+
     final bonusDocId = '${_uid ?? ''}_${_yyyyMMdd(sel)}_bonus';
 
     return StreamBuilder<DocumentSnapshot>(
@@ -2872,118 +2904,84 @@ class _taskPageState extends State<taskPage> {
           .doc(bonusDocId)
           .snapshots(),
       builder: (context, snap) {
-        // مو موجودة بعد — اعرض زر الاقتراح الصغير
-        if (!snap.hasData || !snap.data!.exists) {
-          if (_suggestedBonusTask != null) {
-            return _buildProposedBonusCard(
-              task: _suggestedBonusTask!,
-              onAccept: () => _saveBonusTaskAndOpen(_suggestedBonusTask!),
-              onReject: () => setState(() => _suggestedBonusTask = null),
-              onAlternative: () async {
-                setState(() => _bonusLoading = true);
-                final currentTaskId =
-                    _suggestedBonusTask!['taskId'] ??
-                    _suggestedBonusTask!['id'];
-                final next = await _suggestBonusTask(
-                  excludeTaskId: currentTaskId,
-                );
-                if (mounted)
-                  setState(() {
-                    _suggestedBonusTask = next;
-                    _bonusLoading = false;
-                  });
-              },
-              isLoading: _bonusLoading,
-            );
+        // ✅ حالة: مهمة إضافية موجودة ولم تكتمل بعد
+        if (snap.hasData && snap.data!.exists) {
+          final bonusData = (snap.data!.data() as Map<String, dynamic>?) ?? {};
+          final bonusStatus = bonusData['status'] as String? ?? 'pending';
+
+          // إذا لم تكتمل → اعرض كارد المهمة الحالية
+          if (bonusStatus != 'completed') {
+            return _buildActiveBonusCard(bonusData, bonusDocId, bonusStatus);
           }
-
-          if (_completedTasksToday >= _requiredTasksToday)
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: _bonusLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primary,
-                      ),
-                    )
-                  : OutlinedButton.icon(
-                      icon: const Icon(
-                        Icons.add_task,
-                        color: AppColors.primary,
-                        size: 18,
-                      ),
-                      label: Text(
-                        'اقتراح مهمة إضافية ✨',
-                        style: GoogleFonts.ibmPlexSansArabic(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                          color: AppColors.primary,
-                          width: 1.2,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 12,
-                        ),
-                        minimumSize: const Size(double.infinity, 0),
-                      ),
-                      onPressed: () async {
-                        setState(() => _bonusLoading = true);
-
-                        final task = await _suggestBonusTask();
-
-                        if (mounted) {
-                          setState(() {
-                            _suggestedBonusTask = task;
-                            _bonusLoading = false;
-                          });
-                        }
-                      },
-                    ),
-            );
-
-          return const SizedBox.shrink();
+          // إذا اكتملت → نتجاوزها ونعرض زر اقتراح جديد (لا نعرض رسالة "تم الإكمال")
         }
 
-        final bonusData = (snap.data!.data() as Map<String, dynamic>?) ?? {};
-        final bonusStatus = bonusData['status'] as String? ?? 'pending';
-
-        // مكتملة
-        if (bonusStatus == 'completed') {
-          return Container(
-            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.primary33,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.primary, width: 1.2),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.star, color: AppColors.primary, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  'تم إكمال المهمة الإضافية 🌱',
-                  style: GoogleFonts.ibmPlexSansArabic(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    color: AppColors.dark,
-                  ),
-                ),
-              ],
-            ),
+        // ✅ مهمة مقترحة في الذاكرة (من الـ Agent)
+        if (_suggestedBonusTask != null) {
+          return _buildProposedBonusCard(
+            task: _suggestedBonusTask!,
+            onAccept: () => _saveBonusTaskAndOpen(_suggestedBonusTask!),
+            onReject: () => setState(() => _suggestedBonusTask = null),
+            onAlternative: () async {
+              setState(() => _bonusLoading = true);
+              final currentTaskId =
+                  _suggestedBonusTask!['taskId'] ?? _suggestedBonusTask!['id'];
+              final next = await _suggestBonusTask(
+                excludeTaskId: currentTaskId,
+              );
+              if (mounted) {
+                setState(() {
+                  _suggestedBonusTask = next;
+                  _bonusLoading = false;
+                });
+              }
+            },
+            isLoading: _bonusLoading,
           );
         }
 
-        // موجودة ولم تكتمل — اعرض كارد صغير
-        return _buildSmallActiveBonusCard(bonusData, bonusDocId, bonusStatus);
+        // ✅ زر الاقتراح الأساسي (نفس عرض الكروت الأخرى)
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: SizedBox(
+            width: double.infinity,
+            child: _bonusLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
+                : OutlinedButton.icon(
+                    icon: const Icon(Icons.add_task, color: AppColors.primary),
+                    label: Text(
+                      'اقتراح مهمة إضافية ✨',
+                      style: GoogleFonts.ibmPlexSansArabic(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(
+                        color: AppColors.primary,
+                        width: 1.5,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () async {
+                      setState(() => _bonusLoading = true);
+                      final task = await _suggestBonusTask();
+                      if (mounted) {
+                        setState(() {
+                          _suggestedBonusTask = task;
+                          _bonusLoading = false;
+                        });
+                      }
+                    },
+                  ),
+          ),
+        );
       },
     );
   }
@@ -3817,6 +3815,17 @@ class _taskPageState extends State<taskPage> {
                     ? null
                     : () async {
                         if (validation == "التحقق عبر اجراء اختبار قصير") {
+                          // ← احفظي articleId أولاً
+                          final articleId = taskData['articleId'];
+                          if (articleId != null) {
+                            await FirebaseFirestore.instance
+                                .collection('userTasks')
+                                .doc(effectiveDocId)
+                                .set({
+                                  'articleId': articleId,
+                                }, SetOptions(merge: true));
+                          }
+
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -4057,26 +4066,29 @@ class _taskPageState extends State<taskPage> {
           );
         }
 
-        // الحالة الافتراضية — زر "اقتراح مهمة إضافية"
         return _bonusLoading
             ? const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Center(
                   child: CircularProgressIndicator(color: AppColors.primary),
                 ),
               )
-            : SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.add_task, color: AppColors.primary),
-                  label: Text(
-                    'اقتراح مهمة إضافية ✨',
-                    style: GoogleFonts.ibmPlexSansArabic(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                      color: AppColors.primary,
-                    ),
-                  ),
+            : Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: OutlinedButton(
+                  onPressed: () async {
+                    setState(() => _bonusLoading = true);
+                    final task = await _suggestBonusTask();
+                    if (mounted) {
+                      setState(() {
+                        _suggestedBonusTask = task;
+                        _bonusLoading = false;
+                      });
+                    }
+                  },
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(
                       color: AppColors.primary,
@@ -4085,17 +4097,30 @@ class _taskPageState extends State<taskPage> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 0,
+                    ),
+                    minimumSize: const Size(
+                      double.infinity,
+                      0,
+                    ), // ← هذا يخليه يعرض كامل
                   ),
-                  onPressed: () async {
-                    setState(() => _bonusLoading = true);
-                    final task = await _suggestBonusTask();
-                    if (mounted)
-                      setState(() {
-                        _suggestedBonusTask = task;
-                        _bonusLoading = false;
-                      });
-                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.add_task, color: AppColors.primary),
+                      SizedBox(width: 8),
+                      Text(
+                        'اقتراح مهمة إضافية ✨',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
       },
@@ -4121,6 +4146,7 @@ class _taskPageState extends State<taskPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
@@ -4225,7 +4251,7 @@ class _taskPageState extends State<taskPage> {
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                     child: Text(
-                      'لا شكراً',
+                      'إلغاء',
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontWeight: FontWeight.w700,
                         color: Colors.grey.shade700,

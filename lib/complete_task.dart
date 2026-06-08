@@ -1866,9 +1866,12 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
         final xp = (userDoc.data()?['xp'] ?? 0) as int;
 
         int requiredTasks = 1;
-        if (xp >= 900) requiredTasks = 4;
-        else if (xp >= 500) requiredTasks = 3;
-        else if (xp >= 100) requiredTasks = 2;
+        if (xp >= 900)
+          requiredTasks = 4;
+        else if (xp >= 500)
+          requiredTasks = 3;
+        else if (xp >= 100)
+          requiredTasks = 2;
 
         // عد المهام المكتملة لليوم
         int completedToday = 0;
@@ -2867,7 +2870,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
             ),
             child: SingleChildScrollView(
               controller: scrollController,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

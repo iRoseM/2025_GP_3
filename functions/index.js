@@ -360,16 +360,13 @@ exports.suggestBonusTask = onCall(async (request) => {
  *  updateUserPreferences
  * ============================================================ */
 // ── Wilson Score ──────────────────────────────
-// Idea: Calculate the lower bound of the completion rate with 95% confidence
-// Example: 2/2 completions → score 3.4 | 8/10 completions → score 4.9
-// The second is better because it has more data and higher statistical confidence
 function wilsonScore(completed, ignored) {
-  const n = completed + ignored; // Total interactions (completions + ignores)
+  const n = completed + ignored;
 
   // If no interaction → neutral score (1.0 × 10 = 10... return 5 as middle value)
   if (n === 0) return 5.0;
 
-  const z = 1.96;          // 95% confidence interval (z-score for α=0.05)
+  const z = 1.96;     
   const p = completed / n; // Observed completion rate
 
   // Wilson score formula — lower bound of the confidence interval
@@ -450,7 +447,6 @@ exports.updateUserPreferences = onSchedule(
           const lastViewedAt = existingPrefs[taskId]?.lastViewedAt || null;
 
           // ── Wilson Score ────────────────────────────────────
-          // المرجع: Miller (2009) بناءً على Wilson (1927)
           let score = wilsonScore(completed, ignored);
 
           // ── تعديل إضافي: عقوبة المهام المعروضة كثيراً بدون إنجاز ──
@@ -606,7 +602,7 @@ exports.sendImmediateTomorrowReminderOnScheduledTaskWrite = functions
  * ⏰ Scheduled Function: كل يوم 5:33 صباحاً
  * ============================================================ */
 exports.scheduledGetAdminRecommendations = onSchedule({
-  sschedule: "0 11 1 * *",  // أول يوم من كل شهر فقط
+  schedule: "0 11 1 * *",  // أول يوم من كل شهر فقط
   timeZone: "Asia/Riyadh",
 },
 async () => {

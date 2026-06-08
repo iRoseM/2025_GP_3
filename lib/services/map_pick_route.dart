@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+import 'package:cloud_functions/cloud_functions.dart';
 
 // ─── Models ───────────────────────────────────────────────────────────────────
 
@@ -39,14 +41,14 @@ class _Station {
   });
 
   factory _Station.fromJson(Map<String, dynamic> j) => _Station(
-        id: j['id']?.toString() ?? '',
-        nameAr: j['name_ar']?.toString() ?? '',
-        nameEn: j['name_en']?.toString() ?? '',
-        position: LatLng(
-          (j['lat'] as num).toDouble(),
-          (j['lng'] as num).toDouble(),
-        ),
-      );
+    id: j['id']?.toString() ?? '',
+    nameAr: j['name_ar']?.toString() ?? '',
+    nameEn: j['name_en']?.toString() ?? '',
+    position: LatLng(
+      (j['lat'] as num).toDouble(),
+      (j['lng'] as num).toDouble(),
+    ),
+  );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -70,35 +72,38 @@ class MapPickRoutePage extends StatefulWidget {
 
 class _MapPickRoutePageState extends State<MapPickRoutePage> {
   static const _riyadhCenter = LatLng(24.7136, 46.6753);
-  List<_Station> _visibleStations = []; // المحطات المرئية فقط
-  LatLng _cameraCenter = _riyadhCenter;  // مركز الكاميرا الحالي
+  List<_Station> _visibleStations = [];
+  LatLng _cameraCenter = _riyadhCenter;
   double get _visibilityRadiusKm {
     if (widget.stationType == 'bus') return 3.0;
     return 8.0;
-  }  
+  }
+
   GoogleMapController? _mapController;
 
-  // المحطات المحمّلة من JSON (مترو/باص فقط)
   List<_Station> _stations = [];
   bool _loadingStations = true;
   Timer? _cameraDebounce;
 
-  // المحطتان المختارتان (مترو/باص)
+  // ← Search
+  final TextEditingController _searchCtrl = TextEditingController();
+  List<_Station> _searchResults = [];
+  bool _showSearchResults = false;
+  List<Map<String, dynamic>> _placeSuggestions = [];
+  bool _isSearchingPlaces = false;
+  String? _mapsApiKey;
+
   _Station? _startStation;
   _Station? _endStation;
 
-  // نقطتا المسار الحر (دراجة/سكوتر/مشي)
   LatLng? _startPoint;
   LatLng? _endPoint;
 
-  // موقع المستخدم الحالي
   LatLng _userLocation = _riyadhCenter;
   bool _gotGps = false;
 
-  // حالة الاختيار: 0 = ننتظر البداية, 1 = ننتظر النهاية, 2 = اكتمل
   int _pickStep = 0;
 
-  // هل هذا النوع يستخدم خريطة حرة (بدون محطات)؟
   bool get _isFree =>
       widget.stationType == 'bicycle' ||
       widget.stationType == 'scooter' ||
@@ -109,26 +114,36 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     super.initState();
     _loadStations();
     _initGps();
+    _loadMapsKey();
   }
 
   @override
   void dispose() {
-    _cameraDebounce?.cancel(); // ← أضيفي
+    _cameraDebounce?.cancel();
+    _searchCtrl.dispose();
     _mapController?.dispose();
     super.dispose();
   }
 
-  // ─── Load stations ────────────────────────────────────────────────────────
+  Future<void> _loadMapsKey() async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('getMapsKey');
+      final result = await callable();
+      if (mounted) setState(() => _mapsApiKey = result.data['apiKey']);
+    } catch (e) {
+      debugPrint('Maps key error: $e');
+    }
+  }
+
   void _updateVisibleStations() {
-    if (_stations.isEmpty) return; // ← أضيفي هذا
-    print('📍 cameraCenter: $_cameraCenter, stations: ${_stations.length}');
+    if (_stations.isEmpty) return;
     final filtered = _stations.where((s) {
       final d = _haversineKm(_cameraCenter, s.position);
       return d <= _visibilityRadiusKm;
     }).toList();
 
-    // دايماً نخلي المحطتين المختارتين مرئيتين حتى لو خارج النطاق
-    if (_startStation != null && !filtered.any((s) => s.id == _startStation!.id)) {
+    if (_startStation != null &&
+        !filtered.any((s) => s.id == _startStation!.id)) {
       filtered.add(_startStation!);
     }
     if (_endStation != null && !filtered.any((s) => s.id == _endStation!.id)) {
@@ -139,10 +154,9 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
   }
 
   Future<void> _loadStations() async {
-    // الأنواع الحرة لا تحتاج محطات
     if (_isFree) {
       if (mounted) setState(() => _loadingStations = false);
-        _updateVisibleStations(); // ← أضيفي هذا
+      _updateVisibleStations();
       return;
     }
 
@@ -162,15 +176,13 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
           _stations = list;
           _loadingStations = false;
         });
-          _updateVisibleStations(); // ← أضيفي هذا
+        _updateVisibleStations();
       }
     } catch (e) {
       debugPrint('❌ Error loading stations: $e');
       if (mounted) setState(() => _loadingStations = false);
     }
   }
-
-  // ─── GPS ──────────────────────────────────────────────────────────────────
 
   Future<void> _initGps() async {
     try {
@@ -188,11 +200,10 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
         if (mounted) {
           setState(() {
             _userLocation = here;
-            _cameraCenter = here; // ← مهم عشان الـ radius يكون حول موقع اليوزر
+            _cameraCenter = here;
             _gotGps = true;
           });
-          _updateVisibleStations(); // ← أضيفي هذا
-
+          _updateVisibleStations();
         }
         _mapController?.animateCamera(
           CameraUpdate.newCameraPosition(
@@ -205,13 +216,12 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     }
   }
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
-
   double _haversineKm(LatLng a, LatLng b) {
     const R = 6371.0;
     final dLat = _deg2rad(b.latitude - a.latitude);
     final dLon = _deg2rad(b.longitude - a.longitude);
-    final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
+    final h =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(_deg2rad(a.latitude)) *
             math.cos(_deg2rad(b.latitude)) *
             math.sin(dLon / 2) *
@@ -239,7 +249,131 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     );
   }
 
-  // ─── Free mode tap ────────────────────────────────────────────────────────
+  // ─── Search ───────────────────────────────────────────────────────────────
+  void _onSearchChanged(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _placeSuggestions = [];
+        _showSearchResults = false;
+      });
+      return;
+    }
+
+    String q = query.trim().toLowerCase();
+    q = q
+        .replaceAll('محطة', '')
+        .replaceAll('station', '')
+        .replaceAll('metro', '')
+        .trim();
+
+    // بحث في المحطات المحلية
+    final stationResults = q.isEmpty
+        ? <_Station>[]
+        : _stations
+              .where(
+                (s) =>
+                    s.nameAr.toLowerCase().contains(q) ||
+                    s.nameEn.toLowerCase().contains(q) ||
+                    q
+                        .split(' ')
+                        .any(
+                          (word) =>
+                              word.isNotEmpty &&
+                              (s.nameAr.toLowerCase().contains(word) ||
+                                  s.nameEn.toLowerCase().contains(word)),
+                        ),
+              )
+              .toList();
+
+    setState(() {
+      _searchResults = stationResults;
+      _showSearchResults = true;
+    });
+
+    // بحث في Google Places
+    if (_mapsApiKey != null && _mapsApiKey!.isNotEmpty) {
+      try {
+        setState(() => _isSearchingPlaces = true);
+        final url = Uri.parse(
+          'https://maps.googleapis.com/maps/api/place/autocomplete/json'
+          '?input=${Uri.encodeComponent(query)}'
+          '&language=ar&components=country:sa'
+          '&key=$_mapsApiKey',
+        );
+        final response = await http.get(url);
+        final data = jsonDecode(response.body);
+        if (data['status'] == 'OK') {
+          setState(() {
+            _placeSuggestions = List<Map<String, dynamic>>.from(
+              data['predictions'].map(
+                (p) => {
+                  'placeId': p['place_id'],
+                  'description': p['description'],
+                },
+              ),
+            );
+          });
+        }
+      } catch (e) {
+        debugPrint('Places error: $e');
+      } finally {
+        if (mounted) setState(() => _isSearchingPlaces = false);
+      }
+    }
+  }
+
+  void _onSearchResultTap(_Station station) {
+    _searchCtrl.clear();
+    setState(() {
+      _searchResults = [];
+      _placeSuggestions = [];
+      _showSearchResults = false;
+    });
+    _onStationTap(station);
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: station.position, zoom: 15.0),
+      ),
+    );
+  }
+
+  Future<void> _onPlaceTap(String placeId) async {
+    _searchCtrl.clear();
+    setState(() {
+      _searchResults = [];
+      _placeSuggestions = [];
+      _showSearchResults = false;
+    });
+
+    try {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/details/json'
+        '?place_id=$placeId&key=$_mapsApiKey',
+      );
+      final response = await http.get(url);
+      final data = jsonDecode(response.body);
+      if (data['status'] == 'OK') {
+        final loc = data['result']['geometry']['location'];
+        final lat = (loc['lat'] as num).toDouble();
+        final lng = (loc['lng'] as num).toDouble();
+        final target = LatLng(lat, lng);
+
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(target: target, zoom: 15.0),
+          ),
+        );
+
+        // لو free mode → نحدد النقطة تلقائياً
+        if (_isFree) {
+          _onMapTapFree(target);
+        }
+      }
+    } catch (e) {
+      debugPrint('Place details error: $e');
+    }
+  }
 
   void _onMapTapFree(LatLng tapped) {
     if (_pickStep == 0) {
@@ -258,8 +392,6 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
       );
     }
   }
-
-  // ─── Station tap ──────────────────────────────────────────────────────────
 
   void _onStationTap(_Station station) {
     if (_pickStep == 0) {
@@ -297,35 +429,38 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     }
   }
 
-  // ─── Build markers ────────────────────────────────────────────────────────
-
   Set<Marker> _buildMarkers() {
     final markers = <Marker>{};
 
     if (_isFree) {
       if (_startPoint != null) {
-        markers.add(Marker(
-          markerId: const MarkerId('free_start'),
-          position: _startPoint!,
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueGreen),
-          infoWindow: const InfoWindow(title: 'نقطة البداية'),
-        ));
+        markers.add(
+          Marker(
+            markerId: const MarkerId('free_start'),
+            position: _startPoint!,
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueGreen,
+            ),
+            infoWindow: const InfoWindow(title: 'نقطة البداية'),
+          ),
+        );
       }
       if (_endPoint != null) {
-        markers.add(Marker(
-          markerId: const MarkerId('free_end'),
-          position: _endPoint!,
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-              BitmapDescriptor.hueAzure),
-          infoWindow: const InfoWindow(title: 'نقطة الوصول'),
-        ));
+        markers.add(
+          Marker(
+            markerId: const MarkerId('free_end'),
+            position: _endPoint!,
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueAzure,
+            ),
+            infoWindow: const InfoWindow(title: 'نقطة الوصول'),
+          ),
+        );
       }
       return markers;
     }
 
-    // مترو / باص
-  for (final station in _visibleStations) {
+    for (final station in _visibleStations) {
       final isStart = station.id == _startStation?.id;
       final isEnd = station.id == _endStation?.id;
 
@@ -350,8 +485,8 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
             snippet: isStart
                 ? '🟢 محطة البداية'
                 : isEnd
-                    ? '🔵 محطة النهاية'
-                    : 'اضغط للاختيار',
+                ? '🔵 محطة النهاية'
+                : 'اضغط للاختيار',
           ),
           onTap: () => _onStationTap(station),
           zIndex: (isStart || isEnd) ? 2.0 : 1.0,
@@ -362,7 +497,153 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
     return markers;
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────────
+  // ─── Search Results Widget ────────────────────────────────────────────────
+  Widget _buildSearchResults(Color typeColor) {
+    final hasStations = _searchResults.isNotEmpty;
+    final hasPlaces = _placeSuggestions.isNotEmpty;
+
+    if (!_showSearchResults ||
+        (!hasStations && !hasPlaces && !_isSearchingPlaces)) {
+      return const SizedBox.shrink();
+    }
+
+    return Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 260),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ListView(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          children: [
+            // ← المحطات
+            if (hasStations) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: Text(
+                  'المحطات',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 11,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              ..._searchResults.map((s) {
+                final isStart = s.id == _startStation?.id;
+                final isEnd = s.id == _endStation?.id;
+                return ListTile(
+                  dense: true,
+                  leading: Icon(
+                    widget.stationType == 'metro'
+                        ? Icons.train_rounded
+                        : Icons.directions_bus_rounded,
+                    color: isStart
+                        ? Colors.green
+                        : isEnd
+                        ? Colors.blue
+                        : typeColor,
+                    size: 20,
+                  ),
+                  title: Text(
+                    s.nameAr,
+                    style: GoogleFonts.ibmPlexSansArabic(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: isStart
+                      ? Text(
+                          '✅ محطة البداية',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 11,
+                            color: Colors.green,
+                          ),
+                        )
+                      : isEnd
+                      ? Text(
+                          '✅ محطة النهاية',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 11,
+                            color: Colors.blue,
+                          ),
+                        )
+                      : Text(
+                          _pickStep == 0
+                              ? 'اضغط لتحديد كمحطة بداية'
+                              : 'اضغط لتحديد كمحطة نهاية',
+                          style: GoogleFonts.ibmPlexSansArabic(
+                            fontSize: 11,
+                            color: Colors.grey,
+                          ),
+                        ),
+                  onTap: () => _onSearchResultTap(s),
+                );
+              }),
+              if (hasPlaces) const Divider(height: 1),
+            ],
+
+            // ← الأماكن من Google Places
+            if (hasPlaces) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: Text(
+                  'الأماكن',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 11,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              ..._placeSuggestions.map(
+                (p) => ListTile(
+                  dense: true,
+                  leading: const Icon(
+                    Icons.location_on_outlined,
+                    color: Colors.redAccent,
+                    size: 20,
+                  ),
+                  title: Text(
+                    p['description'],
+                    style: GoogleFonts.ibmPlexSansArabic(fontSize: 13),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => _onPlaceTap(p['placeId']),
+                ),
+              ),
+            ],
+
+            // ← loading
+            if (_isSearchingPlaces)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+
+            // ← لا نتائج
+            if (!hasStations && !hasPlaces && !_isSearchingPlaces)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'لا توجد نتائج مطابقة',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    color: Colors.grey,
+                    fontSize: 13,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -372,9 +653,8 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
 
     final double? km = hasBoth
         ? (_isFree
-            ? _haversineKm(_startPoint!, _endPoint!)
-            : _haversineKm(
-                _startStation!.position, _endStation!.position))
+              ? _haversineKm(_startPoint!, _endPoint!)
+              : _haversineKm(_startStation!.position, _endStation!.position))
         : null;
 
     final Color typeColor;
@@ -420,9 +700,11 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
               onMapCreated: (c) {
                 _mapController = c;
                 if (_gotGps) {
-                  c.animateCamera(CameraUpdate.newCameraPosition(
-                    CameraPosition(target: _userLocation, zoom: 13.0),
-                  ));
+                  c.animateCamera(
+                    CameraUpdate.newCameraPosition(
+                      CameraPosition(target: _userLocation, zoom: 13.0),
+                    ),
+                  );
                 }
               },
               onTap: _isFree ? _onMapTapFree : null,
@@ -430,9 +712,6 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               markers: _loadingStations ? {} : _buildMarkers(),
-
-              // ← أضيفي هذين
-              // في onCameraMove
               onCameraMove: (position) {
                 _cameraCenter = position.target;
                 _cameraDebounce?.cancel();
@@ -446,16 +725,10 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
                         polylineId: const PolylineId('route'),
                         points: _isFree
                             ? [_startPoint!, _endPoint!]
-                            : [
-                                _startStation!.position,
-                                _endStation!.position,
-                              ],
+                            : [_startStation!.position, _endStation!.position],
                         color: typeColor,
                         width: 4,
-                        patterns: [
-                          PatternItem.dash(20),
-                          PatternItem.gap(10),
-                        ],
+                        patterns: [PatternItem.dash(20), PatternItem.gap(10)],
                       ),
                     }
                   : {},
@@ -538,6 +811,64 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
                     ),
             ),
 
+            // ─── Search Bar + Results (تحت StepCard) ─────────────────────
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 250,
+              left: 12,
+              right: 12,
+              child: Column(
+                children: [
+                  Material(
+                    elevation: 4,
+                    borderRadius: BorderRadius.circular(12),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: _onSearchChanged,
+                      textDirection: TextDirection.rtl,
+                      decoration: InputDecoration(
+                        hintText: _isFree
+                            ? 'ابحث عن مكان...'
+                            : 'ابحث عن محطة أو مكان...',
+                        hintStyle: GoogleFonts.ibmPlexSansArabic(
+                          color: Colors.grey,
+                          fontSize: 13,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.grey,
+                        ),
+                        suffixIcon: _searchCtrl.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() {
+                                    _searchResults = [];
+                                    _placeSuggestions = [];
+                                    _showSearchResults = false;
+                                  });
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  _buildSearchResults(typeColor),
+                ],
+              ),
+            ),
+
             // ─── Distance hint ────────────────────────────────────────────
             if (hasBoth)
               Positioned(
@@ -561,31 +892,29 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
                 label: hasBoth
                     ? 'اعتماد المسار'
                     : _pickStep == 0
-                        ? (_isFree
-                            ? 'اضغط على الخريطة لتحديد نقطة البداية'
-                            : 'اضغط على محطة البداية')
-                        : (_isFree
-                            ? 'اضغط على الخريطة لتحديد نقطة الوصول'
-                            : 'اضغط على محطة النهاية'),
+                    ? (_isFree
+                          ? 'اضغط على الخريطة لتحديد نقطة البداية'
+                          : 'اضغط على محطة البداية')
+                    : (_isFree
+                          ? 'اضغط على الخريطة لتحديد نقطة الوصول'
+                          : 'اضغط على محطة النهاية'),
                 onTap: hasBoth
                     ? () => Navigator.pop(
-                          context,
-                          MapRoutePickResult(
-                            start: _isFree
-                                ? _startPoint!
-                                : _startStation!.position,
-                            end: _isFree
-                                ? _endPoint!
-                                : _endStation!.position,
-                            startName: _isFree
-                                ? 'نقطة البداية'
-                                : _startStation!.nameAr,
-                            endName: _isFree
-                                ? 'نقطة الوصول'
-                                : _endStation!.nameAr,
-                            distanceKm: km!,
-                          ),
-                        )
+                        context,
+                        MapRoutePickResult(
+                          start: _isFree
+                              ? _startPoint!
+                              : _startStation!.position,
+                          end: _isFree ? _endPoint! : _endStation!.position,
+                          startName: _isFree
+                              ? 'نقطة البداية'
+                              : _startStation!.nameAr,
+                          endName: _isFree
+                              ? 'نقطة الوصول'
+                              : _endStation!.nameAr,
+                          distanceKm: km!,
+                        ),
+                      )
                     : null,
               ),
             ),
@@ -594,9 +923,7 @@ class _MapPickRoutePageState extends State<MapPickRoutePage> {
       ),
     );
   }
-}
-
-// ─── Helper Widgets ───────────────────────────────────────────────────────────
+} // ─── Helper Widgets ───────────────────────────────────────────────────────────
 
 class _MapButton extends StatelessWidget {
   final IconData icon;

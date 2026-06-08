@@ -2870,8 +2870,49 @@ class _FacilityFormCardState extends State<_FacilityFormCard> {
                         ),
                       ),
                     ),
-                  ],
 
+                    // ← أضيفي هذا
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: appColors.primary.withOpacity(0.07),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: appColors.primary.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            color: appColors.primary,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'الموقع الحالي: ${widget.fixedPosition!.latitude.toStringAsFixed(5)}, '
+                              '${widget.fixedPosition!.longitude.toStringAsFixed(5)}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: appColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'لتغيير الموقع استخدم الخيارات أدناه',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   const Text(
                     'طريقة تحديد الموقع',
