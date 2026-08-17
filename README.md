@@ -35,11 +35,11 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 ## ⚡ Launching Instructions
 1. Clone the repository:
    ```bash
-   git clone https://github.com/iRoseM/2025_GP_3.git
+   git clone https://github.com/iRoseM/Nameer-Sustainability_Mobile_App.git
 
 2. Navigate to the project folder:
    ```bash
-    cd 2025_GP_3
+    cd Nameer-Sustainability_Mobile_App
 
 3. Install dependencies:
    ```bash
