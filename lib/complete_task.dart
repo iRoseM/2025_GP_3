@@ -3621,16 +3621,7 @@ class _CompleteTaskSheetState extends State<CompleteTaskSheet> {
     final t = (widget.taskData['title'] ?? '').toString().toLowerCase();
 
     // ← أضيفي هذا الشرط في أول الدالة قبل أي شيء
-    final bool isTransportTask =
-        t.contains('مترو') ||
-        t.contains('ميترو') ||
-        t.contains('metro') ||
-        t.contains('باص') ||
-        t.contains('bus') ||
-        t.contains('حافلة') ||
-        t.contains('دراجة') ||
-        t.contains('سكوتر') ||
-        t.contains('مشي');
+    final bool isTransportTask = _isTransportTask;
 
     if (isTransportTask && !_locationDenied) {
       return _buildTransportGpsInstructions(); // ← return مبكر، ما يكمل

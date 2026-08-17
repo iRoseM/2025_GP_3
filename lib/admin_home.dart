@@ -178,7 +178,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
               final rec = Map<String, dynamic>.from(e as Map);
               if (!rec.containsKey('id')) {
                 rec['id'] =
-                    'rec_${rec['type']}_${DateTime.now().millisecondsSinceEpoch}_$index';
+                    'rec_${rec['type']}_${rec['title']}'; // ← احذفي الـ timestamp
               }
               return rec;
             }).toList();
@@ -191,9 +191,14 @@ class _AdminHomePageState extends State<AdminHomePage> {
           }
 
           if (data['season'] != null) {
-            _currentSeason = Map<String, dynamic>.from(
-              data['season'] as Map,
-            )['season'];
+            final season = data['season'];
+            if (season is Map) {
+              _currentSeason = Map<String, dynamic>.from(
+                season,
+              )['season']?.toString();
+            } else if (season is String) {
+              _currentSeason = season;
+            }
           }
 
           if (data['summary'] != null) {
@@ -2389,8 +2394,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
           child: Stack(
             children: [
               Container(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),                 
-                  decoration: BoxDecoration(
+                padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
+                decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
@@ -4361,7 +4366,8 @@ class _AdminHomePageState extends State<AdminHomePage> {
 
     // تصفية التوصيات المخفية
     final visibleRecommendations = _adminRecommendations.where((rec) {
-      final recId = rec['id'] ?? rec['taskId'] ?? rec.hashCode.toString();
+      final recId =
+          rec['id'] ?? rec['taskId'] ?? 'rec_${rec['type']}_${rec['title']}';
       return !_hiddenRecommendations.contains(recId);
     }).toList();
 
@@ -4480,6 +4486,28 @@ class _AdminHomePageState extends State<AdminHomePage> {
     }
   }
 
+  Future<void> _hideRecommendation(String recId) async {
+    if (_isProcessingRecommendation) return;
+    _isProcessingRecommendation = true;
+
+    setState(() {
+      _hiddenRecommendations.add(recId);
+      // أزيلي التوصية من القائمة مباشرة
+      _adminRecommendations.removeWhere((rec) {
+        final id =
+            rec['id'] ?? rec['taskId'] ?? 'rec_${rec['type']}_${rec['title']}';
+        return id == recId;
+      });
+    });
+
+    await _prefs.setStringList(
+      'hidden_recommendations',
+      _hiddenRecommendations.toList(),
+    );
+
+    _isProcessingRecommendation = false;
+  }
+
   Widget _buildRecommendationCard(
     Map<String, dynamic> rec,
     int index,
@@ -4487,9 +4515,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   ) {
     // إنشاء ID فريد للتوصية
     final String recId =
-        rec['id'] ??
-        rec['taskId'] ??
-        'rec_${rec['type']}_${rec['title']}_${DateTime.now().millisecondsSinceEpoch}';
+        rec['id'] ?? rec['taskId'] ?? 'rec_${rec['type']}_${rec['title']}';
 
     // اختيار الأيقونة واللون حسب نوع التوصية
     IconData getIcon() {
@@ -4559,23 +4585,6 @@ class _AdminHomePageState extends State<AdminHomePage> {
         return rec['validationStrategy']?.toString() ?? '';
       }
       return '';
-    }
-
-    // ✅ دالة لإخفاء التوصية
-    Future<void> _hideRecommendation(String recId) async {
-      if (_isProcessingRecommendation) return;
-      _isProcessingRecommendation = true;
-
-      setState(() {
-        _hiddenRecommendations.add(recId);
-      });
-
-      await _prefs.setStringList(
-        'hidden_recommendations',
-        _hiddenRecommendations.toList(),
-      );
-
-      _isProcessingRecommendation = false;
     }
 
     return Card(

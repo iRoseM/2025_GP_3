@@ -1,0 +1,240 @@
+{
+  "summary": [
+    {
+      "variant": "① بدون قواعد (Zero-shot)",
+      "json_parse_rate": "100%",
+      "task_id_valid_rate": "100%",
+      "no_hallucination": "100%",
+      "avg_latency_ms": "1977"
+    },
+    {
+      "variant": "② قواعد إيجابية فقط",
+      "json_parse_rate": "100%",
+      "task_id_valid_rate": "100%",
+      "no_hallucination": "67%",
+      "avg_latency_ms": "1765"
+    },
+    {
+      "variant": "③ قواعد كاملة (البرومت الحالي)",
+      "json_parse_rate": "100%",
+      "task_id_valid_rate": "100%",
+      "no_hallucination": "100%",
+      "avg_latency_ms": "2073"
+    },
+    {
+      "variant": "④ Few-shot مع أمثلة",
+      "json_parse_rate": "100%",
+      "task_id_valid_rate": "100%",
+      "no_hallucination": "100%",
+      "avg_latency_ms": "1678"
+    },
+    {
+      "variant": "⑤ قواعد كاملة temp=0.0",
+      "json_parse_rate": "100%",
+      "task_id_valid_rate": "100%",
+      "no_hallucination": "100%",
+      "avg_latency_ms": "1988"
+    },
+    {
+      "variant": "⑥ قواعد كاملة temp=0.7",
+      "json_parse_rate": "100%",
+      "task_id_valid_rate": "100%",
+      "no_hallucination": "100%",
+      "avg_latency_ms": "1920"
+    }
+  ],
+  "details": [
+    {
+      "test_case": "بدون أماكن قريبة",
+      "variant": "① بدون قواعد (Zero-shot)",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1992,
+      "task_id": "f2SYfX2lEjDyb31Ugwqg",
+      "description": "It's a great evening to make a positive impact! Gather your plastic water bottles and other recyclable plastic containers and prepare them for recycling. This simple act helps reduce landfill waste and conserves resources. You can sort them and prepare them for your next recycling pickup or trip to a recycling center."
+    },
+    {
+      "test_case": "بدون أماكن قريبة",
+      "variant": "② قواعد إيجابية فقط",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": true,
+      "fake_reason": "ذكر 'حاوية' بدون أماكن حقيقية",
+      "latency_ms": 1693,
+      "task_id": "f2SYfX2lEjDyb31Ugwqg",
+      "description": "حان وقت المساء! هيا بنا نفرز علب المياه البلاستيكية ونضعها في حاوية إعادة التدوير. ♻️"
+    },
+    {
+      "test_case": "بدون أماكن قريبة",
+      "variant": "③ قواعد كاملة (البرومت الحالي)",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 2360,
+      "task_id": "f2SYfX2lEjDyb31Ugwqg",
+      "description": "حان وقت المساء، واليوم سأقوم بمهمة إعادة تدوير علب البلاستيك. سأجمع كل قوارير الماء البلاستيكية الفارغة وأفرغها وأضغطها لتوفير المساحة. سأحتفظ بها لحين إيجاد طريقة لإعادة تدويرها بشكل صحيح. كل علبة بلاستيكية يتم إعادة تدويرها تحدث فرقًا! ♻️"
+    },
+    {
+      "test_case": "بدون أماكن قريبة",
+      "variant": "④ Few-shot مع أمثلة",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1505,
+      "task_id": "bJjITCm7ZWlmzEk2QNPr",
+      "description": "المساء هو وقت مثالي للاسترخاء والتعلّم! اقرأ خبراً بيئياً ممتعاً ووسّع معرفتك حول الاستدامة."
+    },
+    {
+      "test_case": "بدون أماكن قريبة",
+      "variant": "⑤ قواعد كاملة temp=0.0",
+      "temperature": 0.0,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 2019,
+      "task_id": "f2SYfX2lEjDyb31Ugwqg",
+      "description": "حان وقت الأبطال! 💪 مهمتي الليلة هي جمع علب المياه البلاستيكية الفارغة وتحويلها من مجرد نفايات إلى فرصة جديدة. سأحرص على تفريغها وغسلها جيدًا، ثم سأودعها في مكانها الصحيح لتنطلق في رحلة إعادة التدوير. كل علبة ننقذها هي خطوة نحو مستقبل أكثر اخضرارًا!"
+    },
+    {
+      "test_case": "بدون أماكن قريبة",
+      "variant": "⑥ قواعد كاملة temp=0.7",
+      "temperature": 0.7,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1972,
+      "task_id": "f2SYfX2lEjDyb31Ugwqg",
+      "description": "مساء الخير! ♻️ مهمتي الليلة هي التأكد من أن كل علب البلاستيك الفارغة (قوارير الماء) تحصل على فرصة جديدة للحياة. سأقوم بجمعها وغسلها وتجهيزها لرحلتها التالية في عملية إعادة التدوير. كل خطوة صغيرة تحدث فرقاً كبيراً في حماية كوكبنا!"
+    },
+    {
+      "test_case": "مع حاوية بلاستيك قريبة",
+      "variant": "① بدون قواعد (Zero-shot)",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1895,
+      "task_id": "f2SYfX2lEjDyb31Ugwqg",
+      "description": "Good morning! Since you're near a plastic recycling container, let's start the day by recycling any plastic bottles you have. It's a quick and easy way to make a positive impact on the environment!"
+    },
+    {
+      "test_case": "مع حاوية بلاستيك قريبة",
+      "variant": "② قواعد إيجابية فقط",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1929,
+      "task_id": "f2SYfX2lEjDyb31Ugwqg",
+      "description": "ابدأ يومك بشكل إيجابي! ♻️ توجه إلى حاوية البلاستيك القريبة (0.8 كم) وقم بإعادة تدوير قوارير المياه البلاستيكية. خطوة بسيطة نحو بيئة أنظف!"
+    },
+    {
+      "test_case": "مع حاوية بلاستيك قريبة",
+      "variant": "③ قواعد كاملة (البرومت الحالي)",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1902,
+      "task_id": "f2SYfX2lEjDyb31Ugwqg",
+      "description": "صباح الخير أيها العالم! اليوم سأبدأ يومي بفعل بسيط ولكنه قوي: سأتوجه إلى حاوية البلاستيك في حي الملز لإعادة تدوير قوارير المياه. خطوة صغيرة مني، لكنها تحدث فرقًا كبيرًا لكوكبنا ♻️."
+    },
+    {
+      "test_case": "مع حاوية بلاستيك قريبة",
+      "variant": "④ Few-shot مع أمثلة",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1824,
+      "task_id": "f2SYfX2lEjDyb31Ugwqg",
+      "description": "صباح النشاط! حاوية بلاستيك على بعد 0.8 كم. ابدأ يومك بإعادة تدوير قوارير الماء والمساهمة في بيئة أنظف!"
+    },
+    {
+      "test_case": "مع محطة مترو قريبة",
+      "variant": "① بدون قواعد (Zero-shot)",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 2044,
+      "task_id": "fTVRcGbemEc6C1JMU2v0",
+      "description": "صباح الخير! بما أنك قريب من محطة المترو، لماذا لا تستخدم المترو في تنقلاتك اليوم؟ إنه خيار صديق للبيئة يساعد في تقليل الازدحام المروري وتلوث الهواء. استمتع برحلتك!"
+    },
+    {
+      "test_case": "مع محطة مترو قريبة",
+      "variant": "② قواعد إيجابية فقط",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1672,
+      "task_id": "fTVRcGbemEc6C1JMU2v0",
+      "description": "استقل المترو اليوم! 🚇 بدلاً من السيارة، ساهم في تقليل الازدحام المروري وتلوث الهواء، خاصة في ساعات الذروة الصباحية. خطوة بسيطة نحو بيئة أنظف!"
+    },
+    {
+      "test_case": "مع محطة مترو قريبة",
+      "variant": "③ قواعد كاملة (البرومت الحالي)",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1958,
+      "task_id": "fTVRcGbemEc6C1JMU2v0",
+      "description": "صباح الخير! لنبدأ يومنا بخطوة إيجابية نحو بيئة أنظف. سأتوجه الآن إلى محطة المترو (خط 1) القريبة، فهي تبعد 0.3 كم فقط، وأساهم في تقليل الازدحام والتلوث. 🚇 هيا بنا نجعل كل رحلة صديقة للبيئة!"
+    },
+    {
+      "test_case": "مع محطة مترو قريبة",
+      "variant": "④ Few-shot مع أمثلة",
+      "temperature": 0.2,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1705,
+      "task_id": "fTVRcGbemEc6C1JMU2v0",
+      "description": "محطة مترو قريبة على بعد 0.3 كم! ابدأ يومك برحلة مستدامة وساهم في تقليل الانبعاثات."
+    },
+    {
+      "test_case": "مع محطة مترو قريبة",
+      "variant": "⑤ قواعد كاملة temp=0.0",
+      "temperature": 0.0,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1956,
+      "task_id": "fTVRcGbemEc6C1JMU2v0",
+      "description": "صباح الخير! 🌞 لنبدأ يومنا بانتعاش ونساهم في بيئة أنظف. سأتوجه الآن إلى محطة المترو القريبة، وأستقل الخط 1. معًا، نجعل كل رحلة خطوة نحو مستقبل مستدام!"
+    },
+    {
+      "test_case": "مع محطة مترو قريبة",
+      "variant": "⑥ قواعد كاملة temp=0.7",
+      "temperature": 0.7,
+      "json_ok": true,
+      "task_id_valid": true,
+      "fake_location": false,
+      "fake_reason": "",
+      "latency_ms": 1868,
+      "task_id": "fTVRcGbemEc6C1JMU2v0",
+      "description": "صباح الخير! ☀️ لنبدأ يومنا بخطوة إيجابية نحو بيئة أنظف. بدلاً من السيارة، سأتوجه الآن إلى محطة المترو القريبة، فهي تبعد 0.3 كم فقط، وأستخدم الخط 1. معاً، نجعل مدينتنا أكثر استدامة!"
+    }
+  ]
+}

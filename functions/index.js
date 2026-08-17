@@ -535,7 +535,6 @@ exports.generateDailyTasks = onSchedule(
   }
 );
 
-
 exports.sendImmediateTomorrowReminderOnScheduledTaskWrite = functions
   .region("us-central1")
   .firestore.document("scheduledTasks/{scheduledTaskId}")
@@ -574,7 +573,6 @@ exports.sendImmediateTomorrowReminderOnScheduledTaskWrite = functions
     if (!isTomorrow) return null;
 
     const ymd = startTomorrow.toFormat("yyyyLLdd");
-
     const taskTitle = afterData.taskTitle || "مهمة";
 
     const notifId = `rem1d_sched_${docId}_${ymd}`;
@@ -583,6 +581,7 @@ exports.sendImmediateTomorrowReminderOnScheduledTaskWrite = functions
     const exists = await notifRef.get();
     if (exists.exists) return null;
 
+    const notifBody = `لا تنسى مهمتك "${taskTitle}"، بكره موعدها 🌿`;
     await notifRef.set({
       type: "scheduled_task_one_day_reminder",
       userId,
@@ -590,7 +589,8 @@ exports.sendImmediateTomorrowReminderOnScheduledTaskWrite = functions
       taskId: afterData.taskId || null,
       taskTitle,
       title: "تذكير ⏳",
-      body: `لا تنسى مهمتك "${taskTitle}"، بكره موعدها 🌿`,
+      body: notifBody,
+      message: notifBody,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       seen: false,
     });

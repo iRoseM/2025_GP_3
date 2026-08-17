@@ -533,14 +533,18 @@ class _ReportCardState extends State<_ReportCard> {
       // إضافة الإشعار
       await FirebaseFirestore.instance.collection('notifications').add({
         'type': decision == 'approved'
-            ? 'facility_report_approved'
-            : 'facility_report_rejected',
+            ? 'task_report_approved'
+            : decision == 'rejected'
+            ? 'task_report_rejected'
+            : 'task_report_pending',
         'userId': reportedBy,
         'reportId': widget.doc.id,
         'createdAt': FieldValue.serverTimestamp(),
         'seen': false,
         'title': notifTitle,
-        // 'body': notifBody,
+        'body': notifBody,
+        'message': notifBody,
+        if (reason != null && reason.isNotEmpty) 'adminNote': reason,
       });
 
       // نحدد الرسالة واللون حسب القرار

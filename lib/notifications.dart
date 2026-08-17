@@ -143,7 +143,15 @@ class _MyReportsPageState extends State<MyReportsPage> {
                                 ts.toDate().isAfter(localLastOpened);
 
                             final title = (data['title'] ?? '').toString();
-                            final message = (data['message'] ?? '').toString();
+
+                            final message =
+                                (data['message'] ??
+                                        data['body'] ??
+                                        data['notificationBody'] ??
+                                        '')
+                                    .toString()
+                                    .trim();
+
                             final type = (data['type'] ?? '').toString();
 
                             // ===== الأيقونات =====
