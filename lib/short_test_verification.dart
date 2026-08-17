@@ -319,7 +319,8 @@ class _ShortTestVerificationPageState extends State<ShortTestVerificationPage> {
         await userRef.update({
           'completedTask': FieldValue.increment(1),
           'points': FieldValue.increment(taskPoints),
-          'xp': FieldValue.increment(taskPoints), // ← أضيفي هذا
+          'xp': FieldValue.increment(taskPoints),
+          'taskCounts.article': FieldValue.increment(1),
           'lastCompletedTaskType': "quiz",
           'lastQuizAnswer': selected,
         });
