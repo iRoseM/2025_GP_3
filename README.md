@@ -3,6 +3,7 @@
 
 ![Logo](docs/img/Logo.png)
 
+
 ---
 
 ## 📖 Introduction
@@ -25,31 +26,29 @@ Our goal is to align with **Saudi Vision 2030** and the **Saudi Green Initiative
 
 ## 🛠️ Technology Stack
 - **Frontend**: Flutter (Dart)  
-- **Backend / Database**: NoSQL database  
-- **Machine Learning**: Python  
-- **Tools**: GitHub, VSC, Android Studio  
+- **Backend / Database**:  NoSQL database 
+- **Machine Learning**: Python 
+- **Tools**: GitHub , VSC ,  Android studio
 
 ---
 
 ## ⚡ Launching Instructions
 1. Clone the repository:
-```bash
+   ```bash
    git clone https://github.com/iRoseM/2025_GP_3.git
-```
-2. Navigate to the project folder:
-```bash
-   cd 2025_GP_3
-```
-3. Install dependencies:
-```bash
-   flutter pub get
-```
-4. Run:
-```bash
-   flutter run
-```
 
----
+2. Navigate to the project folder:
+   ```bash
+    cd 2025_GP_3
+
+3. Install dependencies:
+   ```bash
+   flutter pub get
+4. Run
+   ```bash
+   flutter run
+
+
 
 ## 📊 Dataset
 
